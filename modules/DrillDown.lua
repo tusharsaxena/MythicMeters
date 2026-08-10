@@ -1,0 +1,555 @@
+-- modules/DrillDown.lua
+--
+-- Clicking a cell replaces the window's grid with the story behind that one
+-- number: which spells made up this player's damage, which kicks landed on
+-- what, which avoidable hits actually connected. A back button returns to the
+-- grid, and nothing about the trip is remembered past the session.
+--
+-- ---------------------------------------------------------------------------
+-- ONE RENDERER, NOT TWO
+-- ---------------------------------------------------------------------------
+--
+-- The obvious implementation is a second view with its own frames, its own
+-- layout code and its own idea of what a row looks like. It is also the
+-- implementation that drifts: the grid grows a font setting and the drill-down
+-- does not, the grid learns about secret values and the drill-down learns about
+-- them a patch later, in combat, in front of the player.
+--
+-- So this file builds no frames for rows at all. BuildRows() returns rows in the
+-- SAME SHAPE modules/Aggregator.lua produces, and modules/Window.lua feeds them
+-- to the same row pool and the same cell render path it already has. A spell is
+-- a "row" whose name is the spell's name and whose one value is the spell's
+-- amount. Everything the player configured about rows, bars, text and fonts
+-- applies to the drill-down for free, because it is literally the same code
+-- drawing it.
+--
+-- The ONLY widget this module owns is the back button, which the grid has no
+-- equivalent of and which is three lines of frame code.
+--
+-- ---------------------------------------------------------------------------
+-- COMBAT AND SECRETS
+-- ---------------------------------------------------------------------------
+--
+-- Everything here works in combat. These are plain unprotected frames, so there
+-- is no InCombatLockdown gate anywhere below and there must not be one: the
+-- moment a raider most wants to know what killed them is the moment they are
+-- still fighting.
+--
+-- What it must not do is look at a value. Nothing below adds, compares, keys on
+-- or measures a meter amount:
+--   * the spell walk goes through NS.Secrets.SafeIterate, which never applies
+--     `#` to a possibly-secret array;
+--   * amounts are copied into the row table as opaque handles and travel
+--     untouched to the widget setters;
+--   * ordering is left exactly as the API returned it. The drill-down does NOT
+--     sort. modules/Tooltip.lua sorts when comparison is legal because a tooltip
+--     is a snapshot; a drill-down is a live view that would reshuffle under the
+--     cursor the instant the restriction lifted, which is worse than an order
+--     the player can learn.
+--
+-- THE TITLE IS DISPLAY-ONLY. DrillDown.Title() builds its string with
+-- string.format from `view.name`, which is the meter's ConditionalSecret name —
+-- a folded pet whose owner has left, a cross-realm source, a stale roster entry
+-- all make it opaque mid-pull. string.format on a secret returns a SECRET
+-- STRING, and a secret string poisons everything a caller's instinct wants to do
+-- with it: `if title then`, `title ~= ""`, `#title`, using it as a table key.
+-- Every one of those raises while the restriction is active.
+--
+-- So the title travels to a SetText and nowhere else, and the question "is this
+-- window drilled in" is answered by a PLAIN BOOLEAN that never touches the
+-- string:
+--
+--   DrillDown.IsActive(window)  -> boolean
+--   DrillDown:BuildRows(window) -> rows|nil, title|nil, active (boolean)
+--
+-- The third return of BuildRows is that same boolean, handed back at the call
+-- site that needs it so a consumer never has to reach for the title to find out
+-- whether there is one.
+--
+-- ---------------------------------------------------------------------------
+-- STATE
+-- ---------------------------------------------------------------------------
+--
+-- Drill-down state is per window and SESSION-ONLY — it lives in core/State.lua's
+-- cache, never in SavedVariables. Logging in to a view of one spell breakdown
+-- from last week's raid would be nonsense, and worse, it would be a stored
+-- reference to a sourceGUID that no longer exists.
+--
+-- Living in State.Cache buys one more thing: core/MythicMeters.lua already wipes
+-- every cache on DAMAGE_METER_RESET and on a profile change, and both of those
+-- invalidate a breakdown completely. The wipe is in place, so the upvalue below
+-- keeps pointing at the live table (see core/State.lua's WipeCache).
+
+local addonName, NS = ...
+
+local DrillDown = NS:NewModule("DrillDown", "AceEvent-3.0")
+NS.DrillDown = DrillDown
+
+local L      = NS.L
+local Const  = NS.Constants
+local Compat = NS.Compat
+local State  = NS.State
+local Debug  = NS.Debug
+
+local Perf = NS.Perf or {}
+
+-- [windowId] = { guid, statKey, name, classFilename, sessionType }
+local views = State.Cache("DrillDown")
+
+-- [windowId] = Button. Frames are never destroyed, only hidden and reused —
+-- creating one per entry into a drill-down would leak a frame per click for the
+-- life of the session.
+local backButtons = {}
+
+-- Bus message announcing that a window entered or left a drill-down.
+--
+-- The catalog in core/Constants.lua is the ONLY source. A hand-spelled `or`
+-- fallback would defeat the exact protection the catalog exists to give: a
+-- misspelled or removed key must fail loudly at load, not quietly ship a name
+-- that no subscriber is listening on. THIS FILE IS THE ONE SENDER
+-- (architecture-§4); the payload is { windowId = number, active = boolean }.
+local MSG_DRILLDOWN = Const.MSG.DRILLDOWN_CHANGED
+
+-- Hard ceiling on drill-down rows. The row pool is sized for a raid, and a
+-- breakdown with more entries than a raid has players is past the point where
+-- anyone reads it; the cap keeps one pathological source from asking the pool
+-- for hundreds of frames.
+local MAX_SPELL_ROWS = Const.MAX_ROWS
+
+local BACK_BUTTON_WIDTH  = 64
+local BACK_BUTTON_HEIGHT = 18
+
+-- ---------------------------------------------------------------------------
+-- Collaborators
+-- ---------------------------------------------------------------------------
+
+--- modules/Provider.lua, resolved at call time — modules/ load in TOC order and
+--- this file does not get to assume it is last.
+local function provider()
+    if NS.Provider then return NS.Provider end
+    if NS.GetModule then return NS:GetModule("Provider", true) end
+    return nil
+end
+
+--- A window's id, tolerating both a config table and a bare id.
+local function windowIdOf(window)
+    if type(window) == "table" then return window.id end
+    return window
+end
+
+--- Which session this window reads.
+local function sessionTypeOf(window)
+    local data = type(window) == "table" and window.data or nil
+    if data and data.sessionType ~= nil then return data.sessionType end
+    return Const.SESSION_TYPE.Current
+end
+
+--- Which stored SEGMENT this window is pointed at, or nil for "the one
+--- sessionType names".
+---
+--- Captured into the view alongside the type, so a breakdown opened on a
+--- historical segment keeps showing that segment's spells rather than silently
+--- switching to the live pull's the moment the next one starts.
+local function sessionIDOf(window)
+    local data = type(window) == "table" and window.data or nil
+    return data and data.sessionID or nil
+end
+
+--- Announce a change to whoever is drawing this window.
+---
+--- A message rather than a direct call into modules/Window.lua: the window
+--- registry is WindowManager's and the render loop is Window's, and reaching
+--- into either from here is the cross-module grab architecture-§4 exists to stop.
+local function announce(windowId, active)
+    if NS.SendMessage then
+        NS:SendMessage(MSG_DRILLDOWN, { windowId = windowId, active = active })
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Death recap
+-- ---------------------------------------------------------------------------
+
+--- Hand a death off to Blizzard's own recap UI.
+---
+--- `deathRecapID` is NeverSecret, so it is readable at the height of a pull —
+--- which is the only reason this can be a click action at all rather than an
+--- out-of-combat nicety.
+---
+--- The shim is preferred over the global: core/Compat.lua is where every
+--- cross-patch API call is supposed to live (architecture-§1). It does not carry
+--- one for the recap yet, so the guarded global is the fallback, and the moment
+--- `Compat.OpenDeathRecap(recapID)` exists this call site picks it up with no
+--- edit. Returning a boolean rather than erroring is what lets the caller
+--- degrade to the ordinary spell breakdown.
+---
+--- @param recapID number
+--- @return boolean  whether the recap was opened
+local function openDeathRecap(recapID)
+    if recapID == nil then return false end
+
+    if Compat and Compat.OpenDeathRecap then
+        return Compat.OpenDeathRecap(recapID) and true or false
+    end
+
+    local open = _G.OpenDeathRecapUI
+    if type(open) ~= "function" then return false end
+    open(recapID)
+    return true
+end
+
+-- ---------------------------------------------------------------------------
+-- State
+-- ---------------------------------------------------------------------------
+
+--- The drill-down a window is currently showing, or nil for the grid.
+--- @param window table|number
+--- @return table|nil
+function DrillDown.GetState(window)
+    local id = windowIdOf(window)
+    if id == nil then return nil end
+    return views[id]
+end
+
+--- Whether this window is in a drill-down right now.
+---
+--- ALWAYS a plain boolean, and the only supported way to ask the question. It is
+--- derived from the presence of the view table — never from DrillDown.Title's
+--- string, which may be secret and therefore un-testable (see the header).
+---
+--- @param window table|number
+--- @return boolean
+function DrillDown.IsActive(window)
+    return DrillDown.GetState(window) ~= nil
+end
+
+--- Enter the breakdown for one player and one statistic.
+---
+--- The row's identity is captured as PLAIN fields — guid, name, classFilename —
+--- and never as a reference to the aggregated row itself. The row table is
+--- rebuilt from scratch on the next refresh, so holding it would pin a stale
+--- object; and its VALUES are meter amounts, which this module has no business
+--- keeping across time.
+---
+--- @param window table
+--- @param row table    an aggregated row (needs .guid)
+--- @param statKey string
+--- @return boolean  whether the view changed
+function DrillDown:Enter(window, row, statKey)
+    local id = windowIdOf(window)
+    if id == nil or type(row) ~= "table" or row.guid == nil then return false end
+    if not Const.STAT_BY_KEY[statKey] then return false end
+
+    views[id] = {
+        guid          = row.guid,
+        statKey       = statKey,
+        name          = row.name,
+        classFilename = row.classFilename,
+        sessionType   = sessionTypeOf(window),
+        sessionID     = sessionIDOf(window),
+    }
+
+    if State.debug and Debug then
+        Debug("DrillDown", "enter window=%s stat=%s", tostring(id), statKey)
+    end
+    announce(id, true)
+    return true
+end
+
+--- Leave the breakdown and restore the grid.
+--- @param window table|number
+--- @return boolean  whether anything changed
+function DrillDown:Exit(window)
+    local id = windowIdOf(window)
+    if id == nil or views[id] == nil then return false end
+
+    views[id] = nil
+    local button = backButtons[id]
+    if button then button:Hide() end
+
+    if State.debug and Debug then
+        Debug("DrillDown", "exit window=%s", tostring(id))
+    end
+    announce(id, false)
+    return true
+end
+
+--- Leave every drill-down. Used on a profile swap and on a meter reset, where
+--- the captured GUIDs describe data that no longer exists.
+function DrillDown:ExitAll()
+    local any = false
+    for id in pairs(views) do
+        views[id] = nil
+        local button = backButtons[id]
+        if button then button:Hide() end
+        announce(id, false)
+        any = true
+    end
+    return any
+end
+
+-- ---------------------------------------------------------------------------
+-- Click routing
+-- ---------------------------------------------------------------------------
+
+--- What a click on a cell does. modules/Row.lua wires every cell's OnClick here
+--- so the decision lives in one place rather than in the row builder.
+---
+--- Deaths is the special case, and deliberately so: a death has a recap the game
+--- already renders far better than a spell list could, and it is the one cell
+--- where the player's question is "what happened to me" rather than "what did I
+--- do". When the recap API or the id is missing the click falls through to the
+--- ordinary breakdown, so the cell is never dead.
+---
+--- @param window table
+--- @param row table
+--- @param statKey string
+--- @return string  what happened: "recap", "enter", "exit" or "none"
+function DrillDown:OnCellClick(window, row, statKey)
+    if type(row) ~= "table" then return "none" end
+
+    -- A second click inside a drill-down returns to the grid. Two ways out (this
+    -- and the back button) rather than one, because a player who clicked in
+    -- expects the same click to take them out.
+    local current = DrillDown.GetState(window)
+    if current and current.guid == row.guid and current.statKey == statKey then
+        return self:Exit(window) and "exit" or "none"
+    end
+
+    if statKey == "Deaths" and openDeathRecap(row.deathRecapID) then
+        if State.debug and Debug then
+            Debug("DrillDown", "recap id=%s", tostring(row.deathRecapID))
+        end
+        return "recap"
+    end
+
+    return self:Enter(window, row, statKey) and "enter" or "none"
+end
+
+-- ---------------------------------------------------------------------------
+-- Rows
+-- ---------------------------------------------------------------------------
+--
+-- THE ROW CONTRACT, stated here because modules/Window.lua consumes it and the
+-- two files have to agree exactly. A drill-down row is an aggregated row whose
+-- "player" is a spell:
+--
+--   guid           "spell:<spellID>" — a plain STRING, never secret, usable as
+--                  a table key and as the row pool's identity. The pool keys on
+--                  guid, and a spell has none, so it is synthesized.
+--   name           the spell's name (or "#<id>" when the client cannot resolve
+--                  it). A plain string.
+--   icon           the spell's icon fileID, for the name cell.
+--   classFilename  the DRILLED-INTO PLAYER's class, so class-colored bars stay
+--                  the player's color through the whole trip.
+--   isDrillDown    true. The one flag that tells the render path this row is a
+--                  spell and its name cell has no class/spec icons to draw.
+--   values         { [statKey] = { total = <opaque>, rate = <opaque> } } —
+--                  the same shape the aggregator emits, so the cell render path
+--                  needs no branch.
+--   maxAmount      the source's own maxAmount, for bar scaling. Handed to
+--                  SetMinMaxValues; never compared here.
+--   overkillAmount / isAvoidable / isDeadly
+--                  passed through for the tooltip. Possibly secret; nothing in
+--                  this file looks at them.
+
+--- One drill-down row from one DamageMeterCombatSpell.
+local function spellRow(spell, view, maxAmount)
+    local spellID = spell.spellID
+    local spellName, iconID
+    if spellID ~= nil and Compat and Compat.GetSpellInfo then
+        spellName, iconID = Compat.GetSpellInfo(spellID)
+    end
+
+    -- The synthesized key must be a plain string. string.format is legal even if
+    -- spellID were secret, and the explicit nil branch is there because
+    -- string.format("%s", nil) raises in Lua 5.1.
+    local key = (spellID ~= nil) and string.format("spell:%s", spellID) or "spell:?"
+
+    local values = {}
+    values[view.statKey] = { total = spell.totalAmount, rate = spell.amountPerSecond }
+
+    return {
+        guid           = key,
+        spellID        = spellID,
+        name           = spellName or key,
+        icon           = iconID,
+        classFilename  = view.classFilename,
+        isLocalPlayer  = false,
+        isDrillDown    = true,
+        values         = values,
+        maxAmount      = maxAmount,
+        overkillAmount = spell.overkillAmount,
+        isAvoidable    = spell.isAvoidable,
+        isDeadly       = spell.isDeadly,
+    }
+end
+
+--- The rows a window should draw while it is in a drill-down.
+---
+--- Returns nil when the window is not drilled in, which is how
+--- modules/Window.lua decides between this and the aggregator with a single
+--- test rather than a mode flag it has to keep in step.
+---
+--- Bracketed as "aggregate" because that is exactly what it substitutes for: the
+--- perf report should show the same bucket whether the window is drawing a grid
+--- or a breakdown, or the two cannot be compared.
+---
+--- The third return is the PLAIN BOOLEAN a consumer branches on. The title is a
+--- possibly-secret string (see the header) and must never be truth-tested, so
+--- "am I drawing a breakdown" is answered by `active`, which is derived from the
+--- presence of the view table and never from the string.
+---
+--- @param window table
+--- @return table|nil rows, string|nil title, boolean active
+function DrillDown:BuildRows(window)
+    local view = DrillDown.GetState(window)
+    if not view then return nil, nil, false end
+
+    local t0 = Perf.on and debugprofilestop()
+
+    local P = provider()
+    -- A test row answers for itself; the provider has no such source. Same
+    -- reason as modules/Tooltip.lua's copy of this branch.
+    local A = NS.Aggregator
+    local source = A and A.TestSourceDetail and A.TestSourceDetail(view.guid, view.statKey)
+    if source == nil then
+        source = P and P.GetSourceDetail
+            and P:GetSourceDetail(view.sessionType, view.statKey, view.guid, nil, view.sessionID)
+    end
+
+    local rows = {}
+    if type(source) == "table" then
+        local Secrets = NS.Secrets
+        local maxAmount = source.maxAmount
+        if Secrets and Secrets.SafeIterate then
+            Secrets.SafeIterate(source.combatSpells, function(_, spell)
+                if type(spell) ~= "table" then return end
+                if Secrets.CanAccessTable and not Secrets.CanAccessTable(spell) then return end
+                rows[#rows + 1] = spellRow(spell, view, maxAmount)
+                if #rows >= MAX_SPELL_ROWS then return false end
+            end)
+        end
+    end
+
+    if t0 then Perf.Note("aggregate", debugprofilestop() - t0) end
+    if State.debug and Debug then
+        Debug("DrillDown", "rows window=%s stat=%s n=%d",
+            tostring(windowIdOf(window)), view.statKey, #rows)
+    end
+
+    return rows, DrillDown.Title(window), true
+end
+
+--- The header line for the current drill-down: who, and which statistic.
+---
+--- DISPLAY-ONLY, and the file header says why at length: `view.name` is
+--- ConditionalSecret, and string.format over a secret returns a SECRET STRING.
+--- The caller may hand the result to FontString:SetText and may do nothing else
+--- with it — no truth test, no comparison, no `#`, no use as a table key. Ask
+--- DrillDown.IsActive(window) instead; that is a plain boolean built from the
+--- view table, not from this string.
+---
+--- The name is placed with string.format rather than concatenated behind a truth
+--- test, and it is not compared to anything to decide whether to use it: the one
+--- test it gets is `~= nil`, which is the single comparison a non-boolean secret
+--- permits.
+---
+--- @param window table|number
+--- @return string|nil  display text only — never compare or truth-test it
+function DrillDown.Title(window)
+    local view = DrillDown.GetState(window)
+    if not view then return nil end
+
+    local stat = Const.STAT_BY_KEY[view.statKey]
+    local label = stat and L[stat.label] or view.statKey
+    if view.name == nil then return label end
+    return string.format("%s - %s", view.name, label)
+end
+
+-- ---------------------------------------------------------------------------
+-- The back button
+-- ---------------------------------------------------------------------------
+
+--- The window's back button, created on first use and reused forever after.
+---
+--- Anchored with SetPoint and never measured. A drill-down window has cells
+--- carrying secret values, which makes the frame's own geometry secret and
+--- propagates it to anything anchored to it — so this button's position comes
+--- from the caller's config-derived offsets, and nothing reads GetPoint,
+--- GetWidth or GetLeft back off anything (rule R3).
+---
+--- No combat gate: this is an unprotected button on an unprotected frame, and
+--- leaving a player stuck inside a breakdown until the pull ended would be a bug
+--- invented purely out of caution.
+---
+--- @param window table
+--- @param parent table  the frame to anchor into (the window's body)
+--- @param offsetX number|nil
+--- @param offsetY number|nil
+--- @return table|nil  the button, or nil where CreateFrame is unavailable
+function DrillDown:AcquireBackButton(window, parent, offsetX, offsetY)
+    local id = windowIdOf(window)
+    if id == nil or not parent or not _G.CreateFrame then return nil end
+
+    local button = backButtons[id]
+    if not button then
+        button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        button:SetSize(BACK_BUTTON_WIDTH, BACK_BUTTON_HEIGHT)
+        button:SetText(L["Back"])
+        button:SetScript("OnClick", function()
+            DrillDown:Exit(id)
+        end)
+        backButtons[id] = button
+    end
+
+    button:SetParent(parent)
+    button:ClearAllPoints()
+    button:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or 0)
+    button:Show()
+    return button
+end
+
+--- Hide the window's back button without destroying it.
+--- @param window table|number
+function DrillDown:ReleaseBackButton(window)
+    local id = windowIdOf(window)
+    local button = id ~= nil and backButtons[id]
+    if button then button:Hide() end
+end
+
+-- ---------------------------------------------------------------------------
+-- Wiring
+-- ---------------------------------------------------------------------------
+--
+-- Bus messages only — core/MythicMeters.lua is the addon's single game-event
+-- listener. METER_RESET and PROFILE_CHANGED both invalidate every captured
+-- GUID; WINDOWS_CHANGED can delete the window a view belongs to.
+
+function DrillDown:OnEnable()
+    local MSG = Const.MSG
+    self:RegisterMessage(MSG.METER_RESET,     "OnMeterReset")
+    self:RegisterMessage(MSG.PROFILE_CHANGED, "OnMeterReset")
+    self:RegisterMessage(MSG.WINDOWS_CHANGED, "OnWindowsChanged")
+end
+
+function DrillDown:OnMeterReset()
+    self:ExitAll()
+end
+
+--- A window that no longer exists cannot be drilled into. The registry is
+--- WindowManager's, so this asks it rather than assuming the payload is complete
+--- — an action of "deleted" carries the id, but a bulk reset may not.
+function DrillDown:OnWindowsChanged(_, payload)
+    local id = type(payload) == "table" and payload.windowId or nil
+    if id ~= nil and views[id] ~= nil then
+        self:Exit(id)
+        return
+    end
+
+    local Database = NS.Database
+    if not (Database and Database.FindWindow) then return end
+    for viewId in pairs(views) do
+        if not Database.FindWindow(viewId) then self:Exit(viewId) end
+    end
+end

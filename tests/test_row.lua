@@ -1,0 +1,690 @@
+-- tests/test_row.lua — modules/Row.lua: the cells, and the fact that none of
+-- them ever looks at a number.
+--
+-- Every meter figure that reaches SetValue / SetText here is an OPAQUE HANDLE.
+-- The simulated secret in tests/wow_mock.lua traps arithmetic, comparison,
+-- indexing and concatenation, so a case that renders a restricted row and then
+-- asserts on the widget is a live probe for an inspection rather than a
+-- restatement of the file header. What it CAN legally do is exactly two things:
+-- test a value for nil-ness, and hand it to a widget setter or to the native
+-- formatter — and both are asserted below on the values the widget actually
+-- received, which the frame stub records raw.
+
+local T = _G.MYTHICMETERS_TEST
+
+local test        = T.test
+local assertEqual = T.assertEqual
+local assertTrue  = T.assertTrue
+local assertFalse = T.assertFalse
+local assertNil   = T.assertNil
+
+--- A window instance with a known column set, plus one row built off its pool.
+---
+--- The row is created through NS.Row.New rather than through a refresh so a case
+--- can hand it any entry it likes, including shapes the aggregator would never
+--- produce.
+local function bench(configure)
+    local inst = T.load()
+    local NS = inst.NS
+
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.columns = {
+        { stat = "DamageDone",  width = 90, showBar = true },
+        { stat = "Interrupts",  width = 40, showBar = true },
+    }
+    cfg.data.sortColumn = "DamageDone"
+    if configure then configure(cfg) end
+
+    local window = NS.Window.New(cfg)
+    local row = NS.Row.New(window)
+    row:ApplyLayout(window.layout)
+    return inst, window, row, cfg
+end
+
+--- An aggregator-shaped entry.
+local function entry(values, opts)
+    opts = opts or {}
+    return {
+        guid          = opts.guid or "Player-1-0000000A",
+        name          = opts.name or "Alpha",
+        classFilename = opts.classFilename or "MAGE",
+        specIconID    = opts.specIconID,
+        role          = opts.role or "DAMAGER",
+        isPlayer      = opts.isPlayer or false,
+        isDrillDown   = opts.isDrillDown,
+        icon          = opts.icon,
+        maxAmount     = opts.maxAmount,
+        values        = values,
+        cells         = values,
+    }
+end
+
+-- ---------------------------------------------------------------------------
+-- Geometry, from config only
+-- ---------------------------------------------------------------------------
+
+test("Row.OffsetFor is a pure function of the index and the row config", function()
+    local layout = { rowHeight = 16, rowSpacing = 1 }
+    local OffsetFor = T.NS.Row.OffsetFor
+    assertEqual(OffsetFor(layout, 1), 0)
+    assertEqual(OffsetFor(layout, 2), 17)
+    assertEqual(OffsetFor(layout, 5), 68)
+    -- No widget is consulted, which is rule R3 for the vertical axis exactly as
+    -- Cell:ApplyLayout is for the horizontal.
+    assertEqual(OffsetFor({ rowHeight = 20, rowSpacing = 0 }, 3), 40)
+end)
+
+test("Cell:ApplyLayout places every cell from the layout table", function()
+    local inst, window, row = bench()
+    local layout = window.layout
+    local Const = inst.NS.Constants
+
+    assertEqual(row.frame:GetWidth(), layout.rowWidth)
+    assertEqual(row.frame:GetHeight(), layout.rowHeight)
+
+    local damage = row.cells.DamageDone
+    local point, relativeTo, _, x = damage.frame:GetPoint(1)
+    assertEqual(point, "TOPLEFT")
+    assertTrue(relativeTo == row.frame)
+    assertEqual(x, Const.NAME_COLUMN_WIDTH + 2)
+    -- The DRAWN width is the layout's share of the frame, not the stored width.
+    assertEqual(damage.frame:GetWidth(), layout.columns[1].width)
+    assertEqual(damage.frame:GetHeight(), layout.rowHeight)
+end)
+
+test("A column toggled off hides its cell rather than destroying it", function()
+    local _, window, row, cfg = bench()
+    local before = row.cells.Interrupts
+    assertTrue(before ~= nil)
+
+    cfg.columns = { { stat = "DamageDone", width = 90 } }
+    window:RefreshUpvalues()
+    row:ApplyLayout(window.layout)
+
+    assertEqual(row.cells.Interrupts.frame:IsShown(), false)
+    assertTrue(row.cells.Interrupts == before, "the widget is kept for when it comes back")
+
+    cfg.columns = { { stat = "DamageDone", width = 90 }, { stat = "Interrupts", width = 40 } }
+    window:RefreshUpvalues()
+    row:ApplyLayout(window.layout)
+    assertEqual(row.cells.Interrupts.frame:IsShown(), true)
+    assertTrue(row.cells.Interrupts == before, "and re-used, not rebuilt")
+end)
+
+test("modules/Row.lua contains no geometry getter at all", function()
+    -- The static half of rule R3. There is not one GetWidth / GetHeight /
+    -- GetLeft / GetPoint call in this file, and there must not be: the layout
+    -- table the window hands in is the whole geometry story.
+    local fh = assert(io.open(T.root .. "/modules/Row.lua", "r"))
+    local n, offenders = 0, {}
+    for line in fh:lines() do
+        n = n + 1
+        if not line:match("^%s*%-%-") then
+            local code = line:gsub("%s%-%-.*$", "")
+            for _, getter in ipairs{ "GetWidth", "GetHeight", "GetLeft", "GetPoint" } do
+                if code:find(":" .. getter .. "%(") then
+                    offenders[#offenders + 1] = "modules/Row.lua:" .. n .. " " .. getter
+                end
+            end
+        end
+    end
+    fh:close()
+    assertEqual(#offenders, 0, table.concat(offenders, ", "))
+end)
+
+-- ---------------------------------------------------------------------------
+-- Values reach the widget untouched
+-- ---------------------------------------------------------------------------
+
+test("Cell:SetValue hands the raw handle to SetValue and SetMinMaxValues", function()
+    local inst, _, row = bench()
+    local mocks = inst.mocks
+    mocks.setRestricted(true)
+
+    local total = mocks.secret(4200000)
+    local max   = mocks.secret(4200000)
+    row:Update(entry{ DamageDone = { total = total, rate = mocks.secret(14000),
+                                     maxAmount = max } }, 1)
+
+    local bar = row.cells.DamageDone.frame
+    -- The stub stores what it was handed, raw. Identity here is the whole point:
+    -- nothing between the session read and the C side looked at the value.
+    assertTrue(bar:GetValue() == total, "the same handle, not a copy or a coercion")
+    local mn, mx = bar:GetMinMaxValues()
+    assertEqual(mn, 0)
+    assertTrue(mx == max)
+    assertEqual(bar:HasSecretValues(), true,
+        "which is why nothing may read this frame's geometry back")
+end)
+
+test("Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden one", function()
+    local _, _, row = bench()
+    -- `== nil` is the one test this file applies to a meter value, and it is how
+    -- "this player has no dispels" is told apart from "this player dispelled a
+    -- secret number of times".
+    row:Update(entry{ Interrupts = {} }, 1)
+
+    local bar = row.cells.Interrupts.frame
+    assertEqual(bar:GetValue(), 0)
+    local _, mx = bar:GetMinMaxValues()
+    assertEqual(mx, 1)
+    assertEqual(bar:HasSecretValues(), false)
+end)
+
+test("A rate-capable column renders the RATE ALONE by default", function()
+    -- The shipped layout: `leftSlot = "none"`, `rightSlot = "rate"`. "Who is
+    -- doing the most damage right now" is what a meter is read for, and the
+    -- running total is the number that answers it least well.
+    local inst, _, row = bench()
+    inst.mocks.setRestricted(true)
+
+    row:Update(entry{
+        DamageDone = { total = inst.mocks.secret(4200000),
+                       rate  = inst.mocks.secret(14000),
+                       maxAmount = inst.mocks.secret(4200000) },
+    }, 1)
+
+    -- ONE figure sits in the LEFT slot, at the cell's left edge, under a
+    -- left-aligned column header. Filling the right slot first put a lone number
+    -- hard against the cell's right edge and the header hard against its left.
+    local cell = row.cells.DamageDone
+    assertEqual(cell.left:GetText(), "14.0K")
+    assertEqual(cell.right:GetText(), "", "the total is off unless it is asked for")
+end)
+
+test("Both figures appear when the left slot is turned on", function()
+    local inst, _, row = bench(function(c) c.text.leftSlot = "total" end)
+    inst.mocks.setRestricted(true)
+
+    row:Update(entry{
+        DamageDone = { total = inst.mocks.secret(4200000),
+                       rate  = inst.mocks.secret(14000),
+                       maxAmount = inst.mocks.secret(4200000) },
+    }, 1)
+
+    local cell = row.cells.DamageDone
+    assertEqual(cell.left:GetText(), "4.20M")
+    assertEqual(cell.right:GetText(), "14.0K",
+        "amountPerSecond ships beside totalAmount, which is why Dps is never queried")
+    assertEqual(cell.left:GetJustifyH(), "LEFT",
+        "cells line up under their left-aligned column headers")
+    assertFalse(cell.right:GetText():find("/", 1, true) ~= nil,
+        "the rate slot carries no unit suffix — the column header already names the stat")
+end)
+
+test("A counting column renders the total only", function()
+    local _, _, row = bench()
+    row:Update(entry{ Interrupts = { total = 9, rate = 3, maxAmount = 9 } }, 1)
+
+    local cell = row.cells.Interrupts
+    assertEqual(cell.left:GetText(), "9")
+    assertEqual(cell.right:GetText(), "",
+        "\"0.42 interrupts per second\" is noise, so the slot stays empty")
+    assertEqual(cell.stat.isRate, false, "and the catalog is where that is decided")
+end)
+
+test("The text slots are configurable, and percent is the one that goes quiet", function()
+    local inst, _, row = bench(function(cfg)
+        cfg.text.leftSlot  = "percent"
+        cfg.text.rightSlot = "percent"
+    end)
+
+    row:Update(entry{ DamageDone = { total = 60, maxAmount = 100, percent = 60 } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "60.0%")
+
+    -- The aggregator only produces `percent` when the division was legal, which
+    -- is not most of a pull. nil is "cannot be known", never "zero percent".
+    inst.mocks.setRestricted(true)
+    row:Update(entry{ DamageDone = { total = inst.mocks.secret(60),
+                                     maxAmount = inst.mocks.secret(100) } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "")
+    assertEqual(row.cells.DamageDone.right:GetText(), "")
+end)
+
+test("A 'none' text slot renders nothing", function()
+    local _, _, row = bench(function(cfg) cfg.text.leftSlot = "none" end)
+    row:Update(entry{ DamageDone = { total = 100, maxAmount = 100 } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "")
+end)
+
+test("Cell figures are read out of EITHER row shape the addon produces", function()
+    local _, _, row = bench()
+
+    -- modules/Aggregator.lua emits { total }, modules/DrillDown.lua emits
+    -- { total } on `values` with the max on the ROW. Both are legitimate, and
+    -- the branch lives in one place rather than at every call site.
+    row:Update({ guid = "spell:101", name = "Fireball", isDrillDown = true,
+                 maxAmount = 500,
+                 values = { DamageDone = { total = 250, rate = 25 } } }, 1)
+
+    local bar = row.cells.DamageDone.frame
+    assertEqual(bar:GetValue(), 250)
+    local _, mx = bar:GetMinMaxValues()
+    assertEqual(mx, 500, "the max fell back to the row's")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Color
+-- ---------------------------------------------------------------------------
+
+test("Class color comes from classFilename, which keeps working while restricted", function()
+    local inst, _, row = bench(function(cfg) cfg.bars.colorMode = "class" end)
+    inst.mocks.setRestricted(true)
+
+    row:Update(entry({ DamageDone = { total = inst.mocks.secret(100),
+                                      maxAmount = inst.mocks.secret(100) } },
+        { classFilename = "PRIEST" }), 1)
+
+    -- classFilename is NeverSecret. That is what makes "class" the default and
+    -- what makes it keep working at the height of a pull when every number on
+    -- the row is opaque.
+    local color = row.cells.DamageDone.frame.__barColor
+    local expected = inst.mocks.RAID_CLASS_COLORS.PRIEST
+    assertEqual(color[1], expected.r)
+    assertEqual(color[2], expected.g)
+    assertEqual(color[3], expected.b)
+end)
+
+test("Every color mode falls back to one neutral, never to a fourth palette", function()
+    local _, _, row = bench(function(cfg) cfg.bars.colorMode = "class" end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "NOTACLASS" }), 1)
+
+    local color = row.cells.DamageDone.frame.__barColor
+    assertEqual(color[1], 0.45)
+    assertEqual(color[2], 0.45)
+    assertEqual(color[3], 0.5)
+end)
+
+test("Role and stat color modes read their own tables", function()
+    local _, window, row, cfg = bench(function(c) c.bars.colorMode = "role" end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { role = "TANK" }), 1)
+    local roleColor = row.cells.DamageDone.frame.__barColor
+    assertEqual(roleColor[1], 0.30)
+
+    cfg.bars.colorMode = "stat"
+    window:RefreshUpvalues()
+    row:Update(entry{ DamageDone = { total = 1, maxAmount = 1 },
+                      Interrupts = { total = 1, maxAmount = 1 } }, 1)
+    -- One color per column, so a glance at a wide window tells you which column
+    -- you are reading.
+    local damage    = row.cells.DamageDone.frame.__barColor
+    local interrupt = row.cells.Interrupts.frame.__barColor
+    assertFalse(damage[1] == interrupt[1] and damage[2] == interrupt[2],
+        "two stats must not share a color")
+end)
+
+test("A custom color comes from the setting, not from the last-resort literal", function()
+    local _, _, row = bench(function(cfg)
+        cfg.bars.colorMode   = "custom"
+        cfg.bars.customColor = { r = 0.1, g = 0.2, b = 0.3, a = 1 }
+    end)
+    row:Update(entry{ DamageDone = { total = 1, maxAmount = 1 } }, 1)
+    local color = row.cells.DamageDone.frame.__barColor
+    assertEqual(color[1], 0.1)
+    assertEqual(color[2], 0.2)
+    assertEqual(color[3], 0.3)
+end)
+
+test("A cell with its bar switched off keeps its text", function()
+    local _, window, row, cfg = bench(function(c) c.text.leftSlot = "total" end)
+    cfg.columns[1].showBar = false
+    window:RefreshUpvalues()
+    row:ApplyLayout(window.layout)
+    row:Update(entry{ DamageDone = { total = 4200000, maxAmount = 4200000 } }, 1)
+
+    assertEqual(row.cells.DamageDone.frame.__barColor[4], 0, "the bar goes transparent")
+    assertEqual(row.cells.DamageDone.left:GetText(), "4.20M", "the column still reads")
+    -- The BACKGROUND stays: a bar-less column still carries its class tint, it
+    -- just stops competing for attention with a filled bar.
+    assertEqual(row.cells.DamageDone.bg:IsShown(), true)
+end)
+
+-- ---------------------------------------------------------------------------
+-- The name cell
+-- ---------------------------------------------------------------------------
+
+test("The name cell is never handed a meter value at all", function()
+    local inst, _, row = bench()
+    inst.mocks.setRestricted(true)
+    row:Update(entry{
+        DamageDone = { total = inst.mocks.secret(60), maxAmount = inst.mocks.secret(100) },
+        Interrupts = { total = 9,  maxAmount = 9 },
+    }, 1)
+
+    -- The name column used to draw a bar scaled to the sort column, which meant
+    -- handing this frame a secret purely to size a rectangle. Dropping the bar
+    -- takes the frame OUT of the secret set: its geometry stays readable, which
+    -- is the taint half of the change and the half a screenshot cannot show.
+    -- red under: restoring the SetValue(total) call in Cell:SetPlayer.
+    local bar = row.nameCell.frame
+    assertEqual(bar:GetValue(), 0, "the name cell holds no figure")
+    assertEqual(bar:HasSecretValues(), false,
+        "and is therefore not marked secret, unlike every stat cell beside it")
+
+    -- The stat cell in the same row DID take one, which is what makes the
+    -- assertion above a real distinction rather than an artifact of the fixture.
+    assertEqual(row.cells.DamageDone.frame:HasSecretValues(), true)
+end)
+
+test("The name cell colors the NAME by class, now that no bar carries it", function()
+    local inst, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Alpha", classFilename = "MAGE" }), 1)
+
+    local r, g, b = row.nameCell.left:GetTextColor()
+    local c = inst.mocks.RAID_CLASS_COLORS.MAGE
+    assertEqual(r, c.r)
+    assertEqual(g, c.g)
+    assertEqual(b, c.b)
+end)
+
+test("An unknown class reads as white, not as a tenth palette entry", function()
+    local _, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Whatsit", classFilename = "NOTACLASS" }), 1)
+
+    local r, g, b = row.nameCell.left:GetTextColor()
+    assertEqual(r, 1); assertEqual(g, 1); assertEqual(b, 1)
+end)
+
+test("The name cell renders a plain name and survives a secret one", function()
+    local inst, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { name = "Alpha" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Alpha")
+
+    -- ConditionalSecret: on a client that hides it mid-pull the row still draws,
+    -- with the class icon carrying the identity instead.
+    inst.mocks.setRestricted(true)
+    row:Update(entry({ DamageDone = { total = inst.mocks.secret(1),
+                                      maxAmount = inst.mocks.secret(1) } },
+        { name = inst.mocks.secret("Alpha") }), 1)
+    assertEqual(type(row.nameCell.left:GetText()), "string")
+end)
+
+-- ── realm strip and truncation ──────────────────────────────────────────────
+
+test("A cross-realm PLAYER name loses its realm", function()
+    local _, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { guid = "Player-1-0000000A", name = "Stabby-Aerie Peak" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Stabby",
+        "the realm is most of the column and never what anyone is scanning for")
+end)
+
+test("An NPC keeps the hyphen in its name", function()
+    -- "Crenna Earth-Daughter" is a follower-dungeon companion, and the first
+    -- build of the realm strip rendered her as "Crenna Earth". A hyphen is only
+    -- a realm separator in a PLAYER's name; the row's GUID is what says which
+    -- this is, and guessing from the string would be a heuristic about naming
+    -- conventions we do not control.
+    -- red under: stripping on the hyphen unconditionally.
+    --
+    -- The cap is raised for this case so it asserts ONE thing. At the shipped
+    -- default of 20 this exact name is 21 characters and truncates, which is the
+    -- cap working correctly and would mask whether the strip fired.
+    local _, _, row = bench(function(c) c.text.maxNameLength = 0 end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { guid = "Creature-0-3766-2813-30763-209065-000078A00B",
+          name = "Crenna Earth-Daughter" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Crenna Earth-Daughter")
+end)
+
+test("A pet keeps its hyphen too", function()
+    local _, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { guid = "Pet-0-1234-5-6-7-8", name = "Gore-Tusk" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Gore-Tusk")
+end)
+
+test("A name past the cap is truncated with a single ellipsis glyph", function()
+    local _, window, row = bench(function(c) c.text.maxNameLength = 8 end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Meredy Huntswell" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Meredy H\226\128\166")
+    assertEqual(window.config.text.maxNameLength, 8)
+end)
+
+test("Truncation counts CHARACTERS, never bytes", function()
+    -- "Helyâ" is 6 bytes and 5 characters. A byte slice at 5 lands inside the â
+    -- and emits half a code point, which renders as a replacement box — and the
+    -- names most likely to need truncating are exactly the accented ones.
+    -- red under: `out:sub(1, cap)`.
+    local _, _, row = bench(function(c) c.text.maxNameLength = 5 end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Hely\195\162nder" }), 1)
+    assertEqual(row.nameCell.left:GetText(), "Hely\195\162\226\128\166")
+end)
+
+test("A cap of 0 means no cap", function()
+    local _, _, row = bench(function(c) c.text.maxNameLength = 0 end)
+    local long = "Averyveryverylongnpcnamethatkeepsgoing"
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { name = long }), 1)
+    assertEqual(row.nameCell.left:GetText(), long)
+end)
+
+test("Neither the realm strip nor the cap is applied to a SECRET name", function()
+    -- string.match and string.sub READ the characters of a value, and performing
+    -- either on a secret is exactly what rule R1 forbids. A name we may not read
+    -- goes to the widget untouched.
+    -- red under: stripping before the IsConcatSafe probe.
+    local inst, _, row = bench(function(c) c.text.maxNameLength = 4 end)
+    inst.mocks.setRestricted(true)
+    local ok = pcall(row.Update, row, entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = inst.mocks.secret("Stabby-Aerie Peak") }), 1)
+    assertTrue(ok, "inspecting a secret name raised")
+end)
+
+test("A drill-down row keeps a hyphen, which is part of a spell name", function()
+    -- The realm strip is anchored to the first hyphen. On a spell that is not a
+    -- separator, and stripping there would silently shorten it to its first word.
+    local _, _, row = bench()
+    local spell = { guid = "s1", name = "Fire-and-Brimstone", isDrillDown = true,
+                    classFilename = "WARLOCK", role = "NONE",
+                    values = { DamageDone = { total = 1, maxAmount = 1 } } }
+    spell.cells = spell.values
+    row:Update(spell, 1)
+    assertEqual(row.nameCell.left:GetText(), "Fire-and-Brimstone")
+end)
+
+test("A nil name renders empty rather than the string 'nil'", function()
+    local _, _, row = bench()
+    -- Built by hand rather than through `entry()`, which defaults the name: the
+    -- case is about a row that genuinely has none.
+    local blank = { guid = "g", classFilename = "MAGE", role = "NONE",
+                    values = { DamageDone = { total = 1, maxAmount = 1 } } }
+    blank.cells = blank.values
+    row:Update(blank, 1)
+    assertEqual(row.nameCell.left:GetText(), "")
+end)
+
+test("The name cell draws the class icon, and a spell icon inside a drill-down", function()
+    local inst, window, row, cfg = bench(function(c)
+        c.icons.showClass = true
+        c.icons.showSpec  = true
+        c.icons.showRole  = true
+    end)
+    row:ApplyLayout(window.layout)
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE", specIconID = 135771, role = "TANK" }), 1)
+
+    local icons = row.nameCell.icons
+    assertEqual(icons.class:IsShown(), true)
+    local c = inst.mocks.CLASS_ICON_TCOORDS.MAGE
+    local l = select(1, icons.class:GetTexCoord())
+    assertEqual(l, c[1])
+    assertEqual(icons.spec:IsShown(), true)
+    assertEqual(icons.spec:GetTexture(), 135771, "specIconID is a file ID and NeverSecret")
+    assertEqual(icons.role:IsShown(), true)
+
+    -- A drill-down row is a SPELL, not a player: the class slot carries the
+    -- spell's own icon and the spec and role slots have nothing to say.
+    row:Update({ guid = "spell:101", name = "Fireball", isDrillDown = true,
+                 icon = 135808, classFilename = "MAGE", maxAmount = 1,
+                 values = { DamageDone = { total = 1 } } }, 1)
+    assertEqual(icons.class:GetTexture(), 135808)
+    assertEqual(icons.spec:IsShown(), false)
+    assertEqual(icons.role:IsShown(), false)
+
+    cfg.icons.showSpec = false
+    row:ApplyLayout(window.layout)
+    assertEqual(icons.spec:IsShown(), false, "an icon turned off is hidden, not destroyed")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Highlights, mouse and the pool contract
+-- ---------------------------------------------------------------------------
+
+test("highlightSelf honors both spellings of 'this row is you'", function()
+    local _, _, row = bench(function(cfg) cfg.rows.highlightSelf = true end)
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { isPlayer = true }), 1)
+    assertEqual(row.selfHighlight:IsShown(), true)
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { isPlayer = false }), 1)
+    assertEqual(row.selfHighlight:IsShown(), false)
+
+    -- modules/DrillDown.lua and the API's own source rows say `isLocalPlayer`.
+    local drill = { guid = "g", name = "n", isLocalPlayer = true, role = "NONE",
+                    values = { DamageDone = { total = 1, maxAmount = 1 } } }
+    drill.cells = drill.values
+    row:Update(drill, 1)
+    assertEqual(row.selfHighlight:IsShown(), true)
+end)
+
+test("The class tint is painted on the CELLS, not on the row", function()
+    -- It lived on the row briefly and tinted the two-pixel seams between columns
+    -- along with the cells, which lost the column separators the grid is read by.
+    -- Painting each cell leaves the seams clear.
+    -- red under: SetColorTexture on row.bg instead of cell.bg.
+    local inst, _, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE" }), 1)
+
+    local c = inst.mocks.RAID_CLASS_COLORS.MAGE
+    local bg = row.cells.DamageDone.bg
+    assertEqual(bg:IsShown(), true)
+    assertEqual(bg.__colorTexture[1], c.r)
+    assertEqual(bg.__colorTexture[4], 0.1, "a tint, not a second bar")
+end)
+
+test("A row with no class falls back to the alternating stripe", function()
+    -- NPCs, enemies, unattributed pets and drill-down spells land here. Inventing
+    -- a color for them would put a meaningless hue on the rows a player is least
+    -- able to explain.
+    local _, _, row = bench(function(cfg) cfg.rows.alternatingBackground = true end)
+    local e = entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = false })
+    e.classFilename = nil
+
+    row:Update(e, 1)
+    assertEqual(row.bg:IsShown(), false, "odd row, no stripe")
+    row:Update(e, 2)
+    assertEqual(row.bg:IsShown(), true, "even row, striped")
+end)
+
+test("The class tint can be switched off", function()
+    local _, _, row = bench(function(cfg) cfg.bars.bgColorMode = "none" end)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE" }), 1)
+    assertEqual(row.cells.DamageDone.bg.__colorTexture[4], 0, "no tint at all")
+end)
+
+test("The mouseover overlay is driven from the CELLS, and honors the setting", function()
+    local _, _, row = bench(function(cfg) cfg.rows.mouseoverHighlight = true end)
+    row:SetMouseOver(true)
+    assertEqual(row.mouseHighlight:IsShown(), true)
+    row:SetMouseOver(false)
+    assertEqual(row.mouseHighlight:IsShown(), false)
+
+    row.window.config.rows.mouseoverHighlight = false
+    row:SetMouseOver(true)
+    assertEqual(row.mouseHighlight:IsShown(), false)
+end)
+
+test("EnableCellMouse hands the mouse to every cell, including the name cell", function()
+    local _, _, row = bench()
+
+    row:EnableCellMouse(true)
+    assertEqual(row.nameCell.frame:IsMouseEnabled(), true)
+    for _, cell in pairs(row.cells) do
+        assertEqual(cell.frame:IsMouseEnabled(), true)
+    end
+
+    row:EnableCellMouse(false)
+    assertEqual(row.nameCell.frame:IsMouseEnabled(), false)
+end)
+
+test("Release blanks the row without destroying a widget", function()
+    local _, _, row = bench()
+    row:Update(entry{ DamageDone = { total = 4200000, maxAmount = 4200000 } }, 1)
+    assertEqual(row.frame:IsShown(), true)
+
+    local bar = row.cells.DamageDone.frame
+    row:Release()
+
+    assertNil(row.entry)
+    assertNil(row.index)
+    assertEqual(row.frame:IsShown(), false)
+    assertEqual(row.cells.DamageDone.left:GetText(), "")
+    assertEqual(bar:GetValue(), 0)
+    assertTrue(row.cells.DamageDone.frame == bar, "the widget survives; the pool re-uses it")
+    assertNil(row.cells.DamageDone.entry, "and holds no reference to the player it drew")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Mouse hand-off
+-- ---------------------------------------------------------------------------
+
+test("Hovering a stat cell asks the tooltip the narrow question", function()
+    local inst, _, row, cfg = bench()
+    local seen
+    inst.NS.Tooltip.CellTooltip = function(_, e, key) seen = { e, key } end
+    inst.NS.Tooltip.NameTooltip = function() seen = { "name" } end
+
+    row:Update(entry{ DamageDone = { total = 1, maxAmount = 1 } }, 1)
+    row.cells.DamageDone.frame:_run("OnEnter")
+
+    assertEqual(seen[2], "DamageDone")
+    assertTrue(seen[1] == row.entry)
+
+    -- Hovering the NAME cell summarizes every stat, which is the cross-column
+    -- read the whole addon exists for.
+    row.nameCell.frame:_run("OnEnter")
+    assertEqual(seen[1], "name")
+
+    cfg.tooltip.showAllStatsOnName = false
+    seen = nil
+    row.nameCell.frame:_run("OnEnter")
+    assertNil(seen, "the setting switches the summary off entirely")
+end)
+
+test("Clicking a stat cell routes to the drill-down; the name cell does not", function()
+    local inst, _, row = bench()
+    local clicks = {}
+    inst.NS.DrillDown.OnCellClick = function(_, _, _, key) clicks[#clicks + 1] = key end
+
+    row:Update(entry{ DamageDone = { total = 1, maxAmount = 1 } }, 1)
+    row.cells.DamageDone.frame:_run("OnMouseUp")
+    assertEqual(#clicks, 1)
+    assertEqual(clicks[1], "DamageDone")
+
+    -- The name column's question is "how is this player doing overall", which
+    -- the tooltip already answers.
+    row.nameCell.frame:_run("OnMouseUp")
+    assertEqual(#clicks, 1)
+end)
+
+test("A cell with no entry does nothing under the cursor", function()
+    local inst, _, row = bench()
+    local touched = false
+    inst.NS.Tooltip.CellTooltip = function() touched = true end
+    inst.NS.DrillDown.OnCellClick = function() touched = true end
+
+    row:Release()
+    row.cells.DamageDone.frame:_run("OnEnter")
+    row.cells.DamageDone.frame:_run("OnMouseUp")
+    assertFalse(touched)
+end)

@@ -1,0 +1,84 @@
+## Interface: 120007
+## Title: Ka0s Mythic Meters
+## Notes: One grid, one row per group member, one column per stat — read from Blizzard's built-in damage meter.
+## Author: add1kted2ka0s
+## Version: 0.1.0
+## IconTexture: Interface\Icons\achievement_challengemode_gold
+## SavedVariables: MythicMetersDB, MythicMetersPerfDB
+## OptionalDeps: Ace3, LibStub, CallbackHandler-1.0, LibSharedMedia-3.0, LibDataBroker-1.1, LibDBIcon-1.0
+## DefaultState: enabled
+## Category-enUS: Combat
+## X-License: MIT
+## X-Standard: https://github.com/tusharsaxena/WowAddonStandards
+# X-Curse-Project-ID / X-Wago-ID are deliberately absent: the addon is not published yet, and a
+# placeholder ID here would make the packager upload to somebody else's project.
+
+# Libraries (must load first)
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\AceAddon-3.0\AceAddon-3.0.lua
+libs\AceEvent-3.0\AceEvent-3.0.lua
+libs\AceTimer-3.0\AceTimer-3.0.lua
+libs\AceDB-3.0\AceDB-3.0.lua
+libs\AceDBOptions-3.0\AceDBOptions-3.0.lua
+libs\AceConsole-3.0\AceConsole-3.0.lua
+libs\AceConfig-3.0\AceConfig-3.0.xml
+libs\AceGUI-3.0\AceGUI-3.0.xml
+libs\LibKa0s\LibKa0s.xml
+libs\LibSharedMedia-3.0\lib.xml
+libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
+libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+libs\LibDBIcon-1.0\lib.xml
+
+# Locales
+locales\enUS.lua
+
+# Core
+core\Compat.lua
+core\Constants.lua
+core\Namespace.lua
+core\State.lua
+core\Secrets.lua
+core\CoreSetup.lua
+core\PerfSetup.lua
+core\DebugLogSetup.lua
+core\LSMPatch.lua
+core\MythicMeters.lua
+core\Database.lua
+# `/mm debug diag`. Last in the block: it reads modules at CALL time and owns no
+# state, so nothing depends on where it loads.
+core\Diagnostics.lua
+
+# Defaults (the only place a profile default is hardcoded — savedvariables-§2)
+defaults\Profile.lua
+
+# Modules
+modules\Format.lua
+modules\Provider.lua
+modules\Roster.lua
+modules\Aggregator.lua
+modules\WindowManager.lua
+modules\Window.lua
+modules\Row.lua
+modules\Tooltip.lua
+modules\DrillDown.lua
+modules\Visibility.lua
+modules\Minimap.lua
+
+# Settings (last — depend on everything else being initialized)
+settings\Schema.lua
+settings\Slash.lua
+settings\OptionsSetup.lua
+settings\Windows.lua
+settings\Frame.lua
+settings\Header.lua
+settings\Rows.lua
+settings\Bars.lua
+settings\Text.lua
+settings\Icons.lua
+settings\Tooltip.lua
+settings\Visibility.lua
+settings\Columns.lua
+settings\Data.lua
+settings\General.lua
+settings\Profiles.lua

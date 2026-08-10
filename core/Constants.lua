@@ -1,0 +1,345 @@
+-- core/Constants.lua
+--
+-- Named constants pulled out of the modules so each value lives in exactly one
+-- place and a reader doesn't have to puzzle out a magic number at the use site.
+--
+-- TOC POSITION: second in the core block — after core/Compat.lua and BEFORE
+-- core/Namespace.lua — so every consumer loaded later can read NS.Constants.*
+-- without an existence check. Nothing below reads a field this file did not
+-- itself publish, so sitting ahead of Namespace costs nothing: the only external
+-- table it touches is `_G.Enum`, which the client owns.
+--
+-- This file MUST stay free of logic — no frame creation, no event registration,
+-- no API calls beyond reading Enum tables — so that loading it early has no side
+-- effects. Add a constant here only when it is used across modules, or when a
+-- comment at the use site would otherwise have to explain the number.
+--
+-- The largest thing here is the STAT CATALOG: the single source of truth for
+-- which Enum.DamageMeterType values this addon is willing to show. Add a column
+-- to the addon by adding a row to it; the settings panel's column editor, the
+-- defaults, the aggregator's per-stat read loop and the tooltip's header all
+-- read the same table.
+
+local addonName, NS = ...
+
+local Constants = {}
+NS.Constants = Constants
+
+-- Short alias matching the collection's `Const` idiom. Both names point at the
+-- same table, so a reader who learned one in a sibling addon finds it here.
+NS.Const = Constants
+
+-- ---------------------------------------------------------------------------
+-- Shipped media
+-- ---------------------------------------------------------------------------
+
+-- Monospace TTF shipped under media/fonts/ (JetBrains Mono, OFL — license text
+-- in media/fonts/JetBrainsMono-OFL.txt). A meter is a grid of numbers, and
+-- proportional digits make columns of numbers jitter as they tick; a monospace
+-- face is what makes a column of "12.4M / 9.87M / 240K" line up on the decimal.
+-- Registered with LibSharedMedia at load in core/LSMPatch.lua so the settings
+-- panel's font dropdown can offer it by name.
+Constants.FONT_MONO = [[Interface\AddOns\MythicMeters\media\fonts\JetBrainsMono-Regular.ttf]]
+
+-- The LibSharedMedia key the font is registered under. Kept beside the path so
+-- the registration and every default that names the font cannot drift apart.
+Constants.FONT_MONO_NAME = "JetBrains Mono"
+
+-- ---------------------------------------------------------------------------
+-- Enum resolution
+-- ---------------------------------------------------------------------------
+--
+-- C_DamageMeter and its enums are new in 12.0. On a client that does not have
+-- them, `Enum.DamageMeterType.Interrupts` is an index into nil and raises at
+-- FILE LOAD — which would take the whole addon down before it could render the
+-- "meter unavailable" notice it already knows how to show.
+--
+-- So every enum read below is guarded and falls back to the documented numeric
+-- literal. The literals are not a guess: they are the values published on
+-- warcraft.wiki.gg for 12.0 and restated in docs/superpowers/specs. If Blizzard
+-- ever renumbers them, the guarded read wins on any client that HAS the enum,
+-- and only a client that lacks it entirely — where the meter does not exist —
+-- would use the stale literal.
+
+local function enumValue(enumName, key, fallback)
+    local group = _G.Enum and _G.Enum[enumName]
+    local value = group and group[key]
+    if type(value) == "number" then return value end
+    return fallback
+end
+
+--- Enum.DamageMeterType, resolved defensively. The values this addon actually
+--- reads; Dps (1) and Hps (3) are deliberately ABSENT because it never queries
+--- them — `amountPerSecond` ships on the same source row as `totalAmount`, so
+--- one DamageDone read fills both halves of the Damage column (design §3).
+Constants.STAT_TYPE = {
+    DamageDone           = enumValue("DamageMeterType", "DamageDone",           0),
+    HealingDone          = enumValue("DamageMeterType", "HealingDone",          2),
+    Absorbs              = enumValue("DamageMeterType", "Absorbs",              4),
+    Interrupts           = enumValue("DamageMeterType", "Interrupts",           5),
+    Dispels              = enumValue("DamageMeterType", "Dispels",              6),
+    DamageTaken          = enumValue("DamageMeterType", "DamageTaken",          7),
+    AvoidableDamageTaken = enumValue("DamageMeterType", "AvoidableDamageTaken", 8),
+    Deaths               = enumValue("DamageMeterType", "Deaths",               9),
+    EnemyDamageTaken     = enumValue("DamageMeterType", "EnemyDamageTaken",    10),
+}
+
+--- Enum.DamageMeterSessionType. `Current` is the live pull, `Overall` is the
+--- accumulated run, `Expired` is what the client keeps after a session closes.
+--- Windows default to Current (design §8).
+Constants.SESSION_TYPE = {
+    Overall = enumValue("DamageMeterSessionType", "Overall", 0),
+    Current = enumValue("DamageMeterSessionType", "Current", 1),
+    Expired = enumValue("DamageMeterSessionType", "Expired", 2),
+}
+
+--- Enum.DamageMeterSourceDisplayType. Rows are filtered to Ally; Enemy rows are
+--- what the EnemyDamageTaken column is made of, and None is the "not a
+--- displayable source" marker.
+Constants.SOURCE_DISPLAY_TYPE = {
+    None  = enumValue("DamageMeterSourceDisplayType", "None",  0),
+    Ally  = enumValue("DamageMeterSourceDisplayType", "Ally",  1),
+    Enemy = enumValue("DamageMeterSourceDisplayType", "Enemy", 2),
+}
+
+-- ---------------------------------------------------------------------------
+-- The stat catalog
+-- ---------------------------------------------------------------------------
+--
+-- One row per column the addon can show, in the order the column editor offers
+-- them. Fields:
+--
+--   key            stable identifier. This is what a window's column config
+--                  stores, what `/mm` accepts, and what a test asserts on. It is
+--                  NOT the enum name by accident — it is the enum name on
+--                  purpose, so a reader holding Blizzard's documentation can map
+--                  a row to an API value without a lookup table.
+--   enumValue      the Enum.DamageMeterType number handed to the provider.
+--   label          full English label for the settings panel and the tooltip
+--                  header. LOCALIZE AT THE USE SITE — `NS.L[stat.label]` — never
+--                  here: locales/enUS.lua may load before or after this file
+--                  depending on the TOC, and a value frozen at load would miss a
+--                  locale that registers later.
+--   shortLabel     the three-or-four letter form. Still used by anything that
+--                  has to fit a name into almost no width; the column HEADER no
+--                  longer uses it (see headerLabel).
+--   headerLabel    what the grid's column header says. Optional — defaults to
+--                  `label`, and is only spelled out where the full label does not
+--                  fit COLUMN_WIDTH. Full words beat initialisms in a header: a
+--                  player reading "AVD" has to remember what it stood for, and
+--                  the header is read far less often than the numbers under it,
+--                  so the space is worth spending.
+--   isCount        the session reports this stat as ONE ROW PER EVENT rather
+--                  than as a per-source total, so the figure is how many rows a
+--                  GUID has and `totalAmount` is meaningless. TRUE only for
+--                  Deaths — see the note on the catalog row.
+--   isRate         whether `amountPerSecond` is meaningful for this stat. TRUE
+--                  ONLY for DamageDone and HealingDone. Counting stats (kicks,
+--                  dispels, deaths) do carry an amountPerSecond field, but
+--                  "0.42 interrupts per second" is noise, and the text assembler
+--                  uses this flag to decide whether the right-hand text slot has
+--                  anything to say.
+--   defaultWidth   pixel width of the cell when the column is first added.
+--                  UNIFORM ACROSS EVERY STAT — see COLUMN_WIDTH below.
+--   defaultEnabled whether a brand-new window ships with this column.
+--
+-- ADDING A STAT: add a row. Nothing else in the addon enumerates these values.
+
+--- The width every column is born at.
+---
+--- ONE NUMBER FOR EVERY STAT, and that is the point. Sizing each column to its
+--- own content — 92 for damage, 44 for deaths — produced a ragged grid whose
+--- header labels sat at nine different offsets, and the eye reads a meter by
+--- scanning down a column, which a ragged grid makes harder for a saving of a
+--- few dozen pixels. 92 is the widest of the old per-stat values (damage's),
+--- which is the one that has to hold "1.41M" and a rate beside it; every other
+--- column simply has room to spare.
+---
+--- Per-column width remains a SETTING. This is the default, not a constraint —
+--- a player who wants a narrow deaths column still has one.
+Constants.COLUMN_WIDTH = 92
+
+-- Gap between two adjacent columns. Not a setting: it is the visual seam that
+-- keeps two numbers from reading as one, and a player who wants more space
+-- widens the column.
+--
+-- Lives here rather than in modules/Window.lua because the layout builder and
+-- core/Database.lua's width migration both have to agree on it — the migration
+-- sizes a frame to hold the grid the layout builder is about to lay out, and two
+-- copies of "2" is the duplicate that drifts the first time one of them changes.
+Constants.COLUMN_GAP = 2
+
+-- The narrowest a stat column may be drawn.
+--
+-- Columns share the frame's width equally, so dragging the window narrow keeps
+-- squeezing them — and below this a column cannot hold an abbreviated number and
+-- its header at the same time, which is the point at which the window stops
+-- being a meter. modules/Window.lua stops shrinking here and clamps the frame
+-- instead of drawing something illegible.
+Constants.COLUMN_MIN_WIDTH = 50
+Constants.STATS = {
+    {
+        key = "DamageDone", enumValue = Constants.STAT_TYPE.DamageDone,
+        label = "Damage", shortLabel = "DMG",
+        isRate = true, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "HealingDone", enumValue = Constants.STAT_TYPE.HealingDone,
+        label = "Healing", shortLabel = "HEAL",
+        isRate = true, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "Absorbs", enumValue = Constants.STAT_TYPE.Absorbs,
+        label = "Absorbs", shortLabel = "ABS",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = false,
+    },
+    {
+        key = "Interrupts", enumValue = Constants.STAT_TYPE.Interrupts,
+        label = "Interrupts", shortLabel = "INT",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "Dispels", enumValue = Constants.STAT_TYPE.Dispels,
+        label = "Dispels", shortLabel = "DIS",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "DamageTaken", enumValue = Constants.STAT_TYPE.DamageTaken,
+        label = "Damage Taken", shortLabel = "DTK", headerLabel = "Taken",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = false,
+    },
+    {
+        key = "AvoidableDamageTaken", enumValue = Constants.STAT_TYPE.AvoidableDamageTaken,
+        label = "Avoidable Damage", shortLabel = "AVD", headerLabel = "Avoidable",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "Deaths", enumValue = Constants.STAT_TYPE.Deaths,
+        label = "Deaths", shortLabel = "DTH",
+        -- DEATHS IS COUNTED, NOT SUMMED, and this flag is the whole reason the
+        -- column read zero for everybody.
+        --
+        -- Every other stat hands back one source row per player carrying that
+        -- player's total. Deaths hands back one row PER DEATH — the same
+        -- sourceGUID appears once for each time they died, each with its own
+        -- deathRecapID, and `totalAmount` is 0 on every one of them (and 0 on the
+        -- session). Reading totalAmount therefore answers 0, correctly and
+        -- uselessly. The figure a player means by "deaths" is how many rows they
+        -- have.
+        --
+        -- Counting is arithmetic on a number THIS ADDON produced, not on a meter
+        -- value, so it stays legal mid-pull where summing two secrets would not.
+        isCount = true,
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
+    },
+    {
+        key = "EnemyDamageTaken", enumValue = Constants.STAT_TYPE.EnemyDamageTaken,
+        label = "Enemy Damage Taken", shortLabel = "EDT", headerLabel = "Enemy Taken",
+        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = false,
+    },
+}
+
+--- key -> catalog row, built from the array above so the two cannot disagree.
+--- Consumers that hold a stored column's `stat` string resolve it through here
+--- and treat nil as "a column the user configured against a build that offered
+--- more stats than this one" — which they drop rather than render blank.
+Constants.STAT_BY_KEY = {}
+for _, stat in ipairs(Constants.STATS) do
+    Constants.STAT_BY_KEY[stat.key] = stat
+end
+
+--- The default column set, in display order, left to right after the name
+--- column: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deaths
+--- (design §5). Derived from `defaultEnabled` rather than restated, so the two
+--- can never drift; the ORDER is the catalog's order, which is why the catalog
+--- is written in the order a player wants to read.
+Constants.DEFAULT_STAT_KEYS = {}
+for _, stat in ipairs(Constants.STATS) do
+    if stat.defaultEnabled then
+        Constants.DEFAULT_STAT_KEYS[#Constants.DEFAULT_STAT_KEYS + 1] = stat.key
+    end
+end
+
+-- Width of the leading name column. Not a stat — every row has one and it can
+-- never be removed — so it is a constant rather than a catalog entry.
+--
+-- WIDER THAN COLUMN_WIDTH ON PURPOSE, and the one place the uniform grid is
+-- deliberately broken: it holds a class icon, a spec icon, a role icon and a
+-- name of up to `text.maxNameLength` characters, where a stat column holds two
+-- short numbers. 140 fits the 20-character default cap at 11pt with the icon
+-- row in front of it.
+Constants.NAME_COLUMN_WIDTH = 118
+
+-- ---------------------------------------------------------------------------
+-- The message bus
+-- ---------------------------------------------------------------------------
+--
+-- Modules talk to each other through AceEvent messages named
+-- "Ka0s_MythicMeters_<Event>" and never by reaching into another module's table
+-- (architecture-§4). Every name is declared here so the catalog in
+-- docs/ARCHITECTURE.md has one place to be checked against, and so a typo in a
+-- subscriber is a nil-index at load rather than a callback that silently never
+-- fires.
+--
+-- ONE SENDER EACH. The owner is named in the comment beside each constant; a
+-- second sender is a bug, not a convenience.
+Constants.MSG = {
+    -- core/MythicMeters.lua fans the raw game events onto the bus. Nothing else
+    -- registers DAMAGE_METER_* / GROUP_ROSTER_UPDATE / ... directly, so there is
+    -- one place where "the game said something" becomes "the addon knows".
+    METER_UPDATED       = "Ka0s_MythicMeters_METER_UPDATED",       -- current session ticked
+    METER_SESSION       = "Ka0s_MythicMeters_METER_SESSION",       -- { type, sessionID }
+    METER_RESET         = "Ka0s_MythicMeters_METER_RESET",         -- sessions wiped
+    ROSTER_CHANGED      = "Ka0s_MythicMeters_ROSTER_CHANGED",      -- group composition moved
+    ZONE_CHANGED        = "Ka0s_MythicMeters_ZONE_CHANGED",        -- instance context moved
+    ENTERING_WORLD      = "Ka0s_MythicMeters_ENTERING_WORLD",      -- login / reload / zone-in
+    RESTRICTION_CHANGED = "Ka0s_MythicMeters_RESTRICTION_CHANGED", -- { type, state }
+
+    -- core/Database.lua, on an AceDB profile swap / copy / reset.
+    PROFILE_CHANGED     = "Ka0s_MythicMeters_PROFILE_CHANGED",     -- { newProfileKey }
+
+    -- settings/ — the single write seam (NS.SetByPath) announces, nobody else.
+    CONFIG_CHANGED      = "Ka0s_MythicMeters_CONFIG_CHANGED",      -- { section, windowId }
+
+    -- modules/WindowManager.lua, when the window REGISTRY changes shape (a
+    -- window created, deleted, renamed or duplicated). Distinct from
+    -- CONFIG_CHANGED, which is a setting moving inside a window that already
+    -- exists: the registry message forces a rebuild, the config message a
+    -- refresh.
+    WINDOWS_CHANGED     = "Ka0s_MythicMeters_WINDOWS_CHANGED",     -- { windowId, action }
+
+    -- core/State.lua, when preview mode is toggled by the unlock state or by
+    -- `/mm preview`.
+    TEST_MODE_CHANGED     = "Ka0s_MythicMeters_PREVIEW_CHANGED",     -- { enabled }
+
+    -- modules/DrillDown.lua, when a window enters or leaves a per-source
+    -- breakdown. Declared here rather than spelled out at the two use sites: a
+    -- hand-written wire string in the sender and another in the subscriber is
+    -- exactly the pair this catalog exists to make impossible to mistype.
+    DRILLDOWN_CHANGED   = "Ka0s_MythicMeters_DRILLDOWN_CHANGED",   -- { windowId, active }
+}
+
+-- ---------------------------------------------------------------------------
+-- Refresh timing
+-- ---------------------------------------------------------------------------
+
+-- Floor on the per-window refresh throttle, in seconds. The meter events fire
+-- far faster than a human can read, so a window coalesces them; letting a user
+-- configure the interval down to zero would turn every event into a full
+-- rebuild, which is the exact failure the throttle exists to prevent
+-- (performance-§6). The settings slider clamps to this.
+Constants.THROTTLE_MIN = 0.05
+
+-- Ceiling on the same slider. Past this the display reads as broken rather than
+-- as economical.
+Constants.THROTTLE_MAX = 2.0
+
+-- Row-pool growth step. Frames are never destroyed, only released, so this is
+-- the size of the batch created when a bigger group arrives mid-session. Sized
+-- to a party so a 5-man never grows twice.
+Constants.POOL_GROW_STEP = 5
+
+-- Upper bound on rows a single window will draw regardless of configuration.
+-- A 40-player raid is the largest real group; the cap exists so a corrupted
+-- config cannot ask the pool for thousands of frames.
+Constants.MAX_ROWS = 40

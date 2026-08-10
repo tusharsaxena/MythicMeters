@@ -1,0 +1,560 @@
+# Saved variables and the settings schema
+
+Two saved-variables are declared in `MythicMeters.toc`:
+
+| Global | Owner | What it holds |
+|---|---|---|
+| `MythicMetersDB` | AceDB-3.0, assembled in `core/Database.lua` | every setting — the window registry, the id counter, the minimap table, and the account-wide schema version |
+| `MythicMetersPerfDB` | `LibKa0s-Perf-1.0`, wired in `core/PerfSetup.lua` | `/mm perf` A/B capture records |
+
+`MythicMetersPerfDB` sits **outside** the profile tree on purpose, and it is not merely "a second
+table for tidiness". A capture record is diagnostics, not configuration: it describes one measured
+session on one machine, and it means nothing under a different profile. Folding it into
+`db.profile` would make a profile switch appear to delete captures and a profile copy appear to
+duplicate them, and it would put library-owned bytes inside the tree `NS.ValidateSchema` and the
+Defaults sweep both walk. Nothing in this addon reads or writes it directly — the library owns its
+shape, and deleting it loses captures and nothing else.
+
+Everything below is about `MythicMetersDB`.
+
+---
+
+## `db.global` — account-wide
+
+```lua
+db.global = {
+    schemaVersion = 1,     -- CURRENT_DB_VERSION in core/Database.lua
+}
+```
+
+The version is **addon-wide rather than per-profile** (`savedvariables-§1`), so a migration runs
+once per account instead of once per profile. `NS:RunMigrations()` walks it forward one step at a
+time out of the `migrations` table in `core/Database.lua`, and is called from `NS:InitDB()` and
+again from every AceDB profile callback (changed / copied / reset).
+
+At v1 the `migrations` table is empty by design: the shipped shape **is** v1. The runner exists
+anyway so that the next non-additive change ships beside its migrator rather than having one wired
+up under deadline pressure. Adding a v2 is two edits and no bootstrap change:
+
+```lua
+migrations[1] = function(db) ... ; db.global.schemaVersion = 2 end
+local CURRENT_DB_VERSION = 2
+```
+
+**Bump the version only for a non-additive change** — a rename, a restructure, a type change.
+Adding a new leaf setting or a new window config group needs no bump: AceDB's defaults merge
+absorbs the profile-level ones and `Database.EnsureWindowShape` absorbs the per-window ones.
+
+### Why normalization is shape-driven and not version-gated
+
+`Database.SeedWindows` runs **unconditionally**, after the version walk, on every Init and every
+profile swap. It does not ask "is this account older than v2"; it asks "is this key missing".
+
+That is not belt-and-braces, it is the only question with a reliable answer. AceDB's defaults merge
+backfills `db.global.schemaVersion` to the current value the moment `db.global` is first touched —
+so an account that has never seen a migration reads as already-current, and a version-gated step
+would be skipped entirely, silently, on exactly the profile that needed it.
+
+---
+
+## `db.profile` — the profile tree
+
+The whole thing:
+
+```lua
+db.profile = {
+    enabled      = true,      -- master enable. Off = no window drawn, no provider read.
+    windows      = { },       -- an ARRAY of window config tables, in picker order
+    nextWindowId = 1,         -- monotonic id source; ids are never reused
+    minimap      = { hide = false },   -- LibDBIcon-1.0 owns this table's shape
+}
+```
+
+Four keys, and that is the design working rather than the profile being thin. A window is an
+**instance, not a singleton** (design §6): there are no global display settings, so `frame`,
+`header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
+inside one window's config. What is left at profile level is the handful of things that cannot
+sensibly differ between windows.
+
+### `windows` is an array, and it is empty in the defaults
+
+`defaults/Profile.lua` ships `windows = {}` and `core/Database.lua` seeds exactly one window into
+it. The seed **cannot** be a default: AceDB's defaults merge would fold a default window back into
+a profile the user had deleted their last window from, resurrecting it on every login with no way
+to refuse it. So the seed lives in `Database.SeedWindows`, which detects "brand new" by an **empty
+registry** rather than by a version — the same shape-driven rule as above.
+
+`Database.GetWindows()` is the one traversal seam; every consumer that reads the registry goes
+through it, and every consumer that *mutates* it goes through `modules/WindowManager.lua`, which is
+the sole sender of `WINDOWS_CHANGED`.
+
+### `nextWindowId` — ids are minted, never reused
+
+`Database.NextWindowId()` hands out the next integer and advances the counter. Reuse would let a
+deleted window's id be handed to a new one, which would then silently inherit the settings panel's
+active-window pointer and every window-relative schema path aimed at it. A window with no `id` (a
+hand-edited SavedVariables, a build that predates the counter) is **given** one rather than dropped:
+losing a configured window is worse than renumbering it.
+
+### `minimap`
+
+`{ hide = false }` is all this addon declares. `LibDBIcon-1.0` is registered against this table and
+treats it as its own — it reads `hide` and **writes** `minimapPos` (and a lock / free-position pair
+if the player drags the button off the minimap). The addon must never enumerate the table or
+normalize keys out of it, or a dragged button snaps back on the next login.
+
+### What is deliberately *not* in the profile
+
+The session-only flags in `core/State.lua`: `debug`, `restricted`, `preview`, `activeWindowId`, and
+`State.cache`. A flag that survives a `/reload` is a setting; these are not. Persisting
+`activeWindowId` in particular would make a deleted window's id outlive the window.
+
+---
+
+## The window config template
+
+Written once as a private literal in `defaults/Profile.lua` and **deep-copied per window** by
+`NS.DefaultWindow(id, name)`. It is never handed out by reference: two windows sharing one
+sub-table is the classic profile-aliasing bug, where editing window 2's bar color silently edits
+window 1's. The template is published as `NS.WINDOW_TEMPLATE` for the merge, the tests and the
+schema validator.
+
+```lua
+{
+    id   = <number>,     -- stamped by NS.DefaultWindow / Database.SeedWindows
+    name = "Meter",      -- shown in the picker and, optionally, in the header
+    frame = {...}, header = {...}, rows = {...}, bars = {...}, text = {...},
+    icons = {...}, tooltip = {...}, visibility = {...}, columns = {...}, data = {...},
+}
+```
+
+Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and the settings panel's
+"Settings to copy" dropdown — one list, three jobs. **A group added to the template and not to
+`COPY_GROUPS` simply never copies.**
+
+### `frame` — the standalone window
+
+| Key | Default | Notes |
+|---|---|---|
+| `width` | `716` | slider 160–1400. Derived from the grid: name column + six default columns at `COLUMN_WIDTH` + seams + padding. |
+| `height` | `220` | slider 60–900 |
+| `scale` | `1.0` | 0.5–2.0 |
+| `alpha` | `1.0` | 0–1, rendered as a percentage |
+| `strata` | `"MEDIUM"` | `LOW` `MEDIUM` `HIGH` `DIALOG` |
+| `backdropColor` | `{ r=0, g=0, b=0, a=0.75 }` | |
+| `borderStyle` | `"Blizzard Tooltip"` | LSM `border` key |
+| `borderSize` | `2` | `0` drops `edgeFile` with it — a zero edge size with a texture still present is drawn as a hard 1px line |
+| `borderColor` | `{ r=0, g=0, b=0, a=1 }` | |
+| `padding` | `6` | frame edge to rows |
+| `locked` | `false` | unlocking implies preview mode |
+| `clampToScreen` | `true` | |
+| `titleBar` / `closeButton` / `resizeGrip` | `true` | |
+| `position` | `{ point="CENTER", relativePoint="CENTER", x=0, y=0 }` | **not a schema row** — see below |
+
+The chrome itself is `LibKa0s-Core-1.0`'s shared `SKIN` / `ApplySkin`, which tints `frame.title` and
+`frame.divider` on its own, so the accent colors are not settings here. What the player owns is
+geometry, the backdrop and the LSM border, layered over the skin in that order.
+
+**`frame.position` is not a schema row and cannot be one.** It is four values behind one concept,
+which the flat path model has no vocabulary for, and it is written by a drag rather than typed. It
+is also the one piece of window state that must never be *read back* off the live frame (rule R3).
+`modules/Window.lua` keeps an empty, invisible `anchor` frame that never receives a value and reads
+`GetPoint` off **that**; the visible window is anchored to it. Because positions have no row,
+`NS.ApplyDefault` never reaches them, so `NS.ResetPositions()` exists and is wired into the options
+descriptor's `afterRestoreAll` — without it a "reset everything" would leave every window exactly
+where it was.
+
+### `header` — the strip above the rows
+
+`title = ""` (empty falls back to the window's name) · `showSessionName = true` ·
+`showDuration = true` · `showTotals = true` · `font = "Friz Quadrata TT"` · `size = 12` ·
+`outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `align = "LEFT"` · `height = 18` ·
+`bgColor = { r=0, g=0, b=0, a=0.5 }`.
+
+`showTotals` shows the group total **for the sort column**, taken off the aggregate the render pass
+just parked on the window — never a second provider read.
+
+### `rows` — one per group member
+
+`maxRows = 0` (0 means "as many as fit the frame"; a positive value caps it, hard-ceilinged at
+`Constants.MAX_ROWS = 40`) · `height = 16` · `spacing = 1` · `growthDirection = "DOWN"` ·
+`alwaysShowSelf = true` · `highlightSelf = true` · `alternatingBackground = true` ·
+`mouseoverHighlight = true`.
+
+`alwaysShowSelf` spends the last visible slot on the local player rather than growing the list, so
+the row count stays exactly at the cap (`Aggregator.ApplyRowLimit`).
+
+### `bars` — the StatusBar in every cell
+
+`texture = "Blizzard Raid Bar"` (LSM `statusbar`) · `colorMode = "class"` · `customColor =
+{ r=0.35, g=0.55, b=0.85, a=1 }` · `bgColor = { r=0, g=0, b=0, a=1 }` · `bgAlpha = 0.35` ·
+`border = false` · `alpha = 1.0` · `fillDirection = "LEFT"`.
+
+`colorMode` is `class` / `stat` / `custom`. **`class` is the default because `classFilename` is
+`NeverSecret`** — a class-colored bar is still correct at the height of a pull, when every number on
+the row is an opaque handle. `fillDirection` names where the fill *starts*, so `"LEFT"` means the
+bar grows rightward (`SetReverseFill(false)`).
+
+### `text` — the FontString in every cell
+
+`leftSlot = "total"` (`total` / `percent` / `none`) · `rightSlot = "rate"` (`rate` / `percent` /
+`none`) · `numberFormat = "abbreviated"` (`abbreviated` / `full`) · `maxNameLength = 20` (0 = no
+cap) · `font = Const.FONT_MONO_NAME` ("JetBrains Mono") · `size = 11` · `outline = "NONE"` ·
+`shadow = true` · `color = { r=1, g=1, b=1, a=1 }` · `alpha = 1.0`.
+
+`maxNameLength` counts **characters, not bytes** — a byte slice can land inside a multi-byte
+character and emit half a code point, and the names most likely to need truncating are exactly the
+accented ones. It sits above WoW's 12-character player-name limit because a group meter also lists
+NPCs, which are not bound by it. The realm is stripped regardless of the number.
+
+Both the strip and the cap are **gated on the concat probe**: `string.match` and `string.sub` read
+the characters of a value, and doing that to a secret is what rule R1 forbids, so a `ConditionalSecret`
+name reaches the widget untouched and uncapped.
+
+**Nothing here divides anything.** `numberFormat` picks which `NumericRuleFormatter` instance
+`modules/Format.lua` hands the value to; the formatter does the division natively, which is the only
+legal way to render "12.4M" from a secret. `percent` is the one slot that goes quiet in combat —
+`modules/Aggregator.lua` only produces it when both operands were accessible, and empty means
+"cannot be known right now", never "zero percent". That is why the shipped slots are `total` and
+`rate`.
+
+`rightSlot = "rate"` renders only for stats whose catalog row sets `isRate` — `DamageDone` and
+`HealingDone`. Counting stats leave the slot empty rather than announcing "0.42 interrupts per
+second".
+
+### `icons` — the marks in the name column
+
+`showClass = true` · `showSpec = false` · `showRole = false` · `size = 14` · `position = "LEFT"`.
+
+`classFilename` and `specIconID` are both `NeverSecret`, so this column renders in full even when
+every number to its right is opaque.
+
+### `tooltip`
+
+`anchor = "CURSOR"` · `showSpells = true` · `maxSpells = 10` · `showAllStatsOnName = true` ·
+`hideInCombat = false`.
+
+`hideInCombat` is a **preference, not a guard**: a tooltip's numbers go through the formatter like
+every other, so nothing about it is unsafe mid-pull — it is simply in the way. The combat test
+behind it is `UnitAffectingCombat("player")`, not `InCombatLockdown()`; the setting is a statement
+about the player, not about whether secure writes are currently legal.
+
+### `visibility`
+
+`dungeon = true` · `raid = true` · `arena = true` · `battleground = true` · `world = false` ·
+`hideWhenSolo = true` · `hideInVehicle = true`.
+
+Refused **at the source** (`performance-§6`): a hidden window does not merely skip its draw, it
+stops asking the provider for data. `modules/Visibility.lua` maps Blizzard's `instanceType` to these
+keys, and anything it has never heard of resolves to `world` — which ships `false`, so an unknown
+context is deny-by-default.
+
+### `columns` — the ordered stat list
+
+An **array**, filled by `NS.DefaultWindow` from `Constants.DEFAULT_STAT_KEYS` rather than written
+out in the template, so the stat catalog in `core/Constants.lua` stays the single source of truth
+for which stats exist and which ship enabled.
+
+```lua
+columns = {
+    { stat = "DamageDone",           width = 92, showBar = true },
+    { stat = "HealingDone",          width = 92, showBar = true },
+    { stat = "Interrupts",           width = 48, showBar = true },
+    { stat = "Dispels",              width = 48, showBar = true },
+    { stat = "AvoidableDamageTaken", width = 78, showBar = true },
+    { stat = "Deaths",               width = 44, showBar = true },
+}
+```
+
+The catalog offers three more that ship disabled: `Absorbs`, `DamageTaken`, `EnemyDamageTaken`.
+`Dps` and `Hps` are absent from the catalog entirely and never queried — `amountPerSecond` ships on
+the same source row as `totalAmount`, so one `DamageDone` read fills both halves of the column.
+
+### `data`
+
+`sessionType = Const.SESSION_TYPE.Current` · `sortMode = "value"` · `sortColumn = "DamageDone"` ·
+`throttle = 0.25` (clamped to `Constants.THROTTLE_MIN` 0.05 / `THROTTLE_MAX` 2.0).
+
+`sortMode` is `value` / `provider` / `roster`. `value` is *attempted* and degrades to the order
+frozen at the `ADDON_RESTRICTION_STATE_CHANGED` "Activating" edge for the rest of a pull; see
+`docs/data-flow.md`.
+
+**`sessionID` has no schema row and no default**, and both absences are deliberate. It is set by the
+header's segment dropdown rather than by the settings panel, and its "unset" state is `nil` —
+"no segment pinned, follow `sessionType`" — which a defaults tree cannot express. It is persisted:
+`modules/Window.lua` writes it into `window.data` and AceDB stores it from there.
+
+When it *is* set it **overrides `sessionType`**, and every read path honors it — the aggregator's
+column reads, the header's duration, the tooltip's spell breakdown and the drill-down's. A pinned id
+the client no longer holds is dropped back to `nil` by `WindowProto:DropStaleSegment` at the top of
+the next refresh, because a stale id does not error, it silently reads an empty session.
+
+---
+
+## The window-relative path model
+
+This is the part of the schema a reader will not guess, and it is the only thing about
+`settings/Schema.lua` that is not standard-issue.
+
+### The problem
+
+Almost every setting is per-window, and a window is an instance the user creates at runtime. Written
+out absolutely, a window row's path would have to be:
+
+```
+windows.<id>.frame.width
+```
+
+Dynamic, unknowable when `settings/Schema.lua` loads, and impossible to express in the **flat path
+model** that the CLI (`LibKa0s-Slash-1.0`) and the panel (`LibKa0s-Options-1.0`) both read. A flat
+path addresses a fixed named leaf; `<id>` is neither fixed nor named.
+
+### The resolution
+
+A window row's path is **relative to a window** and is spelled with a `window.` prefix:
+
+```lua
+{ path = "window.frame.width", type = "number", default = 716, page = "frame", ... }
+```
+
+`NS.GetSetting` and `NS.SetByPath` resolve that prefix against the session's **active window** —
+`NS.State.activeWindowId`, which the settings panel's window picker moves. Global rows keep absolute
+paths (`enabled`, `minimap.hide`) and resolve against `db.profile`.
+
+```lua
+-- settings/Schema.lua
+local function resolveRoot(parts)
+    if parts[1] == "window" then
+        local w, id = activeWindow()      -- picker's selection, else windows[1]
+        return w, 2, id
+    end
+    return NS.db and NS.db.profile or nil, 1, nil
+end
+```
+
+`activeWindow()` falls back to **the first window in the registry** when nothing is selected, rather
+than to nil. The CLI has no picker, and `/mm set window.frame.width 300` typed on a fresh login must
+mean something rather than fail with a message about an internal pointer the user has never heard
+of. `settings/Windows.lua` and `settings/Columns.lua` heal a stale pointer the same way on every
+read.
+
+### What it buys
+
+One schema, one write seam, and one sentence that is true in both surfaces: **`window.frame.width`
+means "the window I am editing"**, on the CLI exactly as in the panel. The picker retargets seventy
+or so rows by moving one integer of session state instead of by rewriting every path. The panel does
+not filter rows per window — it *moves the window every row resolves against*, which is why
+`NS.SchemaForPage(pageKey, filter)` accepts the library's `ctx.unit` and passes it through
+untouched.
+
+### Why `NS.ValidateSchema` exists
+
+The cost of the relative model is that a `window.`-prefixed path is resolved against a table that
+does not exist until runtime, so a typo cannot fail at load. `NS.ValidateSchema()` is what closes
+that hole. It runs from the options descriptor's `validate` hook at panel creation and is asserted
+to return **0** by the headless suite. Two independent checks per non-session row:
+
+1. **Resolution.** Every path must resolve against `defaults/Profile.lua` — `window.` rows against
+   `NS.WINDOW_TEMPLATE`, global rows against `NS.defaults.profile`. A path that does not resolve is
+   a setting whose writes land on a key nothing reads: the panel renders, the widget shows the row's
+   own default, the write succeeds, and nothing anywhere says so. The row's own `default` is **not**
+   an escape hatch from this — a row with a good default and a typo'd path is the worst case, not
+   the exempt one.
+2. **Agreement.** The row's `default` must equal the value the defaults tree ships. The two are
+   restated in two files on purpose: one is what a widget shows before the db exists, the other is
+   what a fresh profile is built from. A single shared reference would agree with itself by
+   construction and prove nothing. A disagreement means a Defaults click silently moves a setting
+   somewhere the addon never shipped it — the bug this function exists to catch.
+
+Table defaults (every color) are compared field-wise one level deep, which is exactly as deep as
+this schema's table defaults go.
+
+---
+
+## Row shape
+
+```
+path         resolution path. `window.`-prefixed = active window; else db.profile.
+type         "bool" | "number" | "string" | "color". THE widget dispatch key —
+             the options major picks a maker from it and the slash major picks a
+             parser from the same field, which is what keeps the CLI and the panel
+             agreeing about what a row is. There is deliberately no separate
+             `widget` field: a second selector is a second thing to keep in step.
+default      the shipped value; MUST equal defaults/Profile.lua's.
+page         the page key. Groups `/mm list`, feeds the panel's rowsForPage, names
+             the CONFIG_CHANGED section, and `page == "profiles"` is the reset-all
+             veto. One key, four jobs.
+group        section heading inside the page.
+label, desc  displayed strings, localized at declaration through NS.L.
+min/max/step/fmt/isPercent    slider shape.
+values/sorting/dialogControl  dropdown shape. A `number` row carrying `values` is
+             inferred as an enum by both majors and constrained rather than clamped.
+validate     optional predicate; a false answer refuses the write.
+onChange     optional reaction for the few settings CONFIG_CHANGED cannot express.
+invert       display is the negation of storage (the one minimap row).
+sessionOnly  never persisted; the row's own get/set are the whole storage.
+```
+
+### `invert` — exactly one row
+
+`minimap.hide` stores the negation of what it displays. LibDBIcon owns the `minimap` table and its
+key is `hide`, while a checkbox a user reads has to say "Show minimap button" — a checkbox labelled
+with a negative is the settings-panel double-negative everyone mis-clicks once. Rather than give
+that one row a private get/set pair (which the CLI would then have to know about separately), the
+seam carries a two-line `toStored` / `toDisplay` concept used at three call sites. `default` is
+always the **stored** value, so the validator still compares like with like.
+
+### `sessionOnly` — exempt from validation, still rows
+
+`state.preview` and `state.debugConsole` are never persisted, so they have no home in the defaults
+tree and `NS.ValidateSchema` skips them. They are rows anyway because they belong on the page and in
+`/mm list` beside the settings they sit next to — a toggle that exists only in the panel is a toggle
+the CLI cannot reach. Their own `get` / `set` **are** the whole storage; `NS.GetSetting` returns
+`row.get()` directly rather than `and`-ing it through, because a session row answering `false` is a
+real answer and `row.get() or nil` would turn every "off" into "no such setting".
+
+### `onChange` — the exception, not the rule
+
+The default refresh for every row is the `CONFIG_CHANGED` message `NS.SetByPath` sends, and
+`settings/Schema.lua` is its **one sender**. Windows subscribe and re-read their upvalues; the panel
+re-reads its scalars. `onChange` exists only where the message genuinely cannot express the effect:
+
+- every `window.visibility.*` row and `enabled` → `refreshVisibility()`, because the effect is a
+  window appearing or disappearing (the show ladder's decision), not a window redrawing;
+- `minimap.hide` → `refreshMinimap()`, because LibDBIcon holds a Blizzard-side object outside our
+  config tree and has to be told to look again.
+
+Both resolve their target through `NS` at call time, because both load after `settings/Schema.lua`.
+
+---
+
+## The write seam
+
+`NS.SetByPath(path, value)` is the single write seam (`settings-schema-§1`). The panel's widgets,
+`/mm set`, `/mm reset`, `NS.ApplyDefault` and the global Defaults sweep all land here, so validation,
+the debug line, the row's reaction and the refresh cannot be skipped by whichever caller forgot one.
+
+**Order is load-bearing**: write → react (`onChange`) → log once → announce `CONFIG_CHANGED` →
+re-sync the panel's scalars. Reacting before the write would hand a refresher the old value; logging
+in the reactor would log it once per subscriber.
+
+Values are **deep-copied on the way in**. A color table handed straight from a widget (or from a
+row's default) would otherwise be shared with whoever else holds it, and editing one window's color
+would edit theirs. `NS.ApplyDefault` copies for the same reason, and takes the **row** rather than
+the path because both library majors hand over the row.
+
+The announcement carries `{ section = row.page, windowId = <id or nil> }`. A window ignores a
+payload naming a different id, so a twenty-window profile does not re-apply nineteen windows because
+one of them was edited.
+
+The refresh at the tail is `Helpers.RefreshScalars()` — an in-place value re-read, never a structural
+rebuild. A structural refresh here would rebuild the page under a slider mid-drag, and writing a
+value emphatically does not change which rows exist. (The picker on the Windows page *does* force a
+structural sweep, because there the rows changed **subject**; see `docs/settings-panel.md`.)
+
+---
+
+## The columns carve-out
+
+`window.columns` is an ordered array whose length is the user's, not the schema's. A path model
+addresses named leaves; it has no vocabulary for "insert a column before index 2". So the columns
+subtree is a documented carve-out rather than a row:
+
+| Operation | Behavior |
+|---|---|
+| `/mm get window.columns` | **reads** — the generic resolver reaches it like any other node |
+| `NS.SetByPath("window.columns", array)` | **accepted whole-array** — the only granularity a path can honestly express |
+| `NS.SetByPath("window.columns.2.width", 90)` | **refused** — the ordinal moves on the next add, remove or reorder, so a stored reference to it is wrong by the next edit |
+
+Because the array has no row, it gets none of a row's `validate`, so the check lives at the seam and
+is at least as strict. `normalizeColumns` proves the array shape before reading anything out of it
+(a hole or a string key would make `#value` an arbitrary answer), then rebuilds it entry by entry:
+
+- at least one column (a window of nothing but names reads as a broken addon);
+- every `stat` is a string present in `Constants.STAT_BY_KEY`, **once** — two Damage columns show
+  identical numbers twice and double the provider reads for them;
+- `width` is a number in **24–240**, with an explicit `width ~= width` NaN test (NaN passes every
+  ordinary comparison and would reach `SetWidth` as a size no frame can be given);
+- `showBar` is a real boolean.
+
+Rebuilding rather than accepting the caller's table does two jobs at once: the stored array can never
+share a sub-table with whoever handed it over, and any extra key someone smuggled in is dropped
+rather than persisted into a profile the renderer will not read. The write then takes the **same**
+debug line, `CONFIG_CHANGED` message and panel re-sync every scalar write takes — a direct table
+write in the page would be a second seam that looks identical and announces nothing.
+
+---
+
+## Merging a stored profile forward
+
+AceDB's defaults merge fills keys of tables it knows about. It does **not** know that
+`profile.windows[3]` is supposed to look like `WINDOW_TEMPLATE`, because it cannot reach inside an
+array. So the per-window merge is ours, in `Database.EnsureWindowShape` → `fillMissing`.
+
+### The `== nil` rule
+
+```lua
+for k, v in pairs(template) do
+    if stored[k] == nil then
+        stored[k] = copy(v)
+    elseif type(v) == "table" and type(stored[k]) == "table" and v[1] == nil then
+        fillMissing(stored[k], v)
+    end
+end
+```
+
+The presence test is `stored[k] == nil`. **It is never `stored[k] or template[k]`.**
+
+`or` cannot tell *unset* from a stored `false`, `""` or `0`, and this profile is full of exactly
+those values — `frame.locked = false`, `header.title = ""`, `rows.maxRows = 0`,
+`bars.border = false`, `icons.showSpec = false`, `visibility.world = false`. An `or` merge would
+silently reset a user's deliberate "off" back to the shipped "on" on every single login, and would
+do it invisibly, because the setting they turned off would simply be on again.
+
+The same rule appears in `core/CoreSetup.lua`'s `fallbackRGBA` (a stored channel of `0` survives as
+`0`) and in `settings/Schema.lua`'s session-row read. It is one rule, applied everywhere a stored
+value can legitimately be falsy.
+
+### Arrays are left alone
+
+The recursion guard is `v[1] == nil` — recurse into **keyed** sub-tables only. `columns` is an
+ordered list the user edits, and key-filling it against the template would re-add columns they
+removed. An **absent** `columns` array is a broken profile rather than an older one, and gets an
+empty table so the window still renders.
+
+`fillMissing` is idempotent and shape-driven, so it is safe to run on every login, every profile
+swap, and after every `CopyFrom` and `Duplicate` — which is exactly where
+`modules/WindowManager.lua` calls it.
+
+---
+
+## Profile lifecycle
+
+`core/Database.lua` registers one callback for all three AceDB profile events:
+
+```lua
+db.RegisterCallback(Database, "OnProfileChanged", "OnProfileChanged")
+db.RegisterCallback(Database, "OnProfileCopied",  "OnProfileChanged")
+db.RegisterCallback(Database, "OnProfileReset",   "OnProfileChanged")
+```
+
+Each one runs `NS:RunMigrations()` (the newly-active profile may be a copy authored at an older
+version, or a reset back to an empty registry), clears `NS.State.activeWindowId`, wipes every
+session cache, and fires **one** `PROFILE_CHANGED` message. `fireProfileChanged` is the single
+emitter — every path that makes the active profile a different thing routes through it, so the bus
+catalog names one site and stays true.
+
+`AceDB:New("MythicMetersDB", NS.defaults, true)` passes `true` as the third argument, which AceDB
+expands to the shared `"Default"` profile. Omitting it falls back to a **per-character** profile,
+which contradicts the documentation and is the source of every "each new character lands on its own
+settings" report in the collection. Players who want per-character opt in through the Profiles page.
+
+---
+
+## Adding to the schema
+
+The full recipe, with the gotchas, is in [common-tasks.md](common-tasks.md#add-a-setting). The short
+version: one row in `settings/Schema.lua`, one matching default in `defaults/Profile.lua` at the same
+path (relative to `WINDOW_TEMPLATE` for a `window.` row), the label and desc in `locales/enUS.lua`,
+and nothing else — `/mm get|set|list|reset`, the page widget, the per-page Defaults button and
+`/mm resetall` all follow. Then run `lua tests/run.lua`, which asserts `NS.ValidateSchema() == 0`.

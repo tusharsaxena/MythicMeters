@@ -1,0 +1,19 @@
+Ka0s Mythic Meters — offline perf  (v0.1.0, label 'offline')
+20 group members, 7 columns, throttle 0.25s, 200 events per burst
+
+scenario                  iters     ms/iter   api/iter   bytes/iter
+refresh20x7                 300     1.20917       9.00     310001.7
+throttleBurst                 1     1.34400       9.00     345892.0
+throttleIdle                300     0.00011       0.00          0.0
+drillOpenClose              300     0.03437       1.00      12778.2
+refreshWhileDrilled         300     0.16431       1.00      22783.7
+rosterRebuild               300     1.10238       9.00     320663.8
+rosterBurst                   1     7.87000       9.00     325934.0
+rosterCached                300     1.02134       9.00     310001.3
+applyConfig                 300     0.58067       0.00     157096.0
+probeOverheadOff            300     1.08872       9.00     310001.0
+probeOverheadOn             300     1.03082       9.00     310006.1
+suspended                   300     0.04498       0.00       4090.3
+
+timings are for orientation only — compare scenarios within a run, never across machines
+wrote docs/automated-tests/20260809-195454/perf.json
