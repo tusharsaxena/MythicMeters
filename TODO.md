@@ -96,3 +96,28 @@ Notes for whoever picks this up:
 - Worth pairing with the poll note in `WindowProto:ShouldPoll`: while a fight is on, a shown window
   refreshes on this clock whether or not a meter event arrived, so the setting governs real cost and
   the page copy should say so.
+
+## Wire up the shipped bar texture
+
+**Status:** file committed, not wired. Raised 2026-08-11.
+
+`media/textures/Default.tga` ships as of this commit — 256x32 RGBA, RLE, which is the shape a WoW
+statusbar texture wants. Nothing registers it and nothing reads it: `core/LSMPatch.lua` registers the
+console font and deliberately stops there, and `defaults/Profile.lua` still ships
+`bars.texture = "Blizzard Raid Bar"`, an LSM key that exists on every install.
+
+Two things have to be answered before it is registered, and they are the same two the LSMPatch
+comment has always named:
+
+- **Its license and provenance are unrecorded.** `media/fonts/` carries `OFL.txt` beside the font and
+  `DEPENDENCIES.md` names it as committed-not-generated; the texture has neither. Where this file
+  came from needs establishing and writing down before it ships in a release, not after.
+- **It needs a registry key.** LSM is a namespace every addon writes into, so the key wants the
+  addon's own prefix rather than a bare `"Default"`, which is exactly the collision the comment
+  warned about.
+
+Then it is: one `LSM:Register(LSM.MediaType.STATUSBAR, key, path)` beside the font registration, a
+constant for the path in `core/Constants.lua` next to `FONT_MONO`, and a decision about whether
+`bars.texture`'s default moves to it — which is a schema default change, so
+`NS.ValidateSchema()` and `defaults/Profile.lua` move together with a migration if it does.
+

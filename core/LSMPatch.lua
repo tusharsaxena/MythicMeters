@@ -39,11 +39,17 @@ if LSM then
     LSM:Register(LSM.MediaType.FONT, NS.Constants.FONT_MONO_NAME, NS.Constants.FONT_MONO)
 end
 
--- No bar textures are registered here, deliberately. The addon ships none: the
--- bars use LSM statusbar textures the player already has, defaulting to a
--- Blizzard one that exists on every install. A shipped texture would be one more
--- file to license and one more name to collide in a shared registry, in exchange
--- for a look the player can pick anyway.
+-- No bar textures are REGISTERED here. The addon now ships one —
+-- media/textures/Default.tga, 256x32 RGBA, the shape a statusbar wants — but it
+-- is not in the registry and nothing reads it yet, so the bars still use LSM
+-- statusbar textures the player already has, defaulting to a Blizzard one that
+-- exists on every install.
+--
+-- The two costs that kept it out remain the two things to settle before it goes
+-- in: it needs a license recorded beside it the way media/fonts/ records the
+-- font's OFL, and it needs a registry key that will not collide in a namespace
+-- every addon writes into. Until both are answered the file ships unused, which
+-- costs 971 bytes and no behavior. See TODO.md.
 
 -- ---------------------------------------------------------------------------
 -- 2. AceGUI-3.0-SharedMediaWidgets: the LSM30_Border display tile
