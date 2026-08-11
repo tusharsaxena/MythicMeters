@@ -99,7 +99,7 @@ badge and any count quoted in the docs must agree with it.
 - Compat: ResetAllCombatSessions reports whether the call was actually made
 - Compat: a half-present C_DamageMeter degrades per function
 - Compat: every meter shim survives a fully secret session
-- Compat: the join key is handed back plain, because it is the only legal one
+- Compat: the join key comes back SECRET under the restriction
 - Compat: the optional source arguments are forwarded, never defaulted
 - Compat: CreateNumericRuleFormatter does NOT abbreviate on its own
 - Compat: CreateAbbreviatedNumberFormatter is the one that abbreviates
@@ -341,7 +341,7 @@ badge and any count quoted in the docs must agree with it.
 - Format.Number and Format.Rate contain no division at all
 - A ladder the client silently refuses is DETECTED, not assumed
 
-### test_provider.lua (32)
+### test_provider.lua (33)
 
 - Provider: core/Compat.lua is the only file that names C_DamageMeter
 - Provider: modules/Provider.lua is the only caller of the meter shims
@@ -375,8 +375,9 @@ badge and any count quoted in the docs must agree with it.
 - Provider.HasSession is the staleness check behind a persisted segment
 - Provider: a suspended capture answers no segment questions
 - Provider: reading a segment never inspects a value
+- Provider.ProbeSourceByGuid names what the API did with a GUID it was handed
 
-### test_roster.lua (21)
+### test_roster.lua (22)
 
 - Roster.GetGroup is player-first, then party order
 - Roster.GetGroup carries name, class and role off the unit API
@@ -394,13 +395,14 @@ badge and any count quoted in the docs must agree with it.
 - Roster builds lazily and holds the map until it is invalidated
 - Roster.Refresh drops the cache without rebuilding it eagerly
 - Roster shares core/State.lua's cache seam rather than owning a private one
+- Entering or leaving test mode invalidates the map
 - Roster subscribes to the roster message; it never sends one
 - modules/Roster.lua registers no game event of its own
 - A partial build is NOT cached, so the next read retries
 - A complete build IS cached
 - Solo is complete, not partial
 
-### test_aggregator.lua (39)
+### test_aggregator.lua (44)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -416,7 +418,7 @@ badge and any count quoted in the docs must agree with it.
 - Aggregator drops a source that is not a group member
 - Aggregator drops an unattributable pet rather than showing a phantom row
 - Aggregator sums an attributed pet into its owner out of combat
-- Aggregator DROPS a pet's contribution while restricted, rather than summing
+- A pet is a ROW OF ITS OWN while restricted, not a dropped contribution
 - Aggregator adopts a pet's numbers into a column the owner has no cell in
 - A pet's position never moves its owner in the provider order
 - A row seen only outside the sort column is parked past every ranked row
@@ -431,28 +433,32 @@ badge and any count quoted in the docs must agree with it.
 - A test row's tooltip finds a breakdown, because it goes to the provider
 - Test mode reaches no meter API at all
 - Test data is deterministic — a jittering grid cannot be laid out against
-- A meter reset drops the frozen sort orders
+- A meter reset drops this module's cache
 - A pet gets its OWN row by default, with its own name
 - A pet's own row survives the restriction, where a merged one would not
 - Leaving the group does NOT empty the window
 - A meter reset is what forgets them
 - A pet stays attributed after its owner's group is gone
+- A dropped source says WHY, once per pass
+- A secret-GUID source that says it is the local player keeps its row
+- A secret GUID that does NOT claim to be the local player is still dropped
+- A SECRET isLocalPlayer flag is not truth-tested, and claims nothing
+- A SECRET source GUID is dropped without raising, and is named as secret
 - The Deaths column counts a GUID's rows rather than reading totalAmount
 - A counted column scales its bars to the highest count, never to 0
 - The NEWEST death wins the recap id
 - Counting a death is legal mid-pull, where summing two secrets is not
 
-### test_aggregator_sort.lua (15)
+### test_aggregator_sort.lua (14)
 
 - value mode orders by the sort column's numbers, descending
 - value mode breaks a tie on providerIndex, so the order is deterministic
 - value mode sorts a row with no cell in the sort column last
-- value mode freezes the order it produced, keyed by GUID
-- value mode does NOT compare while restricted; it reuses the frozen order
-- a GUID with no frozen place sorts after the frozen block
-- value mode falls through to provider order when there is no freeze
+- a value sort caches NOTHING — the freeze is retired
+- while restricted the order is the ENGINE's ranking, and it is live
+- while restricted a row is keyed on its POSITION, never on the secret GUID
 - value mode checks comparability in a pass BEFORE table.sort is entered
-- the Activating edge takes one final sort for every value-sorted window
+- the Activating edge is no longer listened for
 - provider mode never compares a value, in combat or out
 - an unrecognized sort mode degrades to provider order rather than to nothing
 - roster mode orders by group position, ignoring the numbers entirely
@@ -460,7 +466,7 @@ badge and any count quoted in the docs must agree with it.
 - roster mode's NAME TIEBREAK refuses to compare two secret names
 - roster mode compares names when they are plain
 
-### test_window.lua (65)
+### test_window.lua (66)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -493,7 +499,8 @@ badge and any count quoted in the docs must agree with it.
 - ShouldShow's ladder reads master enable, then test mode, then context
 - RefreshVisibility shows, hides, and marks dirty exactly once on the way in
 - The header folds its parts with `..`, and survives a secret duration
-- The header says so when the row order has stopped tracking the numbers
+- The header says the grid was built the restricted way
+- The header names AMBIGUITY when two rows cannot be told apart
 - The header line reads 'Test' while placeholder data is on screen
 - Test data never reaches the provider
 - UNLOCKING A WINDOW NO LONGER TURNS TEST DATA ON
@@ -892,11 +899,11 @@ badge and any count quoted in the docs must agree with it.
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 22 |
-| test_provider.lua | 32 |
-| test_roster.lua | 21 |
-| test_aggregator.lua | 39 |
-| test_aggregator_sort.lua | 15 |
-| test_window.lua | 65 |
+| test_provider.lua | 33 |
+| test_roster.lua | 22 |
+| test_aggregator.lua | 44 |
+| test_aggregator_sort.lua | 14 |
+| test_window.lua | 66 |
 | test_row.lua | 41 |
 | test_tooltip.lua | 25 |
 | test_drilldown.lua | 31 |
@@ -909,4 +916,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **771** |
+| **Total** | **778** |

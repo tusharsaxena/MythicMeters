@@ -192,14 +192,23 @@ local collect = nil
 --- they land in table VALUES, which is explicitly permitted, and travel onward
 --- as opaque handles.
 ---
---- `sourceGUID` is the exception that makes the whole design work: the METER's
---- source GUID is never secret, so it is the only field legal as a table KEY,
---- and it is therefore the join key for every column (design §5).
+--- `sourceGUID` WAS the field the whole design rested on — "the meter's source
+--- GUID is never secret, so it is the only field legal as a table KEY, and it is
+--- therefore the join key for every column" (design §5). MEASURED IN-GAME, THAT
+--- IS FALSE: under the Combat restriction it arrives secret AND inaccessible, so
+--- for the duration of a pull there is no join key at all and every source was
+--- dropped as unidentifiable.
 ---
---- Scope that claim to this file. It is a statement about C_DamageMeter, NOT
---- about GUIDs in general — the UNIT API hands out secret GUIDs (a follower
+--- It is still copied here, unexamined, exactly like every other field — a
+--- secret in a table VALUE is permitted, and out of combat it is the plain join
+--- key it always was. What changed is downstream: modules/Aggregator.lua no
+--- longer assumes it can key on one, and rebuilds the local player's identity
+--- from `isLocalPlayer` (which stays plain) when it cannot.
+---
+--- The UNIT API is no safer — it hands out secret GUIDs too (a follower
 --- dungeon's companion pets), which is why modules/Roster.lua vets every GUID it
---- reads through NS.Secrets.IsSafeKey before keying on one.
+--- reads through NS.Secrets.IsSafeKey before keying on one. NEITHER source of
+--- GUIDs may be assumed plain.
 local function collectSource(_, src)
     -- A row inside an accessible session can still be individually inaccessible.
     -- Guarding per row costs one call and removes the only remaining way this
@@ -374,6 +383,41 @@ function Provider.GetSourceDetail(a, b, c, d, e, f)
     if not Secrets.CanAccessTable(source) then return nil end
 
     return source
+end
+
+--- DIAGNOSTIC ONLY: can the API resolve a source from a SECRET sourceGUID?
+---
+--- THE QUESTION THE WHOLE MID-PULL GRID TURNS ON. `sourceGUID` is annotated
+--- SecretWhenInCombat, so Lua may not key on it, compare it or look it up — but
+--- passing a secret to a function IS permitted, and this API takes a sourceGUID
+--- as an argument. If the native side will accept the secret handle we were just
+--- handed, then the per-source join we may not perform in Lua can be performed
+--- BY THE CLIENT: read the sort column's sources, then ask for each source's
+--- figure in every other column by passing its own opaque GUID straight back.
+--- That is a full multi-column grid mid-pull rather than the local player's row
+--- alone.
+---
+--- Answers a short plain string rather than a boolean, because the interesting
+--- failures are different from each other: "raised" says the argument is refused
+--- outright, "nil" says it is accepted and matches nothing, and "sealed" says we
+--- get a table we may not read.
+---
+--- pcall, because this is the one call in the addon deliberately made with an
+--- argument the contract does not promise is legal. Reached only from
+--- modules/Aggregator.lua's first-drop debug line, so it is off unless the debug
+--- flag is on and costs one call per refresh when it is.
+---
+--- @return string
+function Provider.ProbeSourceByGuid(sessionType, statKey, guid)
+    local stat = STAT_BY_KEY[statKey]
+    if not stat then return "no stat" end
+
+    local ok, source = pcall(Compat.GetCombatSessionSourceFromType,
+        sessionType, stat.enumValue, guid)
+    if not ok then return "raised" end
+    if type(source) ~= "table" then return "nil" end
+    if not Secrets.CanAccessTable(source) then return "sealed" end
+    return (source.totalAmount ~= nil) and "resolved" or "no total"
 end
 
 -- ---------------------------------------------------------------------------

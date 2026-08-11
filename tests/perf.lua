@@ -113,7 +113,21 @@ do
     mocks.setInstance("party")
 end
 
-local SESSION = NS.Constants.SESSION_TYPE.Current
+-- OVERALL, BECAUSE THAT IS WHAT THE SHIPPED WINDOW READS.
+--
+-- This seeded `Current` while `defaults/Profile.lua` sets `data.sessionType` to
+-- Overall, so every measured pass asked the mock for a session it had never been
+-- given, got "no session" back, and produced no rows — a fixture that did not
+-- join. The figures downstream were therefore measuring the empty path: seven
+-- column reads that each returned nothing, a render of zero rows, and a
+-- drill-down that had no row to open.
+--
+-- Nothing here forces the window's config to match the fixture, deliberately.
+-- The harness has to measure the configuration a player actually runs, and if
+-- the shipped default ever moves the fixture must move with it rather than a
+-- line in this file quietly pinning the window to whatever the fixture happens
+-- to hold. The assert below is what catches it either way.
+local SESSION = NS.Constants.SESSION_TYPE.Overall
 for _, key in ipairs(STAT_KEYS) do
     local stat = NS.Constants.STAT_BY_KEY[key]
     mocks.setSession(SESSION, stat.enumValue,
@@ -301,6 +315,66 @@ assert_(refresh.unitsPerIter == 0,
      .. "being invalidated by something the refresh itself does")
         :format(refresh.unitsPerIter))
 
+-- ── 1b. the same refresh, MID-PULL ──────────────────────────────────────────
+--
+-- The path that runs while the client is busiest, and until now the harness
+-- never touched it. `sourceGUID` is SecretWhenInCombat, so under the restriction
+-- modules/Aggregator.lua takes the IDENTITY build instead of the GUID join: the
+-- sort column supplies the rows, every other column is read on its own and
+-- correlated back by class and spec, and each source's fields arrive as secret
+-- handles the mock materializes on every read.
+--
+-- The property being guarded is the one that matters on a raid pull: identity
+-- mode must still cost exactly ONE read per column per refresh. Correlating a
+-- column is a walk over a list already in hand, and any re-entry into the
+-- provider to resolve a row would multiply the session reads by the number of
+-- rows at the worst possible moment.
+
+mocks.setRestricted(true)
+NS.State.SetRestricted(true)
+
+local restricted = measure("refresh20x7Restricted", ITERS, function()
+    inst.dirty = true
+    inst:Refresh()
+end)
+
+mocks.setRestricted(false)
+NS.State.SetRestricted(false)
+NS.State.WipeCache()
+
+assert_(restricted.columnsPerIter == COLUMNS,
+    ("a restricted refresh made %.2f Provider.GetColumn calls over %d enabled columns — "
+     .. "identity mode must read each column exactly once, the same as the GUID join. More "
+     .. "than one per column means a row is being resolved through the provider")
+        :format(restricted.columnsPerIter, COLUMNS))
+
+assert_(restricted.unitsPerIter == 0,
+    ("a restricted refresh made %.2f UnitGUID calls — Roster.LocalGUID must answer from the "
+     .. "cached map rather than re-walking the unit API mid-pull")
+        :format(restricted.unitsPerIter))
+
+-- A restricted pass costs about 22% more than the unrestricted one (397702
+-- against 325890 for the same 20x7 window). That gap was measured rather than
+-- assumed, by running this scenario with the correlation stubbed out:
+--
+--   * ~47KB is identity correlation itself — one key per source per non-sort
+--     column (120 of them at this size), a lookup table per column, and the
+--     cells they produce. The GUID join pays for the cells too, so the genuine
+--     extra is the keys and the two small tables per column.
+--   * ~24KB is the HARNESS, not the addon. tests/wow_mock.lua simulates a secret
+--     value as a TABLE with a trapping metatable, so every secret field in every
+--     source becomes an allocation here that the client — where a secret is a
+--     value — does not make. It appears only in this scenario, because it is the
+--     only one that runs restricted.
+--
+-- The ceiling carries the same ~3.5% headroom as the dormant one above. What it
+-- catches is identity correlation GROWING; the gap to `refresh20x7` is expected
+-- and is not itself a failure.
+local RESTRICTED_BYTES_CEILING = 412000   -- measured 397702 for a 20x7 pass
+assert_(restricted.bytesPerIter <= RESTRICTED_BYTES_CEILING,
+    ("a restricted pass allocated %.0f bytes/iter, over the %d-byte ceiling — identity "
+     .. "correlation grew"):format(restricted.bytesPerIter, RESTRICTED_BYTES_CEILING))
+
 -- ── 2. throttle sensitivity ─────────────────────────────────────────────────
 --
 -- The single most important performance property in the addon: N meter events
@@ -466,7 +540,21 @@ NS.Perf.on = false
 -- does not make. The ceiling still does its job — it catches a rise in what one
 -- refresh allocates — and the ratio between the two arms below is unaffected,
 -- because both arms pay the identical harness cost.
-local PROBE_OFF_BYTES_CEILING = 320000   -- measured 309297 for a 20x7 pass
+-- RE-RECORDED 2026-08-11, and the reason is that the previous figure could not
+-- have been measured for some time. The fixture above seeded the `Current`
+-- session while the shipped window reads `Overall`, so every pass here joined
+-- NOTHING: the ceiling was being compared against an empty refresh, which is why
+-- a 309297-byte record sat under a path that now measures 325890.
+--
+-- The growth itself is NOT this changeset's — the same fixture repair against the
+-- committed tree measures 326594, marginally higher than the figure recorded
+-- here. Where the ~5% came from cannot be established: the harness was blind to
+-- it for the whole period, and this repo has a single commit, so there is nothing
+-- to bisect. Recorded as unexplained rather than attributed to a guess.
+--
+-- The figure is deterministic to the byte across runs, so the headroom is the
+-- same ~3.5% the previous ceiling carried, and a real regression still shows.
+local PROBE_OFF_BYTES_CEILING = 336000   -- measured 325890 for a 20x7 pass
 
 assert_(probeOff.bytesPerIter <= PROBE_OFF_BYTES_CEILING,
     ("a dormant pass allocated %.0f bytes/iter, over the %d-byte ceiling — one refresh of "

@@ -202,11 +202,13 @@ test("Provider.GetColumn copies secret fields through without inspecting one", f
     assertTrue(mocks.isSimulatedSecret(first.name), "`name` is ConditionalSecret")
     assertEqual(mocks.reveal(first.totalAmount), 4200000, "and the handle is the right one")
 
-    -- The GUID is the exception that makes the design work: never secret, and
-    -- therefore the only field legal as a table key.
-    assertEqual(type(first.guid), "string")
-    assertFalse(mocks.isSimulatedSecret(first.guid), "a GUID is never secret")
-    assertEqual(first.classFilename, "WARRIOR", "classFilename is NeverSecret")
+    -- The GUID goes through opaque like everything else. It was believed to be
+    -- the one field a join could key on; it is annotated SecretWhenInCombat, so
+    -- mid-pull it is another handle this file carries without examining.
+    assertTrue(mocks.isSimulatedSecret(first.guid),
+        "sourceGUID is SecretWhenInCombat — the premise the whole join rested on")
+    assertEqual(first.classFilename, "WARRIOR",
+        "classFilename is NeverSecret, and is what identity correlation is built from")
 end)
 
 test("Provider.GetColumn skips a source row it may not access, without raising", function()
@@ -569,4 +571,25 @@ test("Provider: reading a segment never inspects a value", function()
         inst.NS.Provider.HasSession(77)
     end)
     assertTrue(ok, "a segment read inspected a value: " .. tostring(err))
+end)
+
+test("Provider.ProbeSourceByGuid names what the API did with a GUID it was handed", function()
+    -- The diagnostic behind the open design question: `sourceGUID` is
+    -- SecretWhenInCombat, so Lua may not key on it or look it up — but passing a
+    -- secret to a function is permitted, and this API takes a sourceGUID
+    -- argument. If the client resolves it, the per-source join we may not do
+    -- ourselves can be done by the client, and a full grid survives a pull.
+    --
+    -- Every answer is a plain string because the failures differ: refused
+    -- outright, accepted-and-matched-nothing, and readable-but-sealed each point
+    -- at a different design.
+    local guid = "Player-1-0000000A"
+    local inst = T.load()
+    inst.mocks.setSourceDetail(CURRENT, "*", guid, {
+        combatSpells = {}, maxAmount = 10, totalAmount = 100,
+    })
+
+    assertEqual(inst.NS.Provider.ProbeSourceByGuid(CURRENT, "DamageDone", guid), "resolved")
+    assertEqual(inst.NS.Provider.ProbeSourceByGuid(CURRENT, "DamageDone", "Player-1-0000NONE"), "nil")
+    assertEqual(inst.NS.Provider.ProbeSourceByGuid(CURRENT, "NoSuchStat", guid), "no stat")
 end)

@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-771%2F771_passing-green)
+![Tests](https://img.shields.io/badge/Tests-778%2F778_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -116,9 +116,12 @@ turned on.
 It can. Add the Damage and Healing columns and you have the usual numbers alongside the ones other
 meters make you switch windows to see. Many people run it beside their existing meter instead.
 
-**Why does the row order freeze mid-fight?**
-See *How it works* above. It is a Midnight restriction on all addons, not a bug, and the order fixes
-itself between pulls.
+**Why is a cell empty mid-fight, and why is the header gray?**
+Midnight hides the identifier the game normally gives addons for each row, for the whole of a fight.
+The rows themselves are the game's own ranking and keep updating; the other columns are matched to
+them by class and specialization. Two players with the same class *and* spec cannot be told apart,
+so those cells are left blank rather than showing a number that might be the other player's. The
+header says so, and everything fills back in the moment the fight ends.
 
 **Can I look back at an earlier fight?**
 Yes. Click the session line in the window's header and pick the fight out of the list — it shows each

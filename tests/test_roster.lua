@@ -260,6 +260,34 @@ test("Roster shares core/State.lua's cache seam rather than owning a private one
     assertEqual(#NS.Roster.GetGroup(), 3, "and the next read rebuilds cleanly")
 end)
 
+test("Entering or leaving test mode invalidates the map", function()
+    -- THE EMPTY TEST GRID. Test mode substitutes BOTH data sources — the meter
+    -- in modules/Provider.lua and the unit API in this file's build() — but the
+    -- substitution here only takes effect on a BUILD, and the live client always
+    -- has a warm map by the time anybody types `/mm test`. So the invented
+    -- sources were joined against the REAL group, every one of them was dropped
+    -- as "not in your group", and the window drew nothing at all — with no
+    -- notice, because preview suppresses it.
+    --
+    -- Leaving test mode is the same bug pointing the other way: the mocked group
+    -- stayed cached and every real source was dropped until the next regroup.
+    -- red under: no TEST_MODE_CHANGED subscription.
+    local inst = grouped(PARTY)
+    local NS = inst.NS
+    NS.Roster:OnEnable()
+
+    assertEqual(#NS.Roster.GetGroup(), 3, "the map is warm before test mode is touched")
+
+    NS.State.SetTestMode(true)
+    local group = NS.Roster.GetGroup()
+    assertEqual(#group, #NS.Aggregator.TestGroup(),
+        "test mode must be joined against the mocked group, or every row is dropped")
+    assertTrue(NS.Roster.IsGroupMember(group[1].guid))
+
+    NS.State.SetTestMode(false)
+    assertEqual(#NS.Roster.GetGroup(), 3, "and the real group comes straight back")
+end)
+
 -- ---------------------------------------------------------------------------
 -- Wiring
 -- ---------------------------------------------------------------------------
@@ -270,7 +298,8 @@ test("Roster subscribes to the roster message; it never sends one", function()
     local MSG = NS.Constants.MSG
 
     NS.Roster:OnEnable()
-    for _, message in ipairs{ MSG.ROSTER_CHANGED, MSG.ENTERING_WORLD, MSG.PROFILE_CHANGED } do
+    for _, message in ipairs{ MSG.ROSTER_CHANGED, MSG.ENTERING_WORLD, MSG.PROFILE_CHANGED,
+                              MSG.TEST_MODE_CHANGED } do
         assertTrue((mocks.__busRegistry[message] or {})[NS.Roster] ~= nil,
             "Roster must listen on " .. message)
     end

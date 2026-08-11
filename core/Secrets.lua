@@ -202,9 +202,10 @@ end
 --- Whether `v` may be used as a TABLE KEY right now.
 ---
 --- The addon joins everything on GUIDs, on the strength of a design note that
---- said a GUID is never secret. That note was right about the METER — a
---- sourceGUID off C_DamageMeter is plain — and wrong about the UNIT API, which
---- is where modules/Roster.lua gets its GUIDs. In a follower dungeon
+--- said a GUID is never secret. That note is wrong about BOTH sources. The METER
+--- returns a secret, inaccessible sourceGUID for the whole of a pull, which is
+--- why modules/Aggregator.lua can no longer key on one there. The UNIT API is
+--- where modules/Roster.lua gets its GUIDs, and in a follower dungeon
 --- `UnitGUID("party3pet")` answers a secret string, and `pets[petGuid] = guid`
 --- raises "attempted to perform indexed assignment on a table that cannot be
 --- indexed with secret keys" on every refresh for the whole run.

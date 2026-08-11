@@ -676,14 +676,39 @@ local SECRET_FIELDS = {
     deathTimeSeconds = true,
     overkillAmount   = true,
     name             = true,   -- ConditionalSecret
+    -- SecretWhenInCombat, per Blizzard's own annotation on
+    -- DamageMeterCombatSource — and the omission that let this harness stay
+    -- green while the addon showed an empty grid for every pull it ever ran.
+    --
+    -- The addon was built on the reading that a meter sourceGUID is never
+    -- secret and is therefore its only legal join key. The mock was written from
+    -- the same reading, so the restricted cases handed the aggregator a PLAIN
+    -- GUID, the GUID join ran, the rows came out, and 771 cases agreed with each
+    -- other about a client neither of them had asked. Measured in-game it comes
+    -- back secret AND inaccessible: NS.Secrets.IsSafeKey refuses it, every
+    -- source is dropped, and the window says "Waiting for combat data" with a
+    -- full session behind it.
+    --
+    -- A fixture is only worth what it refuses to let you get away with.
+    sourceGUID       = true,
 }
 
 --- Deep-copy `spec`, wrapping the secret-bearing leaves when `wrap` is true.
+---
+--- A SIMULATED SECRET IS ITSELF A TABLE (see the header), so it is carried
+--- through by reference rather than recursed into. Copying it produced a plain
+--- empty table with none of the trapping metatable on it — silently stripping
+--- the one property the fixture was written to express — so a suite that placed
+--- `mocks.secret(x)` in a session spec was testing a plain value and passing for
+--- the wrong reason. The SECRET_FIELDS wrapping below is unaffected: it wraps
+--- leaves on the way out, after this branch.
 local function materialize(spec, wrap)
     if type(spec) ~= "table" then return spec end
     local out = {}
     for k, v in pairs(spec) do
-        if type(v) == "table" then
+        if isSimulatedSecret(v) or isSimulatedSecretTable(v) then
+            out[k] = v
+        elseif type(v) == "table" then
             out[k] = materialize(v, wrap)
         elseif wrap and SECRET_FIELDS[k] and v ~= nil then
             out[k] = secret(v)

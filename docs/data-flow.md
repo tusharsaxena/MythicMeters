@@ -60,7 +60,7 @@ Expanded, with the guards named:
         │
         ├─ join on sourceGUID          (Roster.IsGroupMember / Roster.OwnerOf)
         ├─ fold pets, or drop them     (Secrets.CanCompare2 decides which)
-        ├─ order                       (value → frozen → provider, or roster)
+        ├─ order                       (value → provider, or roster; engine order when restricted)
         ├─ cap                         (Aggregator.ApplyRowLimit)
         └─ derive percent              (the only division, gated)
         │
@@ -146,11 +146,30 @@ Every field is *copied*, never examined. `name` is `ConditionalSecret`; `totalAm
 `amountPerSecond` and `deathTimeSeconds` are secret in combat. They land in table **values**, which is
 explicitly permitted, and travel onward as opaque handles.
 
-`sourceGUID` is the exception that makes the whole design work: the meter's source GUID is never
-secret, so it is the only field legal as a table **key**, and it is therefore the join key for every
-column. Scope that to `C_DamageMeter` — the **unit** API returns secret GUIDs (a follower dungeon's
-companion pets), which is why `modules/Roster.lua` passes every GUID it reads through
-`NS.Secrets.IsSafeKey` before keying on one.
+`sourceGUID` was the exception the whole design rested on, and **it does not hold**. The addon
+shipped on the reading that a meter source GUID is never secret and is therefore the one field legal
+as a table **key**; measured in-game, `C_DamageMeter` hands back a `sourceGUID` that is secret *and*
+inaccessible for the whole of a pull:
+
+```
+[Aggregator] dropped guid=<secret> secret=true access=false member=false owner=nil
+             local=true/false class=WARLOCK/false
+```
+
+So mid-pull a source cannot be keyed on, compared, or looked up, and the GUID join — the algorithm in
+§3 — has no key to run on. Every guard behaved correctly: `NS.Secrets.IsSafeKey` refused the key, the
+aggregator dropped the source, and the window showed "Waiting for combat data" for a whole fight with
+a full session sitting behind it. What was wrong was the premise.
+
+What survives is `isLocalPlayer`, which stays plain, so a source that says it is the player is
+attributed to the roster's own plain GUID — the source's own claim about itself, not an inference.
+`classFilename` stays plain too and is deliberately **not** used for identity: it would name a group
+member only when no two of them share a class, and mislabeling one player's numbers with another's
+name is a lie the player cannot see, where a dropped row is a visible absence.
+
+The unit API is no safer: it returns secret GUIDs too (a follower dungeon's companion pets), which is
+why `modules/Roster.lua` passes every GUID it reads through `NS.Secrets.IsSafeKey` before keying on
+one. **Neither source of GUIDs may be assumed plain.**
 
 An empty column carries a **`reason`** — `"suspended"`, `"unknown stat"`, `"unavailable"`,
 `"no session"`, `"session sealed"` — because "we may not look" and "there is nothing there" are
@@ -182,7 +201,8 @@ group position, and neither depends on it. If it proves false in-game the fix is
 `modules/Aggregator.lua` runs the algorithm in this order:
 
 1. Read one column per enabled stat from the provider.
-2. Index every source by `sourceGUID` — the only thing in a session legal as a table key.
+2. Index every source by `sourceGUID`, where that GUID is plain. It is **not** plain under the
+   Combat restriction (see §2); a source unkeyable then is attributed by `isLocalPlayer`, or dropped.
 3. Filter to group members (`modules/Roster.lua`) and fold pets into owners.
 4. Order, per the window's `sortMode`.
 5. Cap to `rows.maxRows`, honoring `rows.alwaysShowSelf`.
@@ -196,8 +216,8 @@ the whole reason `roster` sort mode is legal mid-pull when `value` mode is not.
 The roster map is rebuilt **lazily** on first read after an invalidation, not eagerly in the event
 handler: a raid regroup fires `GROUP_ROSTER_UPDATE` a dozen times a second while nothing is on
 screen, and building on demand collapses that to one build per refresh. It lives in
-`core/State.lua`'s shared cache alongside the formatter instances and the frozen sort orders, so all
-three drop through one wipe seam.
+`core/State.lua`'s shared cache alongside the formatter instances, so both drop through one wipe
+seam.
 
 Row identity comes from the roster where the roster has it, and from the meter's source row only as
 a fallback — `name` off the meter is `ConditionalSecret` and may be opaque mid-pull, while
@@ -222,7 +242,7 @@ once per pass rather than hiding them:
 | State | Behavior |
 |---|---|
 | Unrestricted (`Secrets.CanCompare2` says yes) | The pet's value is summed into the owner's cell. |
-| Restricted | The pet's row is **dropped**. The owner's number is low by whatever the pet contributed. |
+| Restricted | The fold does not run at all — it is reached through the owner link, and the owner link is reached through a GUID that is secret. The pet is a **row of its own**, exactly as the meter reported it, and nothing is summed. |
 
 Dropping is chosen over the two alternatives deliberately: a phantom pet row in a group meter looks
 like a bug, and a Lua error mid-pull takes the window with it. A low number is a visible, explainable
@@ -240,7 +260,7 @@ aggregator's contract is to **drop the row, not guess**.
 
 Deferring the scoring feature rests on exactly this fact — see [scope.md](scope.md#deferred-scoring).
 
-## 5. The three sort modes and the freeze
+## 5. The three sort modes, and identity mode
 
 | Mode | Behavior | Legal in combat? |
 |---|---|---|
@@ -259,26 +279,42 @@ came from the meter's `ConditionalSecret` `src.name`. `<` on two of those raises
 does not launder a secret: it survives it. So names are compared only behind `CanCompare2`, and
 otherwise the deterministic `providerIndex` escape is used.
 
-### The freeze
+### Identity mode — the grid while the GUID is secret
 
-Falling back to `provider` order the moment a pull starts would make every row jump at the worst
-possible time. Instead:
+The table above describes the **unrestricted** build. Under the Combat restriction none of it runs,
+because `sourceGUID` is secret: there is no key to join the columns on, nothing to sort, and nothing
+for a row to be identified by. `Aggregator.Build` chooses between two builds once per pass, on
+`Secrets.IsRestricted()`, so a grid is never half one shape and half the other.
 
-- Every **successful** value-sort caches its resulting `guid → position` map per window, in
-  `State.Cache("Aggregator")`.
-- While restricted, that frozen order is reapplied — rows update their numbers **in place** and
-  nothing reshuffles. `kept.sortFrozen` is set, and the header says so in gray.
-- `ADDON_RESTRICTION_STATE_CHANGED` with `state == Activating` fires **before** enforcement begins
-  and access is still permitted during that dispatch, so `Aggregator:OnRestrictionChanged` takes one
-  final `Build` for every `value`-mode window there. That is the last legal moment, and taking it is
-  what makes the frozen order "as of the pull's start" rather than "as of whenever the player last
-  stood still".
-- A GUID with no frozen position (someone who joined mid-pull) sorts after the frozen block, in
-  provider order, and never disturbs the rows above it.
-- `METER_RESET` and `PROFILE_CHANGED` wipe the freeze: it describes a fight that no longer exists.
+Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
 
-The restriction keys off **`Combat`, not `ChallengeMode`**. Between packs in a key the values are
-fully readable, so `value` mode works for most of a dungeon run and only freezes during the pulls.
+- The **sort column's** `combatSources` is the row list, in the order the engine returned it — which
+  *is* the ranking for that column. Row identity is its position, `"rank_<n>"`, a plain string the
+  row pool and the drill-down can hold. The local player is the exception: `isLocalPlayer` is plain
+  and `UnitGUID("player")` is not secret, so their row keeps the roster's own GUID, name and role.
+- **Every other column** is read on its own and correlated back to those rows by an identity key of
+  `classFilename .. specIconID .. isLocalPlayer`.
+- A key appearing **twice** — two players of one class *and* one spec — is ambiguous, and every
+  secondary cell for it is left **empty**. `kept.ambiguous` says so and the header line reports it.
+  Class alone identifies nobody in a raid; class plus spec plus "is it me" identifies almost
+  everybody almost always, and the exceptions are detected rather than guessed at. An empty cell is a
+  visible absence; a mislabeled number is a lie the player cannot see.
+- Enemies are filtered by the plain `sourceDisplayType`, because the roster cannot answer for a
+  source it cannot key on.
+- **Pets are rows**, not folded contributions. The fold needs the owner link, the owner link needs a
+  GUID, and there is none — so a pet appears as the source Blizzard reports, with its own name and
+  numbers, and nothing is summed.
+
+**The sort freeze is retired.** It cached each successful value-sort as a `guid → position` map and
+reapplied it for the duration of a pull, so rows would not jump — keyed, that is, on the one field
+that is secret exactly when the freeze was needed, and therefore never applicable to a single
+mid-pull row. The engine's ranking replaces it and is strictly better: live rather than a snapshot of
+the pull's first frame, and free of any comparison of ours. `ADDON_RESTRICTION_STATE_CHANGED` is no
+longer listened for in `modules/Aggregator.lua`; `modules/Window.lua` still redraws on it.
+
+The restriction keys off **`Combat`, not `ChallengeMode`**. Between packs in a key the values and the
+GUIDs are fully readable, so the exact join runs for most of a dungeon run and identity mode covers
+the pulls.
 
 ### `percent` — the one derived number
 
@@ -388,8 +424,8 @@ it to `settings/Columns.lua` removes the hazard rather than guarding against it.
 
 ### The header line
 
-`WindowProto:UpdateHeaderText` folds the session name, the duration, the group total and the frozen-
-sort notice into one string with `..` and an `add()` helper — **never `table.concat`**. Two of those
+`WindowProto:UpdateHeaderText` folds the session name, the duration, the group total and the
+restricted-grid notice into one string with `..` and an `add()` helper — **never `table.concat`**. Two of those
 pieces come out of `NS.Format` having been built from a secret, and a formatted secret is itself
 secret. `..` is explicitly legal on one; `table.concat` is the single string operation that *raises*
 on one — it is literally the probe LibKa0s uses to detect a secret at all.

@@ -70,3 +70,29 @@ Notes for whoever picks this up:
   schema change with a migration behind it (`core/Database.lua`).
 - Until this lands, leave `EnemyDamageTaken` where it is. It is off by default, and a player who
   turns it on gets a column of numbers that are real, just oddly framed.
+
+## The refresh rate should be a visible setting
+
+**Status:** decided, not started. Raised 2026-08-11.
+
+`data.throttle` already exists, ships at 0.25s, is clamped to `Constants.THROTTLE_MIN` / `MAX`
+(0.05–2.0), and is the only clock in `modules/Window.lua`. What it is not is **discoverable**: it is
+reachable through `/mm set window.data.throttle 0.1` and nowhere else. A player who thinks the meter
+feels sluggish, or who wants it to cost less on a forty-player pull, has no way to find the knob that
+decides both.
+
+It wants a row on the window's General page — a slider in seconds, or an "updates per second"
+framing, which is the way a player actually thinks about it.
+
+Notes for whoever picks this up:
+
+- It is one `settings/Schema.lua` row (`window.data.throttle`), which is the whole point of the
+  schema: the panel widget, `/mm get|set|list`, the per-page reset and the defaults check all come
+  from that one row. Do not add a parallel mutator.
+- `WindowProto:RefreshUpvalues` already caches it into `self.throttle` on every `CONFIG_CHANGED`, so
+  a change takes effect on the next tick with no extra wiring.
+- The clamp belongs in the schema row's bounds as well as in the code, so the slider cannot express a
+  value the code will silently correct.
+- Worth pairing with the poll note in `WindowProto:ShouldPoll`: while a fight is on, a shown window
+  refreshes on this clock whether or not a meter event arrived, so the setting governs real cost and
+  the page copy should say so.

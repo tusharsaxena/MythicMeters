@@ -481,8 +481,16 @@ L["Mythic Meters reads every number from the game's built-in damage meter. Enabl
     "Mythic Meters reads every number from the game's built-in damage meter. Enable it to see data here."
 L["Reason: %s"] = "Reason: %s"
 L["Waiting for combat data..."] = "Waiting for combat data..."
-L["Sorting is frozen while the game restricts combat data."] =
-    "Sorting is frozen while the game restricts combat data."
+-- Shown in gray on the header line for the whole of a pull. The grid is built a
+-- different way while the game restricts combat data — rows come from the
+-- engine's own ranking and are matched across columns by class and spec rather
+-- than by GUID — and the player is owed the reason a cell can be blank.
+L["restricted"] = "restricted"
+-- Appended to the above when two players share a class AND a specialization, so
+-- their rows cannot be told apart. Those cells are left empty rather than filled
+-- with a number that might be the other player's.
+L["restricted \226\128\148 some rows cannot be told apart"] =
+    "restricted \226\128\148 some rows cannot be told apart"
 L["Test"] = "Test"
 -- The red marker in a window's title bar while test mode is on. Upper case in
 -- English on purpose; a translator may lower it.

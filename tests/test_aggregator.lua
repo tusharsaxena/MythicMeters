@@ -38,6 +38,7 @@ local function src(guid, total, opts)
         name             = opts.name or guid,
         classFilename    = opts.class or "MAGE",
         specIconID       = opts.specIconID,
+        isLocalPlayer    = opts.localPlayer,
         totalAmount      = total,
         amountPerSecond  = opts.rate,
         deathTimeSeconds = opts.deathTime,
@@ -301,24 +302,29 @@ test("Aggregator sums an attributed pet into its owner out of combat", function(
     assertEqual(result[1].values.DamageDone.rate, 14, "the rate folds with the total")
 end)
 
-test("Aggregator DROPS a pet's contribution while restricted, rather than summing", function()
+test("A pet is a ROW OF ITS OWN while restricted, not a dropped contribution", function()
+    -- WHAT THE PET FOLD USED TO DO HERE, and why it stopped. Merging is
+    -- addition; addition on two secrets raises; so mid-pull the fold refused and
+    -- the pet's numbers were simply dropped, leaving the owner's total quietly
+    -- low for the whole fight.
+    --
+    -- The fold cannot run mid-pull at all now — it needs the owner link, which
+    -- needs a GUID, which is secret. So the pet arrives as what Blizzard's own
+    -- list says it is: a source, on a row, with its own name and numbers. That is
+    -- MORE information than the old behavior, not less, and nothing is summed.
+    -- red under: attempting the fold in identity mode.
     local inst = withPet()
-    install(inst, {
-        src(ALPHA, 100, { rate = 10 }),
-        src(PET, 40, { rate = 4, name = "Ghoul" }),
-    }, { maxAmount = 100, totalAmount = 140 })
     inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { rate = 10, class = "WARLOCK" }),
+        src(PET, 40, { rate = 4, name = "Ghoul", class = "PET" }),
+    }, { maxAmount = 100, totalAmount = 140 })
 
-    -- Summing two secrets is arithmetic and raises; there is no native escape
-    -- hatch for a sum. Reaching the assertions at all is the proof it refused.
     local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
-    assertEqual(#result, 1, "and still no phantom pet row")
-    assertEqual(result[1].guid, ALPHA)
-
-    local total = result[1].values.DamageDone.total
-    assertTrue(inst.mocks.isSimulatedSecret(total), "the owner's own handle, untouched")
-    assertEqual(inst.mocks.reveal(total), 100,
-        "the number is low by whatever the pet contributed — visible and explainable")
+    assertEqual(#result, 2, "the pet's damage is shown rather than discarded")
+    assertEqual(inst.mocks.reveal(result[1].values.DamageDone.total), 100,
+        "and the owner's own number is untouched — nothing was added to it")
+    assertEqual(inst.mocks.reveal(result[2].values.DamageDone.total), 40)
 end)
 
 test("Aggregator adopts a pet's numbers into a column the owner has no cell in", function()
@@ -326,15 +332,18 @@ test("Aggregator adopts a pet's numbers into a column the owner has no cell in",
     -- The pet did damage its owner did not. Taking the pet's numbers wholesale
     -- is not a sum, so it is legal in either state — and it is correct: the
     -- owner DID that damage, through the pet.
+    --
+    -- Unrestricted, because that is the only state the fold runs in now: it is
+    -- reached through the owner link, and the owner link is reached through a
+    -- GUID that is secret for the whole of a pull.
     install(inst, { src(PET, 40, { rate = 4, name = "Ghoul" }) },
         { maxAmount = 40, totalAmount = 40 })
-    inst.mocks.setRestricted(true)
 
     local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
     assertEqual(#result, 1)
     assertEqual(result[1].guid, ALPHA)
-    assertEqual(inst.mocks.reveal(result[1].values.DamageDone.total), 40)
-    assertEqual(inst.mocks.reveal(result[1].values.DamageDone.maxAmount), 40,
+    assertEqual(result[1].values.DamageDone.total, 40)
+    assertEqual(result[1].values.DamageDone.maxAmount, 40,
         "the column max reaches a cell a pet fold created")
 end)
 
@@ -507,17 +516,17 @@ test("Test data is deterministic — a jittering grid cannot be laid out against
     end
 end)
 
-test("A meter reset drops the frozen sort orders", function()
+test("A meter reset drops this module's cache", function()
+    -- It held the frozen sort orders, which are retired. The seam stays: it is
+    -- the one place "the numbers those rows described no longer exist" is
+    -- expressed, and modules/Roster.lua and modules/Format.lua drop through it
+    -- too.
     local inst = loaded()
-    install(inst, { src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 100 })
-
-    -- A successful value sort freezes the order it produced.
-    inst.NS.Aggregator.Build(makeWindow{ sortMode = "value" })
-    local frozen = inst.NS.State.Cache("Aggregator")
-    assertTrue(frozen[1] ~= nil, "the value sort froze this window's order")
+    local cache = inst.NS.State.Cache("Aggregator")
+    cache.probe = true
 
     inst.NS.Aggregator:OnMeterReset()
-    assertNil(frozen[1], "a frozen order describes a fight that no longer exists")
+    assertNil(cache.probe, "the wipe must reach this namespace")
 end)
 
 -- ---------------------------------------------------------------------------
@@ -606,6 +615,95 @@ test("A pet stays attributed after its owner's group is gone", function()
 
     assertEqual(inst.NS.Roster.OwnerOf(PET), ALPHA,
         "the link outlives the unit that taught it")
+end)
+
+test("A dropped source says WHY, once per pass", function()
+    -- `rows=0 dropped=N` is the shape every "my window is empty" report takes,
+    -- and the counter alone cannot say which of the three causes it was: a GUID
+    -- this context may not key on, a source belonging to nobody in the group, or
+    -- a pet with no owner link. They need different fixes, so the refusal names
+    -- itself.
+    -- red under: incrementing pass.dropped and returning.
+    local inst = loaded()
+    local NS = inst.NS
+    NS.State.debug = true
+    install(inst, { src("Player-1-0000DEAD", 100) }, { maxAmount = 100 })
+
+    NS.Aggregator.Build(makeWindow())
+
+    local found = NS.DebugLog:FindLine("dropped guid=")
+    assertTrue(found ~= nil, "a drop with no explanation costs a whole play session")
+    assertTrue(found:find("member=false", 1, true) ~= nil, "got: " .. tostring(found))
+end)
+
+test("A secret-GUID source that says it is the local player keeps its row", function()
+    -- THE PULL THAT DREW NOTHING. C_DamageMeter hands back a SECRET sourceGUID
+    -- while the Combat restriction is active — measured in-game, contradicting
+    -- the design's "a GUID is never secret" — so the join has no key, every
+    -- source is dropped and the window empties for the whole fight.
+    --
+    -- `isLocalPlayer` stays plain, and it is the one identity claim that
+    -- survives. A source making it is attributed to the roster's own local GUID:
+    -- not a guess, the source's own statement about itself.
+    -- red under: dropping every source whose GUID cannot be keyed on.
+    local inst = loaded()
+    install(inst, { src(inst.mocks.secret("Player-1-0000SECR"), 100,
+                        { class = "WARLOCK", localPlayer = true }) },
+        { maxAmount = 100 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+
+    assertEqual(#result, 1, "the player's own row must survive the restriction")
+    assertEqual(result[1].guid, ALPHA, "keyed on the ROSTER's plain guid, never the meter's")
+    assertEqual(result[1].name, "Alpha")
+    assertEqual(result[1].isLocalPlayer, true)
+    assertEqual(result[1].values.DamageDone.total, 100)
+end)
+
+test("A secret GUID that does NOT claim to be the local player is still dropped", function()
+    -- The claim is the whole warrant. Without it there is nothing to attribute a
+    -- source to, and a row invented for an unidentifiable source is a phantom —
+    -- the same refusal the pet path already makes (design §5).
+    local inst = loaded()
+    install(inst, { src(inst.mocks.secret("Player-1-0000SECR"), 100) }, { maxAmount = 100 })
+
+    assertEqual(#inst.NS.Aggregator.Build(makeWindow()), 0)
+end)
+
+test("A SECRET isLocalPlayer flag is not truth-tested, and claims nothing", function()
+    -- A boolean test on a SECRET boolean raises. If a client ever makes this
+    -- field conditional too, the fallback has to read as "no claim" rather than
+    -- take the window down mid-pull.
+    local inst = loaded()
+    install(inst, { src(inst.mocks.secret("Player-1-0000SECR"), 100,
+                        { localPlayer = inst.mocks.secret(true) }) },
+        { maxAmount = 100 })
+
+    local result
+    local ok, err = pcall(function() result = inst.NS.Aggregator.Build(makeWindow()) end)
+    assertTrue(ok, "a secret boolean was truth-tested: " .. tostring(err))
+    assertEqual(#result, 0)
+end)
+
+test("A SECRET source GUID is dropped without raising, and is named as secret", function()
+    -- The whole GUID join rests on `sourceGUID` being plain — it is the only
+    -- thing in a session legal as a table KEY. If a client ever hands one back
+    -- secret, NS.Secrets.IsSafeKey refuses it, every source is dropped and the
+    -- window empties for the whole pull. That must stay a NAMED refusal rather
+    -- than either a raise or a silent blank grid.
+    local inst = loaded()
+    local NS = inst.NS
+    NS.State.debug = true
+    install(inst, { src(inst.mocks.secret(ALPHA), 100) }, { maxAmount = 100 })
+
+    local result
+    local ok, err = pcall(function() result = NS.Aggregator.Build(makeWindow()) end)
+    assertTrue(ok, "a secret GUID must never raise on the join: " .. tostring(err))
+    assertEqual(#result, 0)
+
+    local found = NS.DebugLog:FindLine("dropped guid=")
+    assertTrue(found ~= nil and found:find("secret=true", 1, true) ~= nil,
+        "got: " .. tostring(found))
 end)
 
 -- ---------------------------------------------------------------------------

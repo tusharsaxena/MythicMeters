@@ -24,8 +24,8 @@ Three things define the shape of everything else:
   guarded shims — so an 11.x client, or a PTR build missing one function, degrades to a window
   rendering Blizzard's own failure reason rather than erroring at load.
 - **Those numbers are secret in combat.** See [Taint notes](#taint-notes). This is the defining
-  constraint and it is why the aggregator freezes its sort, why the formatter exists, why pets are
-  dropped rather than summed, and why there is no column drag editor.
+  constraint and it is why the aggregator has two builds rather than one, why the formatter exists,
+  and why there is no column drag editor.
 - **A window is an instance, not a singleton.** There are no global display settings: `frame`,
   `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
   inside one window's own config. That is what makes multi-window and copy-settings-from cheap — a
@@ -65,7 +65,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
-freeze, the formatter and the widget setters — is **[data-flow.md](data-flow.md)**. Read it before
+identity build, the formatter and the widget setters — is **[data-flow.md](data-flow.md)**. Read it before
 touching the data path.
 
 ## Settings schema
@@ -115,11 +115,11 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 | `ROSTER_CHANGED` | `core/MythicMeters.lua` | `Roster`, `Visibility`, every `Window` | — |
 | `ZONE_CHANGED` | `core/MythicMeters.lua` | `Visibility`, every `Window` | — |
 | `ENTERING_WORLD` | `core/MythicMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
-| `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | `Aggregator`, every `Window` | `{ type, state }` |
+| `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | every `Window` | `{ type, state }` |
 | `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
-| `PREVIEW_CHANGED` | `core/State.lua` (`State.SetPreview`) | every `Window` | `{ enabled }` |
+| `PREVIEW_CHANGED` | `core/State.lua` (`State.SetTestMode`) | `Roster`, every `Window` | `{ enabled }` |
 | `DRILLDOWN_CHANGED` | `modules/DrillDown.lua` (`announce`) | the addressed `Window` | `{ windowId, active }` |
 
 `METER_RESET` has two dispatch paths on purpose: the game fires `DAMAGE_METER_RESET` and
@@ -228,11 +228,15 @@ truth test would be natural — `value or 0` is a truth test and raises; `value 
 does not. `table.concat` is worth naming twice: it is the one string operation that raises on a
 secret, which is exactly why LibKa0s uses it as the detection probe.
 
-`classFilename`, `specIconID`, `isLocalPlayer`, `deathRecapID` and `sourceGUID` are `NeverSecret` and
-always readable. `name` is `ConditionalSecret`. **A meter `sourceGUID` is never secret, which is why
-it is the only legal join key in the addon** — and why the aggregator is built on it.
+`classFilename`, `specIconID`, `isLocalPlayer` and `deathRecapID` are `NeverSecret` and always
+readable — all four verified in-game under an active restriction. `name` is `ConditionalSecret`.
 
-That guarantee covers `C_DamageMeter` and nothing else. **The unit API does hand out secret GUIDs**:
+**`sourceGUID` is NOT.** The addon was built on the reading that a meter source GUID is never secret
+and is therefore its only legal join key; in-game it comes back secret *and* inaccessible for the
+whole of a pull, so the join has no key while the restriction is active. `isLocalPlayer` is what row
+identity is rebuilt from — see Known limitations below.
+
+**The unit API hands out secret GUIDs too**:
 in a follower dungeon `UnitGUID("party3pet")` answers a secret string, and keying on one raises
 `attempted to perform indexed assignment on a table that cannot be indexed with secret keys` on every
 refresh tick. `modules/Roster.lua` — the addon's only reader of the unit API — therefore vets every
@@ -268,12 +272,13 @@ on a secret — so both are gated on the concat probe, and a `ConditionalSecret`
 untouched and uncapped. The cap counts UTF-8 characters rather than bytes; a byte slice can emit half
 a code point, and accented names are exactly the ones most likely to need truncating.
 
-**Secrecy keys off `Combat`, not `ChallengeMode`.** Between packs in a key the values are fully
-readable, so value sorting works for most of a dungeon run and freezes only during the pulls
-themselves. `ADDON_RESTRICTION_STATE_CHANGED` fires with `state = Activating` **before** enforcement
-begins and access is still permitted during that dispatch — the last moment a correct value-sort can
-be taken, which is why `core/Secrets.lua` exposes the raw state and not just a boolean, and why
-`Aggregator:OnRestrictionChanged` takes one final sort there.
+**Secrecy keys off `Combat`, not `ChallengeMode`.** Between packs in a key the values and the GUIDs
+are fully readable, so the exact GUID join runs for most of a dungeon run and identity mode covers the
+pulls themselves. `ADDON_RESTRICTION_STATE_CHANGED` fires with `state = Activating` **before**
+enforcement begins and access is still permitted during that dispatch, which is why
+`core/Secrets.lua` exposes the raw state and not just a boolean. `modules/Aggregator.lua` no longer
+listens for that edge: it existed to take one last value-sort and freeze the result, and a frozen
+`guid → position` map cannot be applied to rows that have no GUID.
 
 Two consequences worth stating once, because both look like bugs: **percentage text slots go quiet in
 combat** (a percentage is a division), and **a pet's row is dropped rather than summed into its
@@ -319,13 +324,22 @@ and a fallback nobody can run is a fallback nobody has tested.
 - **Pet attribution is best-effort.** Guardians, totems, temporary summons and any pet whose owner
   was never within unit-API range are unattributable and their rows are dropped. The roster REMEMBERS
   every attribution it once made, so leaving the group does not lose one.
-- **`data.mergePets` is off by default, and lossy when on.** A pet gets its own row, which needs no
-  arithmetic and is exact in both states. Merging is addition, addition on secrets raises, so the
-  merged mode drops the pet's numbers for the duration of a pull and the owner's total reads low.
+- **`data.mergePets` is off by default, and has no effect during a pull.** A pet gets its own row,
+  which needs no arithmetic and is exact in both states. Merging is addition and needs the owner
+  link, so it runs only where GUIDs are plain — out of combat.
 - **The roster is sticky for the life of the meter's data.** Someone who left the group mid-run stays
   on the grid until the meter is reset. That is deliberate: the alternative — what shipped in
   v0.1.0 — was the window emptying itself the moment you left a dungeon, for a session that still
   held everyone's numbers.
+- **Two players of the same class AND specialization cannot be told apart mid-pull.** `sourceGUID`
+  is `SecretWhenInCombat`, so while the restriction is active the grid is built by identity
+  correlation (`classFilename` + `specIconID` + `isLocalPlayer`) rather than by the GUID join. Rows
+  are correct — they are the engine's own ranking of the sort column — but where two of them share an
+  identity key, their **secondary columns are left empty** rather than filled from a source that
+  might be the other player's. The header says `restricted — some rows cannot be told apart`, and the
+  full grid returns on the first refresh after combat.
+- **Pets are separate rows for the whole of a pull, whatever `data.mergePets` says.** Folding needs
+  the owner link, the owner link needs a GUID, and there is none while restricted.
 - **Percentage text slots render empty in combat.** By design; the slots default to total and rate.
 - **`provider` sort mode rests on an unverified assumption** — that `combatSources` arrives sorted by
   the requested statistic. Isolated in `modules/Provider.lua`; `value` and `roster` do not depend on

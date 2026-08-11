@@ -45,7 +45,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 | 6 | Multi-window | [Second window, copy settings, independence](#6-multi-window) |
 | 7 | Visibility | [Context matrix](#7-visibility-matrix) |
 | 8 | **Secret values** | [**Mythic+ pull — the secret-value path**](#8-mythic-pull--the-secret-value-path) |
-| 9 | **Sorting** | [**Sort freeze and re-sort between packs**](#9-sort-freeze-and-re-sort-between-packs) |
+| 9 | **Sorting** | [**Live ranking mid-pull, and identity ambiguity**](#9-live-ranking-mid-pull-and-identity-ambiguity) |
 | 10 | **Interaction** | [**Tooltips, drill-down and death recap mid-pull**](#10-tooltips-drill-down-and-death-recap-mid-pull) |
 | 11 | **Unverified assumption** | [**Does `combatSources` arrive pre-sorted?**](#11-verify-the-unverified-assumption-provider-order) |
 | 12 | Pets | [Pet attribution](#12-pet-attribution) |
@@ -260,34 +260,46 @@ of a pull, where nobody can see it until BugSack fills up.
 - **The refresh is smooth, not frantic.** With `data.throttle = 0.25` the grid updates roughly four
   times a second regardless of how fast the game reports. If it visibly stutters or the client
   hitches at the start of a big pull, capture it (§18) rather than guessing.
-- **Between packs, everything comes back**: percentages return, the row order re-sorts (§9), and the
-  gray "sorting is frozen" note disappears.
+- **THE GRID IS NOT EMPTY.** A window reading *"Waiting for combat data…"* for a whole pull with a
+  live session behind it is the bug this section exists for: `sourceGUID` is `SecretWhenInCombat`, and
+  any code that keys, compares or looks one up mid-pull drops every source silently. `/mm debug on`
+  and a `dropped=` count equal to the group size is the signature.
+- **Between packs, everything comes back**: percentages return, secondary cells that were blanked for
+  ambiguity fill in, pets fold per `mergePets`, and the gray `restricted` note disappears.
 
 **Record for the report:** dungeon and key level, group composition, number of packs, and whether the
 error frame stayed empty. "No errors" from a five-minute dummy session is not evidence for this test.
 
-### 9. Sort freeze and re-sort between packs
+### 9. Live ranking mid-pull, and identity ambiguity
 
-**Setup.** As §8, `sortMode = "value"`, `sortColumn = "DamageDone"`.
+**Setup.** As §8, `sortMode = "value"`, `sortColumn = "DamageDone"`. Run it once in a group where
+every player has a different specialization, and once in a group containing **two players of the same
+class AND spec** — that second run is the whole point of this case.
 
 **Steps.**
 1. Between packs, note the row order top to bottom.
-2. Pull. Watch the order for the whole fight.
+2. Pull. Watch the order, and watch the columns other than Damage, for the whole fight.
 3. Kill the pack. Watch again.
 
 **Pass.**
-- **During the pull the row order does not change.** Numbers update in place; nobody swaps rows. The
-  order held is the one taken at the `ADDON_RESTRICTION_STATE_CHANGED` "Activating" edge, which fires
-  *before* enforcement begins and is the last moment a correct value sort can be taken.
-- **The header says so**, in gray: *"Sorting is frozen while the game restricts combat data."* The
-  player watching a list that has stopped reordering is owed the reason.
-- **After the pull the order re-sorts** to the true damage order, and the gray note disappears.
-- Somebody who joins the group **mid-pull** appears at the **bottom** and does not disturb the rows
-  above them.
-- Switch `sortMode` to **`roster`** and repeat: the order is group order (you first), then role
-  (tank, healer, damage), then name, and it **never** reshuffles — in or out of combat.
-- Switch to **`provider`** and repeat: the order follows the game's own, in and out of combat, with
-  no freeze note.
+- **Rows keep coming, and they re-rank live.** `sourceGUID` is secret for the whole of a pull, so the
+  grid is built by identity correlation and its order is the game's own ranking of the sort column.
+  Someone overtaking someone else moves up *during* the fight.
+- **The header says `restricted`** in gray. The grid is built a different way and the player is owed
+  the reason a cell can be blank.
+- **Every row is present**, including pets — which appear as their own rows mid-pull whatever
+  `mergePets` says, because folding needs an owner link the GUID would have provided.
+- **With two players of one class and spec**: their Damage figures are still right (that column comes
+  off the row itself), and their **other columns are empty**. The header reads
+  `restricted — some rows cannot be told apart`. An empty cell here is the correct answer: the addon
+  cannot prove which of the two a secondary figure belongs to, and will not guess.
+- **After the pull everything fills in** on the next refresh — exact GUID correlation, all columns,
+  pets folded per `mergePets` — and the gray note disappears.
+- Switch `sortMode` to **`roster`** and repeat: out of combat the order is group order (you first),
+  then role, then name. In combat the ranking is the engine's, as above — `roster` mode needs GUIDs
+  to place a row and cannot run while they are secret.
+- Switch to **`provider`** and repeat: out of combat the order follows the game's own, which is what
+  identity mode uses in combat too, so this mode looks the same on both sides of a pull.
 
 ### 10. Tooltips, drill-down and death recap mid-pull
 
@@ -429,7 +441,7 @@ on and there is nothing in it yet", which is the normal state between pulls.
 
 **Reset meter data.** From the Data page, click it and confirm the popup. Blizzard's **own** meter
 window empties too — the call is `C_DamageMeter.ResetAllCombatSessions` and it is account-wide, which
-is why the popup exists. Every open drill-down closes and every frozen sort order is dropped.
+is why the popup exists. Every open drill-down closes and this module's caches are dropped.
 
 ### 14. Slash surface
 

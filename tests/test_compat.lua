@@ -242,18 +242,24 @@ test("Compat: every meter shim survives a fully secret session", function()
         "the duration is secret too — the header must format it, never do minutes/seconds on it")
 end)
 
-test("Compat: the join key is handed back plain, because it is the only legal one", function()
-    -- sourceGUID is NeverSecret and is the whole basis of the aggregator's join.
-    -- If it ever arrived secret, nothing in this addon could match a meter row
-    -- to a group member at all.
+test("Compat: the join key comes back SECRET under the restriction", function()
+    -- THE ASSERTION THAT USED TO SAY THE OPPOSITE, and it is why this suite was
+    -- green while the addon drew an empty grid for every pull it ever ran. The
+    -- addon was written believing `sourceGUID` was NeverSecret and therefore the
+    -- one field legal as a table key. Blizzard annotates it SecretWhenInCombat,
+    -- and in-game it arrives secret AND inaccessible — so mid-pull there is no
+    -- join key, which is what modules/Aggregator.lua's identity build exists for.
+    --
+    -- Compat's own contract is unchanged: it is a courier and hands the value
+    -- through untouched, secret or not.
     local inst = restrictedInstance()
     local session = inst.NS.Compat.GetCombatSessionFromType(Const.SESSION_TYPE.Current,
         Const.STAT_TYPE.DamageDone)
     local first = session.combatSources[1]
-    assertFalse(inst.mocks.isSimulatedSecret(first.sourceGUID))
-    assertEqual(type(first.sourceGUID), "string")
+    assertTrue(inst.mocks.isSimulatedSecret(first.sourceGUID),
+        "a fixture that hands back a plain GUID mid-pull is testing a client that does not exist")
     assertFalse(inst.mocks.isSimulatedSecret(first.classFilename),
-        "classFilename is NeverSecret — it is what colors a bar mid-pull")
+        "classFilename IS NeverSecret — it is what colors a bar mid-pull, and what identifies a row")
 end)
 
 test("Compat: the optional source arguments are forwarded, never defaulted", function()

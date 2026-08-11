@@ -9,13 +9,18 @@
 -- ---------------------------------------------------------------------------
 --
 --   1. Read one column per enabled stat from modules/Provider.lua.
---   2. Index every source by sourceGUID. A GUID is never secret, so it is legal
---      as a table KEY — and it is the ONLY thing in a session that is. Nothing
---      here is ever keyed on a value; that is an immediate Lua error in combat
---      and it is the single most tempting mistake in the whole addon.
+--   2. Index every source by sourceGUID. Nothing here is ever keyed on a VALUE;
+--      that is an immediate Lua error in combat and the single most tempting
+--      mistake in the whole addon.
 --   3. Filter to group members (modules/Roster.lua) and fold pets into owners.
 --   4. Order, per the window's sortMode.
 --   5. Cap to rows.maxRows, honoring rows.alwaysShowSelf.
+--
+-- THAT IS THE UNRESTRICTED BUILD, AND IT IS HALF THE FILE. `sourceGUID` is
+-- annotated SecretWhenInCombat, so for the whole of a pull there is no join key
+-- at all: it cannot be keyed on, compared or looked up. The second build —
+-- IDENTITY MODE, further down — is what runs then, and it correlates on the
+-- fields that stay plain instead. The choice is made once per pass.
 --
 -- ---------------------------------------------------------------------------
 -- PET FOLDING IS ADDITION, AND ADDITION IS THE THING WE MAY NOT DO
@@ -36,26 +41,24 @@
 -- Deferring the scoring feature rests on exactly this fact (design §7).
 --
 -- ---------------------------------------------------------------------------
--- THE SORT FREEZE
+-- THE SORT FREEZE, AND WHY IT IS GONE
 -- ---------------------------------------------------------------------------
 --
 -- `value` mode sorts by the sort column's numbers, which requires comparing
--- them, which is illegal while restricted. Falling back to `provider` order the
--- moment a pull starts would make every row jump at the worst possible time, so
--- instead:
+-- them, which is illegal while restricted. This file used to answer that by
+-- caching each successful value-sort as a guid -> position map, taking one last
+-- sort at the ADDON_RESTRICTION_STATE_CHANGED `Activating` edge, and reapplying
+-- that frozen order for the rest of the pull so nothing reshuffled.
 --
---   * every successful value-sort CACHES its resulting GUID order per window;
---   * while restricted, that frozen order is reused — rows update their numbers
---     IN PLACE and nothing reshuffles;
---   * ADDON_RESTRICTION_STATE_CHANGED with state = Activating fires BEFORE
---     enforcement begins and access is still permitted during that dispatch, so
---     the handler at the bottom of this file takes one final sort there. That is
---     the last legal moment, and taking it is what makes the frozen order the
---     order as of the pull's start rather than as of whenever the player last
---     stood still.
+-- ALL OF IT RESTED ON ROWS HAVING GUIDS MID-PULL, AND THEY DO NOT. A frozen
+-- order is a map keyed on the one field that turns out to be secret exactly when
+-- the freeze is needed, so it could never have been reapplied to a single row.
 --
--- A GUID with no frozen position (someone who joined mid-pull) sorts after the
--- frozen ones, in provider order. It never reorders the frozen block.
+-- Identity mode replaces it with something better rather than poorer: the sort
+-- column's `combatSources` arrives ALREADY RANKED by that column, so the order
+-- is the engine's, it is live rather than a snapshot of the pull's first frame,
+-- and it costs no comparison of ours. Rows re-rank as the fight moves, which is
+-- what a meter is for.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT BUILD RETURNS
@@ -69,7 +72,8 @@
 --     sortTotal       = opaque,                -- columnTotals[sortColumn]
 --     durationSeconds = opaque,                -- for the header
 --     sessionName     = string|nil,
---     sortFrozen      = boolean,               -- the header says so when true
+--     identityMode    = boolean,               -- rows correlated, not GUID-joined
+--     ambiguous       = boolean,               -- a class+spec pair could not be told apart
 --     reason          = string|nil,            -- why a column came back empty
 --   }
 --
@@ -125,11 +129,6 @@ local MSG      = Const.MSG
 -- real instance or its stub.
 local Perf = NS.Perf
 
--- Frozen sort orders, per window id. Lives in the shared session cache so it is
--- dropped by the same seam that drops the roster map and the formatters: a meter
--- reset or a profile swap makes a frozen order meaningless, and the alternative
--- is a window that keeps last fight's ordering after the meter has been wiped.
-local frozen = State.Cache("Aggregator")
 
 -- ---------------------------------------------------------------------------
 -- Row assembly
@@ -331,25 +330,6 @@ local function orderByValue(rows, statKey, ascending)
     return true
 end
 
---- Order by the frozen GUID list captured at the last legal sort.
----
---- Rows absent from the freeze keep their provider position and are pushed after
---- every frozen row, so somebody who joined mid-pull appears at the bottom and
---- disturbs nothing above them.
----
---- @return boolean  whether a freeze existed to apply
-local function orderByFreeze(rows, windowId)
-    local order = frozen[windowId]
-    if type(order) ~= "table" then return false end
-
-    for i = 1, #rows do
-        local row = rows[i]
-        row.freezeIndex = order[row.guid] or (UNRANKED + row.providerIndex)
-    end
-    table.sort(rows, function(a, b) return a.freezeIndex < b.freezeIndex end)
-    return true
-end
-
 --- Order by group position, then role, then name — the mode that never moves.
 ---
 --- Roles sort tank, healer, damager rather than alphabetically, because that is
@@ -380,18 +360,6 @@ local function orderByRoster(rows)
         end
         return tostring(a.name) < tostring(b.name)
     end)
-end
-
---- Record the current order as this window's freeze.
----
---- Stored as guid -> position rather than as an array because the only question
---- ever asked of it is "where does this GUID go", and an array would make that a
---- linear scan per row per refresh.
-local function freeze(rows, windowId)
-    if windowId == nil then return end
-    local order = {}
-    for i = 1, #rows do order[rows[i].guid] = i end
-    frozen[windowId] = order
 end
 
 -- ---------------------------------------------------------------------------
@@ -440,6 +408,13 @@ local function newPass(window)
         -- inside it.
         mergePets   = data.mergePets and true or false,
         applied     = nil,
+        -- Whether this pass must build without the GUID join. Asked of
+        -- core/Secrets.lua rather than of State.restricted, which is a mirror
+        -- for the render path: this decides which algorithm runs and has to be
+        -- right rather than fast.
+        identityMode = Secrets.IsRestricted(),
+        -- Set by the identity build when two sources shared one identity key.
+        ambiguous    = false,
 
         byGuid  = {},
         rows    = {},
@@ -468,37 +443,120 @@ local function owningMember(guid)
     return nil
 end
 
+--- Truth-test a field that MIGHT be a secret boolean.
+---
+--- `if src.isLocalPlayer then` is the natural way to write this and it raises the
+--- moment that field is secret, because a boolean test on a secret boolean is
+--- exactly what tainted code may not do. Asking core/Secrets.lua first keeps the
+--- inspection in the one file allowed to make it, and an inaccessible flag reads
+--- as "no claim" — the same shape modules/Tooltip.lua uses for isAvoidable.
+local function plainTruth(v)
+    if not Secrets.CanAccess(v) then return false end
+    return v and true or false
+end
+
+--- The plain GUID a source with an UNKEYABLE GUID can still be attributed to.
+---
+--- THE MEASURED FACT THIS EXISTS FOR: `C_DamageMeter` returns a SECRET
+--- `sourceGUID` while the Combat restriction is active. The design assumed the
+--- opposite — "a GUID is never secret, so it is the ONLY thing in a session
+--- legal as a table KEY" — and on that assumption the entire join rests. It does
+--- not hold: NS.Secrets.IsSafeKey correctly refuses the key, every source is
+--- dropped, and the window emptied for the whole of every pull.
+---
+--- A secret GUID cannot be keyed on, compared, or looked up, so for most sources
+--- there is genuinely nothing left to join on and they stay dropped (see the
+--- header on why a phantom row is worse). ONE identity survives: `isLocalPlayer`
+--- is plain, so a source that says it is us can be attributed to the roster's own
+--- plain GUID. That is the source's own statement about itself, not a guess.
+---
+--- Deliberately narrow. `classFilename` is plain too and would "identify" a
+--- group member whenever no two of them share a class — which is a coin flip in
+--- a party and false in a raid, and getting it wrong prints one player's numbers
+--- under another player's name. Dropping a row is a visible absence; mislabeling
+--- one is a lie the player cannot see.
+---
+--- @return string|nil  the local player's roster GUID, or nil for no claim
+local function localClaim(src)
+    if not plainTruth(src.isLocalPlayer) then return nil end
+    return Roster.LocalGUID()
+end
+
+--- Say WHY a source was refused, on the first drop of the pass only.
+---
+--- `rows=0 dropped=N` is the shape every "my window is empty" report takes, and
+--- the counter alone cannot say which of the causes it was: a GUID this context
+--- may not key on, a source belonging to nobody in the group, or a pet with no
+--- owner link. They need different fixes, so the refusal names itself.
+---
+--- `lookup` asks whether the CLIENT will resolve a source from a GUID we may not
+--- resolve ourselves (modules/Provider.lua's ProbeSourceByGuid) — the question
+--- that decides whether a future build can do better than identity correlation.
+---
+--- Every argument goes through NS.SafeToString: a GUID this branch could not use
+--- is exactly the one that is likely secret, and a secret raises inside
+--- string.format.
+local function logDrop(pass, src, guid)
+    NS.Debug("Aggregator",
+        "dropped guid=%s secret=%s access=%s member=%s owner=%s local=%s/%s class=%s/%s lookup=%s",
+        NS.SafeToString(guid), tostring(Secrets.IsSecret(guid)),
+        tostring(Secrets.CanAccess(guid)),
+        tostring(Roster.IsGroupMember(guid)), NS.SafeToString(Roster.OwnerOf(guid)),
+        NS.SafeToString(src.isLocalPlayer), tostring(Secrets.IsSecret(src.isLocalPlayer)),
+        NS.SafeToString(src.classFilename), tostring(Secrets.IsSecret(src.classFilename)),
+        Provider.ProbeSourceByGuid(pass.sessionType, pass.sortColumn, guid))
+end
+
+--- The local player's row, started on first sight of it.
+---
+--- Reached only when the GUID join could not place the source and the source
+--- claimed to be us — a mixed pass, where most GUIDs are plain and this one is
+--- not. `claimed` is the ROSTER's own GUID, so the row keys, names and roles
+--- exactly like any other, and nothing here touches the secret one.
+local function claimedRow(pass, src, index, isSortColumn, claimed)
+    local row = pass.byGuid[claimed]
+    if row == nil then
+        row = newRow(claimed, src, pass.windowId)
+        row.providerIndex = isSortColumn and index or (UNRANKED + index)
+        pass.byGuid[claimed] = row
+        pass.rows[#pass.rows + 1] = row
+    elseif isSortColumn then
+        row.providerIndex = index
+    end
+    return row
+end
+
 --- The row `src` should be written into, started on first sight of its owner.
 ---
 --- @return table|nil row  nil when the source was dropped (and counted)
 --- @return boolean isOwn  true when the source IS the member, false for a pet
-local function rowForSource(pass, src, index, isSortColumn)
-    local guid = src.guid
-    local ownerGuid = owningMember(guid)
-    if ownerGuid == nil then
-        pass.dropped = pass.dropped + 1
-        return nil, false
-    end
+--- Refuse a source, count it, and say why the first time in each pass.
+---
+--- First-drop only, because a raid pull drops every enemy in the pack and forty
+--- lines a quarter second is a log nobody can read (debug-logging-§4).
+local function dropSource(pass, src, guid)
+    pass.dropped = pass.dropped + 1
+    if State.debug and pass.dropped == 1 then logDrop(pass, src, guid) end
+    return nil, false
+end
 
-    local isOwn = (ownerGuid == guid)
-
-    -- A PET GETS ITS OWN ROW unless the window asked for it to be merged.
-    --
-    -- Merging is ADDITION, and addition on two secrets raises — so the merged
-    -- mode has never been able to do it mid-pull and drops the pet's numbers
-    -- instead, leaving the owner's total quietly low for the whole fight. A
-    -- separate row has no arithmetic in it at all: it is exact, in and out of
-    -- combat, and it is what Blizzard's own meter shows. That is why it is the
-    -- default and merging is the option rather than the other way round.
-    --
-    -- The row is keyed on the PET's guid and carries its own name and class off
-    -- the source, so it reads as the pet it is rather than as a second copy of
-    -- its owner. `ownerGuid` is kept on it for the tooltip and for anything that
-    -- later wants to group them.
+--- The row a placed source belongs on, started on first sight of its owner.
+---
+--- A PET GETS ITS OWN ROW unless the window asked for it to be merged. Merging
+--- is ADDITION, so it runs only where the operands are accessible; a separate row
+--- has no arithmetic in it at all, is exact in both states, and is what
+--- Blizzard's own meter shows. That is why it is the default and merging is the
+--- option rather than the other way round.
+---
+--- A pet's row is keyed on the PET's guid and carries its own name and class off
+--- the source, so it reads as the pet it is rather than as a second copy of its
+--- owner. `ownerGuid` is kept on it for the tooltip and for anything that later
+--- wants to group them.
+local function placedRow(pass, src, index, isSortColumn, ownerGuid, isOwn)
     local petOwner
     if not isOwn and not pass.mergePets then
         petOwner  = ownerGuid
-        ownerGuid = guid
+        ownerGuid = src.guid
         isOwn     = true
     end
 
@@ -527,6 +585,217 @@ local function rowForSource(pass, src, index, isSortColumn)
     if isSortColumn and isOwn then row.providerIndex = index end
 
     return row, isOwn
+end
+
+--- The row `src` should be written into.
+---
+--- @return table|nil row  nil when the source was dropped (and counted)
+--- @return boolean isOwn  true when the source IS the member, false for a pet
+local function rowForSource(pass, src, index, isSortColumn)
+    local guid = src.guid
+    local ownerGuid = owningMember(guid)
+
+    if ownerGuid == nil then
+        -- The local-player fallback returns EARLY rather than joining the path
+        -- below, which compares `ownerGuid` against `guid` — and `guid` is
+        -- exactly the secret value that got us here. `==` on a secret is a
+        -- comparison, and a comparison raises. The row is the member's own by
+        -- construction, so there is nothing to work out.
+        local claimed = localClaim(src)
+        if claimed == nil then return dropSource(pass, src, guid) end
+        return claimedRow(pass, src, index, isSortColumn, claimed), true
+    end
+
+    return placedRow(pass, src, index, isSortColumn, ownerGuid, ownerGuid == guid)
+end
+
+-- ---------------------------------------------------------------------------
+-- IDENTITY MODE — the grid while the GUID is secret
+-- ---------------------------------------------------------------------------
+--
+-- Under the Combat restriction `sourceGUID` is SecretWhenInCombat, so the GUID
+-- join below cannot run: a source can be neither keyed on, compared, nor looked
+-- up. Everything that IDENTIFIES a source stays plain, though — `classFilename`,
+-- `specIconID` and `isLocalPlayer` are all annotated NeverSecret — and that is
+-- enough to build the grid a different way:
+--
+--   * the SORT column's `combatSources` is the row list, in the order the engine
+--     returned it, which is the ranking. Row identity is its POSITION;
+--   * every other column is read on its own and correlated to those rows by an
+--     identity key built from the three plain fields;
+--   * a key that appears twice in either the row list or a correlated column is
+--     AMBIGUOUS — two players of the same class and spec — and every secondary
+--     cell for it is left empty rather than filled with a number that might
+--     belong to the other one.
+--
+-- That last rule is the whole reason this is honest. Class alone identifies
+-- nobody in a raid; class plus spec plus "is it me" identifies almost everybody
+-- almost always, and the cases where it does not are DETECTED rather than
+-- guessed at. An empty cell is a visible absence; a mislabeled number is a lie
+-- the player cannot see.
+--
+-- The local player is the one row that keeps a real GUID: `isLocalPlayer` is
+-- plain and `UnitGUID("player")` never was secret, so their row is keyed on the
+-- roster's own GUID and carries the roster's name and role.
+--
+-- Verified against Blizzard's field annotations and against Scoot's Damage Meter
+-- Y, which solves it the same way.
+
+--- The plain triple that stands in for a GUID while the GUID is secret.
+local function identityKey(src)
+    local class = src.classFilename
+    if Secrets.IsSecret(class) then class = nil end
+    local icon = src.specIconID
+    if Secrets.IsSecret(icon) then icon = nil end
+    -- Concatenation only, on values just proved plain. Never `..` on a secret.
+    return (class or "UNKNOWN") .. "_" .. tostring(icon or 0)
+        .. "_" .. tostring(plainTruth(src.isLocalPlayer))
+end
+
+--- Whether this source is an enemy rather than one of us.
+---
+--- `sourceDisplayType` is a plain enum, which is what makes it usable here: the
+--- unrestricted path filters mobs out by asking the roster, and the roster
+--- cannot answer for a source it cannot key on.
+local function isEnemySource(src)
+    local kind = src.sourceDisplayType
+    if kind == nil or Secrets.IsSecret(kind) then return false end
+    return kind == Const.SOURCE_DISPLAY_TYPE.Enemy
+end
+
+--- One correlated column: identity key -> the figure to show, plus the keys that
+--- turned out to be ambiguous.
+---
+--- A counted stat (Deaths) reports one source row per event, so repeats of a key
+--- are the same player dying twice and are TALLIED. For every other stat a
+--- repeat is a genuine collision, because a player appears at most once.
+local function correlateColumn(column, isCount, collisions)
+    local byKey, seen = {}, {}
+    for _, src in ipairs(column.sources) do
+        if not isEnemySource(src) then
+            local key = identityKey(src)
+            if isCount then
+                byKey[key] = (byKey[key] or 0) + 1
+            elseif seen[key] then
+                collisions[key] = true
+            else
+                seen[key] = true
+                -- The value is copied, never examined — opaque exactly as it
+                -- arrived, and it reaches a widget setter or the formatter.
+                byKey[key] = src.totalAmount
+            end
+        end
+    end
+    return byKey
+end
+
+--- Read one column onto the pass and hand it back. Shared by both halves of the
+--- identity build so the bookkeeping is written once.
+local function takeColumn(pass, statKey)
+    local column = Provider.GetColumn(pass.sessionType, statKey, pass.sessionID)
+    pass.columns[statKey] = column
+    pass.columnTotals[statKey] = column.totalAmount
+    if column.reason and pass.reason == nil then pass.reason = column.reason end
+    return column, (Const.STAT_BY_KEY[statKey] or {}).isCount or false
+end
+
+--- A counted column scales every bar to the highest COUNT.
+---
+--- Those counters are ours and plain, so comparing them is legal mid-pull where
+--- comparing two meter values would not be. The session's own max is useless
+--- here: Deaths reports 0, and a bar scaled to 0 draws full for everybody.
+local function rescaleCounted(pass, statKey)
+    local highest = 0
+    for i = 1, #pass.rows do
+        local cell = pass.rows[i].values[statKey]
+        if cell and cell.total > highest then highest = cell.total end
+    end
+    if highest < 1 then highest = 1 end
+    for i = 1, #pass.rows do
+        local cell = pass.rows[i].values[statKey]
+        if cell then cell.maxAmount = highest end
+    end
+    pass.columnTotals[statKey] = nil
+end
+
+--- The row this source belongs on, started on first sight of it.
+---
+--- The local player keeps a REAL guid — `isLocalPlayer` is plain and
+--- `UnitGUID("player")` is not secret — so their row joins the roster's name and
+--- role. Everyone else is keyed on their POSITION, a plain string the row pool
+--- and the drill-down can hold without ever touching the secret one.
+local function identityRow(pass, src, index, localGuid)
+    local isLocal = plainTruth(src.isLocalPlayer)
+    local rowGuid = (isLocal and localGuid) or ("rank_" .. index)
+
+    local row = pass.byGuid[rowGuid]
+    if row ~= nil then return row end
+
+    row = newRow(rowGuid, src, pass.windowId)
+    -- newRow takes identity from the roster where the roster has it, which here
+    -- is the local player and nobody else. For every other row the source's own
+    -- fields are all there is — and `name` among them is ConditionalSecret, so it
+    -- travels to SetText and nowhere else.
+    if not isLocal then
+        row.isPlayer      = false
+        row.isLocalPlayer = false
+    end
+    row.identityKey   = identityKey(src)
+    row.providerIndex = index
+    pass.byGuid[rowGuid] = row
+    pass.rows[#pass.rows + 1] = row
+    return row
+end
+
+--- Fill one non-sort column by correlating it back onto the rows already built.
+local function fillCorrelated(pass, statKey, collisions)
+    local column, isCount = takeColumn(pass, statKey)
+    local byKey = correlateColumn(column, isCount, collisions)
+
+    for i = 1, #pass.rows do
+        local row = pass.rows[i]
+        local value = byKey[row.identityKey]
+        -- A collided key is left EMPTY rather than filled from a source that
+        -- might be the other player's. That refusal is the whole warrant for
+        -- correlating on class and spec at all.
+        if value ~= nil and not collisions[row.identityKey] then
+            row.values[statKey] = {
+                total     = value,
+                maxAmount = not isCount and column.maxAmount or nil,
+            }
+        end
+    end
+
+    if isCount then rescaleCounted(pass, statKey) end
+end
+
+--- Build every row from the sort column's source list, then fill the rest of the
+--- grid by identity correlation.
+local function buildByIdentity(pass)
+    local sortKey = pass.sortColumn
+    local column, sortCount = takeColumn(pass, sortKey)
+    local collisions, seenKeys = {}, {}
+    local localGuid = Roster.LocalGUID()
+
+    for index, src in ipairs(column.sources) do
+        if isEnemySource(src) then
+            pass.dropped = pass.dropped + 1
+        else
+            local key = identityKey(src)
+            if seenKeys[key] then collisions[key] = true end
+            seenKeys[key] = true
+
+            local row = identityRow(pass, src, index, localGuid)
+            setCell(row, sortKey, src, not sortCount and column.maxAmount or nil, sortCount)
+        end
+    end
+
+    for _, statKey in ipairs(pass.keys) do
+        if statKey ~= sortKey then fillCorrelated(pass, statKey, collisions) end
+    end
+
+    if sortCount then rescaleCounted(pass, sortKey) end
+    pass.ambiguous = next(collisions) ~= nil
 end
 
 --- Read one column from the provider and index every source in it by GUID.
@@ -597,11 +866,15 @@ end
 ---
 --- Written as a ladder because the fallbacks are the interesting part: every
 --- mode ends at `provider`, which cannot fail. The name returned is the mode
---- that ACTUALLY took effect, which is what the header reports and what the
---- debug line records — `value` degrading to `frozen` is the thing a bug report
---- most needs to show.
+--- that ACTUALLY took effect, which is what the debug line records.
 ---
---- @return string  the mode applied: the window's own, or "frozen"/"provider"
+--- ONLY EVER REACHED UNRESTRICTED. While the Combat restriction is active the
+--- pass takes the identity build instead, which has its own order — the engine's
+--- — so the ladder below never has to degrade for secrecy. That is what retired
+--- the sort freeze: it existed to hold a GUID order steady through a pull, and
+--- mid-pull rows no longer have GUIDs to hold.
+---
+--- @return string  the mode applied: the window's own, or "provider"
 local function applySortMode(pass)
     local rows, mode = pass.rows, pass.mode
 
@@ -615,11 +888,7 @@ local function applySortMode(pass)
         return "provider"
     end
 
-    if orderByValue(rows, pass.sortColumn, pass.sortAscending) then
-        freeze(rows, pass.windowId)
-        return mode
-    end
-    if orderByFreeze(rows, pass.windowId) then return "frozen" end
+    if orderByValue(rows, pass.sortColumn, pass.sortAscending) then return mode end
 
     orderByProvider(rows)
     return "provider"
@@ -678,7 +947,12 @@ local function assembleResult(kept, pass)
     kept.columnTotals    = pass.columnTotals
     kept.sortColumn      = pass.sortColumn
     kept.sortTotal       = pass.columnTotals[pass.sortColumn]
-    kept.sortFrozen      = (pass.applied == "frozen")
+    -- Published so the window can say WHY a mid-pull grid reads differently:
+    -- rows came from identity correlation rather than the GUID join, and
+    -- `ambiguous` means at least one class+spec pair could not be told apart and
+    -- had its secondary cells left empty on purpose.
+    kept.identityMode    = pass.identityMode
+    kept.ambiguous       = pass.ambiguous
     kept.reason          = pass.reason
     kept.durationSeconds = Provider.GetSessionDuration(pass.sessionType, pass.sessionID)
     return kept
@@ -704,8 +978,23 @@ function Aggregator.Build(a, b)
     local t0 = Perf.on and debugprofilestop()
 
     local pass = newPass(window)
-    for _, statKey in ipairs(pass.keys) do scanColumn(pass, statKey) end
-    pass.applied = applySortMode(pass)
+
+    -- TWO BUILDS, chosen by whether the join key exists at all. The GUID join is
+    -- the exact one and runs whenever `sourceGUID` is plain; under the Combat
+    -- restriction it is secret, and identity correlation is what stands in for
+    -- it (see the section header). The choice is made ONCE per pass rather than
+    -- per source, so a grid is never half one shape and half the other.
+    if pass.identityMode then
+        buildByIdentity(pass)
+        -- Engine order IS the ranking, and it is the only order available: value
+        -- sorting needs comparisons, and the frozen order is keyed on GUIDs that
+        -- no longer resolve. `applied` reports what actually happened.
+        orderByProvider(pass.rows)
+        pass.applied = "provider"
+    else
+        for _, statKey in ipairs(pass.keys) do scanColumn(pass, statKey) end
+        pass.applied = applySortMode(pass)
+    end
 
     local kept = Aggregator.ApplyRowLimit(pass.rows, window.rows or {})
     deriveRowFacts(kept, pass)
@@ -947,48 +1236,23 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --
--- Bus subscriptions only — core/MythicMeters.lua owns every game event and
--- publishes the restriction transition with its raw state attached, which is the
--- only reason the Activating edge is reachable from here at all.
+-- Bus subscriptions only — core/MythicMeters.lua owns every game event.
+--
+-- THE `Activating` EDGE IS NO LONGER LISTENED FOR. It used to be the last legal
+-- moment to take a value-sort, and that sort's result was frozen and reapplied
+-- for the whole pull. Both halves are gone: mid-pull rows are keyed on their
+-- position rather than on a GUID, so there is no order to freeze and nothing to
+-- reapply it to. The engine's own ranking of the sort column is the order now,
+-- and it is live rather than a snapshot. modules/Window.lua still redraws on the
+-- transition, which is all that was ever needed here.
 
 function Aggregator:OnEnable()
-    self:RegisterMessage(MSG.RESTRICTION_CHANGED, "OnRestrictionChanged")
-    self:RegisterMessage(MSG.METER_RESET,         "OnMeterReset")
-    self:RegisterMessage(MSG.PROFILE_CHANGED,     "OnMeterReset")
+    self:RegisterMessage(MSG.METER_RESET,     "OnMeterReset")
+    self:RegisterMessage(MSG.PROFILE_CHANGED, "OnMeterReset")
 end
 
---- ADDON_RESTRICTION_STATE_CHANGED, forwarded.
----
---- `Activating` is the last moment a correct value-sort can be taken: it fires
---- BEFORE enforcement begins and access is still permitted during the dispatch
---- (design §4). So every window that sorts by value takes its final sort here,
---- and that result is the order it will hold for the whole pull.
----
---- Building every window costs one aggregate pass each, once per pull, at a
---- moment when the client is not yet doing anything expensive. That is the
---- cheapest point on the curve and the only correct one.
-function Aggregator:OnRestrictionChanged(_, payload)
-    local state = payload and payload.state
-    if state == nil or state ~= Secrets.STATE.Activating then return end
-
-    local profile = NS.db and NS.db.profile
-    local windows = profile and profile.windows
-    if type(windows) ~= "table" then return end
-
-    for _, window in ipairs(windows) do
-        if window and (window.data or {}).sortMode == "value" then
-            Aggregator.Build(window)
-        end
-    end
-
-    if State.debug then
-        NS.Debug("Aggregator", "froze sort order for %d window(s) at the Activating edge", #windows)
-    end
-end
-
---- A frozen order describes a fight that no longer exists once the meter is
---- reset or the profile changes. Dropping it means the next unrestricted pass
---- takes a fresh sort instead of reviving last pull's ranking.
+--- The cache this module owns describes a fight that no longer exists once the
+--- meter is reset or the profile changes.
 function Aggregator:OnMeterReset()
     State.WipeCache("Aggregator")
 end

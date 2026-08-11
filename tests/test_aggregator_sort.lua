@@ -4,10 +4,21 @@
 --
 -- The interesting part of this file is the ladder's fallbacks rather than its
 -- happy path. `value` mode sorts by numbers; the moment a pull starts those
--- numbers are secret and comparing them raises, so the mode has to degrade —
--- first to the order frozen at the last legal sort, and only then to the
--- provider's. Each rung is driven here with a fixture where the WRONG rung
--- produces a visibly different order, so a regression cannot pass by accident.
+-- numbers are secret and comparing them raises, so the mode has to degrade to
+-- the provider's order. Each rung is driven here with a fixture where the WRONG
+-- rung produces a visibly different order, so a regression cannot pass by
+-- accident.
+--
+-- THE SORT FREEZE USED TO BE THE MIDDLE RUNG AND IS GONE. It cached a
+-- guid -> position map and reapplied it for the duration of a pull — keyed, that
+-- is, on the one field that turns out to be secret exactly when the freeze was
+-- needed. Under the restriction the aggregator now takes the identity build,
+-- whose order is the engine's own live ranking of the sort column, so `value`
+-- mode is never asked to degrade for secrecy at all. The cases below drive the
+-- comparator guards by wrapping INDIVIDUAL amounts with `mocks.secret`, which
+-- leaves the GUID plain so the exact join still runs and the ladder is still
+-- reached. `setSecretValues` would seal the GUID along with the amounts — it is
+-- the same SecretWhenInCombat trigger — and there would be no rows to order.
 
 local T = _G.MYTHICMETERS_TEST
 
@@ -103,7 +114,7 @@ test("value mode orders by the sort column's numbers, descending", function()
 
     local result = inst.NS.Aggregator.Build(makeWindow{ sortMode = "value" })
     assertOrder(result, { ALPHA, GAMMA, BETA })
-    assertEqual(result.sortFrozen, false, "a live sort is not a frozen one")
+    assertFalse(result.identityMode, "an unrestricted pass is the exact GUID join")
 end)
 
 test("value mode breaks a tie on providerIndex, so the order is deterministic", function()
@@ -129,75 +140,67 @@ test("value mode sorts a row with no cell in the sort column last", function()
     assertOrder(result, { ALPHA, BETA, GAMMA })
 end)
 
-test("value mode freezes the order it produced, keyed by GUID", function()
+test("a value sort caches NOTHING — the freeze is retired", function()
+    -- It cached guid -> position and reapplied that for the whole of a pull. The
+    -- map could never have been applied to a single mid-pull row: `sourceGUID` is
+    -- SecretWhenInCombat, so the rows it was keyed on have no GUID at exactly the
+    -- moment the freeze was for.
+    -- red under: reinstating freeze() in applySortMode.
     local inst = loaded()
     install(inst, { src(BETA, 10), src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 110 })
 
     inst.NS.Aggregator.Build(makeWindow{ id = 7, sortMode = "value" })
-    local frozen = inst.NS.State.Cache("Aggregator")[7]
-    assertEqual(type(frozen), "table")
-    -- guid -> position, because the only question ever asked of it is "where
-    -- does this GUID go"; an array would make that a scan per row per refresh.
-    assertEqual(frozen[ALPHA], 1)
-    assertEqual(frozen[BETA], 2)
+    assertEqual(inst.NS.State.Cache("Aggregator")[7], nil,
+        "a cached order is a snapshot that cannot survive the state it was made for")
 end)
 
 -- ---------------------------------------------------------------------------
--- value mode, while comparison is illegal
+-- while the restriction is active — identity mode
 -- ---------------------------------------------------------------------------
 
-test("value mode does NOT compare while restricted; it reuses the frozen order", function()
+test("while restricted the order is the ENGINE's ranking, and it is live", function()
+    -- What replaced the freeze. The sort column's combatSources arrives already
+    -- ranked by that column, so the order costs no comparison of ours and it
+    -- moves with the fight instead of being a snapshot of its first frame.
     local inst = loaded()
+    inst.mocks.setRestricted(true)
     local window = makeWindow{ id = 3, sortMode = "value" }
 
-    -- One legal sort, out of combat: ALPHA is ahead of BETA and that is frozen.
-    install(inst, { src(BETA, 10), src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 110 })
-    assertOrder(inst.NS.Aggregator.Build(window), { ALPHA, BETA }, "the legal sort")
+    install(inst, { src(ALPHA, 100), src(BETA, 10) }, { maxAmount = 100, totalAmount = 110 })
+    local first = inst.NS.Aggregator.Build(window)
+    assertEqual(#first, 2)
+    assertTrue(first.identityMode, "a restricted pass cannot use the GUID join")
 
-    -- Now the pull starts. The numbers move AND the provider's order is
-    -- BETA-first, so a fall-through to provider order would be visible.
-    inst.mocks.setRestricted(true)
+    -- BETA overtakes. A frozen order would have pinned ALPHA to the top for the
+    -- rest of the pull; the engine's ranking follows.
     install(inst, { src(BETA, 900), src(ALPHA, 100) }, { maxAmount = 900, totalAmount = 1000 })
-
-    local result = inst.NS.Aggregator.Build(window)
-    assertOrder(result, { ALPHA, BETA },
-        "rows update in place; nothing reshuffles at the worst possible moment")
-    assertEqual(result.sortFrozen, true, "and the header is told to say so")
+    local second = inst.NS.Aggregator.Build(window)
+    -- Revealed for the assertion only: the addon itself never looks.
+    assertEqual(inst.mocks.reveal(second[1].values.DamageDone.total), 900,
+        "the top row is the top parse")
 end)
 
-test("a GUID with no frozen place sorts after the frozen block", function()
-    local inst = loaded()
-    local window = makeWindow{ id = 4, sortMode = "value" }
-
-    install(inst, { src(BETA, 10), src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 110 })
-    inst.NS.Aggregator.Build(window)
-
-    -- Gamma joined mid-pull and sits FIRST in the provider's order. They appear
-    -- at the bottom and disturb nothing above them.
-    inst.mocks.setRestricted(true)
-    install(inst, { src(GAMMA, 5000), src(BETA, 10), src(ALPHA, 100) },
-        { maxAmount = 5000, totalAmount = 5110 })
-
-    assertOrder(inst.NS.Aggregator.Build(window), { ALPHA, BETA, GAMMA })
-end)
-
-test("value mode falls through to provider order when there is no freeze", function()
+test("while restricted a row is keyed on its POSITION, never on the secret GUID", function()
+    -- `sourceGUID` is SecretWhenInCombat: keying a table on one raises. The row
+    -- still needs an identity the pool and the drill-down can hold, so it gets a
+    -- plain one derived from where the engine put it.
     local inst = loaded()
     inst.mocks.setRestricted(true)
-    install(inst, { src(BETA, 10), src(GAMMA, 50), src(ALPHA, 100) },
-        { maxAmount = 100, totalAmount = 160 })
+    install(inst, { src(ALPHA, 100), src(BETA, 10) }, { maxAmount = 100, totalAmount = 110 })
 
-    -- Nothing was ever frozen for this window, so the only order left is the
-    -- one the API returned — which needs no comparison and cannot fail.
-    local result = inst.NS.Aggregator.Build(makeWindow{ id = 5, sortMode = "value" })
-    assertOrder(result, { BETA, GAMMA, ALPHA })
-    assertEqual(result.sortFrozen, false)
+    local result = inst.NS.Aggregator.Build(makeWindow{ sortMode = "value" })
+    assertEqual(result[1].guid, "rank_1")
+    assertEqual(result[2].guid, "rank_2")
 end)
 
 test("value mode checks comparability in a pass BEFORE table.sort is entered", function()
     local inst = loaded()
-    inst.mocks.setRestricted(true)
-    install(inst, { src(BETA, 10), src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 110 })
+    -- The AMOUNTS are opaque and the GUIDs are not, so the exact join still runs
+    -- and the sort ladder is still reached — which is the only state in which
+    -- this pre-pass has anything to refuse.
+    inst.mocks.setSecretsAccessible(false)
+    install(inst, { src(BETA, inst.mocks.secret(10)), src(ALPHA, inst.mocks.secret(100)) },
+        { maxAmount = 100, totalAmount = 110 })
 
     -- The proof that the check is a separate pass rather than a test inside the
     -- comparator: CanCompare is consulted, and table.sort is never entered with
@@ -215,31 +218,18 @@ test("value mode checks comparability in a pass BEFORE table.sort is entered", f
     assertTrue(calls > 0, "CanCompare must actually be consulted")
 end)
 
-test("the Activating edge takes one final sort for every value-sorted window", function()
+test("the Activating edge is no longer listened for", function()
+    -- It existed to take one last legal value-sort and freeze the result. With
+    -- the freeze gone there is nothing for that dispatch to do here, and
+    -- modules/Window.lua already redraws on the same transition.
+    -- red under: reinstating the RESTRICTION_CHANGED subscription.
     local inst = T.load()
-    inst.mocks.setGroup(GROUP)
-    inst.NS.Roster.Refresh()
-    install(inst, { src(BETA, 10), src(ALPHA, 100) }, { maxAmount = 100, totalAmount = 110 })
+    local NS, mocks = inst.NS, inst.mocks
+    NS.Aggregator:OnEnable()
 
-    local NS = inst.NS
-    local window = NS.Database.GetWindows()[1]
-    window.data.sortMode    = "value"
-    window.data.sortColumn  = "DamageDone"
-    -- `install` seeds the CURRENT session; the shipped default is Overall.
-    window.data.sessionType = CURRENT
-
-    NS.State.WipeCache("Aggregator")
-    -- Anything but Activating is ignored: Active is too late (enforcement has
-    -- begun) and Inactive needs no help.
-    NS.Aggregator:OnRestrictionChanged(nil, { state = NS.Secrets.STATE.Active })
-    assertEqual(NS.State.Cache("Aggregator")[window.id], nil)
-
-    -- Activating fires BEFORE enforcement begins and access is still permitted
-    -- during the dispatch — the last legal moment for a correct value sort.
-    NS.Aggregator:OnRestrictionChanged(nil, { state = NS.Secrets.STATE.Activating })
-    local frozen = NS.State.Cache("Aggregator")[window.id]
-    assertEqual(type(frozen), "table", "the pull's starting order is captured here")
-    assertEqual(frozen[ALPHA], 1)
+    assertEqual((mocks.__busRegistry[NS.Constants.MSG.RESTRICTION_CHANGED] or {})[NS.Aggregator],
+        nil, "a subscription with no handler behind it is dead wiring")
+    assertEqual(NS.Aggregator.OnRestrictionChanged, nil)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -248,8 +238,8 @@ end)
 
 test("provider mode never compares a value, in combat or out", function()
     local inst = loaded()
-    inst.mocks.setRestricted(true)
-    install(inst, { src(BETA, 10), src(GAMMA, 50), src(ALPHA, 100) },
+    install(inst, { src(BETA, inst.mocks.secret(10)), src(GAMMA, inst.mocks.secret(50)),
+                    src(ALPHA, inst.mocks.secret(100)) },
         { maxAmount = 100, totalAmount = 160 })
 
     -- CanCompare has exactly one caller in the aggregator: the value sort's
@@ -263,7 +253,6 @@ test("provider mode never compares a value, in combat or out", function()
 
     assertEqual(calls, 0, "provider mode asked whether it could compare — it should not care")
     assertOrder(result, { BETA, GAMMA, ALPHA })
-    assertEqual(result.sortFrozen, false)
 end)
 
 test("an unrecognized sort mode degrades to provider order rather than to nothing", function()
@@ -279,8 +268,8 @@ end)
 
 test("roster mode orders by group position, ignoring the numbers entirely", function()
     local inst = loaded()
-    inst.mocks.setRestricted(true)
-    install(inst, { src(GAMMA, 5000), src(BETA, 900), src(ALPHA, 1) },
+    install(inst, { src(GAMMA, inst.mocks.secret(5000)), src(BETA, inst.mocks.secret(900)),
+                    src(ALPHA, inst.mocks.secret(1)) },
         { maxAmount = 5000, totalAmount = 5901 })
 
     -- The mode that never moves: group order is a plain-data fact, so it is
@@ -327,15 +316,17 @@ test("roster mode's NAME TIEBREAK refuses to compare two secret names", function
     -- src.name rather than from a unit token. `<` on two of those raises
     -- mid-combat, and tostring() does not launder a secret: it survives it.
     local inst = loaded()
-    inst.mocks.setRestricted(true)
 
     -- Two rows with EQUAL providerIndex: neither column is the sort column
     -- (Deaths is in the catalog but not on this window), so every row is parked
     -- at UNRANKED + its index, and each of these is the first row of its own
     -- column.
-    install(inst, { src(ALPHA, 100, { name = "Zeta" }) },
+    -- The NAMES are wrapped individually rather than through setSecretValues,
+    -- which would seal the sourceGUID with them (same SecretWhenInCombat
+    -- trigger) and leave no rows to order at all.
+    install(inst, { src(ALPHA, 100, { name = inst.mocks.secret("Zeta") }) },
         { statKey = "DamageDone", maxAmount = 100 })
-    install(inst, { src(BETA, 100, { name = "Alfa" }) },
+    install(inst, { src(BETA, 100, { name = inst.mocks.secret("Alfa") }) },
         { statKey = "HealingDone", maxAmount = 100 })
 
     local NS = inst.NS

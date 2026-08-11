@@ -203,6 +203,7 @@ and every column backed by a real session.
 | Scenario | What it drives | What is asserted |
 |---|---|---|
 | `refresh20x7` | one full coalesced pass — 7 session reads, a 20-source join per column, 140 cells | **exactly one `Provider.GetColumn` per enabled column**; exactly one `GetCombatSessionFromType` per column per refresh; at most one `IsDamageMeterAvailable` across the whole run; **zero** unit-API walks in steady state |
+| `refresh20x7Restricted` | the same pass **mid-pull**, where `sourceGUID` is secret and `modules/Aggregator.lua` takes the identity build instead of the GUID join | **exactly one `Provider.GetColumn` per enabled column** — correlating a column must not re-enter the provider per row; **zero** unit-API walks; an absolute allocation ceiling |
 | `throttleBurst` | 200 bus events, then 100 sub-interval ticks, then one tick that spends the throttle | **exactly one** refresh, reading exactly one pass worth of columns; zero refreshes before the interval elapses |
 | `throttleIdle` | ticks with nothing dirty | zero refreshes, zero column reads |
 | `drillOpenClose` | `DrillDown:Enter` / `BuildRows` / `Exit` | zero `GetColumn` calls — a breakdown reads `GetSourceDetail`, never a whole column — and the view is really closed afterwards |
@@ -213,6 +214,13 @@ and every column backed by a real session.
 | `applyConfig` | a settings change re-applying config and re-laying every row | recorded only |
 | `probeOverheadOff` / `probeOverheadOn` | the same refresh with brackets dormant, then armed | the zero-overhead assertions below |
 | `suspended` | a refresh with the provider suspended | **zero** meter API calls — suspend stops the reads at the source |
+
+**A restricted pass costs about 22% more than an unrestricted one** — 397702 bytes against 325890
+for the same 20×7 window — and roughly a third of that gap is the harness rather than the addon: the
+mock simulates a secret value as a *table* with a trapping metatable, so every secret field becomes an
+allocation the client does not make. The rest is identity correlation itself: one key per source per
+non-sort column, plus a lookup table per column. The breakdown was measured by running the scenario
+with the correlation stubbed out, not estimated.
 
 **The regression guard worth knowing by name is `refresh20x7`'s column count.** One refresh used to
 make *two* `GetColumn` calls per column: `modules/Window.lua` re-entered the provider for each

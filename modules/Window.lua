@@ -1644,20 +1644,29 @@ function WindowProto:SortTotalText(F)
     return F.Number(total, (self.config.text or {}).numberFormat)
 end
 
---- The warning that the row order has stopped tracking the numbers, or nil while
---- it still does.
+--- The note that this grid was built the restricted way, or nil when it was not.
 ---
---- The player is watching a list that no longer reorders and is owed the reason;
---- the restriction mirror in core/State.lua is the cheap read of the same fact
---- core/Secrets.lua is the authority on.
+--- REPLACES THE FROZEN-SORT NOTICE, which said the rows had stopped reordering.
+--- They have not: `sourceGUID` is secret for the whole of a pull, so the rows are
+--- the engine's own ranking of the sort column and they re-rank live. What the
+--- player is owed instead is why a CELL can be empty — the other columns are
+--- matched to those rows by class and spec, and a pair that cannot be told apart
+--- has its cells left blank rather than guessed at.
+---
+--- Read off the aggregate the render pass parked here rather than from the
+--- restriction state directly, so the line describes the grid actually on screen
+--- rather than the state at the moment the header was drawn.
 ---
 --- @param preview boolean
 --- @return string|nil
-function WindowProto:FrozenSortNotice(preview)
+function WindowProto:RestrictedNotice(preview)
     if preview then return nil end
-    if (self.config.data or {}).sortMode ~= "value" then return nil end
-    if not (NS.State and NS.State.restricted) then return nil end
-    return NS.GRAY .. L["Sorting is frozen while the game restricts combat data."] .. "|r"
+    local aggregate = self.aggregate
+    if not (aggregate and aggregate.identityMode) then return nil end
+    if aggregate.ambiguous then
+        return NS.GRAY .. L["restricted \226\128\148 some rows cannot be told apart"] .. "|r"
+    end
+    return NS.GRAY .. L["restricted"] .. "|r"
 end
 
 --- The header's right-hand line: which session, how long it has run, and the
@@ -1709,7 +1718,7 @@ function WindowProto:UpdateHeaderText(preview, isDrill, drillTitle)
     add(self:SessionLabel(preview))
     add(self:DurationText(F))
     add(self:SortTotalText(F))
-    add(self:FrozenSortNotice(preview))
+    add(self:RestrictedNotice(preview))
 
     self.sessionText:SetText(line == nil and "" or line)
 end

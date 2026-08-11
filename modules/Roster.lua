@@ -24,9 +24,9 @@
 -- A UNIT GUID IS NOT ALWAYS PLAIN — THE CORRECTION THAT COST A DUNGEON RUN
 -- ---------------------------------------------------------------------------
 --
--- The meter's own sourceGUID is never secret; that part of design §5 holds, and
--- modules/Provider.lua still relies on it. The UNIT API is a different promise,
--- and it is not one the client makes: in a follower dungeon
+-- NEITHER source of GUIDs is reliably plain. The meter's own sourceGUID comes
+-- back SECRET under the Combat restriction (see modules/Aggregator.lua), and the
+-- UNIT API is no better: in a follower dungeon
 -- `UnitGUID("party3pet")` answers a SECRET string, and the assignment below
 -- raised "attempted to perform indexed assignment on a table that cannot be
 -- indexed with secret keys" on every refresh tick for the entire run.
@@ -402,6 +402,28 @@ function Roster.GetGroup()
     return ensure()
 end
 
+--- The LOCAL player's GUID, from the unit API, or nil before the map has built.
+---
+--- THE ONE IDENTITY THAT SURVIVES THE RESTRICTION. `C_DamageMeter` hands back a
+--- SECRET `sourceGUID` while the Combat restriction is active — the meter's GUID
+--- is not the plain join key this addon was designed around — so mid-pull a
+--- source cannot be looked up, keyed on, or compared. What it can still say for
+--- itself is `isLocalPlayer`, which stays plain, and this is the plain GUID that
+--- claim resolves to. modules/Aggregator.lua is the caller; see the note there.
+---
+--- Read off the built map rather than from `UnitGUID("player")` directly, so the
+--- answer is the same string the rest of the map is keyed on and a row built
+--- from it joins the roster's own name, class and role.
+---
+--- @return string|nil
+function Roster.LocalGUID()
+    local group = ensure()
+    for i = 1, #group do
+        if group[i].isPlayer then return group[i].guid end
+    end
+    return nil
+end
+
 --- One member entry by GUID, or nil.
 ---
 --- Preferred over reading a name off the meter's source row where both exist:
@@ -505,10 +527,20 @@ end
 -- group is unchanged but the unit API has not populated yet, so a map built a
 -- frame earlier can be full of nils that never correct themselves.
 
+-- TEST_MODE_CHANGED is here for the same reason as the other three: it changes
+-- WHICH GROUP the map describes. build() substitutes the mocked unit API while
+-- test mode is on, but that substitution only happens on a BUILD, and by the
+-- time anybody types `/mm test` the map is long since warm — so the invented
+-- sources were joined against the real group, modules/Aggregator.lua dropped
+-- every one of them as "not in your group", and the test grid was empty with no
+-- notice to explain it (preview suppresses the notice). Leaving test mode is the
+-- same bug reversed: the mocked group stayed cached and every REAL source was
+-- dropped until the next regroup.
 function Roster:OnEnable()
-    self:RegisterMessage(MSG.ROSTER_CHANGED,  "OnRosterChanged")
-    self:RegisterMessage(MSG.ENTERING_WORLD,  "OnRosterChanged")
-    self:RegisterMessage(MSG.PROFILE_CHANGED, "OnRosterChanged")
+    self:RegisterMessage(MSG.ROSTER_CHANGED,    "OnRosterChanged")
+    self:RegisterMessage(MSG.ENTERING_WORLD,    "OnRosterChanged")
+    self:RegisterMessage(MSG.PROFILE_CHANGED,   "OnRosterChanged")
+    self:RegisterMessage(MSG.TEST_MODE_CHANGED, "OnRosterChanged")
 end
 
 function Roster:OnRosterChanged()

@@ -681,19 +681,35 @@ test("The header folds its parts with `..`, and survives a secret duration", fun
     assertTrue(line:find("212", 1, true) ~= nil, "how long it has run")
 end)
 
-test("The header says so when the row order has stopped tracking the numbers", function()
+test("The header says the grid was built the restricted way", function()
+    -- REPLACES THE FROZEN-SORT NOTICE. The rows have not stopped reordering —
+    -- they are the engine's own live ranking. What the player is owed is why a
+    -- CELL can be empty: mid-pull the other columns are matched to those rows by
+    -- class and spec, because `sourceGUID` is secret and cannot be joined on.
     local inst, window, cfg = scene{ restricted = true, sortMode = "value" }
     cfg.header.showSessionName = true
-    -- core/State.lua's mirror is the cheap read of the fact core/Secrets.lua is
-    -- the authority on; core/MythicMeters.lua is its only writer, so a headless
-    -- scene has to seed it the way OnEnable does.
-    inst.NS.State.SetRestricted(true)
     window:ApplyConfig()
     window:Refresh()
 
-    -- The player is watching a list that no longer reorders and is owed the
-    -- reason.
-    assertTrue(window.sessionText:GetText():find("frozen", 1, true) ~= nil)
+    assertTrue(window.sessionText:GetText():find("restricted", 1, true) ~= nil,
+        "got: " .. tostring(window.sessionText:GetText()))
+end)
+
+test("The header names AMBIGUITY when two rows cannot be told apart", function()
+    -- Two players of one class AND one spec: the identity key cannot separate
+    -- them, so their secondary cells are left empty rather than filled with a
+    -- number that might be the other one's. That is a visible absence and it
+    -- needs a reason on the line.
+    local inst, window, cfg = scene{
+        restricted = true,
+        sources = { src(ALPHA, 100, { class = "MAGE" }), src(BETA, 50, { class = "MAGE" }) },
+    }
+    cfg.header.showSessionName = true
+    window:ApplyConfig()
+    window:Refresh()
+
+    assertTrue(window.sessionText:GetText():find("told apart", 1, true) ~= nil,
+        "got: " .. tostring(window.sessionText:GetText()))
 end)
 
 test("The header line reads 'Test' while placeholder data is on screen", function()
@@ -760,7 +776,9 @@ test("A drilled-in window draws the breakdown, decided by the ROWS not the title
 
     NS.DrillDown:Exit(cfg)
     window:Refresh()
-    assertEqual(window.pool.active[1].entry.guid, ALPHA, "and back to the grid")
+    -- Back to the grid — and this scene is RESTRICTED, so the grid's rows are
+    -- keyed on their rank rather than on a GUID nothing may key on.
+    assertEqual(window.pool.active[1].entry.guid, "rank_1", "and back to the grid")
 end)
 
 -- ---------------------------------------------------------------------------
