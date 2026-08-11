@@ -899,7 +899,11 @@ function WindowProto:ApplyColumnHeaders()
     local cellFont = fontPath(textCfg.font)
 
     local data = cfg.data or {}
-    local sortKey = data.sortColumn
+    -- The arrow belongs on whichever header the CURRENT order came from, and in
+    -- `name` mode that is the Player column rather than a stat one. Without this
+    -- the name column was the one header that could be sorted by and never said
+    -- so.
+    local sortKey = (data.sortMode == "name") and "name" or data.sortColumn
 
     -- EVERY HEADER IS A BUTTON, including the name column's — clicking it sorts
     -- by that column, clicking it again reverses. The widget is created once per
@@ -1415,20 +1419,34 @@ function WindowProto:SortByColumn(key)
     local data = self.config.data
     if not data then return false end
 
-    if key == "name" then
-        data.sortMode = (data.sortMode == "roster") and "value" or "roster"
-        self:MarkDirty()
-        return true
-    end
-
-    -- Value sorting is the only mode a column header can express, so choosing a
-    -- column implies it. A window parked in `provider` or `roster` mode that is
-    -- then clicked is being told "order by this number".
+    -- SORTING IS REFUSED WHILE THE RESTRICTION IS ACTIVE, whichever header was
+    -- clicked. Ordering by value means comparing meter values and ordering by
+    -- name means comparing a ConditionalSecret; both raise mid-pull, and the
+    -- aggregator is drawing the engine's own ranking there anyway (rule R2).
+    -- Without a message the click would simply do nothing, which reads as a
+    -- broken button rather than as a rule.
     if NS.Secrets and NS.Secrets.IsRestricted() then
         if NS.Print then
-            NS.Print(L["Sorting is frozen while the game restricts combat data."])
+            NS.Print(L["Sorting is not possible while the game restricts combat data."])
         end
         return false
+    end
+
+    -- THE PLAYER COLUMN SORTS BY PLAYER. It used to toggle between `roster` and
+    -- `value`, which is a reasonable thing for some header to do and not what a
+    -- header labelled "Player" says. Ascending first, because A-Z is what a
+    -- player means by "sort by name"; clicking again reverses it, exactly like a
+    -- stat column.
+    if key == "name" then
+        if data.sortMode == "name" then
+            data.sortAscending = not data.sortAscending
+        else
+            data.sortMode      = "name"
+            data.sortAscending = true
+        end
+        self:ApplyColumnHeaders()
+        self:MarkDirty()
+        return true
     end
 
     if data.sortColumn == key and data.sortMode == "value" then

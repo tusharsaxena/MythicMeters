@@ -324,10 +324,11 @@ local ANCHOR_SORT    = { "CURSOR", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMR
 
 local SORTMODE_VALUES = {
     value    = L["By value"],
+    name     = L["By name"],
     provider = L["Game order"],
     roster   = L["Group order"],
 }
-local SORTMODE_SORT   = { "value", "provider", "roster" }
+local SORTMODE_SORT   = { "value", "name", "provider", "roster" }
 
 -- The sort-column list is DERIVED from the stat catalog rather than restated, so
 -- adding a stat to core/Constants.lua offers it here with no edit (and so a stat

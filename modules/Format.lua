@@ -139,8 +139,20 @@ local function secondsSuffix() return L["s"] end
 --
 -- So each rung is written as `significandDivisor = order / fractionDivisor`,
 -- which is the identity that makes the displayed value come out at `n / order`
--- with the decimals asked for. Three significant figures at every magnitude,
--- which is what a meter is read at — "1.41M" and "816.8K" rather than "1M".
+-- with the decimals asked for.
+--
+-- ONE DECIMAL PLACE AT EVERY MAGNITUDE, WHICH IS WHY THERE IS ONE RUNG PER
+-- SUFFIX. The ladder used to carry two rungs per suffix — a `fractionDivisor` of
+-- 100 below ten thousand and 10 above it — chasing three significant figures.
+-- What that produced was a COLUMN THAT CHANGED SHAPE PARTWAY DOWN ITSELF:
+-- "4.75K" on one row and "10.2K" on the next, two decimal places beside one,
+-- because the two rows had landed on different rungs. A column of numbers is
+-- read by scanning it vertically and the decimal point is the thing the eye
+-- tracks, so consistency beats the extra digit.
+--
+-- The cost is real and small: "1.4M" where the old ladder said "1.41M". The
+-- benefit is that every figure in a column has the same shape whatever its
+-- magnitude.
 --
 -- `abbreviationIsGlobal = false` puts the literal K / M / B in rather than
 -- looking up a global string. That is a deliberate trade against localization:
@@ -148,22 +160,38 @@ local function secondsSuffix() return L["s"] end
 -- of this string a player reads positionally rather than linguistically, and a
 -- missing global name would silently render an empty suffix — "1.41" — which is
 -- worse than an untranslated one.
+--
+-- THE FLOOR IS BELOW ONE, AND THAT IS THE WHOLE POINT OF IT. A breakpoint is a
+-- rule for values AT OR ABOVE it, so a floor at 1 leaves (0, 1) matching nothing
+-- at all — and a formatter with no matching rule renders the value plainly, which
+-- for a float is every digit it has. That is what put "0.42857142857143" in a
+-- 92px cell.
+--
+-- It read as intermittent because of WHICH figures can be sub-one. The rate slot
+-- is the only place a fraction reaches the grid and `isRate` is true for exactly
+-- two stats, which is why it was only ever seen in Damage and Healing.
+--
+-- 0 itself is deliberately NOT covered: the client refused a `breakpoint = 0` row
+-- outright (the debug log said so) and took the whole array with it. A value of
+-- exactly zero renders "0" through the plain path anyway, which is the answer the
+-- rule would have produced.
 local BREAKPOINTS = {
-    -- 1 rather than 0: the client REFUSED a `breakpoint = 0` row outright (the
-    -- debug log said so), taking the whole array with it.
-    { breakpoint =          1, abbreviation = "",  significandDivisor =     1, fractionDivisor =   1, abbreviationIsGlobal = false },
-    { breakpoint =       1000, abbreviation = "K", significandDivisor =    10, fractionDivisor = 100, abbreviationIsGlobal = false },
-    { breakpoint =      10000, abbreviation = "K", significandDivisor =   100, fractionDivisor =  10, abbreviationIsGlobal = false },
-    { breakpoint =    1000000, abbreviation = "M", significandDivisor = 1e4,   fractionDivisor = 100, abbreviationIsGlobal = false },
-    { breakpoint =   10000000, abbreviation = "M", significandDivisor = 1e5,   fractionDivisor =  10, abbreviationIsGlobal = false },
-    { breakpoint = 1000000000, abbreviation = "B", significandDivisor = 1e7,   fractionDivisor = 100, abbreviationIsGlobal = false },
-    { breakpoint = 10000000000, abbreviation = "B", significandDivisor = 1e8,  fractionDivisor =  10, abbreviationIsGlobal = false },
+    { breakpoint =      0.001, abbreviation = "",  significandDivisor =   1, fractionDivisor =  1, abbreviationIsGlobal = false },
+    { breakpoint =       1000, abbreviation = "K", significandDivisor = 100, fractionDivisor = 10, abbreviationIsGlobal = false },
+    { breakpoint =    1000000, abbreviation = "M", significandDivisor = 1e5, fractionDivisor = 10, abbreviationIsGlobal = false },
+    { breakpoint = 1000000000, abbreviation = "B", significandDivisor = 1e8, fractionDivisor = 10, abbreviationIsGlobal = false },
 }
 
 -- A value whose formatting PROVES the ladder took: 47500 must render as "47.5K"
 -- under the ladder above, and as "47K" under Blizzard's defaults.
 local PROBE_VALUE    = 47500
 local PROBE_EXPECTED = "47.5K"
+
+-- The second probe, for the rung that claims a sub-one floor. 0.5 must render as
+-- a whole "0" rather than as its own digits; a ladder that answers "0.5" here has
+-- a floor the client did not take.
+local PROBE_SMALL          = 0.5
+local PROBE_SMALL_EXPECTED = "0"
 
 --- Whether `f` is actually formatting the way the ladder above asks.
 ---
@@ -175,7 +203,7 @@ local PROBE_EXPECTED = "47.5K"
 ---
 --- @param f table
 --- @return boolean
-local function ladderTook(f)
+local function ladderTook(f, alsoSmall)
     local ok, out = pcall(f.FormatNumber, f, PROBE_VALUE)
     if not ok or type(out) ~= "string" then return false end
     -- THE EXACT STRING, not "does it contain a decimal point".
@@ -183,7 +211,13 @@ local function ladderTook(f)
     -- The looser check is what let a wrong ladder through: under the previous
     -- divisors 47500 rendered "4.7K", which has a point, so the probe said yes to
     -- an answer that was off by two orders of magnitude.
-    return out == PROBE_EXPECTED
+    if out ~= PROBE_EXPECTED then return false end
+
+    if alsoSmall then
+        local okSmall, small = pcall(f.FormatNumber, f, PROBE_SMALL)
+        if not okSmall or small ~= PROBE_SMALL_EXPECTED then return false end
+    end
+    return true
 end
 
 --- Put our ladder on `f`, falling back to the client's own.
@@ -194,36 +228,59 @@ end
 --- formatter with none, which is the v0.1.0 behavior and abbreviates nothing.
 ---
 --- Each rung is CHECKED, not assumed — see ladderTook.
+--- Put one candidate array on `f` and report whether it actually took.
+---
+--- Both halves matter and neither is enough alone: SetBreakpoints can refuse the
+--- array (the pcall), and it can accept the call while keeping its own rules
+--- (the probe). One rung, one question.
+local function tryLadder(f, list, probeSmall)
+    if not pcall(f.SetBreakpoints, f, list) then return false end
+    return ladderTook(f, probeSmall)
+end
+
+--- @return boolean  whether ANY rung actually took
 local function applyBreakpoints(f)
     if type(f.SetBreakpoints) ~= "function" then
         if State.debug then
             NS.Debug("Format", "formatter has no SetBreakpoints — numbers will not abbreviate")
         end
-        return
+        return false
     end
 
+    -- The same ladder with its floor moved back up to 1, for a client that
+    -- refuses a fractional breakpoint the way this one refuses a zero. Sub-one
+    -- values render their digits under it — which is the old behavior, and the
+    -- point is that it is the SECOND choice rather than the only one.
+    local integerFloor = { { breakpoint = 1, abbreviation = "", significandDivisor = 1,
+                             fractionDivisor = 1, abbreviationIsGlobal = false } }
     local withoutFloor = {}
-    for i = 2, #BREAKPOINTS do withoutFloor[#withoutFloor + 1] = BREAKPOINTS[i] end
-
-    if pcall(f.SetBreakpoints, f, BREAKPOINTS) and ladderTook(f) then return end
-    if pcall(f.SetBreakpoints, f, withoutFloor) and ladderTook(f) then
-        if State.debug then
-            NS.Debug("Format", "breakpoint floor rejected; using the ladder without it")
-        end
-        return
+    for i = 2, #BREAKPOINTS do
+        integerFloor[#integerFloor + 1] = BREAKPOINTS[i]
+        withoutFloor[#withoutFloor + 1] = BREAKPOINTS[i]
     end
 
-    local defaults = Compat.GetDefaultAbbreviationBreakpoints()
-    if defaults and pcall(f.SetBreakpoints, f, defaults) then
-        if State.debug then
-            NS.Debug("Format", "custom breakpoints refused; using the client's defaults")
+    -- The first rung is probed for the SUB-ONE case as well, because that is the
+    -- only thing distinguishing it from the second.
+    if tryLadder(f, BREAKPOINTS, true) then return true end
+
+    local rungs = {
+        { integerFloor, "sub-one floor rejected; values below 1 will show their digits" },
+        { withoutFloor, "breakpoint floor rejected; using the ladder without it" },
+        { Compat.GetDefaultAbbreviationBreakpoints(),
+          "custom breakpoints refused; using the client's defaults" },
+    }
+
+    for _, rung in ipairs(rungs) do
+        if rung[1] and tryLadder(f, rung[1]) then
+            if State.debug then NS.Debug("Format", rung[2]) end
+            return true
         end
-        return
     end
 
     if State.debug then
         NS.Debug("Format", "no breakpoints applied — numbers will not abbreviate")
     end
+    return false
 end
 
 --- The session's ABBREVIATING formatter, or nil where C_StringUtil is absent.
@@ -236,20 +293,28 @@ end
 --- @return table|nil  object answering :FormatNumber(n)
 local function numeric()
     local f = cache.numeric
-    if f == nil then
-        f = Compat.CreateAbbreviatedNumberFormatter()
-        if f then
-            applyBreakpoints(f)
-        else
-            -- No abbreviated formatter on this client. The rule formatter still
-            -- renders — unabbreviated — which beats handing a raw float to a
-            -- FontString.
-            f = Compat.CreateNumericRuleFormatter()
-        end
-        cache.numeric = f or false
-    end
     if f == false then return nil end
-    return f
+    if f ~= nil then return f end
+
+    local fresh = Compat.CreateAbbreviatedNumberFormatter()
+
+    -- A FORMATTER THAT DOES NOT ABBREVIATE IS WORSE THAN NO FORMATTER, and this
+    -- is the seam that used to hide one. The old shape built it, applied whatever
+    -- breakpoints it could, and cached the object either way — so a client that
+    -- silently kept its own rules got an object that renders "4200000", cached
+    -- for the rest of the session, with no way back until a profile change.
+    --
+    -- Caching `false` instead sends every render down the AbbreviateNumbers rung,
+    -- which always abbreviates and accepts secrets. It is cached rather than
+    -- retried per cell for the reason below: seven columns times forty rows is
+    -- 280 failing API calls a frame. Format.Invalidate is what tries again.
+    if not (fresh and applyBreakpoints(fresh)) then
+        cache.numeric = false
+        return nil
+    end
+
+    cache.numeric = fresh
+    return fresh
 end
 
 --- The session's NON-abbreviating formatter, for `numberFormat = "full"`.
@@ -269,8 +334,12 @@ local function plain()
             -- an unbounded render of 53571.392857143 is fifteen characters in a
             -- 92px cell. Dividing by 1 with no fraction keeps the whole number
             -- and drops the tail.
+            -- 0.001 rather than 0, for the reason the ladder above gives: the
+            -- client refuses a `breakpoint = 0` row and takes the array with it,
+            -- which left THIS formatter with no rules at all — so "full" mode
+            -- rendered the very float it exists to trim.
             pcall(f.SetBreakpoints, f, {
-                { breakpoint = 0, abbreviation = "", significandDivisor = 1,
+                { breakpoint = 0.001, abbreviation = "", significandDivisor = 1,
                   fractionDivisor = 1, abbreviationIsGlobal = false },
             })
         end

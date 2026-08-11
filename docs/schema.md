@@ -275,7 +275,8 @@ the same source row as `totalAmount`, so one `DamageDone` read fills both halves
 `sessionType = Const.SESSION_TYPE.Current` · `sortMode = "value"` · `sortColumn = "DamageDone"` ·
 `throttle = 0.25` (clamped to `Constants.THROTTLE_MIN` 0.05 / `THROTTLE_MAX` 2.0).
 
-`sortMode` is `value` / `provider` / `roster`, and it governs the **unrestricted** build only. While
+`sortMode` is `value` / `name` / `provider` / `roster` — `name` is what the **Player** column header
+sorts by — and it governs the **unrestricted** build only. While
 the Combat restriction is active the rows are the engine's own ranking of the sort column, because
 `sourceGUID` is secret and there is nothing of ours left to sort; see `docs/data-flow.md`.
 

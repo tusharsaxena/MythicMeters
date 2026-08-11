@@ -140,6 +140,43 @@ test("value mode sorts a row with no cell in the sort column last", function()
     assertOrder(result, { ALPHA, BETA, GAMMA })
 end)
 
+test("a missing cell counts as ZERO, so it leads an ascending sort", function()
+    -- A blank Avoidable cell means the player took no avoidable damage, and
+    -- ascending by that column is a question about who took the least — so they
+    -- belong at the TOP. This used to park a missing cell last in BOTH
+    -- directions, on the reading that an absence is not a low score; for a
+    -- contribution column it is exactly a low score, and the meter is reporting
+    -- zero rather than declining to answer.
+    --
+    -- The "cannot be known" case does not collide with this: a cell left empty
+    -- for an ambiguous identity only happens while restricted, and value sorting
+    -- does not run there at all.
+    -- red under: `if av == nil then return false end`.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 100), src(BETA, 10) },
+        { statKey = "DamageDone", maxAmount = 100, totalAmount = 110 })
+    install(inst, { src(GAMMA, 4) }, { statKey = "Interrupts", maxAmount = 4 })
+
+    local window = makeWindow{ sortMode = "value", columns = { "DamageDone", "Interrupts" } }
+    window.data.sortAscending = true
+
+    assertOrder(inst.NS.Aggregator.Build(window), { GAMMA, BETA, ALPHA },
+        "nobody-did-any sorts as zero, which is first when the smallest leads")
+end)
+
+test("two missing cells keep provider order, so the sort stays deterministic", function()
+    -- Both are zero, and table.sort is not stable: without an explicit tiebreak
+    -- the pair would swap between refreshes for no visible reason.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 100) },
+        { statKey = "DamageDone", maxAmount = 100, totalAmount = 100 })
+    install(inst, { src(BETA, 4), src(GAMMA, 2) }, { statKey = "Interrupts", maxAmount = 4 })
+
+    local window = makeWindow{ sortMode = "value", columns = { "DamageDone", "Interrupts" } }
+    assertOrder(inst.NS.Aggregator.Build(window), { ALPHA, BETA, GAMMA }, "first pass")
+    assertOrder(inst.NS.Aggregator.Build(window), { ALPHA, BETA, GAMMA }, "and again")
+end)
+
 test("a value sort caches NOTHING — the freeze is retired", function()
     -- It cached guid -> position and reapplied that for the whole of a pull. The
     -- map could never have been applied to a single mid-pull row: `sourceGUID` is

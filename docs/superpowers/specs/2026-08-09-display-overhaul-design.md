@@ -81,6 +81,12 @@ Created, with one entry: enemy damage taken should become its own window type ra
 because it describes enemies rather than group members and therefore wants a different row identity.
 Moves to GitHub issues later.
 
+> **Since superseded.** That move happened on 2026-08-11: `TODO.md` was retired and its entries became
+> GitHub issues. This one is
+> [#2 — Enemy damage taken belongs in its own window, not in a column](https://github.com/tusharsaxena/MythicMeters/issues/2).
+> The text above is left as the record of what was decided on the day; the issue is where the work
+> actually lives.
+
 ## Testing
 
 Every change lands with headless coverage:

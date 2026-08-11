@@ -590,7 +590,8 @@ to `AbbreviateNumbers`, and falls back again to `"<secret>"`. Which rung a live 
 on is not knowable from the headless harness, and rung 3 renders a window full of `<secret>`.
 
 1. Stand at a target dummy, out of combat, and hit it until Damage reads over a million.
-2. **Damage shows an abbreviated figure** — `1.4M`, `1.41M`, or similar. Note the exact precision it
+2. **Damage shows an abbreviated figure** — `1.4M` or similar, always ONE decimal place whatever the
+   magnitude. Note the exact precision it
    produces; the reference screenshots show three significant figures and the native formatter may
    give fewer, which is accepted, not a bug.
 3. **No `/s` anywhere.** The rate slot is the bare number.

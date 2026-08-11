@@ -316,7 +316,7 @@ badge and any count quoted in the docs must agree with it.
 - libs/LibKa0s is the LibKa0s release CLAUDE.md says this addon bundles
 - tests/_kit is the test kit that shipped with that release
 
-### test_format.lua (22)
+### test_format.lua (25)
 
 - Format: NS.Format is a callable table carrying both contracts
 - Format.Number goes through the native ABBREVIATING formatter
@@ -324,6 +324,9 @@ badge and any count quoted in the docs must agree with it.
 - Format.Number('full') renders every digit and no abbreviation
 - Format.Number('full') renders a rate's DIGITS, not its decimals
 - Format.Number abbreviates a sub-thousand rate to its whole part
+- Format.Number renders a value BELOW ONE without dumping its float
+- Format.Number('full') also covers a value below one
+- Format: a formatter whose ladder never took is NOT cached
 - Format: the abbreviating formatter is given breakpoints, or it does nothing
 - Format.Number('') for nil, which is a different fact from zero
 - Format.Number accepts a secret and returns something SetText takes
@@ -402,7 +405,7 @@ badge and any count quoted in the docs must agree with it.
 - A complete build IS cached
 - Solo is complete, not partial
 
-### test_aggregator.lua (44)
+### test_aggregator.lua (48)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -418,6 +421,10 @@ badge and any count quoted in the docs must agree with it.
 - Aggregator drops a source that is not a group member
 - Aggregator drops an unattributable pet rather than showing a phantom row
 - Aggregator sums an attributed pet into its owner out of combat
+- A healer with no damage is on the mid-pull grid, from the healing column
+- An ambiguous key gets no invented row, because no column could ever fill it
+- A correlated cell carries the RATE, or a rate column renders no text
+- A correlated Deaths column keeps the recap id the death view opens on
 - A pet is a ROW OF ITS OWN while restricted, not a dropped contribution
 - Aggregator adopts a pet's numbers into a column the owner has no cell in
 - A pet's position never moves its owner in the provider order
@@ -449,11 +456,13 @@ badge and any count quoted in the docs must agree with it.
 - The NEWEST death wins the recap id
 - Counting a death is legal mid-pull, where summing two secrets is not
 
-### test_aggregator_sort.lua (14)
+### test_aggregator_sort.lua (16)
 
 - value mode orders by the sort column's numbers, descending
 - value mode breaks a tie on providerIndex, so the order is deterministic
 - value mode sorts a row with no cell in the sort column last
+- a missing cell counts as ZERO, so it leads an ascending sort
+- two missing cells keep provider order, so the sort stays deterministic
 - a value sort caches NOTHING — the freeze is retired
 - while restricted the order is the ENGINE's ranking, and it is live
 - while restricted a row is keyed on its POSITION, never on the secret GUID
@@ -466,7 +475,7 @@ badge and any count quoted in the docs must agree with it.
 - roster mode's NAME TIEBREAK refuses to compare two secret names
 - roster mode compares names when they are plain
 
-### test_window.lua (66)
+### test_window.lua (68)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -525,7 +534,9 @@ badge and any count quoted in the docs must agree with it.
 - Clicking a header sorts by it; clicking again reverses
 - Clicking a header drops the frozen sort order
 - Sorting is REFUSED in combat, and says so rather than going quiet
-- The Player header sorts by group order, which is legal in combat
+- The Player header sorts by PLAYER, ascending first
+- The Player header REFUSES while restricted, like every other header
+- The sort arrow moves to the Player header in name mode
 - Test mode is marked in RED in the title, and clears when it is off
 - Leaving test mode does not close the window
 - Building a window sets no text on a fontless FontString
@@ -535,7 +546,7 @@ badge and any count quoted in the docs must agree with it.
 - A zone change is what makes an explicit show stale
 - Closing cancels the request, so it does not reappear
 
-### test_row.lua (41)
+### test_row.lua (44)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -561,7 +572,10 @@ badge and any count quoted in the docs must agree with it.
 - A cross-realm PLAYER name loses its realm
 - An NPC keeps the hyphen in its name
 - A pet keeps its hyphen too
-- A name past the cap is truncated with a single ellipsis glyph
+- The name never wraps, and gets a fixed width to be truncated against
+- The icon inset is the SAME for a row with no icons to draw
+- A layout pass keeps the class color instead of flashing white
+- A name past the cap is truncated with NO ellipsis
 - Truncation counts CHARACTERS, never bytes
 - A cap of 0 means no cap
 - Neither the realm strip nor the cap is applied to a SECRET name
@@ -898,13 +912,13 @@ badge and any count quoted in the docs must agree with it.
 | test_debuglogsetup.lua | 18 |
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
-| test_format.lua | 22 |
+| test_format.lua | 25 |
 | test_provider.lua | 33 |
 | test_roster.lua | 22 |
-| test_aggregator.lua | 44 |
-| test_aggregator_sort.lua | 14 |
-| test_window.lua | 66 |
-| test_row.lua | 41 |
+| test_aggregator.lua | 48 |
+| test_aggregator_sort.lua | 16 |
+| test_window.lua | 68 |
+| test_row.lua | 44 |
 | test_tooltip.lua | 25 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
@@ -916,4 +930,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **778** |
+| **Total** | **792** |

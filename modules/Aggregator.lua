@@ -300,10 +300,23 @@ end
 --- touches nothing but CanCompare turns a possible mid-sort error into a clean
 --- "no".
 ---
---- `ascending` flips the direction and nothing else. A MISSING cell sorts last
---- in BOTH directions rather than flipping with them: "this player has no
---- dispels" is an absence, not a low score, and floating those rows to the top of
---- an ascending sort would bury everyone who actually did something.
+--- A MISSING CELL COUNTS AS ZERO, so it flips with the direction like any other
+--- figure: last descending, first ascending. It used to sort last in both
+--- directions, on the reading that "this player has no dispels" is an absence
+--- rather than a low score — but for a contribution column an absence IS zero.
+--- The meter omits a source row because the player did none of that thing, not
+--- because it declined to say, and "sort ascending by Avoidable" is a question
+--- about who took the least: the people who took none are the answer, and they
+--- belong at the top.
+---
+--- The genuine "cannot be known" case never reaches here. A cell left empty
+--- because two rows shared an identity key happens only while restricted, and
+--- this function does not run there — the identity build orders by the engine's
+--- own ranking instead.
+---
+--- Substituting zero is safe for the same reason the sort itself is: the pass
+--- above has already established that every value present is ACCESSIBLE, so
+--- comparing one against a plain 0 is an ordinary comparison.
 ---
 --- @param ascending boolean|nil
 --- @return boolean  whether the sort was taken
@@ -318,14 +331,52 @@ local function orderByValue(rows, statKey, ascending)
         local ac, bc = a.values[statKey], b.values[statKey]
         local av = ac and ac.total
         local bv = bc and bc.total
-        -- A missing cell sorts last, and two missing cells fall back to provider
-        -- order so the sort stays deterministic (table.sort is not stable).
-        if av == nil and bv == nil then return a.providerIndex < b.providerIndex end
-        if av == nil then return false end
-        if bv == nil then return true end
+        -- `== nil` rather than `or 0`, which is a truth test and raises on a
+        -- secret. Two zeros — whether absent or genuinely zero — fall back to
+        -- provider order so the sort stays deterministic (table.sort is not
+        -- stable).
+        if av == nil then av = 0 end
+        if bv == nil then bv = 0 end
         if av == bv then return a.providerIndex < b.providerIndex end
         if ascending then return av < bv end
         return av > bv
+    end)
+    return true
+end
+
+--- Order alphabetically by the name on the row.
+---
+--- WHAT THE PLAYER COLUMN'S HEADER MEANS. It used to toggle between `roster` and
+--- `value`, which is a reasonable thing for some header to do and not what that
+--- one says: a column labelled "Player" sorts by player.
+---
+--- Guarded exactly like orderByValue, and for the same reason: `name` is
+--- ConditionalSecret, `<` on a secret raises, and `tostring()` does not launder
+--- one — it survives it. So comparability is proved in a SEPARATE PASS before
+--- table.sort is entered, and a name that cannot be compared refuses the whole
+--- sort rather than raising inside the comparator.
+---
+--- A row with NO name at all sorts last in both directions. That is not the same
+--- decision as a missing number counting as zero: an empty string is not a
+--- position in the alphabet, and there is nothing for it to be "least" of.
+---
+--- @return boolean  whether the sort was taken
+local function orderByName(rows, ascending)
+    for i = 1, #rows do
+        local n = rows[i].name
+        if n ~= nil and not Secrets.CanCompare(n) then return false end
+    end
+
+    table.sort(rows, function(a, b)
+        local an, bn = a.name, b.name
+        if an == nil and bn == nil then return a.providerIndex < b.providerIndex end
+        if an == nil then return false end
+        if bn == nil then return true end
+        -- Both proved comparable above, so tostring is reading a plain string.
+        local x, y = tostring(an):lower(), tostring(bn):lower()
+        if x == y then return a.providerIndex < b.providerIndex end
+        if ascending then return x < y end
+        return x > y
     end)
     return true
 end
@@ -415,8 +466,21 @@ local function newPass(window)
         identityMode = Secrets.IsRestricted(),
         -- Set by the identity build when two sources shared one identity key.
         ambiguous    = false,
+        -- Correlation tallies for the one debug line the identity build emits.
+        -- `filled` against `possible` is the figure that matters: a grid whose
+        -- secondary columns are blank is either colliding (collisions > 0) or
+        -- not matching at all (collisions == 0 and filled == 0), and those are
+        -- different faults with different fixes.
+        corrFilled   = 0,
+        corrPossible = 0,
+        corrKeys     = 0,
 
         byGuid  = {},
+        -- identity key -> the FIRST row carrying it, for the identity build's
+        -- "does any row already stand for this source" question. Distinct from
+        -- byGuid: two players of one class and spec are two rows sharing one
+        -- key, and this holds the first of them.
+        byIdentity = {},
         rows    = {},
         columns = {},
         -- statKey -> the column's group total, lifted out of the column table it
@@ -663,30 +727,54 @@ local function isEnemySource(src)
     return kind == Const.SOURCE_DISPLAY_TYPE.Enemy
 end
 
---- One correlated column: identity key -> the figure to show, plus the keys that
---- turned out to be ambiguous.
+--- One correlated column: identity key -> the figures to show, plus the keys
+--- that turned out to be ambiguous.
+---
+--- THREE PARALLEL MAPS RATHER THAN ONE MAP OF TABLES. A cell needs the total,
+--- the rate and (for a counted stat) the recap id, and a table per source would
+--- be one allocation per source per column — twenty players times six columns on
+--- every refresh, four times a second. Three maps is three allocations per
+--- column whatever the group size.
+---
+--- THE RATE IS NOT OPTIONAL, which is what its absence proved. The shipped text
+--- layout is `leftSlot = "none"` / `rightSlot = "rate"`, so for a RATE stat the
+--- figure on screen IS `amountPerSecond`: a cell carrying only the total draws
+--- its bar and renders no text at all (modules/Row.lua). Damage looked right
+--- because it is the sort column and goes through setCell; every other rate
+--- column was silent.
 ---
 --- A counted stat (Deaths) reports one source row per event, so repeats of a key
 --- are the same player dying twice and are TALLIED. For every other stat a
 --- repeat is a genuine collision, because a player appears at most once.
 local function correlateColumn(column, isCount, collisions)
-    local byKey, seen = {}, {}
+    -- byRecap only exists for a counted stat, which is the only kind that has a
+    -- recap id to carry: five columns out of six would otherwise allocate a map
+    -- per refresh to hold nothing.
+    local byKey, byRate, seen, keyCount = {}, {}, {}, 0
+    local byRecap = isCount and {} or nil
     for _, src in ipairs(column.sources) do
         if not isEnemySource(src) then
             local key = identityKey(src)
             if isCount then
                 byKey[key] = (byKey[key] or 0) + 1
+                -- The FIRST row wins the recap, as it does in setCell: the API
+                -- returns deaths newest-first and the death a player wants to
+                -- look at is the one that just happened. `deathRecapID` is
+                -- NeverSecret, so it is a plain value in a plain map.
+                if byRecap[key] == nil then byRecap[key] = src.deathRecapID end
             elseif seen[key] then
                 collisions[key] = true
             else
                 seen[key] = true
-                -- The value is copied, never examined — opaque exactly as it
-                -- arrived, and it reaches a widget setter or the formatter.
-                byKey[key] = src.totalAmount
+                keyCount = keyCount + 1
+                -- Copied, never examined — opaque exactly as they arrived, and
+                -- they reach a widget setter or the formatter.
+                byKey[key]  = src.totalAmount
+                byRate[key] = src.amountPerSecond
             end
         end
     end
-    return byKey
+    return byKey, keyCount, byRate, byRecap
 end
 
 --- Read one column onto the pass and hand it back. Shared by both halves of the
@@ -724,9 +812,16 @@ end
 --- `UnitGUID("player")` is not secret — so their row joins the roster's name and
 --- role. Everyone else is keyed on their POSITION, a plain string the row pool
 --- and the drill-down can hold without ever touching the secret one.
-local function identityRow(pass, src, index, localGuid)
+local function identityRow(pass, src, index, localGuid, unranked)
     local isLocal = plainTruth(src.isLocalPlayer)
-    local rowGuid = (isLocal and localGuid) or ("rank_" .. index)
+    local key = identityKey(src)
+
+    -- A row built from a NON-sort column is keyed on its identity rather than on
+    -- a rank, because it has no rank: it is here precisely because the sort
+    -- column never mentioned it. The key is a plain string, and a stable one, so
+    -- the same healer keeps the same row identity between refreshes.
+    local rowGuid = (isLocal and localGuid) or
+        (unranked and ("ident:" .. key)) or ("rank_" .. index)
 
     local row = pass.byGuid[rowGuid]
     if row ~= nil then return row end
@@ -740,17 +835,43 @@ local function identityRow(pass, src, index, localGuid)
         row.isPlayer      = false
         row.isLocalPlayer = false
     end
-    row.identityKey   = identityKey(src)
-    row.providerIndex = index
+    row.identityKey   = key
+    -- Past every ranked row, in first-seen order, exactly as the GUID join parks
+    -- a player who appears in some other column but not in the sort one.
+    row.providerIndex = unranked and (UNRANKED + index) or index
     pass.byGuid[rowGuid] = row
+    if pass.byIdentity[key] == nil then pass.byIdentity[key] = row end
     pass.rows[#pass.rows + 1] = row
     return row
 end
 
 --- Fill one non-sort column by correlating it back onto the rows already built.
-local function fillCorrelated(pass, statKey, collisions)
+local function fillCorrelated(pass, statKey, collisions, localGuid)
     local column, isCount = takeColumn(pass, statKey)
-    local byKey = correlateColumn(column, isCount, collisions)
+    local byKey, keyCount, byRate, byRecap = correlateColumn(column, isCount, collisions)
+    pass.corrKeys = pass.corrKeys + keyCount
+
+    -- A SOURCE THIS COLUMN KNOWS AND NO ROW STANDS FOR GETS ITS OWN ROW.
+    --
+    -- Without this the row list was whatever the SORT column happened to
+    -- mention, so a healer who did no damage and a player whose only
+    -- contribution was one interrupt simply were not on the grid for the whole
+    -- of a pull — they reappeared the moment it ended, which reads as rows
+    -- flickering into existence rather than as a rule. The GUID join has always
+    -- taken the union of every column; this is the same union, reached without a
+    -- key.
+    --
+    -- Only for a key that is unambiguous AND has a figure: a row invented for a
+    -- collided key could never be filled from any column, and an always-empty
+    -- row is noise.
+    for index, src in ipairs(column.sources) do
+        if not isEnemySource(src) then
+            local key = identityKey(src)
+            if pass.byIdentity[key] == nil and byKey[key] ~= nil and not collisions[key] then
+                identityRow(pass, src, index, localGuid, true)
+            end
+        end
+    end
 
     for i = 1, #pass.rows do
         local row = pass.rows[i]
@@ -758,11 +879,29 @@ local function fillCorrelated(pass, statKey, collisions)
         -- A collided key is left EMPTY rather than filled from a source that
         -- might be the other player's. That refusal is the whole warrant for
         -- correlating on class and spec at all.
+        pass.corrPossible = pass.corrPossible + 1
         if value ~= nil and not collisions[row.identityKey] then
-            row.values[statKey] = {
+            pass.corrFilled = pass.corrFilled + 1
+            -- Three fields in the constructor, never four: the literal's size
+            -- is fixed at compile time, so spelling `deathRecapID` here would
+            -- widen every cell in every column to carry a field only Deaths ever
+            -- fills.
+            local cell = {
                 total     = value,
+                rate      = byRate[row.identityKey],
                 maxAmount = not isCount and column.maxAmount or nil,
             }
+            row.values[statKey] = cell
+
+            local recap = byRecap and byRecap[row.identityKey]
+            if recap ~= nil then
+                cell.deathRecapID = recap
+                -- Promoted onto the ROW as well, because it identifies the
+                -- player's death rather than a column's number — the same
+                -- promotion setCell makes, so the tooltip and the death view
+                -- read one place.
+                row.deathRecapID = recap
+            end
         end
     end
 
@@ -791,11 +930,23 @@ local function buildByIdentity(pass)
     end
 
     for _, statKey in ipairs(pass.keys) do
-        if statKey ~= sortKey then fillCorrelated(pass, statKey, collisions) end
+        if statKey ~= sortKey then fillCorrelated(pass, statKey, collisions, localGuid) end
     end
 
     if sortCount then rescaleCounted(pass, sortKey) end
     pass.ambiguous = next(collisions) ~= nil
+
+    -- ONE line per pass, and only while the flag is on. `filled/possible` is the
+    -- whole diagnosis for a mid-pull grid whose secondary columns came out
+    -- blank: with collisions it is ambiguity doing its job, without them the keys
+    -- are not matching between columns at all, which would mean a field this
+    -- correlation trusts is not as stable across sessions as it looks.
+    if State.debug then
+        local collided = 0
+        for _ in pairs(collisions) do collided = collided + 1 end
+        NS.Debug("Aggregator", "identity rows=%d keys=%d collisions=%d filled=%d/%d",
+            #pass.rows, pass.corrKeys, collided, pass.corrFilled, pass.corrPossible)
+    end
 end
 
 --- Read one column from the provider and index every source in it by GUID.
@@ -881,6 +1032,12 @@ local function applySortMode(pass)
     if mode == "roster" then
         orderByRoster(rows)
         return mode
+    end
+
+    if mode == "name" then
+        if orderByName(rows, pass.sortAscending) then return mode end
+        orderByProvider(rows)
+        return "provider"
     end
 
     if mode ~= "value" then

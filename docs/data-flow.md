@@ -265,6 +265,7 @@ Deferring the scoring feature rests on exactly this fact — see [scope.md](scop
 | Mode | Behavior | Legal in combat? |
 |---|---|---|
 | `value` (default) | Order by the sort column's numbers, descending | No — falls through |
+| `name` | Alphabetical by the row's name, ascending first. What the **Player** header sorts by | No — `name` is `ConditionalSecret`, so it falls through |
 | `provider` | Follow the order the API returned `combatSources` in | Yes — iteration needs no comparison |
 | `roster` | Group position, then role rank (tank/healer/damager), then name | Yes — every input is plain |
 
@@ -272,6 +273,21 @@ Deferring the scoring feature rests on exactly this fact — see [scope.md](scop
 comparator. That is the whole trick of the function: a comparator that discovers an illegal
 comparison halfway through has already raised, and there is no way to unwind a partially sorted
 array. One linear pass over `Secrets.CanCompare` turns a possible mid-sort error into a clean "no".
+
+`orderByName` is guarded exactly like `orderByValue` and for the same reason: `name` is
+`ConditionalSecret`, `<` on a secret raises, and `tostring()` does not launder one — it survives it.
+So comparability is proved in a pass before `table.sort` is entered. A row with **no name at all**
+sorts last in both directions, which is deliberately *not* the missing-number rule below: an empty
+string is not a position in the alphabet, so there is nothing for it to be least of.
+
+**A missing cell counts as zero**, so it flips with the direction like any other figure: last
+descending, first ascending. For a contribution column an absence *is* zero — the meter omits a
+source row because the player did none of that thing, not because it declined to say — and "sort
+ascending by Avoidable" is a question about who took the least, which the people who took none
+answer. The genuine "cannot be known" case never reaches this function: a cell left empty for an
+ambiguous identity happens only while restricted, where the order is the engine's instead. Two zeros
+fall back to `providerIndex`, because `table.sort` is not stable and the pair would otherwise swap
+between refreshes.
 
 `orderByRoster`'s name tiebreak is guarded for the same reason. It is reached only by rows *absent*
 from the roster — pets, enemies, cross-realm strays — which is exactly the population whose `name`
@@ -288,14 +304,24 @@ for a row to be identified by. `Aggregator.Build` chooses between two builds onc
 
 Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
 
-- The **sort column's** `combatSources` is the row list, in the order the engine returned it — which
-  *is* the ranking for that column. Row identity is its position, `"rank_<n>"`, a plain string the
-  row pool and the drill-down can hold. The local player is the exception: `isLocalPlayer` is plain
-  and `UnitGUID("player")` is not secret, so their row keeps the roster's own GUID, name and role.
+- The **sort column's** `combatSources` supplies the ranked rows, in the order the engine returned
+  them — which *is* the ranking for that column. Row identity is its position, `"rank_<n>"`, a plain
+  string the row pool and the drill-down can hold. The local player is the exception: `isLocalPlayer`
+  is plain and `UnitGUID("player")` is not secret, so their row keeps the roster's own GUID, name and
+  role.
 - **Every other column** is read on its own and correlated back to those rows by an identity key of
   `classFilename .. specIconID .. isLocalPlayer`.
+- **The rows are the UNION of every column, not just the sort one.** A source some other column knows
+  and no row yet stands for gets its own row, keyed `"ident:<key>"` and parked past every ranked row
+  in first-seen order — the same place the GUID join parks a player who appears in one column but not
+  the sort one. Without it the grid was whatever the sort column happened to mention, so a healer who
+  did no damage and a player whose only contribution was one interrupt were missing for the whole of
+  a pull and reappeared the instant it ended. An **ambiguous** key gets no invented row: no column
+  could ever fill it, and an always-empty line is noise.
 - A key appearing **twice** — two players of one class *and* one spec — is ambiguous, and every
-  secondary cell for it is left **empty**. `kept.ambiguous` says so and the header line reports it.
+  secondary cell for it is left **empty**. `/mm debug on` prints one `identity` line per pass —
+  `rows= keys= collisions= filled=/` — which separates the two reasons a secondary column can come
+  out blank: ambiguity doing its job, or keys not matching between columns at all. `kept.ambiguous` says so and the header line reports it.
   Class alone identifies nobody in a raid; class plus spec plus "is it me" identifies almost
   everybody almost always, and the exceptions are detected rather than guessed at. An empty cell is a
   visible absence; a mislabeled number is a lie the player cannot see.

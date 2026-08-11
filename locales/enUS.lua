@@ -418,6 +418,8 @@ L["Sort mode"] = "Sort mode"
 L["How rows are ordered. Sorting by value is not possible while Blizzard's combat restriction is active, and falls back to the game's own order for the rest of the pull."] =
     "How rows are ordered. Sorting by value is not possible while Blizzard's combat restriction is active, and falls back to the game's own order for the rest of the pull."
 L["By value"] = "By value"
+-- Sorting by the Player column, which is what clicking that header does.
+L["By name"] = "By name"
 L["Game order"] = "Game order"
 L["Group order"] = "Group order"
 L["Sort column"] = "Sort column"
@@ -485,6 +487,10 @@ L["Waiting for combat data..."] = "Waiting for combat data..."
 -- different way while the game restricts combat data — rows come from the
 -- engine's own ranking and are matched across columns by class and spec rather
 -- than by GUID — and the player is owed the reason a cell can be blank.
+-- Printed when a sort is refused: ordering by value compares meter values and
+-- ordering by name compares a ConditionalSecret, and both raise mid-pull.
+L["Sorting is not possible while the game restricts combat data."] =
+    "Sorting is not possible while the game restricts combat data."
 L["restricted"] = "restricted"
 -- Appended to the above when two players share a class AND a specialization, so
 -- their rows cannot be told apart. Those cells are left empty rather than filled

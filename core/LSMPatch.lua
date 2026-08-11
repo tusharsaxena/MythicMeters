@@ -49,7 +49,7 @@ end
 -- in: it needs a license recorded beside it the way media/fonts/ records the
 -- font's OFL, and it needs a registry key that will not collide in a namespace
 -- every addon writes into. Until both are answered the file ships unused, which
--- costs 971 bytes and no behavior. See TODO.md.
+-- costs 971 bytes and no behavior. See issue #4.
 
 -- ---------------------------------------------------------------------------
 -- 2. AceGUI-3.0-SharedMediaWidgets: the LSM30_Border display tile

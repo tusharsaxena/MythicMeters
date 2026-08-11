@@ -528,6 +528,34 @@ end
 --- name in one font and its number in another.
 ---
 --- @param text table  the window's `text` config group (already defaulted)
+--- Paint the name in its class color, or white where there is no class.
+---
+--- IDENTITY MOVES TO THE TEXT in the name column: it has no bar to carry the
+--- class color, and `classFilename` is NeverSecret, so this keeps working at the
+--- height of a pull when every number on the row is opaque.
+---
+--- ITS OWN FUNCTION BECAUSE TWO CALLERS NEED IT, and the second one is a bug
+--- fix. Cell:ApplyTextStyle repaints every slot in the window's text color —
+--- white — and it runs on every layout pass, which during a drag-resize is every
+--- frame. The class color was only restored by the next Cell:SetPlayer, up to a
+--- throttle interval later, so the names flashed white for as long as the mouse
+--- was moving. Re-applying it at the end of the styling pass closes that window
+--- entirely rather than shortening it.
+---
+--- @param entry table|nil  defaults to the cell's current row
+function Cell:ApplyNameColor(entry)
+    if self.key ~= "name" then return end
+    entry = entry or self.entry
+    local classes = _G.RAID_CLASS_COLORS
+    local c = classes and entry and entry.classFilename and classes[entry.classFilename]
+    if c then
+        self.left:SetTextColor(c.r, c.g, c.b)
+    else
+        -- An unknown class reads as "no class information", not as a tenth color.
+        self.left:SetTextColor(1, 1, 1)
+    end
+end
+
 function Cell:ApplyTextStyle(text)
     local path = fontPath(text.font)
     local flags = (text.outline ~= "NONE") and text.outline or nil
@@ -542,6 +570,11 @@ function Cell:ApplyTextStyle(text)
     self.right:SetTextColor(tr, tg, tb, ta)
     self.left:SetShadowOffset(shadowX, shadowY)
     self.right:SetShadowOffset(shadowX, shadowY)
+
+    -- LAST, and deliberately after the color above: the name column's color is
+    -- the player's class, not the window's text color, and this pass would
+    -- otherwise leave it white until the next refresh drew the row again.
+    self:ApplyNameColor()
 end
 
 --- @param layout table  the window's computed layout (see modules/Window.lua)
@@ -714,15 +747,39 @@ function Cell:ApplyIcons(layout)
         if not wanted then tex:Hide() end
     end
 
+    -- FIXED SPACE FOR THE ICONS, WHETHER OR NOT A GIVEN ROW HAS THEM.
+    --
+    -- Computed from the CONFIGURED slots rather than from what this row managed
+    -- to draw, so a follower NPC with no spec icon leaves a gap where the icon
+    -- would be instead of sliding its name left. A column whose text starts at a
+    -- different x on every row is not a column.
     local consumed = #slots > 0 and (offset + #slots * (size + 1)) or 2
+
+    -- AN EXPLICIT WIDTH, NOT A SECOND ANCHOR. Two-point anchoring gives the
+    -- FontString a width too, but it also lets it grow to whatever the frame
+    -- becomes mid-resize; a fixed width is the same number every pass and is what
+    -- the truncation cap is measured against.
+    local column = layout.nameColumn or {}
+    local width = (column.width or 0) - consumed - 2
+    if width < 1 then width = 1 end
+
     self.left:ClearAllPoints()
     if onRight then
         self.left:SetPoint("LEFT", self.frame, "LEFT", 2, 0)
-        self.left:SetPoint("RIGHT", self.frame, "RIGHT", -consumed, 0)
     else
         self.left:SetPoint("LEFT", self.frame, "LEFT", consumed, 0)
-        self.left:SetPoint("RIGHT", self.frame, "RIGHT", -2, 0)
     end
+    self.left:SetWidth(width)
+    self.left:SetHeight(layout.rowHeight)
+
+    -- ONE LINE, NEVER WRAPPED. A wrapped name is drawn OUTSIDE its own row — the
+    -- second line lands on top of the row below it — which is what made the grid
+    -- look shuffled whenever somebody had a long name. The cap in nameText is
+    -- what shortens it; this is what guarantees the widget cannot undo that
+    -- decision by reflowing.
+    if self.left.SetWordWrap then self.left:SetWordWrap(false) end
+    if self.left.SetMaxLines then self.left:SetMaxLines(1) end
+
     return consumed
 end
 
@@ -755,7 +812,25 @@ local DEFAULT_MAX_NAME = 20
 --- widget untouched and uncapped. The uncapped case is not a hole: a name we may
 --- not read is one the client is already refusing to show in full.
 ---
---- Truncate to `cap` CHARACTERS, counting UTF-8 rather than bytes.
+--- WHAT IT MUST NOT DO IS RENDER THE SENTINEL. The opaque branch used to answer
+--- NS.SafeToString(name), which is `"<secret>"` — so every row but the local
+--- player's said `<secret>` where a name should be, for the whole of a pull. That
+--- is the debug renderer's answer, and it is the right one for a LOG LINE, where
+--- the alternative is a raise inside string.format.
+---
+--- A widget is not a log line. `FontString:SetText` ACCEPTS a secret and the
+--- client draws the real characters — that is the whole point of the value being
+--- opaque to us rather than hidden from the player, and it is the same permission
+--- modules/Format.lua relies on to put "12.4M" on a bar it may not divide. So the
+--- handle goes to the widget untouched, and the return type of this function is
+--- "a string, or something SetText will take" (modules/Format.lua's phrase). Its
+--- ONE caller passes it straight to SetText and does nothing else with it; a
+--- future caller that wants to compare or concatenate the result has to reach for
+--- NS.IsConcatSafe itself.
+---
+--- Truncate to `cap` CHARACTERS, counting UTF-8 rather than bytes. NO ELLIPSIS:
+--- the name column is narrow and a cap that spends its last character saying "I
+--- ran out of characters" is a character it could have spent on the name.
 ---
 --- `s:sub(1, cap)` is wrong here and wrong in a way that only shows up on the
 --- names most likely to need truncating: "Helyâ" is six bytes and five
@@ -777,7 +852,7 @@ local function utf8Truncate(s, cap)
         -- counted; anything else starts a new one.
         if b < 0x80 or b > 0xBF then
             chars = chars + 1
-            if chars > cap then return s:sub(1, i - 1) .. "\226\128\166" end
+            if chars > cap then return s:sub(1, i - 1) end
         end
         i = i + 1
     end
@@ -787,13 +862,14 @@ end
 --- @param name any        a name string, an opaque handle, or nil
 --- @param text table|nil  the window's `text` config group
 --- @param stripRealm boolean  true only for a real player's row (see below)
---- @return string
+--- @return any  a string, or something SetText will take — see above
 local function nameText(name, text, stripRealm)
     if name == nil then return "" end
 
     if not (NS.IsConcatSafe and NS.IsConcatSafe(name)) then
-        -- Opaque. No match, no sub, no length — hand it over as-is.
-        return NS.SafeToString and NS.SafeToString(name) or ""
+        -- Opaque. No match, no sub, no length — hand it over AS-IS, which is
+        -- what the widget wants and what draws the player's actual name.
+        return name
     end
 
     local out = tostring(name)
@@ -912,17 +988,16 @@ function Cell:SetPlayer(entry, _sortKey)
     self.frame:SetValue(0)
     self.frame:SetStatusBarColor(0, 0, 0, 0)
 
-    -- IDENTITY MOVES TO THE TEXT. With no bar to carry the class color, the name
-    -- itself carries it — and `classFilename` is NeverSecret, so this keeps
-    -- working at the height of a pull when every number on the row is opaque.
-    local classes = _G.RAID_CLASS_COLORS
-    local c = classes and entry.classFilename and classes[entry.classFilename]
-    if c then
-        self.left:SetTextColor(c.r, c.g, c.b)
-    else
-        -- An unknown class reads as "no class information", not as a tenth color.
-        self.left:SetTextColor(1, 1, 1)
-    end
+    self:ApplyNameColor(entry)
+
+    -- THE CLASS TINT RUNS ACROSS THIS CELL TOO. It is painted by Cell:SetValue
+    -- for every stat column, and the name column was the one cell that never got
+    -- it — so the tint began at the Damage column and the player column sat
+    -- conspicuously undressed beside it. The background is the cell's own
+    -- texture, not the bar, so this stays true of a cell whose bar is flattened
+    -- to nothing (which this one always is).
+    local br, bgc, bb, ba = cellBackground((self.window.config.bars or {}), entry, self.key)
+    self.bg:SetColorTexture(br, bgc, bb, ba)
 
     -- A `Player-…` GUID is the only thing whose name can carry a realm. A pet, a
     -- follower-dungeon NPC, an enemy and a drill-down spell all keep every

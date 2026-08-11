@@ -302,6 +302,98 @@ test("Aggregator sums an attributed pet into its owner out of combat", function(
     assertEqual(result[1].values.DamageDone.rate, 14, "the rate folds with the total")
 end)
 
+test("A healer with no damage is on the mid-pull grid, from the healing column", function()
+    -- THE MISSING ROWS. The identity build took its row list from the SORT
+    -- column alone, so a healer who did no damage and a player whose only
+    -- contribution was one interrupt were absent for the whole of a pull and
+    -- reappeared the instant it ended — rows flickering into existence rather
+    -- than a rule. The GUID join has always taken the union of every column.
+    -- red under: building rows from the sort column only.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR" }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(BETA, 500, { class = "PRIEST" }) },
+        { statKey = "HealingDone", maxAmount = 500 })
+
+    local result = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" })
+
+    assertEqual(#result, 2, "the healer is on the grid")
+    -- Ranked first, unranked after: the damage row holds its place and the
+    -- healer is parked past it rather than interleaved.
+    assertEqual(inst.mocks.reveal(result[1].values.DamageDone.total), 100)
+    assertEqual(inst.mocks.reveal(result[2].values.HealingDone.total), 500)
+    assertNil(result[2].values.DamageDone, "and has no damage cell, because they did none")
+end)
+
+test("An ambiguous key gets no invented row, because no column could ever fill it", function()
+    -- Two priests: the healing column cannot say which of them a figure belongs
+    -- to, so it fills neither — and inventing a row for the pair would put an
+    -- always-empty line on the grid.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR" }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(BETA, 500, { class = "PRIEST" }), src(GAMMA, 300, { class = "PRIEST" }) },
+        { statKey = "HealingDone", maxAmount = 500 })
+
+    local result = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" })
+
+    assertEqual(#result, 1, "only the row the sort column actually ranked")
+    assertTrue(result.ambiguous, "and the header is told the grid is short an answer")
+end)
+
+test("A correlated cell carries the RATE, or a rate column renders no text", function()
+    -- THE EMPTY HEALING COLUMN. The shipped text layout is
+    -- `leftSlot = "none"` / `rightSlot = "rate"`, so for a RATE stat — Damage,
+    -- Healing — the figure on screen is `amountPerSecond`, not the total.
+    -- Correlation carried only the total, so mid-pull every rate column but the
+    -- sort one drew its bar from the total and its text from a nil rate: a bar
+    -- with no number beside it.
+    --
+    -- Avoidable and Interrupts hid the bug, because neither is a rate stat and
+    -- both fall back to rendering the total (modules/Row.lua's counting-stat
+    -- branch). Only the rate columns were blank, which is exactly what was
+    -- reported.
+    -- red under: `row.values[statKey] = { total = value, maxAmount = ... }`.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { rate = 10 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(ALPHA, 500, { rate = 50 }) },
+        { statKey = "HealingDone", maxAmount = 500 })
+
+    local result = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" })
+
+    assertEqual(#result, 1)
+    local healing = result[1].values.HealingDone
+    assertEqual(inst.mocks.reveal(healing.total), 500)
+    assertEqual(inst.mocks.reveal(healing.rate), 50,
+        "a rate stat's text slot reads amountPerSecond — without it the cell is silent")
+end)
+
+test("A correlated Deaths column keeps the recap id the death view opens on", function()
+    -- `deathRecapID` is NeverSecret and rides on the source row. The GUID join
+    -- promotes it onto the row so neither the tooltip nor the drill-down has to
+    -- know which column it arrived on; correlation dropped it, so mid-pull a
+    -- death had no recap to open.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { rate = 10 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(ALPHA, 0, { recapID = 4242 }) },
+        { statKey = "Deaths", maxAmount = 0 })
+
+    local result = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "Deaths" }, sortColumn = "DamageDone" })
+
+    assertEqual(result[1].values.Deaths.total, 1, "one source row, one death")
+    assertEqual(result[1].deathRecapID, 4242)
+end)
+
 test("A pet is a ROW OF ITS OWN while restricted, not a dropped contribution", function()
     -- WHAT THE PET FOLD USED TO DO HERE, and why it stopped. Merging is
     -- addition; addition on two secrets raises; so mid-pull the fold refused and

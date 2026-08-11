@@ -204,7 +204,7 @@ test("Both figures appear when the left slot is turned on", function()
     }, 1)
 
     local cell = row.cells.DamageDone
-    assertEqual(cell.left:GetText(), "4.20M")
+    assertEqual(cell.left:GetText(), "4.2M")
     assertEqual(cell.right:GetText(), "14.0K",
         "amountPerSecond ships beside totalAmount, which is why Dps is never queried")
     assertEqual(cell.left:GetJustifyH(), "LEFT",
@@ -335,7 +335,7 @@ test("A cell with its bar switched off keeps its text", function()
     row:Update(entry{ DamageDone = { total = 4200000, maxAmount = 4200000 } }, 1)
 
     assertEqual(row.cells.DamageDone.frame.__barColor[4], 0, "the bar goes transparent")
-    assertEqual(row.cells.DamageDone.left:GetText(), "4.20M", "the column still reads")
+    assertEqual(row.cells.DamageDone.left:GetText(), "4.2M", "the column still reads")
     -- The BACKGROUND stays: a bar-less column still carries its class tint, it
     -- just stops competing for attention with a filled bar.
     assertEqual(row.cells.DamageDone.bg:IsShown(), true)
@@ -394,13 +394,26 @@ test("The name cell renders a plain name and survives a secret one", function()
     row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } }, { name = "Alpha" }), 1)
     assertEqual(row.nameCell.left:GetText(), "Alpha")
 
-    -- ConditionalSecret: on a client that hides it mid-pull the row still draws,
-    -- with the class icon carrying the identity instead.
+    -- ConditionalSecret: mid-pull the handle goes to the widget UNTOUCHED, and
+    -- the client draws the real characters. SetText accepts a secret — the same
+    -- permission modules/Format.lua relies on to put "12.4M" on a bar it may not
+    -- divide — so the player sees the name, not a placeholder.
+    --
+    -- THE BUG THIS PINS: the opaque branch used to answer NS.SafeToString(name),
+    -- so every row but the local player's read `<secret>` for the whole of a
+    -- pull. That is the right answer for a LOG LINE, where the alternative is a
+    -- raise inside string.format, and the wrong one for a widget.
+    -- red under: returning the sentinel from nameText's opaque branch.
     inst.mocks.setRestricted(true)
+    local handle = inst.mocks.secret("Alpha")
     row:Update(entry({ DamageDone = { total = inst.mocks.secret(1),
                                       maxAmount = inst.mocks.secret(1) } },
-        { name = inst.mocks.secret("Alpha") }), 1)
-    assertEqual(type(row.nameCell.left:GetText()), "string")
+        { name = handle }), 1)
+
+    local drawn = row.nameCell.left:GetText()
+    assertTrue(drawn == handle, "the widget must get the handle itself, untouched")
+    assertFalse(drawn == "<secret>", "the sentinel is a log renderer, never a name")
+    assertEqual(inst.mocks.reveal(drawn), "Alpha", "and it is the right handle")
 end)
 
 -- ── realm strip and truncation ──────────────────────────────────────────────
@@ -438,11 +451,74 @@ test("A pet keeps its hyphen too", function()
     assertEqual(row.nameCell.left:GetText(), "Gore-Tusk")
 end)
 
-test("A name past the cap is truncated with a single ellipsis glyph", function()
+test("The name never wraps, and gets a fixed width to be truncated against", function()
+    -- A WRAPPED NAME IS DRAWN OUTSIDE ITS OWN ROW: the second line lands on the
+    -- row below and the whole grid reads as shuffled. Two-point anchoring also
+    -- let the string grow to whatever the frame became mid-resize, so the width
+    -- the cap was measured against moved while the mouse did.
+    -- red under: anchoring LEFT and RIGHT instead of setting a width.
+    local _, window, row = bench()
+    local cell = row.nameCell
+
+    assertEqual(cell.left.__wordWrap, false, "a name must never reflow onto a second line")
+    assertTrue(cell.left:GetWidth() > 0, "the name text needs a width of its own")
+    assertTrue(cell.left:GetWidth() < window.layout.nameColumn.width,
+        "and it must leave room for the icons beside it")
+end)
+
+test("The icon inset is the SAME for a row with no icons to draw", function()
+    -- A follower NPC has no spec icon. The space is reserved from the CONFIGURED
+    -- slots rather than from what the row managed to draw, so its name still
+    -- starts where every other name starts — a column whose text begins at a
+    -- different x per row is not a column.
+    local _, _, row = bench(function(c)
+        c.icons = c.icons or {}
+        c.icons.showClass, c.icons.showSpec, c.icons.showRole = true, true, true
+    end)
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Withspec", classFilename = "MAGE", specIconID = 135846 }), 1)
+    local withIcons = row.nameCell.left:GetWidth()
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Nospec" }), 2)
+    assertEqual(row.nameCell.left:GetWidth(), withIcons,
+        "the inset is the column's, not the row's")
+end)
+
+test("A layout pass keeps the class color instead of flashing white", function()
+    -- THE RESIZE FLICKER. Cell:ApplyTextStyle repaints every slot in the
+    -- window's text color, and it runs on every layout pass — which during a
+    -- drag-resize is every frame. The class color was only restored by the next
+    -- Cell:SetPlayer, up to a throttle interval later, so names flashed white for
+    -- as long as the mouse was moving.
+    -- red under: ApplyTextStyle ending at SetShadowOffset.
+    local _, window, row = bench()
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { name = "Priesty", classFilename = "PRIEST" }), 1)
+
+    local before = { row.nameCell.left:GetTextColor() }
+
+    -- What a resize does, repeatedly, with no refresh in between.
+    row:ApplyLayout(window.layout)
+
+    local after = { row.nameCell.left:GetTextColor() }
+    for i = 1, 3 do
+        assertEqual(after[i], before[i],
+            "the name lost its class color on a layout pass (component " .. i .. ")")
+    end
+    assertFalse(after[1] == 1 and after[2] == 1 and after[3] == 1,
+        "the fixture must use a class whose color is not white")
+end)
+
+test("A name past the cap is truncated with NO ellipsis", function()
+    -- The column is narrow and the cap is small, so a glyph spent saying "there
+    -- was more" is a glyph not spent on the name. The cut is the whole signal.
+    -- red under: appending U+2026 to the truncated string.
     local _, window, row = bench(function(c) c.text.maxNameLength = 8 end)
     row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
         { name = "Meredy Huntswell" }), 1)
-    assertEqual(row.nameCell.left:GetText(), "Meredy H\226\128\166")
+    assertEqual(row.nameCell.left:GetText(), "Meredy H")
     assertEqual(window.config.text.maxNameLength, 8)
 end)
 
@@ -454,7 +530,7 @@ test("Truncation counts CHARACTERS, never bytes", function()
     local _, _, row = bench(function(c) c.text.maxNameLength = 5 end)
     row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
         { name = "Hely\195\162nder" }), 1)
-    assertEqual(row.nameCell.left:GetText(), "Hely\195\162\226\128\166")
+    assertEqual(row.nameCell.left:GetText(), "Hely\195\162")
 end)
 
 test("A cap of 0 means no cap", function()

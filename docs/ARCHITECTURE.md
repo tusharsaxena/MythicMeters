@@ -70,7 +70,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **82 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **83 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -333,10 +333,11 @@ and a fallback nobody can run is a fallback nobody has tested.
   held everyone's numbers.
 - **Two players of the same class AND specialization cannot be told apart mid-pull.** `sourceGUID`
   is `SecretWhenInCombat`, so while the restriction is active the grid is built by identity
-  correlation (`classFilename` + `specIconID` + `isLocalPlayer`) rather than by the GUID join. Rows
-  are correct — they are the engine's own ranking of the sort column — but where two of them share an
-  identity key, their **secondary columns are left empty** rather than filled from a source that
-  might be the other player's. The header says `restricted — some rows cannot be told apart`, and the
+  correlation (`classFilename` + `specIconID` + `isLocalPlayer`) rather than by the GUID join, over
+  the union of every column. Rows are correct — the sort column's are the engine's own ranking, and
+  anyone it never mentioned is parked after them — but where two rows share an identity key, their
+  **secondary columns are left empty** rather than filled from a source that might be the other
+  player's, and an ambiguous key gets no row invented for it at all. The header says `restricted — some rows cannot be told apart`, and the
   full grid returns on the first refresh after combat.
 - **Pets are separate rows for the whole of a pull, whatever `data.mergePets` says.** Folding needs
   the owner link, the owner link needs a GUID, and there is none while restricted.
@@ -421,7 +422,12 @@ Rows are shaped `| Rule | What differs | Why | Decided | Re-check trigger |`.
 
 | Rule | What differs | Why | Decided | Re-check trigger |
 |---|---|---|---|---|
-| documentation-§1 (root doc set) | A root **`TODO.md`** ships alongside `README.md`, `CLAUDE.md` and `DEPENDENCIES.md`. The standard fixes the root doc set and does not include it. | Work that is decided but unscheduled had nowhere to live: audit and review bundles carry their own plans, and `## Known limitations` records what *ships* as a constraint, not what is *pending*. Explicitly adopted as a stopgap until the repo's issue store is the record. | 2026-08-09 | The backlog moves to GitHub issues on this repo — at which point `TODO.md` is deleted and this row is retired. |
+
+**The register is currently empty — nothing is ratified.** It carried one row, for a root `TODO.md`
+holding work that was decided but unscheduled, adopted as a stopgap until the repo had an issue store.
+That row was retired on 2026-08-11 when the backlog moved to
+[GitHub issues](https://github.com/tusharsaxena/MythicMeters/issues), which is precisely the re-check
+trigger it was written with.
 
 Rows above are ratified. The paragraph below is why the section is never *removed* even when it is
 empty: an audit needs to be able to tell "nothing has been ratified" from "the register was never

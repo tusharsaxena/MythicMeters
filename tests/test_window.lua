@@ -1067,15 +1067,47 @@ test("Sorting is REFUSED in combat, and says so rather than going quiet", functi
     assertEqual(#said, 1, "the player is owed the reason")
 end)
 
-test("The Player header sorts by group order, which is legal in combat", function()
-    -- "Sort by name" would be a string comparison on a ConditionalSecret name.
-    -- Group order is the stable, always-legal thing a player means by clicking it.
-    local _, window, cfg = scene{ sortMode = "value", restricted = true }
+test("The Player header sorts by PLAYER, ascending first", function()
+    -- It used to toggle between `roster` and `value` — a reasonable thing for
+    -- some header to do, and not what a header labelled "Player" says. A-Z is
+    -- what a player means by "sort by name", so the first click ascends and the
+    -- second reverses, exactly like a stat column.
+    -- red under: toggling sortMode between roster and value.
+    local _, window, cfg = scene{ sortMode = "value" }
 
-    assertTrue(window:SortByColumn("name"), "the name header works while restricted")
-    assertEqual(cfg.data.sortMode, "roster")
     assertTrue(window:SortByColumn("name"))
-    assertEqual(cfg.data.sortMode, "value", "and toggles back")
+    assertEqual(cfg.data.sortMode, "name")
+    assertEqual(cfg.data.sortAscending, true, "A-Z first")
+
+    assertTrue(window:SortByColumn("name"))
+    assertEqual(cfg.data.sortMode, "name", "still by name")
+    assertEqual(cfg.data.sortAscending, false, "and the second click reverses it")
+end)
+
+test("The Player header REFUSES while restricted, like every other header", function()
+    -- Ordering by name compares a ConditionalSecret, which raises mid-pull —
+    -- the same reason ordering by value is refused there. The aggregator is
+    -- drawing the engine's own ranking anyway.
+    local _, window, cfg = scene{ sortMode = "value", restricted = true }
+    assertFalse(window:SortByColumn("name"))
+    assertEqual(cfg.data.sortMode, "value", "the click changed nothing")
+end)
+
+test("The sort arrow moves to the Player header in name mode", function()
+    -- The name column was the one header that could be sorted by and never said
+    -- so, because the arrow was placed from `sortColumn` alone.
+    local _, window, cfg = scene{ sortMode = "value" }
+    window:SortByColumn("name")
+    window:ApplyColumnHeaders()
+
+    local nameButton
+    for _, button in ipairs(window.columnHeaders or {}) do
+        if button.mmKey == "name" then nameButton = button end
+    end
+    assertTrue(nameButton ~= nil, "the Player header must exist as a button")
+    assertTrue(nameButton.arrow:IsShown() or nameButton.arrowTex:IsShown(),
+        "the header the order came from has to carry the arrow")
+    assertEqual(cfg.data.sortMode, "name")
 end)
 
 test("Test mode is marked in RED in the title, and clears when it is off", function()

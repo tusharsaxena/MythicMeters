@@ -215,12 +215,13 @@ and every column backed by a real session.
 | `probeOverheadOff` / `probeOverheadOn` | the same refresh with brackets dormant, then armed | the zero-overhead assertions below |
 | `suspended` | a refresh with the provider suspended | **zero** meter API calls — suspend stops the reads at the source |
 
-**A restricted pass costs about 22% more than an unrestricted one** — 397702 bytes against 325890
-for the same 20×7 window — and roughly a third of that gap is the harness rather than the addon: the
+**A restricted pass costs about 29% more than an unrestricted one** — 421214 bytes against 325955
+for the same 20×7 window — and about a quarter of that gap is the harness rather than the addon: the
 mock simulates a secret value as a *table* with a trapping metatable, so every secret field becomes an
 allocation the client does not make. The rest is identity correlation itself: one key per source per
-non-sort column, plus a lookup table per column. The breakdown was measured by running the scenario
-with the correlation stubbed out, not estimated.
+non-sort column, the lookup maps per column, and the cells they produce — cells that must carry
+`amountPerSecond` as well as the total, because the shipped text layout renders the rate for a rate
+stat. The breakdown was measured by re-running the scenario with pieces removed, not estimated.
 
 **The regression guard worth knowing by name is `refresh20x7`'s column count.** One refresh used to
 make *two* `GetColumn` calls per column: `modules/Window.lua` re-entered the provider for each

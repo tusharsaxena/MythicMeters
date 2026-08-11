@@ -353,14 +353,20 @@ assert_(restricted.unitsPerIter == 0,
      .. "cached map rather than re-walking the unit API mid-pull")
         :format(restricted.unitsPerIter))
 
--- A restricted pass costs about 22% more than the unrestricted one (397702
--- against 325890 for the same 20x7 window). That gap was measured rather than
--- assumed, by running this scenario with the correlation stubbed out:
+-- A restricted pass costs about 29% more than the unrestricted one (421214
+-- against 325955 for the same 20x7 window). The gap was measured rather than
+-- assumed, by re-running this scenario with pieces removed:
 --
 --   * ~47KB is identity correlation itself — one key per source per non-sort
---     column (120 of them at this size), a lookup table per column, and the
+--     column (120 of them at this size), the lookup maps per column, and the
 --     cells they produce. The GUID join pays for the cells too, so the genuine
---     extra is the keys and the two small tables per column.
+--     extra is the keys and the maps.
+--   * ~24KB more arrived with the RATE. A correlated cell has to carry
+--     `amountPerSecond` as well as the total, because the shipped text layout
+--     renders the rate for a rate stat — without it Healing drew a bar and no
+--     number. Three fields rather than two rounds each cell's hash part up to
+--     the next power of two, and there are 120 of them. Not reducible while the
+--     rate is what the column displays.
 --   * ~24KB is the HARNESS, not the addon. tests/wow_mock.lua simulates a secret
 --     value as a TABLE with a trapping metatable, so every secret field in every
 --     source becomes an allocation here that the client — where a secret is a
@@ -370,7 +376,7 @@ assert_(restricted.unitsPerIter == 0,
 -- The ceiling carries the same ~3.5% headroom as the dormant one above. What it
 -- catches is identity correlation GROWING; the gap to `refresh20x7` is expected
 -- and is not itself a failure.
-local RESTRICTED_BYTES_CEILING = 412000   -- measured 397702 for a 20x7 pass
+local RESTRICTED_BYTES_CEILING = 436000   -- measured 421214 for a 20x7 pass
 assert_(restricted.bytesPerIter <= RESTRICTED_BYTES_CEILING,
     ("a restricted pass allocated %.0f bytes/iter, over the %d-byte ceiling — identity "
      .. "correlation grew"):format(restricted.bytesPerIter, RESTRICTED_BYTES_CEILING))
@@ -554,7 +560,7 @@ NS.Perf.on = false
 --
 -- The figure is deterministic to the byte across runs, so the headroom is the
 -- same ~3.5% the previous ceiling carried, and a real regression still shows.
-local PROBE_OFF_BYTES_CEILING = 336000   -- measured 325890 for a 20x7 pass
+local PROBE_OFF_BYTES_CEILING = 336000   -- measured 325955 for a 20x7 pass
 
 assert_(probeOff.bytesPerIter <= PROBE_OFF_BYTES_CEILING,
     ("a dormant pass allocated %.0f bytes/iter, over the %d-byte ceiling — one refresh of "

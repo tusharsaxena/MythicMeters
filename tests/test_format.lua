@@ -53,11 +53,14 @@ test("Format.Number goes through the native ABBREVIATING formatter", function()
     -- first call, and cached for the session.
     assertEqual(mocks.__lastNumericFormatter, nil, "formatter must be built lazily")
 
-    -- Two decimals at this magnitude, by the ladder in modules/Format.lua: a
-    -- meter is read at three significant figures, so "4.20M" and not "4M".
+    -- ONE decimal at every magnitude, by the ladder in modules/Format.lua, so
+    -- "4.2M" and not "4M" — and not "4.20M" either. The ladder used to carry two
+    -- rungs per suffix chasing three significant figures, which made a column
+    -- change shape partway down itself: "4.75K" on one row and "10.2K" on the
+    -- next, because the two had landed on different rungs.
     -- red under: CreateNumericRuleFormatter, which abbreviates nothing.
     local out = NS.Format.Number(4200000)
-    assertEqual(out, "4.20M")
+    assertEqual(out, "4.2M")
 
     local formatter = mocks.__lastNumericFormatter
     assertEqual(type(formatter), "table", "a formatter instance must have been created")
@@ -115,6 +118,63 @@ test("Format.Number abbreviates a sub-thousand rate to its whole part", function
     assertEqual(out, "470")
 end)
 
+test("Format.Number renders a value BELOW ONE without dumping its float", function()
+    -- THE INTERMITTENT ONE. The ladder's floor sat at `breakpoint = 1`, so any
+    -- value in (0, 1) matched no rule at all and the formatter fell back to its
+    -- plain render — every digit of the float, in a 92px cell.
+    --
+    -- It looked random because of WHICH figures can be sub-one. The rate slot is
+    -- the only place a fraction reaches the grid, and `isRate` is true for
+    -- exactly two stats — which is why it was "primarily damage or healing" and
+    -- why no other column ever showed it.
+    -- red under: a floor entry the client's rules never reach below.
+    local F = T.load().NS.Format
+    for _, v in ipairs({ 0.42857142857143, 0.5, 0.999 }) do
+        local out = F.Number(v)
+        assertFalse(tostring(out):find("%.") ~= nil,
+            "a sub-one value must not render its decimals: " .. tostring(v)
+                .. " -> " .. tostring(out))
+    end
+    assertEqual(F.Number(0.42857142857143), "0")
+    -- Zero itself has always been fine and must stay so.
+    assertEqual(F.Number(0), "0")
+end)
+
+test("Format.Number('full') also covers a value below one", function()
+    -- Same floor, same fault, on the non-abbreviating formatter: its single
+    -- breakpoint was written at 0, which this client refuses outright.
+    local F = T.load().NS.Format
+    assertFalse(tostring(F.Number(0.42857142857143, "full")):find("%.") ~= nil,
+        "full mode means every DIGIT, never every decimal place")
+end)
+
+test("Format: a formatter whose ladder never took is NOT cached", function()
+    -- HARDENING. A formatter that refused every rung still abbreviates nothing,
+    -- and caching it made one bad build stick for the rest of the session — the
+    -- same shape of bug as modules/Roster.lua's partial map. Refusing to cache it
+    -- sends the render down the AbbreviateNumbers rung, which always abbreviates,
+    -- and lets the next invalidation try again.
+    -- red under: `cache.numeric = f` regardless of whether the ladder applied.
+    local inst = T.load()
+    local NS, mocks = inst.NS, inst.mocks
+
+    -- A client that accepts the call and keeps its own rules — the live failure
+    -- this file's ladderTook exists to catch.
+    local realCreate = mocks.C_StringUtil.CreateAbbreviatedNumberFormatter
+    mocks.C_StringUtil.CreateAbbreviatedNumberFormatter = function()
+        local f = realCreate()
+        f.SetBreakpoints = function() end   -- silently ignored
+        return f
+    end
+    NS.Format.Invalidate()
+
+    local out = NS.Format.Number(4200000)
+    mocks.C_StringUtil.CreateAbbreviatedNumberFormatter = realCreate
+
+    assertFalse(tostring(out):find("4200000", 1, true) ~= nil,
+        "an unabbreviating formatter must not be the one that renders: " .. tostring(out))
+end)
+
 test("Format: the abbreviating formatter is given breakpoints, or it does nothing", function()
     -- The whole bug in one assertion. A formatter with no breakpoints is not
     -- broken and does not raise — it just renders "4200000".
@@ -148,7 +208,7 @@ test("Format.Number accepts a secret and returns something SetText takes", funct
     -- Any Lua arithmetic on `secret` raises MOCK_SECRET_VIOLATION, so reaching
     -- the assertion at all is the proof that nothing here divided.
     local out = NS.Format.Number(secret)
-    assertEqual(out, "4.20M", "the NATIVE formatter did the arithmetic")
+    assertEqual(out, "4.2M", "the NATIVE formatter did the arithmetic")
 
     -- A FontString takes it: the mock stores SetText's argument raw.
     local fs = mocks.__stubFrame("FontString")
@@ -157,7 +217,7 @@ test("Format.Number accepts a secret and returns something SetText takes", funct
     -- a font by this point; this one is a scratch widget.
     fs:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
     fs:SetText(out)
-    assertEqual(fs:GetText(), "4.20M")
+    assertEqual(fs:GetText(), "4.2M")
 end)
 
 test("Format.Rate renders the bare number — no unit suffix", function()

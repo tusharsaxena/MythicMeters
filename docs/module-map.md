@@ -86,7 +86,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (82 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (83 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (15 verbs), the five

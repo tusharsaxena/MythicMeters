@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-778%2F778_passing-green)
+![Tests](https://img.shields.io/badge/Tests-792%2F792_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -57,7 +57,7 @@ Type `/mm` for the command list. `/mythicmeters` does the same thing if you pref
 | `/mm` | Show the command list |
 | `/mm config` | Open the settings panel |
 | `/mm lock` | Lock or unlock every window for dragging |
-| `/mm preview` | Toggle placeholder rows, for positioning without being in a fight |
+| `/mm test` | Toggle placeholder rows, for positioning without being in a fight |
 | `/mm toggle` | Show or hide a window by name, or all of them |
 | `/mm window` | Window management — list, new, delete, copy |
 | `/mm reset-positions` | Move every window back to the center of the screen |
@@ -101,10 +101,13 @@ and arranges them as a grid — so the figures you see are the same ones Blizzar
 show, and there is no second copy of the combat log being parsed in the background.
 
 That also explains the one behavior that might surprise you. In Midnight, the game hands addons
-combat numbers in a sealed form: an addon can display them but cannot read them. So **while you are
-actually fighting, Mythic Meters cannot re-sort rows by value** — it holds the order it had when the
-pull started and updates the numbers in place. Between packs the seal lifts and the order corrects
-itself. If you would rather it never moved at all, set the sort mode to group order on the Data page.
+combat numbers in a sealed form — an addon can display them but cannot read them — and it seals the
+identifier that says which row a number belongs to along with them. So **while you are actually
+fighting, the grid is built a different way**: the rows are the game's own ranking of the sort column,
+which keeps updating live, and the other columns are matched to those rows by class and
+specialization. Two players who share both cannot be told apart, so their other cells stay blank
+rather than showing a number that might be the other player's; the header says so in gray. Everything
+fills back in the moment the fight ends.
 
 ## FAQ
 
