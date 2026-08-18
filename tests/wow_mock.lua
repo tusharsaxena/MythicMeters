@@ -416,6 +416,25 @@ function FRAME.SetText(self, t)
     return self
 end
 function FRAME.GetText(self) return self.__text end
+--- A PROPORTIONAL-ISH string width, so layout that measures text is testable.
+---
+--- The numeric-getter default answers 0, which silently disables any code that
+--- sizes something from a string — modules/Tooltip.lua widens the tooltip from
+--- the longest spell name, and a zero measurement made that whole path look like
+--- a no-op that still passed.
+---
+--- Six pixels a character is close enough for the game's default font at 12pt,
+--- and the exact figure does not matter: what a suite asserts is that a wider
+--- string produced a wider layout.
+---
+--- Answers 0 for anything that is not a plain string — a FontString handed a
+--- SECRET must not be measured, and a double that measured one anyway would let
+--- a rule-R3 violation through.
+function FRAME.GetStringWidth(self)
+    local t = self.__text
+    if type(t) ~= "string" then return 0 end
+    return #t * 6
+end
 function FRAME.SetFormattedText(self, fmt, ...)
     if self.__objectType == "FontString" and not (self.__font or self.__template) then
         error("FontString:SetFormattedText(): Font not set", 2)
@@ -1481,23 +1500,44 @@ local function build()
         if not M[leftName] then
             M[leftName]  = makeFrame("FontString", tooltip, leftName)
             M[rightName] = makeFrame("FontString", tooltip, rightName)
+            -- The real ones inherit GameTooltipText, so they HAVE a font and
+            -- SetText works on them. Without this the writes below raise the
+            -- mock's own "Font not set" guard.
+            M[leftName].__template  = "GameTooltipText"
+            M[rightName].__template = "GameTooltipText"
             M.__frameByName[leftName]  = M[leftName]
             M.__frameByName[rightName] = M[rightName]
         end
         return M[leftName], M[rightName]
     end
 
+    -- The TEXT REACHES THE LINE WIDGETS, not just the recorded line list.
+    -- modules/Tooltip.lua widens the tooltip from the longest spell name, which it
+    -- measures off GameTooltipTextLeft<N> — and a widget the mock never wrote to
+    -- measures zero, which turned that whole path into a no-op that still passed.
     function tooltip:AddLine(text, r, g, b)
         self.__lines[#self.__lines + 1] = { text = text, r = r, g = g, b = b }
-        lineWidgets(#self.__lines)
+        local left, right = lineWidgets(#self.__lines)
+        left:SetText(text)
+        right:SetText(nil)
         return self
     end
-    function tooltip:AddDoubleLine(left, right, ...)
-        self.__lines[#self.__lines + 1] = { text = left, right = right, double = true }
-        lineWidgets(#self.__lines)
+    function tooltip:AddDoubleLine(leftText, rightText, ...)
+        self.__lines[#self.__lines + 1] =
+            { text = leftText, right = rightText, double = true }
+        local left, right = lineWidgets(#self.__lines)
+        left:SetText(leftText)
+        right:SetText(rightText)
         return self
     end
     function tooltip:NumLines() return #self.__lines end
+    -- The tooltip sizes itself from its own text, and modules/Tooltip.lua's amount
+    -- and share slots are NOT its text — they are addon widgets. So the addon
+    -- widens the frame itself, and has to put the width back afterwards or the
+    -- next addon's item tooltip inherits it. A no-op stub would make both halves
+    -- of that unassertable.
+    function tooltip:SetMinimumWidth(w) self.__minWidth = w or 0; return self end
+    function tooltip:GetMinimumWidth() return self.__minWidth or 0 end
     M.GameTooltip = tooltip
     M.GameTooltip_SetDefaultAnchor = function() end
 

@@ -130,6 +130,27 @@ local function formatNumber(value, style)
     return value
 end
 
+--- One spell's share of the player's total for this column, as trailing text.
+---
+--- A SHARE IS A DIVISION, so this is the one slot on a spell line that cannot
+--- survive a pull. modules/Format.lua's ratio form asks core/Secrets.lua whether
+--- the two operands may be divided and answers an EMPTY STRING when they may
+--- not — so mid-pull the percentages simply are not there, and the amount beside
+--- them is unaffected. That is the intended behaviour, not a degraded one: the
+--- alternative is approximating a number the client will not let us compute.
+---
+--- The empty answer must never be read as "0%". It is returned as "" precisely so
+--- that a caller appends nothing rather than appending a lie.
+---
+--- @param value any   this spell's amount, possibly secret
+--- @param total any   the player's total for this column, possibly secret
+--- @return string     "" when the division is not permitted
+local function formatShare(value, total)
+    local F = NS.Numbers or (NS.GetModule and NS:GetModule("Format", true))
+    if not (F and F.Percent) then return "" end
+    return F.Percent(value, total) or ""
+end
+
 -- ---------------------------------------------------------------------------
 -- Secret-safe primitives
 -- ---------------------------------------------------------------------------
@@ -363,7 +384,7 @@ end
 --- @param spell table
 --- @param numberStyle string|nil
 -- ---------------------------------------------------------------------------
--- THE BAR BEHIND A SPELL LINE
+-- THE SPELL LINE: A BAR, AND TWO FIXED NUMBER SLOTS
 -- ---------------------------------------------------------------------------
 --
 -- A GameTooltip line is TEXT. `|T…|t` embeds a texture but carries no tint, and
@@ -371,79 +392,270 @@ end
 -- glyphs (not in the game font, drew boxes) and the second was a run of `=`
 -- (legible, and obviously not a bar).
 --
--- The third is the real thing: STATUSBARS PARENTED TO THE TOOLTIP, one per line,
--- wearing the window's own bar texture and the player's class color. They are
--- pooled and re-anchored per hover rather than created per line, and they are
--- laid out from the tooltip's own line FontStrings — which are Blizzard's
--- widgets, have never held one of our secret values, and are therefore free to
--- measure. Rule R3 is about cells that HAVE held one.
+-- The real thing is a WIDGET PER LINE, pooled and re-anchored per hover rather
+-- than created per line. Each pooled entry is a carrier Frame holding three
+-- things:
 --
--- They are hidden whenever the tooltip is, so a stale bar can never outlive the
--- hover that drew it.
-local BAR_HEIGHT = 12
+--   * a StatusBar spanning the line, wearing the window's own bar texture and
+--     the player's class color, filled to amount/max;
+--   * the AMOUNT, right-aligned in a fixed-width slot;
+--   * the SHARE, right-aligned in a second fixed-width slot beside it.
+--
+-- WHY THE NUMBERS LEFT THE TOOLTIP'S OWN RIGHT COLUMN. AddDoubleLine right-aligns
+-- one string, so "5.7M 36.5%" and "398.9K 2.1%" line up at their right edge and
+-- nowhere else — the percent column zig-zags, because the amount before it is a
+-- different width on every row. Two right-aligned FontStrings at FIXED PIXEL
+-- OFFSETS are the only way to get two columns out of one line, and the font is
+-- proportional so padding with spaces cannot substitute.
+--
+-- WHY A CARRIER RATHER THAN HANGING THEM OFF THE BAR. The bar is absent whenever
+-- the values may not be divided (see below) and the NUMBERS MUST NOT BE. Hanging
+-- them off the bar would delete the tooltip's entire content mid-pull, which is
+-- the exact inversion of the rule: a restricted tooltip loses decoration, never
+-- information. So the carrier is always shown and the bar inside it is not.
+--
+-- GEOMETRY MATCHES THE GRID. A line spans from just past the icon out to the
+-- tooltip's right margin, and the FILL inside it is amount/max, exactly like a
+-- cell in modules/Row.lua. Every line's track is therefore the same length and
+-- the fills are what differ — which is the only way a length can mean anything.
+-- It starts past the icon so the icon reads as its own column and is not tinted,
+-- and the spell NAME sits fully inside the track.
+--
+-- LAYERING. The carrier and the bar sit at the tooltip's OWN frame level, which
+-- makes their draw layers interleave with the tooltip's rather than stack above
+-- them. Track is BACKGROUND, fill is BORDER, GameTooltip draws its line
+-- FontStrings in ARTWORK, and the two number slots are OVERLAY. So the spell name
+-- lands on top of the bar and the numbers land on top of everything.
+--
+-- Everything comes down whenever the tooltip does — see `ensureTooltipHook` — so
+-- a stale line can never outlive the hover that drew it.
 
-local barPool = {}
+--- The line height a bar has to cover. The icon is the tallest thing on a spell
+--- line, so it sets the height; anything shorter leaves the line's text hanging
+--- off the top and bottom of its own bar.
+local BAR_HEIGHT = TOOLTIP_ICON_SIZE
 
---- Hide every bar. Called at the top of each hover and when the tooltip closes.
-local function releaseBars()
-    for _, bar in ipairs(barPool) do bar:Hide() end
+--- Fallback fill for a window with no bar texture configured. A StatusBar with
+--- no texture draws NOTHING, so the tint alone is not enough.
+local BAR_FALLBACK_TEXTURE = "Interface\\Buttons\\WHITE8X8"
+
+--- How far past the left FontString's edge the track starts.
+---
+--- The spell icon is not a separate widget — it is a `|T…|t` escape INSIDE the
+--- left line, so the FontString's left edge is the icon's left edge. A track
+--- pinned there runs underneath the icon and tints it. Clearing exactly the icon
+--- puts the track's edge in the space between icon and name, which leaves the
+--- NAME fully inside the bar — the point of a full-width bar in the first place.
+local BAR_INSET_LEFT = TOOLTIP_ICON_SIZE
+
+--- The two number slots, in pixels, measured in from the line's right edge.
+---
+--- FIXED, and never measured off a widget. A slot sized from the text it holds
+--- would have to read a FontString that has been handed a meter amount, and a
+--- widget that has held a secret has secret geometry (rule R3). Fixed slots also
+--- happen to be the requirement: they are what makes the column a column.
+---
+--- SHARE_SLOT_WIDTH fits "xx.x%" — the widest share there is, since a share
+--- cannot exceed 100% and 100.0% is rendered at the same five glyphs.
+local SLOT_RIGHT_PAD    = 3
+local SHARE_SLOT_WIDTH  = 36
+local SLOT_GAP          = 6
+local AMOUNT_SLOT_WIDTH = 66
+
+--- Breathing room between the longest spell name and the amount slot.
+local NAME_GAP = 10
+
+--- What GameTooltip adds around its own content, left and right together. Used
+--- only to widen the tooltip, never to place anything.
+local TOOLTIP_H_PADDING = 20
+
+--- The white the share is drawn in, and the gold the amount keeps.
+local AMOUNT_COLOR = { 1, 0.82, 0 }
+local SHARE_COLOR  = { 1, 1, 1 }
+
+local linePool = {}
+
+--- The widest spell name this hover has drawn, in pixels, and the tooltip width
+--- that implies. Reset per hover by `releaseLines`.
+local widestName = 0
+
+--- Take every line down, and put GameTooltip back the way it was found.
+---
+--- `pairs`, NOT `ipairs`. The pool is keyed by TOOLTIP LINE INDEX, and a spell
+--- line is never line 1 — the header, the blank and the "Spell breakdown" caption
+--- come first, so the first key is 4. `ipairs` stops at the hole at index 1 and
+--- releases NOTHING, which is what left bars Shown on a recycled GameTooltip.
+---
+--- The bar is hidden alongside its carrier rather than left to the carrier's
+--- visibility, so "is this bar showing" stays a question the widget itself can
+--- answer.
+---
+--- The minimum width is cleared too. It is a property of the SHARED tooltip, so
+--- leaving ours on it makes the next addon's item tooltip inexplicably wide —
+--- the same class of bug as a bar left Shown.
+local function releaseLines()
+    for _, frame in pairs(linePool) do
+        frame.bar:Hide()
+        frame:Hide()
+    end
+    widestName = 0
+    if _G.GameTooltip and GameTooltip.SetMinimumWidth then
+        GameTooltip:SetMinimumWidth(0)
+    end
 end
 
---- The nth pooled bar, created on first use.
-local function bar(index)
-    local b = barPool[index]
-    if b then return b end
-    b = CreateFrame("StatusBar", nil, GameTooltip)
-    b:SetHeight(BAR_HEIGHT)
-    b:SetFrameLevel(GameTooltip:GetFrameLevel())
+-- ---------------------------------------------------------------------------
+-- WHY THE LINES MUST COME DOWN WITH THE TOOLTIP
+-- ---------------------------------------------------------------------------
+--
+-- GameTooltip is SHARED and RECYCLED. Hiding it does not un-Show the frames
+-- parented to it — it only stops them being drawn — so a widget left Shown
+-- reappears the instant anything else opens GameTooltip: a unit under the cursor,
+-- an item, a quest. And because the lines are anchored to GameTooltipTextLeft<N>,
+-- they re-anchor themselves onto WHATEVER that tooltip's lines now say, which is
+-- how this addon put class-colored bars through the middle of a player's unit
+-- tooltip and an item's stat block.
+--
+-- Releasing at the top of our own hovers is not enough: nothing routes another
+-- addon's tooltip through this file. The only reliable signal is GameTooltip's
+-- own OnHide, hooked once, for the life of the session.
+local tooltipHooked = false
+
+--- Hook GameTooltip:OnHide once, so the pool empties however the tooltip closes.
+local function ensureTooltipHook()
+    if tooltipHooked then return end
+    local tip = _G.GameTooltip
+    if not (tip and tip.HookScript) then return end
+    tip:HookScript("OnHide", releaseLines)
+    tooltipHooked = true
+end
+
+--- The nth pooled line's carrier frame, created on first use. Its bar and its two
+--- number slots hang off it under `.bar`, `.amount` and `.share`.
+local function lineWidget(index)
+    local line = linePool[index]
+    if line then return line end
+    -- First line of the session is also the moment the pool starts needing the
+    -- OnHide hook, and the earliest point in this file that can install it.
+    ensureTooltipHook()
+
+    local frame = CreateFrame("Frame", nil, GameTooltip)
+    frame:SetHeight(BAR_HEIGHT)
+    -- The tooltip's own level, NOT one above it: see the layering note above.
+    frame:SetFrameLevel(GameTooltip:GetFrameLevel())
+
+    local b = CreateFrame("StatusBar", nil, frame)
+    b:SetAllPoints(frame)
+    b:SetFrameLevel(frame:GetFrameLevel())
     local bg = b:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(b)
     bg:SetColorTexture(0, 0, 0, 0.35)
     b.bg = bg
-    barPool[index] = b
-    return b
+
+    -- Right to left: the share is pinned to the line's right edge, and the amount
+    -- to the share's left edge. Both are right-justified inside a fixed width, so
+    -- both columns line up down the tooltip whatever the numbers are.
+    local share = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    share:SetWidth(SHARE_SLOT_WIDTH)
+    share:SetJustifyH("RIGHT")
+    share:SetPoint("RIGHT", frame, "RIGHT", -SLOT_RIGHT_PAD, 0)
+    share:SetTextColor(SHARE_COLOR[1], SHARE_COLOR[2], SHARE_COLOR[3])
+
+    local amount = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    amount:SetWidth(AMOUNT_SLOT_WIDTH)
+    amount:SetJustifyH("RIGHT")
+    amount:SetPoint("RIGHT", share, "LEFT", -SLOT_GAP, 0)
+    amount:SetTextColor(AMOUNT_COLOR[1], AMOUNT_COLOR[2], AMOUNT_COLOR[3])
+
+    -- Keyed onto the carrier the way Blizzard's own `parentKey` does, so the
+    -- pool holds one object rather than a record of four.
+    frame.bar, frame.amount, frame.share = b, amount, share
+    linePool[index] = frame
+    return frame
 end
 
---- Draw the bar for one spell line.
+--- Widen the tooltip enough that the two number slots never sit on a spell name.
 ---
---- ABSENT WHILE THE VALUES CANNOT BE DIVIDED. A bar's length is amount / max,
---- which raises on two secrets, so it is drawn when core/Secrets.lua says both
---- operands are readable and omitted when they are not — exactly like the percent
---- text slot. The NUMBER never goes away, so a mid-pull tooltip loses decoration
---- rather than information.
+--- GameTooltip sizes itself from its own text, and our numbers are not its text
+--- any more — so without this the tooltip shrinks to the width of the names and
+--- the slots overlap them. A MINIMUM is exactly the right instrument: a longer
+--- header line still wins, and nothing here shrinks the tooltip.
 ---
---- @param lineIndex number  which tooltip line to sit behind
---- @param amount any        the spell's total, possibly secret
---- @param max any           the largest total in this breakdown, possibly secret
---- @param color table|nil   { r, g, b }
---- @param texture string|nil  an LSM statusbar path
-local function drawBar(lineIndex, amount, max, color, texture)
-    local Secrets = NS.Secrets
-    if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(amount, max)) then
-        return
-    end
-    if type(amount) ~= "number" or type(max) ~= "number" or max <= 0 then return end
+--- The name width is read off GameTooltip's own left FontString for a SPELL line,
+--- which holds an icon escape and a spell name and has never been handed a meter
+--- amount. Rule R3 is about widgets that HAVE held one — and note this is
+--- deliberately not read off our own amount slot, which has.
+local function applyMinimumWidth()
+    if widestName <= 0 then return end
+    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then return end
+    GameTooltip:SetMinimumWidth(widestName + NAME_GAP + AMOUNT_SLOT_WIDTH
+        + SLOT_GAP + SHARE_SLOT_WIDTH + TOOLTIP_H_PADDING)
+end
 
+--- Lay out one spell line and fill in its numbers.
+---
+--- THE BAR IS ABSENT WHILE THE VALUES CANNOT BE DIVIDED. A bar's length is
+--- amount / max, which raises on two secrets, so it is drawn when core/Secrets.lua
+--- says both operands are readable and omitted when they are not — exactly like
+--- the share slot. THE AMOUNT NEVER GOES AWAY: it is set on the widget as
+--- whatever the formatter returned, secret or not, so a mid-pull tooltip loses
+--- decoration rather than information.
+---
+--- @param lineIndex number   which tooltip line this sits on
+--- @param amount any         the formatted amount, possibly a secret string
+--- @param share string       the formatted share, or "" when it may not be taken
+--- @param value any          the spell's raw total, possibly secret
+--- @param max any            the largest total in this breakdown, possibly secret
+--- @param color table|nil    { r, g, b }
+--- @param texture string|nil an LSM statusbar path
+local function drawLine(lineIndex, amount, share, value, max, color, texture)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
-    local right = name and _G[name .. "TextRight" .. lineIndex]
-    if not (left and right) then return end
+    if not left then return end
 
-    local b = bar(lineIndex)
-    b:ClearAllPoints()
-    -- Spanning from just after the spell name to just before its number, so the
-    -- bar occupies the empty middle of the line rather than sitting under either.
-    b:SetPoint("LEFT", left, "RIGHT", 8, 0)
-    b:SetPoint("RIGHT", right, "LEFT", -6, 0)
-    if texture then b:SetStatusBarTexture(texture) end
+    local frame = lineWidget(lineIndex)
+    frame:ClearAllPoints()
+    -- Past the icon on the left, out to the tooltip's own right margin on the
+    -- right. Anchoring the right edge to GameTooltip rather than to the line's
+    -- right FontString keeps the track a fixed span even though that FontString is
+    -- now empty — the numbers moved onto this carrier.
+    frame:SetPoint("LEFT", left, "LEFT", BAR_INSET_LEFT, 0)
+    frame:SetPoint("RIGHT", GameTooltip, "RIGHT", -(TOOLTIP_H_PADDING / 2), 0)
+    frame:Show()
+
+    frame.amount:SetText(amount)
+    frame.share:SetText(share)
+
+    if left.GetStringWidth then
+        local w = left:GetStringWidth() or 0
+        if w > widestName then widestName = w end
+    end
+
+    local Secrets = NS.Secrets
+    if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(value, max)) then
+        frame.bar:Hide()
+        return
+    end
+    if type(value) ~= "number" or type(max) ~= "number" or max <= 0 then
+        frame.bar:Hide()
+        return
+    end
+
+    local b = frame.bar
+    b:SetStatusBarTexture(texture or BAR_FALLBACK_TEXTURE)
+    -- BORDER, so the tooltip's ARTWORK spell name reads on top of the fill rather
+    -- than under it. SetStatusBarTexture replaces the texture object, so the layer
+    -- has to be re-stated every draw and not once at creation.
+    local fill = b.GetStatusBarTexture and b:GetStatusBarTexture()
+    if fill and fill.SetDrawLayer then fill:SetDrawLayer("BORDER") end
     b:SetMinMaxValues(0, max)
-    b:SetValue(amount)
+    b:SetValue(value)
     b:SetStatusBarColor((color and color.r) or 0.6, (color and color.g) or 0.6,
         (color and color.b) or 0.6, 0.85)
     b:Show()
 end
 
-local function addSpellLine(spell, numberStyle, max, color, texture)
+local function addSpellLine(spell, numberStyle, max, color, texture, sourceTotal)
     local spellID = spell.spellID
     local spellName, iconID
     if spellID ~= nil and Compat and Compat.GetSpellInfo then
@@ -465,12 +677,23 @@ local function addSpellLine(spell, numberStyle, max, color, texture)
         TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE,
         caption)
 
-    GameTooltip:AddDoubleLine(label, formatNumber(spell.totalAmount, numberStyle),
-        1, 1, 1, 1, 0.82, 0)
+    -- The amount and the share go onto our OWN widgets, in their own fixed slots,
+    -- so this line is added with a LEFT SIDE ONLY. Handing them to AddDoubleLine
+    -- instead would right-align the pair as one string and the share column would
+    -- zig-zag behind amounts of different widths.
+    --
+    -- Neither is inspected on the way. `formatNumber` may hand back the ORIGINAL
+    -- OPAQUE VALUE when no formatter is reachable; it travels to SetText, which is
+    -- a widget setter and accepts a secret.
+    GameTooltip:AddLine(label, 1, 1, 1)
 
-    -- The bar goes BEHIND the line that was just added, so it needs the line's
-    -- index — which is NumLines now that the line exists.
-    drawBar(GameTooltip:NumLines(), spell.totalAmount, max, color, texture)
+    local amount = formatNumber(spell.totalAmount, numberStyle)
+    local share = sourceTotal ~= nil and formatShare(spell.totalAmount, sourceTotal) or ""
+
+    -- The line widget goes BEHIND the tooltip line that was just added, so it
+    -- needs that line's index — which is NumLines now that the line exists.
+    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max,
+        color, texture)
 end
 
 --- The extra facts an Avoidable Damage row carries: whether the hit was
@@ -558,15 +781,15 @@ local function addSpellBreakdown(source, statKey, cap, numberStyle, color, textu
     -- mediocre player's tooltip stubbed at one cell.
     --
     -- Taken after the sort, so it is the first entry when the sort was legal, and
-    -- `source.maxAmount` when it was not. No comparison is performed here; drawBar
-    -- refuses on its own if the operands cannot be divided.
+    -- `source.maxAmount` when it was not. No comparison is performed here; drawLine
+    -- refuses to fill on its own if the operands cannot be divided.
     local barMax = (spells[1] and spells[1].totalAmount) or source.maxAmount
 
     local wantAvoidableDetail = (statKey == "AvoidableDamageTaken")
     local shown = 0
     for i = 1, #spells do
         if i > cap then break end
-        addSpellLine(spells[i], numberStyle, barMax, color, texture)
+        addSpellLine(spells[i], numberStyle, barMax, color, texture, source.totalAmount)
         if wantAvoidableDetail then
             addAvoidableDetail(spells[i], numberStyle)
         end
@@ -611,10 +834,10 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
 
     window = resolveWindow(row, window)
     local config = tooltipConfig(window)
-    -- Every bar from the previous hover comes down first: they are pooled and
-    -- re-anchored, so a stale one would otherwise sit behind a line it no longer
-    -- describes.
-    releaseBars()
+    -- Every line widget from the previous hover comes down first: they are pooled
+    -- and re-anchored, so a stale one would otherwise sit behind a tooltip line it
+    -- no longer describes.
+    releaseLines()
     if not openTooltip(anchorFrame, config) then return end
 
     local stat = Const.STAT_BY_KEY[statKey]
@@ -645,6 +868,10 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     end
 
     addDeathRecapHint(row, statKey)
+
+    -- After every line, before the Show that sizes the frame: the number slots are
+    -- our widgets, so GameTooltip cannot size itself around them.
+    applyMinimumWidth()
 
     GameTooltip:Show()
 
@@ -729,10 +956,10 @@ function Tooltip:NameTooltip(row, anchorFrame, window)
 
     window = resolveWindow(row, window)
     local config = tooltipConfig(window)
-    -- Every bar from the previous hover comes down first: they are pooled and
-    -- re-anchored, so a stale one would otherwise sit behind a line it no longer
-    -- describes.
-    releaseBars()
+    -- Every line widget from the previous hover comes down first: they are pooled
+    -- and re-anchored, so a stale one would otherwise sit behind a tooltip line it
+    -- no longer describes.
+    releaseLines()
     if not openTooltip(anchorFrame, config) then return end
 
     GameTooltip:AddLine(displayName(row), 1, 1, 1)
@@ -771,5 +998,8 @@ end
 --- pinned under the cursor after the mouse has moved is the single most
 --- reported meter bug there is.
 function Tooltip:Hide()
+    -- Unconditionally, and BEFORE the hide: the OnHide hook covers every other
+    -- route out, but only once a hover has opened a tooltip and installed it.
+    releaseLines()
     if _G.GameTooltip then GameTooltip:Hide() end
 end

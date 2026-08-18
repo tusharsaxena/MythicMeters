@@ -55,6 +55,49 @@ local function bench(opts)
     return inst, cfg, anchor
 end
 
+-- ---------------------------------------------------------------------------
+-- Reading the spell lines back
+-- ---------------------------------------------------------------------------
+--
+-- A spell line is NOT one tooltip line any more. The tooltip holds the icon and
+-- the spell name; the amount and the share live on our own carrier Frame, in two
+-- fixed-width right-aligned slots, because AddDoubleLine right-aligns one string
+-- and would let the share column zig-zag behind amounts of different widths.
+--
+-- So a suite that reads `line.right` is reading a slot the addon stopped using.
+-- These two helpers read what the player actually sees.
+
+--- Every shown carrier Frame, keyed by the tooltip line index it sits on.
+---
+--- The index is recovered from the carrier's own LEFT anchor, which is pinned to
+--- `GameTooltipTextLeft<N>` — so this asserts the anchoring incidentally, and a
+--- carrier that drifted off its line would simply not be found.
+local function tooltipLines(inst)
+    local out = {}
+    for _, f in ipairs(inst.mocks.__frames) do
+        if f.__objectType == "Frame" and f.__parent == inst.mocks.GameTooltip
+            and f:IsShown() then
+            for _, p in ipairs(f.__points) do
+                local rel = p.relativeTo
+                local index = rel and rel.__name
+                    and rel.__name:match("^GameTooltipTextLeft(%d+)$")
+                if index then out[tonumber(index)] = f end
+            end
+        end
+    end
+    return out
+end
+
+--- The carriers in tooltip-line order, so `[1]` is the first spell line.
+local function spellLines(inst)
+    local byIndex, keys = tooltipLines(inst), {}
+    for index in pairs(byIndex) do keys[#keys + 1] = index end
+    table.sort(keys)
+    local out = {}
+    for _, index in ipairs(keys) do out[#out + 1] = byIndex[index] end
+    return out
+end
+
 local function row(opts)
     opts = opts or {}
     return {
@@ -183,10 +226,8 @@ test("CellTooltip renders secret amounts through the formatter, untouched", func
     inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
 
     local amounts = {}
-    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
-        if type(line.text) == "string" and line.text:find("Mock Spell", 1, true) then
-            amounts[#amounts + 1] = line.right
-        end
+    for _, carrier in ipairs(spellLines(inst)) do
+        amounts[#amounts + 1] = carrier.amount.__text
     end
     assertEqual(#amounts, 3)
     -- Nothing added them, nothing compared them; they went through the native
@@ -429,12 +470,17 @@ end)
 -- Bars in the breakdown
 -- ---------------------------------------------------------------------------
 
---- Every StatusBar parented to the tooltip that is currently shown.
+--- Every shown bar under the tooltip.
+---
+--- One level deeper than it used to be: the bar hangs off a carrier Frame rather
+--- than off GameTooltip directly, because the carrier survives a hover the bar
+--- cannot — mid-pull the amount and the share still have to be drawn.
 local function tooltipBars(inst)
     local shown = {}
     for _, f in ipairs(inst.mocks.__frames) do
-        if f.__objectType == "StatusBar" and f.__parent == inst.mocks.GameTooltip
-            and f:IsShown() then
+        local parent = f.__parent
+        if f.__objectType == "StatusBar" and parent
+            and parent.__parent == inst.mocks.GameTooltip and f:IsShown() then
             shown[#shown + 1] = f
         end
     end
@@ -494,4 +540,236 @@ test("The bar is OMITTED while the values cannot be divided", function()
 
     assertEqual(#tooltipBars(inst), 0,
         "a bar cannot be sized from values we may not divide")
+end)
+
+test("A bar spans the FULL line, so its length is comparable down the column", function()
+    -- The first shipped version anchored LEFT to the name's RIGHT and RIGHT to the
+    -- number's LEFT, which put the bar in the empty gap between the two texts. A
+    -- bar in a gap has a length that means nothing: the gap is as wide as the
+    -- name is short, so a long spell name shortened its own bar. Every bar has to
+    -- start and end where every other bar does — the FILL is what differs.
+    -- red under: restoring the LEFT-to-RIGHT / RIGHT-to-LEFT anchoring.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local carrier = spellLines(inst)[1]
+    assertTrue(carrier ~= nil, "no spell line was drawn")
+
+    local seen = {}
+    for _, p in ipairs(carrier.__points) do seen[p.point] = p end
+
+    assertTrue(seen.LEFT ~= nil and seen.RIGHT ~= nil, "a line needs both edges pinned")
+    assertEqual(seen.LEFT.relativePoint, "LEFT",
+        "the track must be measured from the left text's LEFT edge, not from its right")
+    assertEqual(seen.RIGHT.relativeTo, inst.mocks.GameTooltip,
+        "the track must run out to the tooltip's own right margin")
+end)
+
+test("A bar clears the icon rather than running underneath it", function()
+    -- The icon is a `|T…|t` escape INSIDE the left line, so the FontString's left
+    -- edge is the ICON's left edge. Pinning the track there tints the icon and
+    -- makes the row start look ragged; it has to begin where the spell NAME
+    -- begins, so the icon reads as its own column the way it does in the grid.
+    -- red under: a zero or negative LEFT offset.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local carrier = spellLines(inst)[1]
+    assertTrue(carrier ~= nil, "no spell line was drawn")
+
+    local left
+    for _, p in ipairs(carrier.__points) do if p.point == "LEFT" then left = p end end
+    assertTrue(left ~= nil, "the track's left edge is unpinned")
+    -- 14 is TOOLTIP_ICON_SIZE. Clearing exactly the icon is the point: any less
+    -- tints it, any more pushes the track past the spell name and leaves the name
+    -- hanging outside its own bar.
+    assertEqual(left.x, 14, "the track does not begin at the icon's right edge")
+end)
+
+test("A bar sits UNDER the tooltip's text, not over it", function()
+    -- GameTooltip draws its line FontStrings in ARTWORK, and a frame at the
+    -- tooltip's own level interleaves its draw layers with the tooltip's. So the
+    -- fill goes in BORDER: any higher and a full-width bar paints over the very
+    -- spell name it is behind.
+    -- red under: leaving the fill on the StatusBar's default layer.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    assertTrue(b ~= nil, "no bar was drawn")
+    assertEqual(b.__level, inst.mocks.GameTooltip:GetFrameLevel(),
+        "a bar above the tooltip's level cannot interleave with its text")
+    assertEqual(b.__parent.__level, inst.mocks.GameTooltip:GetFrameLevel(),
+        "the carrier must share the level too, or it lifts the bar with it")
+
+    local fill = b:GetStatusBarTexture()
+    assertTrue(fill ~= nil, "a StatusBar with no texture draws nothing at all")
+    assertEqual(fill.__drawLayer and fill.__drawLayer[1], "BORDER",
+        "the fill must draw below the tooltip's ARTWORK text")
+end)
+
+test("Bars come down when GameTooltip closes, whoever closed it", function()
+    -- GameTooltip is SHARED and RECYCLED, and hiding it does not un-Show the
+    -- frames parented to it. A bar left Shown reappears the instant a unit or an
+    -- item opens GameTooltip, re-anchored onto THAT tooltip's lines — which is how
+    -- this addon put class-colored bars through the middle of a player's unit
+    -- tooltip. The only signal that catches every route out is the tooltip's own
+    -- OnHide.
+    -- red under: dropping the HookScript("OnHide", releaseBars) install.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+    assertTrue(#tooltipBars(inst) > 0, "no bar was drawn")
+
+    -- Somebody ELSE hides the tooltip. Nothing routes this through our module.
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+
+    assertEqual(#tooltipBars(inst), 0, "a bar outlived the tooltip that owned it")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The percent slot
+-- ---------------------------------------------------------------------------
+
+--- Every share slot the tooltip filled in, as one blob.
+local function shareText(inst)
+    local out = {}
+    for _, carrier in ipairs(spellLines(inst)) do
+        out[#out + 1] = tostring(carrier.share.__text or "")
+    end
+    return table.concat(out, "\n")
+end
+
+test("A spell line carries its SHARE of the player's total beside the amount", function()
+    -- The amount alone answers "how much"; the share answers "how much of what I
+    -- did", which is the question a breakdown exists for. The denominator is the
+    -- source's own total for this column, not the column max.
+    -- red under: dropping the sourceTotal argument, or passing maxAmount instead.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    -- The fixture totals 600, and its largest spell is 300 — exactly half.
+    assertTrue(shareText(inst):find("50.0%%") ~= nil,
+        "the top spell's share of a 600 total is not on the line")
+    -- 100/600 rounds to 16.7, which no other reading of the numbers produces:
+    -- against maxAmount (300) the same spell would read 33.3%.
+    assertTrue(shareText(inst):find("16.7%%") ~= nil,
+        "the share is being taken against the wrong denominator")
+end)
+
+test("The percent slot GOES QUIET mid-pull rather than approximating", function()
+    -- A share is a DIVISION, so it is the one slot on a spell line that cannot
+    -- survive the Combat restriction. modules/Format.lua answers an empty string
+    -- when the operands may not be divided, and an empty answer must append
+    -- NOTHING — never a zero, never a guess. The amount is untouched either way,
+    -- so a mid-pull tooltip loses the share and keeps the figure.
+    -- red under: reading Format.Percent's "" as a number, or dividing unguarded.
+    local inst, cfg, anchor = bench{ restricted = true }
+    inst.mocks.setSecretValues(true)
+
+    local ok = pcall(function()
+        inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+    end)
+    assertTrue(ok, "the tooltip divided a secret to get a percentage")
+
+    assertFalse(shareText(inst):find("%%") ~= nil,
+        "a percentage was rendered from values we may not divide")
+    -- And the tooltip still drew its spell lines: the share went, the data did not.
+    assertTrue(#inst.mocks.GameTooltip.__lines > 3, "the breakdown vanished with the shares")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The two number slots
+-- ---------------------------------------------------------------------------
+
+test("The amount and the share sit in FIXED right-aligned slots", function()
+    -- AddDoubleLine right-aligns ONE string, so "5.7M 36.5%" and "398.9K 2.1%"
+    -- line up at their right edge and nowhere else — the share column zig-zags
+    -- behind amounts of different widths. Two right-justified FontStrings at fixed
+    -- widths are the only way to get two columns out of one line; the game font is
+    -- proportional, so padding with spaces cannot substitute.
+    -- red under: putting either number back in the tooltip's own right column.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local carriers = spellLines(inst)
+    assertEqual(#carriers, 3, "the breakdown did not draw its three lines")
+
+    for _, carrier in ipairs(carriers) do
+        assertEqual(carrier.amount.__justifyH, "RIGHT", "the amount slot is not right-aligned")
+        assertEqual(carrier.share.__justifyH, "RIGHT", "the share slot is not right-aligned")
+        assertTrue(carrier.amount.__w > 0, "the amount slot has no fixed width")
+        assertTrue(carrier.share.__w > 0, "the share slot has no fixed width")
+    end
+
+    -- Same widths on every line, which is what makes them columns rather than
+    -- two numbers that happen to be near each other.
+    assertEqual(carriers[1].amount.__w, carriers[3].amount.__w,
+        "the amount slot changes width between lines")
+    assertEqual(carriers[1].share.__w, carriers[3].share.__w,
+        "the share slot changes width between lines")
+
+    -- And nothing is left in a SPELL line's own right column to fight them. The
+    -- header line keeps its right side — that is the column's name, not a number.
+    for index in pairs(tooltipLines(inst)) do
+        local line = inst.mocks.GameTooltip.__lines[index]
+        assertTrue(line ~= nil, "a carrier is anchored to a line that does not exist")
+        assertTrue(line.right == nil or line.right == "",
+            "a number is still being drawn in the tooltip's right column")
+    end
+end)
+
+test("The share is WHITE, and the amount keeps its gold", function()
+    -- red under: reinstating the gray the share shipped with.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local carrier = spellLines(inst)[1]
+    local share = carrier.share.__textColor
+    assertEqual(share[1], 1, "the share is not white")
+    assertEqual(share[2], 1, "the share is not white")
+    assertEqual(share[3], 1, "the share is not white")
+
+    local amount = carrier.amount.__textColor
+    assertEqual(amount[2], 0.82, "the amount lost its gold")
+end)
+
+test("The AMOUNT survives a hover the bar cannot", function()
+    -- This is the inversion the carrier Frame exists to prevent. The bar is a
+    -- division and goes when the values may not be divided; the amount is the
+    -- INFORMATION and must not. Hanging the number slots off the bar would empty
+    -- the tooltip mid-pull — the exact opposite of the rule.
+    -- red under: parenting the amount and share to the bar instead of the carrier.
+    local inst, cfg, anchor = bench{ restricted = true }
+    inst.mocks.setSecretValues(true)
+
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    assertEqual(#tooltipBars(inst), 0, "a bar was sized from values we may not divide")
+
+    local carriers = spellLines(inst)
+    assertEqual(#carriers, 3, "the spell lines went down with the bars")
+    for _, carrier in ipairs(carriers) do
+        assertTrue(carrier.amount.__text ~= nil, "a spell line lost its amount")
+    end
+end)
+
+test("The tooltip is widened for the slots, and put back afterwards", function()
+    -- GameTooltip sizes itself from its own text, and the slots are not its text —
+    -- so without a minimum width it shrinks to the width of the spell names and
+    -- the numbers sit on top of them. The minimum is a property of the SHARED
+    -- tooltip, so leaving ours on it makes the next addon's item tooltip
+    -- inexplicably wide: the same class of bug as a bar left Shown.
+    -- red under: dropping either the applyMinimumWidth call or the reset.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    assertTrue(inst.mocks.GameTooltip:GetMinimumWidth() > 0,
+        "the tooltip was never widened for the number slots")
+
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+
+    assertEqual(inst.mocks.GameTooltip:GetMinimumWidth(), 0,
+        "our minimum width outlived our tooltip")
 end)
