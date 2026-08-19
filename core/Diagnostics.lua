@@ -320,6 +320,59 @@ local function reportTooltipFont()
 end
 
 -- ---------------------------------------------------------------------------
+-- Tooltip width — why the spell names and the amounts collide
+-- ---------------------------------------------------------------------------
+
+--- Report what the last tooltip build decided about its minimum width.
+---
+--- The tooltip lays out correctly out of combat and collides in it, while the
+--- offline harness computes the SAME minimum width in both states. So the
+--- divergence is somewhere only a live client can show, and this prints every
+--- step of the decision rather than the conclusion:
+---
+---   * how many spell lines offered a name, and how many were refused for being
+---     unreadable — a refused name does not widen anything, and enough of them
+---     leave `widestName` at 0 and the minimum unapplied;
+---   * whether the ruler MEASURED each name or fell back to the character
+---     estimate, which is the difference between exact and roughly-right;
+---   * what width was asked for, and what the tooltip actually became.
+---
+--- Run it in combat and out, and compare the two blocks.
+local function reportTooltipWidth()
+    out("|cff00ff00-- tooltip width --|r")
+
+    local Tip = NS.Tooltip
+    local p = Tip and Tip.__widthProbe
+    if not p then
+        out("  no sample yet — turn the debug flag on, then hover a cell with a")
+        out("  spell breakdown, then run this again.")
+        return
+    end
+
+    out(string.format("  lines offering a name: %s", tostring(p.lines or 0)))
+    out(string.format("    refused (unreadable): %s   nil: %s   not a string: %s",
+        tostring(p.refusedAccess or 0), tostring(p.nilText or 0),
+        tostring(p.notAString or 0)))
+    out(string.format("    measured on the ruler: %s   fell back to the estimate: %s",
+        tostring(p.measured or 0), tostring(p.estimated or 0)))
+    out(string.format("  last name: %q  len=%s  fontSize=%s  measured=%s",
+        tostring(p.lastText), tostring(p.lastLen), tostring(p.fontSize),
+        tostring(p.lastMeasured)))
+    out(string.format("  widestName=%s  minimum applied: %s  requested=%s",
+        tostring(p.widestName), tostring(p.applied), tostring(p.requested)))
+    out(string.format("  tooltip read back: width=%s  minWidth=%s",
+        tostring(p.actualWidth), tostring(p.readBackMin)))
+
+    if (p.refusedAccess or 0) > 0 then
+        out("  |cffff2020names were refused as unreadable|r — that is why the")
+        out("  tooltip is not being widened for them.")
+    elseif (p.estimated or 0) > 0 then
+        out("  |cffff2020the ruler could not measure|r — the estimate is in use, and")
+        out("  it runs short on a narrow font.")
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- Targets — where the enemy cross-reference stops
 -- ---------------------------------------------------------------------------
 
@@ -440,7 +493,8 @@ function Diagnostics.Report()
 
     for _, section in ipairs({
         reportAtlases, reportFormatter, reportVisibility, reportHeader,
-        reportNameColumn, reportCells, reportTooltipFont, reportTargets,
+        reportNameColumn, reportCells, reportTooltipFont, reportTooltipWidth,
+        reportTargets,
     }) do
         local ok, err = pcall(section)
         if not ok then out("  |cffff2020section failed:|r " .. tostring(err)) end

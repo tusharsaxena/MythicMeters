@@ -634,6 +634,15 @@ local fontedLines = {}
 --- the two that could revert it.
 Tooltip.__fontProbe = nil
 
+--- What the last tooltip build did about its minimum width, or nil.
+---
+--- Populated ONLY while the debug flag is on, and read by core/Diagnostics.lua.
+--- It exists because the tooltip renders correctly out of combat and mangled in
+--- it, while an offline harness measures the SAME minimum width in both states —
+--- so the divergence is somewhere only the live client can see, and two fixes
+--- shipped on reasoning alone have already missed it.
+Tooltip.__widthProbe = nil
+
 --- Give one tooltip line our font, and remember that we did.
 ---
 --- The record keeps the font PER LINE rather than one font for the hover,
@@ -786,11 +795,35 @@ end
 --- @param inset number  how far into the line this text starts
 local function noteNameWidth(text, style, inset)
     local Secrets = NS.Secrets
-    if text == nil then return end
-    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(text)) then return end
-    if type(text) ~= "string" then return end
+    local probe = State.debug and Tooltip.__widthProbe or nil
+    if probe then probe.lines = (probe.lines or 0) + 1 end
+
+    if text == nil then
+        if probe then probe.nilText = (probe.nilText or 0) + 1 end
+        return
+    end
+    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(text)) then
+        if probe then probe.refusedAccess = (probe.refusedAccess or 0) + 1 end
+        return
+    end
+    if type(text) ~= "string" then
+        if probe then probe.notAString = (probe.notAString or 0) + 1 end
+        return
+    end
 
     local measured = measureText(text, style.fontPath, style.fontSize, style.fontFlags)
+    if probe then
+        if measured then
+            probe.measured = (probe.measured or 0) + 1
+            probe.lastMeasured = measured
+        else
+            probe.estimated = (probe.estimated or 0) + 1
+        end
+        probe.lastText = text
+        probe.lastLen  = #text
+        probe.fontSize = style.fontSize
+    end
+
     local w = (measured or (#text * (style.fontSize or 12) * NAME_WIDTH_PER_CHAR))
         + (inset or 0)
     if w > widestName then widestName = w end
@@ -933,10 +966,34 @@ end
 --- amount. Rule R3 is about widgets that HAVE held one — and note this is
 --- deliberately not read off our own amount slot, which has.
 local function applyMinimumWidth()
-    if widestName <= 0 then return end
-    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then return end
-    GameTooltip:SetMinimumWidth(widestName + NAME_GAP + AMOUNT_SLOT_WIDTH
-        + SLOT_GAP + SHARE_SLOT_WIDTH + TOOLTIP_H_PADDING)
+    local probe = State.debug and Tooltip.__widthProbe or nil
+    if probe then probe.widestName = widestName end
+
+    if widestName <= 0 then
+        if probe then probe.applied = "no — widestName is 0" end
+        return
+    end
+    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then
+        if probe then probe.applied = "no — SetMinimumWidth is absent" end
+        return
+    end
+
+    local want = widestName + NAME_GAP + AMOUNT_SLOT_WIDTH
+        + SLOT_GAP + SHARE_SLOT_WIDTH + TOOLTIP_H_PADDING
+    GameTooltip:SetMinimumWidth(want)
+
+    if probe then
+        probe.requested = want
+        probe.applied = "yes"
+        -- What the tooltip ACTUALLY ended up as, read back under pcall: it is a
+        -- Blizzard frame and this read is exactly the one that is not allowed on
+        -- the render path. Here it is the answer we are after, and a refusal is
+        -- itself the finding.
+        local ok, got = pcall(GameTooltip.GetWidth, GameTooltip)
+        probe.actualWidth = ok and got or "<refused>"
+        local ok2, got2 = pcall(GameTooltip.GetMinimumWidth, GameTooltip)
+        probe.readBackMin = ok2 and got2 or "<refused>"
+    end
 end
 
 --- Everything a line needs to draw itself, resolved ONCE per hover.
@@ -1334,6 +1391,7 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     -- and re-anchored, so a stale one would otherwise sit behind a tooltip line it
     -- no longer describes.
     releaseLines()
+    if State.debug then Tooltip.__widthProbe = {} end
     if not openTooltip(anchorFrame, config) then return end
 
     local stat = Const.STAT_BY_KEY[statKey]
