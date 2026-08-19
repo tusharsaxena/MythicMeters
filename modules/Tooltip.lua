@@ -741,13 +741,58 @@ end
 --- @param text any     a caption, possibly secret, possibly nil
 --- @param style table   the resolved line style, for its font size
 --- @param inset number  how far into the line this text starts
+--- A hidden FontString kept solely to measure text, OUTSIDE GameTooltip.
+---
+--- WHY A RULER RATHER THAN THE LINE ITSELF. Measuring GameTooltip's own line is
+--- what raised "attempt to compare a secret number": tainted code may not read
+--- geometry inside a shared Blizzard frame, whatever is in it. Estimating from a
+--- character count instead avoided the raise and introduced a subtler bug — a
+--- proportional font is not a fixed number of pixels per character, the estimate
+--- ran short on a narrow face, and the names overran the fixed amount slot.
+---
+--- This is the third answer and it is exact. The ruler is OURS: created without
+--- a parent, never placed inside the tooltip, and never handed a meter value —
+--- only a plain caption. So `GetStringWidth` on it is an ordinary read of an
+--- ordinary widget, and rule R3 is untouched because nothing secret has ever
+--- reached it.
+local ruler = nil
+
+local function measureText(text, path, size, flags)
+    if not ruler then
+        local host = CreateFrame("Frame")
+        host:Hide()
+        ruler = host:CreateFontString(nil, "OVERLAY")
+    end
+    if not ruler.SetFont then return nil end
+    ruler:SetFont(path, size, flags)
+    ruler:SetText(text)
+    local ok, w = pcall(ruler.GetStringWidth, ruler)
+    if not ok or type(w) ~= "number" then return nil end
+    return w
+end
+
+--- Widen the tooltip for one line's name, measured on the ruler above.
+---
+--- The caption is checked accessible before it is measured or counted: `#` on a
+--- secret raises, and a target's name comes off the enemy column where it can be
+--- one. An unreadable name simply does not widen the tooltip — the section is
+--- still drawn, it is just sized from the lines whose names could be read.
+---
+--- The character estimate survives as a FALLBACK for a client that refuses the
+--- measurement. It is known to run short, which is why it is second.
+---
+--- @param text any     a caption, possibly secret, possibly nil
+--- @param style table   the resolved line style, for its font
+--- @param inset number  how far into the line this text starts
 local function noteNameWidth(text, style, inset)
     local Secrets = NS.Secrets
     if text == nil then return end
     if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(text)) then return end
     if type(text) ~= "string" then return end
 
-    local w = #text * (style.fontSize or 12) * NAME_WIDTH_PER_CHAR + (inset or 0)
+    local measured = measureText(text, style.fontPath, style.fontSize, style.fontFlags)
+    local w = (measured or (#text * (style.fontSize or 12) * NAME_WIDTH_PER_CHAR))
+        + (inset or 0)
     if w > widestName then widestName = w end
 end
 

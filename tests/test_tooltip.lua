@@ -1313,3 +1313,38 @@ test("A name that cannot be read simply does not widen the tooltip", function()
     end)
     assertTrue(ok, "a secret name raised inside the width estimate: " .. tostring(err))
 end)
+
+test("The name's room is MEASURED, not estimated from a character count", function()
+    -- TWO BUGS IN ONE ASSERTION, and it has to be exact to catch either.
+    --
+    -- Measuring GameTooltip's own line raised "attempt to compare a secret
+    -- number" — tainted code may not read geometry inside a shared Blizzard
+    -- frame. Estimating from a character count instead avoided the raise and
+    -- introduced a subtler failure: a proportional font is not a fixed number of
+    -- pixels per character, the estimate ran short, and the names overran the
+    -- fixed amount slot. That is what "all mangled up" looked like on screen.
+    --
+    -- So the width is measured on a ruler FontString of our own, outside the
+    -- tooltip. The mock measures at 0.5px per character per point and the old
+    -- estimate used 0.55, so asserting the EXACT figure fails if the code falls
+    -- back to the estimate — and also if the ruler is parented into GameTooltip,
+    -- since the measurement then answers a secret and the estimate takes over.
+    -- red under: either regression.
+    local SIZE = 10
+    local inst, cfg, anchor = bench{
+        detail = { combatSpells = { { spellID = 101, totalAmount = 655000 } },
+                   maxAmount = 655000, totalAmount = 655000 },
+        configure = function(c) c.tooltip.fontSize = SIZE end,
+    }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    -- The caption is the spell NAME; the icon escape is not measured with it.
+    local caption = "Mock Spell 101"
+    local measured = #caption * SIZE * 0.5      -- the mock's ruler
+    local expected = measured + 14              -- BAR_INSET_LEFT
+        + 10 + 66 + 6 + 36 + 20                 -- name gap, amount, gap, share, padding
+
+    assertEqual(inst.mocks.GameTooltip:GetMinimumWidth(), expected,
+        "the width was estimated rather than measured, so long names overlap the amount")
+end)
+

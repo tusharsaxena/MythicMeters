@@ -472,7 +472,12 @@ function FRAME.GetStringWidth(self)
     if inheritsSecret(self) then return secret(#(tostring(self.__text or "")) * 6) end
     local t = self.__text
     if type(t) ~= "string" then return 0 end
-    return #t * 6
+    -- SCALED BY THE FONT SIZE, because a real one is. A flat pixels-per-character
+    -- made every measurement size-blind, so code that measured text at the
+    -- configured size looked identical to code that ignored the setting — and
+    -- the addon's tooltip width is exactly that code.
+    local size = (self.__font and self.__font.size) or 12
+    return #t * size * 0.5
 end
 function FRAME.SetFormattedText(self, fmt, ...)
     if self.__objectType == "FontString" and not (self.__font or self.__template) then
