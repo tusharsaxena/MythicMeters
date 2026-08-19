@@ -251,7 +251,7 @@ held a secret value.
 64 rather than literally unbounded — the "and N more" line stays honest about anything past it.
 
 `showTargets` is off by default for two separate reasons: it costs one provider call per enemy on a
-hover and keeps no cache, and it is a **summation**, so it is absent for the whole of a pull rather
+hover to build (cached per session afterwards), and it is a **summation**, so it is absent for the whole of a pull rather
 than approximated ([data-flow.md §9](data-flow.md)).
 
 `hideInCombat` is a **preference, not a guard**: a tooltip's numbers go through the formatter like

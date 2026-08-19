@@ -546,11 +546,31 @@ An unreadable *caster name* is different and is skipped rather than fatal — a 
 attributed to belongs to nobody rather than to everybody, so dropping it costs one spell's
 contribution instead of corrupting a number that is still on screen.
 
-**No cache, and that is deliberate.** A cache here would hold meter values across time, which is the
-one thing this addon does not do. The cost is paid by the caller instead: the section is off by
-default, drawn on the Damage column only, capped at ten entries and bounded at 64 enemies, and it
-runs on a *hover* rather than on the refresh tick. Its own perf bucket, `targets`, is nested under
-`tooltip` so that cost stays separable.
+**One walk builds every player, and the result is cached.** The walk visits every spell of every
+enemy regardless; answering for a single player then discards every other caster — 100% of the work
+for a fifth of the result in a party, a twentieth in a raid. So `buildMap` keeps them all and
+`ForPlayer` is a lookup with a per-call trim. Measured offline against this repo: a hover is `1 + E`
+provider calls (24 at 23 enemies, 65 at `ENEMY_LIMIT`) against **9 for a full 20-player, 7-column
+refresh** — and a cursor swept down a five-row Damage column fell from 120 meter calls to 24.
+
+The cache lives in `State.Cache("Targets")`, keyed on `(sessionType, sessionID)`. **Why that is
+legal here** when the addon does not hold meter values across time, and both halves are specific to
+this file rather than general permission: the section refuses to compute mid-pull at all, so the
+session it caches is one nothing is writing to; and what it stores is *our own sum* of numbers
+already proven readable — a plain Lua number, never an opaque handle.
+
+**Invalidation is wider than `modules/Aggregator.lua`'s, and has to be.** The key is the session's
+*identity*, and for the live Current or Overall session that identity never changes while its
+contents do — so identity alone cannot detect staleness. Four messages do: `METER_RESET`,
+`METER_SESSION`, `METER_UPDATED` and `PROFILE_CHANGED`. `METER_UPDATED` is the one that closes the
+hole; without it a map built after one fight would still be showing after the next. It fires only
+while fighting, when no map can exist anyway, so subscribing costs two nil assignments a tick.
+Over-invalidating costs a rebuild; under-invalidating shows the previous pull's numbers under this
+pull's heading, and looks entirely correct.
+
+A refusal is never stored, and could not pin the section shut even if it were: a nil map is
+re-derived on the next call, because the cache lookup answers nil for "no key" and "key present, map
+nil" alike.
 
 ## Where the guards live
 

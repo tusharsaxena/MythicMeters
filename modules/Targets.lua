@@ -39,15 +39,37 @@
 -- the player cannot see.
 --
 -- ---------------------------------------------------------------------------
--- WHY THERE IS NO CACHE
+-- ONE WALK BUILDS EVERY PLAYER, AND IT IS CACHED
 -- ---------------------------------------------------------------------------
 --
--- A cache here would hold meter values across time, which is the one thing this
--- addon does not do (see modules/Tooltip.lua's note on the per-stat reads). The
--- cost is paid instead by the caller: the section is OFF by default, it is drawn
--- on the Damage column only, and it runs on a hover rather than on the refresh
--- tick. A hover is a human action a few times a minute; the refresh is four
--- times a second.
+-- The walk above visits every spell of every enemy. Answering for ONE player
+-- then throws away every caster but the hovered one — 100% of the work for about
+-- a fifth of the result in a five-player group, and a twentieth in a raid. So it
+-- builds the WHOLE map, every player at once, and `ForPlayer` is a lookup into
+-- it. The marginal cost of keeping the other players is a table write per spell;
+-- the saving is a complete re-walk per hovered row.
+--
+-- Measured offline against this repo: a hover is `1 + E` provider calls — 24 at
+-- 23 enemies, 65 at ENEMY_LIMIT — against **9 calls for a full 20-player,
+-- 7-column refresh**. Sweeping a cursor down a five-row Damage column cost 120
+-- meter calls before this and costs 24 after.
+--
+-- WHY A CACHE IS LEGAL HERE, when this addon does not hold meter values across
+-- time. Two reasons, and both are specific to this file rather than general
+-- permission:
+--
+--   * this section REFUSES to compute mid-pull at all (see above), so the
+--     session it caches is one nothing is writing to — there is no time for the
+--     answer to drift across;
+--   * what is stored is not a meter value. It is OUR OWN SUM of numbers already
+--     proven readable, a plain Lua number in a plain table. No opaque handle is
+--     retained, so nothing here can go stale in the way a held `totalAmount`
+--     would.
+--
+-- The cost accepted in exchange is a staleness failure mode that did not exist
+-- before: get the invalidation wrong and a player sees the PREVIOUS pull's
+-- targets, which looks entirely correct. That is why the key is the session's
+-- own identity and why the bus subscription below is not optional.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS FILE MAY TOUCH
@@ -64,6 +86,7 @@ local Targets = {}
 NS.Targets = Targets
 
 local Const = NS.Constants
+local State = NS.State
 
 -- Load-time upvalue, never an NS lookup in the loop (performance-§2).
 local Perf = NS.Perf or {}
@@ -80,6 +103,34 @@ local ENEMY_STAT = "EnemyDamageTaken"
 --- answer the player would have seen — it only stops a pathological session from
 --- turning a hover into a stall.
 local ENEMY_LIMIT = 64
+
+--- The built map, and the session it was built from.
+---
+--- In `State.Cache` rather than a file-local table so it is wiped by the same
+--- machinery every other cache here is: core/MythicMeters.lua wipes the lot on
+--- the events that invalidate everything, and the bus subscription at the foot
+--- of this file wipes this one on the two that invalidate only it.
+---
+--- Shape: `cache.key` is the session identity the map was built from, and
+--- `cache.map` is `{ [bareName] = { { name, total }, ... } }`, each list already
+--- ordered biggest-first. A nil `map` with a live `key` is a build that was
+--- REFUSED, and it is deliberately not cached — see `buildMap`.
+local cache = State.Cache("Targets")
+
+--- The identity of the session a map belongs to.
+---
+--- Both halves matter. `sessionType` separates Current from Overall, and
+--- `sessionID` separates one stored segment from another — a player flipping
+--- between two past fights in the header dropdown must not be shown the first
+--- one's targets under the second one's name.
+local function cacheKey(sessionType, sessionID)
+    return tostring(sessionType) .. "|" .. tostring(sessionID)
+end
+
+--- Drop the built map. Wired to the bus at the foot of this file.
+function Targets.Invalidate()
+    cache.key, cache.map = nil, nil
+end
 
 --- modules/Provider.lua, or nil. Resolved at call time for the same reason
 --- modules/Tooltip.lua does it: modules/ load in TOC order and this file cannot
@@ -158,7 +209,7 @@ local function casterName(spell)
     return bareName(name)
 end
 
---- Add one enemy's contribution from `player` into `totals`, or answer false.
+--- Fold one enemy's spells into the per-player totals, or answer false.
 ---
 --- FALSE MEANS ABANDON THE WHOLE BUILD, not "skip this enemy". An amount this
 --- context may not read is the restriction being active, and the restriction is
@@ -166,12 +217,16 @@ end
 --- whichever rows happened to be readable, which is the under-reporting this
 --- file exists to refuse.
 ---
---- @param source table   one enemy's GetSourceDetail result
---- @param player string  the name being asked about
---- @param key any        this enemy's key in `totals`
---- @param totals table
+--- EVERY caster is kept, not just one. The walk visits each spell either way;
+--- filtering to a single player here is what made a five-row column sweep cost
+--- five identical walks. `byPlayer[name][key]` is one table write more per spell
+--- and it is what the cache is built out of.
+---
+--- @param source table    one enemy's GetSourceDetail result
+--- @param key any         this enemy's key, unique across the walk
+--- @param byPlayer table  bareName -> { [enemyKey] = total }
 --- @return boolean  whether the walk may continue
-local function accumulateEnemy(source, player, key, totals)
+local function accumulateEnemy(source, key, byPlayer)
     local Secrets = NS.Secrets
     if not (Secrets and Secrets.SafeIterate) then return false end
 
@@ -179,7 +234,9 @@ local function accumulateEnemy(source, player, key, totals)
     Secrets.SafeIterate(source.combatSpells, function(_, spell)
         if type(spell) ~= "table" then return end
         if not Secrets.CanAccessTable(spell) then return end
-        if casterName(spell) ~= player then return end
+
+        local caster = casterName(spell)
+        if caster == nil then return end
 
         local amount = spell.totalAmount
         if amount == nil then return end
@@ -189,40 +246,32 @@ local function accumulateEnemy(source, player, key, totals)
             return false
         end
 
+        local totals = byPlayer[caster]
+        if totals == nil then
+            totals = {}
+            byPlayer[caster] = totals
+        end
         totals[key] = (totals[key] or 0) + amount
     end)
 
     return ok
 end
 
---- Every enemy `player` damaged, biggest first, or nil.
+--- Every player's target list for one session, built in a single walk.
 ---
---- Nil is returned for all of "no provider", "no enemy column", "this player hit
---- nothing", and "the values may not be read" — deliberately one answer, because
---- the caller does the same thing with all four: draws no section. The
---- difference between them is not something a tooltip can usefully say.
+--- Answers nil for all of "no provider", "no enemy column" and "the values may
+--- not be read" — and a nil is NOT cached. Caching a refusal would pin the
+--- section shut for the rest of the session: the next hover would find a live
+--- cache key, read a nil map, and never retry once the restriction lifted.
 ---
---- @param window table|nil  the window config, for its session
---- @param player any        the hovered row's name
---- @param limit number|nil  how many entries to keep
---- @return table|nil  array of { name = string, total = number }, descending
-function Targets.ForPlayer(window, player, limit)
-    local t0 = Perf.on and debugprofilestop()
-
+--- @param sessionType number
+--- @param sessionID number|nil
+--- @return table|nil  { [bareName] = { { name, total }, ... } }, ordered
+local function buildMap(sessionType, sessionID)
     local Secrets = NS.Secrets
-    -- The hovered name is ConditionalSecret too, and it is what every spell row
-    -- is matched against — so an unreadable one means there is no comparison to
-    -- make, which is the same nil as everything else.
-    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(player)) then return nil end
-    if type(player) ~= "string" or player == "" then return nil end
-    -- Both sides go through the same normalizer, so it does not matter which of
-    -- them carried a realm.
-    player = bareName(player)
-
     local P = provider()
     if not (P and P.GetColumn and P.GetSourceDetail) then return nil end
 
-    local sessionType, sessionID = sessionTypeOf(window), sessionIDOf(window)
     local column = P:GetColumn(sessionType, ENEMY_STAT, sessionID)
     if type(column) ~= "table" or type(column.sources) ~= "table" then return nil end
 
@@ -230,7 +279,7 @@ function Targets.ForPlayer(window, player, limit)
     -- GUID is secret and inaccessible for the whole of a pull (docs/data-flow.md
     -- §2), so keying on one raises. The index is ours, it is plain, and it is
     -- unique across the walk — which is everything a key here has to be.
-    local totals, names = {}, {}
+    local byPlayer, names = {}, {}
     local walked = 0
 
     for index = 1, #column.sources do
@@ -254,7 +303,7 @@ function Targets.ForPlayer(window, player, limit)
             if type(source) == "table" then
                 walked = walked + 1
                 names[index] = enemy.name
-                if not accumulateEnemy(source, player, index, totals) then
+                if not accumulateEnemy(source, index, byPlayer) then
                     -- Restricted. Abandon everything rather than return a
                     -- partial sum: see this file's header.
                     return nil
@@ -263,20 +312,90 @@ function Targets.ForPlayer(window, player, limit)
         end
     end
 
-    local list = {}
-    for index, total in pairs(totals) do
-        if total > 0 then
-            list[#list + 1] = { name = names[index], total = total }
+    -- Each player's enemy map becomes an ordered array once, here, rather than
+    -- on every hover. Sorting is legal without asking: every amount was checked
+    -- accessible on the way in, and these are our own sums.
+    local map = {}
+    for player, totals in pairs(byPlayer) do
+        local list = {}
+        for index, total in pairs(totals) do
+            if total > 0 then
+                list[#list + 1] = { name = names[index], total = total }
+            end
+        end
+        if #list > 0 then
+            table.sort(list, function(a, b) return a.total > b.total end)
+            map[player] = list
         end
     end
-    if #list == 0 then return nil end
 
-    -- Legal without asking: every amount in `totals` was checked accessible on
-    -- the way in, and these are our own sums rather than meter values.
-    table.sort(list, function(a, b) return a.total > b.total end)
+    return map
+end
 
-    local cap = (type(limit) == "number" and limit >= 1) and limit or #list
-    for i = #list, cap + 1, -1 do list[i] = nil end
+--- Every enemy `player` damaged, biggest first, or nil.
+---
+--- Nil is returned for all of "no provider", "no enemy column", "this player hit
+--- nothing", and "the values may not be read" — deliberately one answer, because
+--- the caller does the same thing with all four: draws no section. The
+--- difference between them is not something a tooltip can usefully say.
+---
+--- The map is built on the first hover of a session and reused by every hover
+--- after it. Only the TRIM is per-call, so two windows with different
+--- `maxTargets` share one build.
+---
+--- @param window table|nil  the window config, for its session
+--- @param player any        the hovered row's name
+--- @param limit number|nil  how many entries to keep
+--- @return table|nil  array of { name = string, total = number }, descending
+function Targets.ForPlayer(window, player, limit)
+    local t0 = Perf.on and debugprofilestop()
+
+    local Secrets = NS.Secrets
+    -- The hovered name is ConditionalSecret too, and it is what every spell row
+    -- is matched against — so an unreadable one means there is no comparison to
+    -- make, which is the same nil as everything else.
+    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(player)) then return nil end
+    if type(player) ~= "string" or player == "" then return nil end
+    -- Both sides go through the same normalizer, so it does not matter which of
+    -- them carried a realm.
+    player = bareName(player)
+
+    local sessionType, sessionID = sessionTypeOf(window), sessionIDOf(window)
+    local key = cacheKey(sessionType, sessionID)
+
+    local map = (cache.key == key) and cache.map or nil
+    if map == nil then
+        map = buildMap(sessionType, sessionID)
+        -- A REFUSED build stores nothing and returns early.
+        --
+        -- Note what is actually load-bearing here, because it is not this
+        -- branch: a nil map is re-derived on the very next call regardless,
+        -- since the lookup above answers nil for "no key" and "key present,
+        -- map nil" alike. So the section cannot be pinned shut by a refusal
+        -- even if the nil WERE stored. This early return is the cheaper spelling
+        -- of the same thing, not the guarantee — the guarantee is the recheck.
+        if map == nil then
+            if t0 then Perf.Note("targets", debugprofilestop() - t0) end
+            return nil
+        end
+        cache.key, cache.map = key, map
+    end
+
+    local built = map[player]
+    if built == nil or #built == 0 then
+        if t0 then Perf.Note("targets", debugprofilestop() - t0) end
+        return nil
+    end
+
+    -- A COPY, always. The cached list outlives this call and is handed to every
+    -- later hover of the same player, so trimming it in place would make the
+    -- first hover at a cap of three permanently delete the fourth target for
+    -- every window and every cap after it.
+    local cap = (type(limit) == "number" and limit >= 1) and limit or #built
+    if cap > #built then cap = #built end
+
+    local list = {}
+    for i = 1, cap do list[i] = built[i] end
 
     if t0 then Perf.Note("targets", debugprofilestop() - t0) end
     return list
@@ -295,4 +414,45 @@ function Targets.Total(list)
     local total = 0
     for i = 1, #list do total = total + list[i].total end
     return total
+end
+
+-- ---------------------------------------------------------------------------
+-- Invalidation
+-- ---------------------------------------------------------------------------
+--
+-- A PRIVATE bus target, not the shared addon object. CallbackHandler keys
+-- callbacks by (message, target), so two receivers of one message registered on
+-- the same object silently clobber each other and only the last one ever fires
+-- (architecture-§4, anti-pattern #32). This module has no lifecycle and is not
+-- an AceAddon module, so it owns a target rather than being one — the same shape
+-- modules/Format.lua uses for the same reason.
+--
+-- FOUR messages, and the list is deliberately wider than the one
+-- modules/Aggregator.lua uses. The cache key is the session's IDENTITY —
+-- `(sessionType, sessionID)` — and for the live Current or Overall session that
+-- identity never changes while its CONTENTS do. So identity alone cannot detect
+-- staleness, and the events have to.
+--
+--   * METER_RESET     — the session it was summed from is gone.
+--   * METER_SESSION   — a session boundary moved; a stored segment is not the
+--                       one this map describes.
+--   * METER_UPDATED   — the current session ticked, so anything summed from it
+--                       is now short. This fires throughout a pull and is the
+--                       one that closes the hole: without it, a map built after
+--                       one fight would still be showing after the next.
+--   * PROFILE_CHANGED — a profile swap can move the window onto a different
+--                       session entirely.
+--
+-- Subscribing to METER_UPDATED costs two nil assignments per tick and only while
+-- fighting, when no map can exist anyway — the build refuses while restricted.
+-- Over-invalidating costs a rebuild; under-invalidating shows a player the
+-- previous pull's numbers under this pull's heading, which looks entirely
+-- correct. That trade is not close.
+local bus = NS.NewBusTarget and NS.NewBusTarget()
+if bus then
+    local MSG = Const.MSG
+    bus:RegisterMessage(MSG.METER_RESET,     Targets.Invalidate)
+    bus:RegisterMessage(MSG.METER_SESSION,   Targets.Invalidate)
+    bus:RegisterMessage(MSG.METER_UPDATED,   Targets.Invalidate)
+    bus:RegisterMessage(MSG.PROFILE_CHANGED, Targets.Invalidate)
 end

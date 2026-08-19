@@ -371,3 +371,175 @@ test("Targets: two casters differing only by realm are still told apart by name"
     local list = inst.NS.Targets.ForPlayer(cfg, "Helya", 5)
     assertEqual(list[1].total, 400, "same-name cross-realm casters are merged, as documented")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The cache
+-- ---------------------------------------------------------------------------
+--
+-- The cache is the one thing here that can be wrong in a way the player cannot
+-- see: a stale map shows the PREVIOUS pull's numbers under this pull's heading
+-- and looks entirely correct. So these cases are about invalidation far more
+-- than they are about speed.
+
+--- How many meter reads a call made.
+local function meterCalls(inst)
+    local n = 0
+    for _, v in pairs(inst.mocks.__meter.calls) do n = n + v end
+    return n
+end
+
+test("Targets: one walk answers for every player, not just the hovered one", function()
+    -- The walk visits every spell of every enemy either way. Answering for one
+    -- player and discarding the rest was 100% of the work for a fifth of the
+    -- result — a five-row column sweep cost five identical walks.
+    -- red under: filtering to the hovered player inside accumulateEnemy.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = {
+            { caster = "Alpha", amount = 500 },
+            { caster = "Beta",  amount = 300 },
+        } },
+    }
+
+    inst.mocks.resetMeterCalls()
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 500)
+    local first = meterCalls(inst)
+    assertTrue(first > 0, "the first hover read nothing at all")
+
+    -- A DIFFERENT player, off the same build.
+    inst.mocks.resetMeterCalls()
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Beta", 5)[1].total, 300)
+    assertEqual(meterCalls(inst), 0, "hovering a second player re-walked the whole column")
+end)
+
+test("Targets: a second hover of the same player reads nothing", function()
+    -- red under: rebuilding per call.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }
+    inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)
+    inst.mocks.resetMeterCalls()
+    inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)
+    assertEqual(meterCalls(inst), 0, "the cached map was not reused")
+end)
+
+test("Targets: the cap is applied to a COPY, never to the cached list", function()
+    -- THE ONE THAT BITES SILENTLY. The cached list outlives the call and is
+    -- handed to every later hover, so trimming it in place would make the first
+    -- hover at a cap of one permanently delete every other target — for every
+    -- window and every cap afterwards.
+    -- red under: `for i = #list, cap + 1, -1 do list[i] = nil end` on the cached list.
+    local inst, cfg = bench{
+        { name = "Big",    hits = { { caster = "Alpha", amount = 900 } } },
+        { name = "Medium", hits = { { caster = "Alpha", amount = 400 } } },
+        { name = "Small",  hits = { { caster = "Alpha", amount = 100 } } },
+    }
+
+    assertEqual(#inst.NS.Targets.ForPlayer(cfg, "Alpha", 1), 1, "the cap was not applied")
+    assertEqual(#inst.NS.Targets.ForPlayer(cfg, "Alpha", 3), 3,
+        "a narrow cap on one hover truncated the cache for every hover after it")
+end)
+
+test("Targets: a refusal does not pin the section shut for the session", function()
+    -- The property that matters to a player: hovering mid-pull gets nothing, and
+    -- hovering again once the restriction lifts gets the real list. Worth a test
+    -- even though it holds STRUCTURALLY rather than by a guard — the nil map is
+    -- re-derived on the next call because the cache lookup answers nil for "no
+    -- key" and for "key present, map nil" alike.
+    -- red under: an early `return` on a cached nil, or a `map` sentinel that
+    -- reads as present.
+    local inst, cfg = bench{
+        { name = "Readable",   hits = { { caster = "Alpha", amount = 500 } } },
+        { name = "Restricted", hits = { { caster = "Alpha", amount = 700 } } },
+    }
+    local mocks = inst.mocks
+    local detail = enemyDetail{ { caster = "Alpha", amount = 700 } }
+    detail.combatSpells[1].totalAmount = mocks.secret(700)
+    for _, key in ipairs({ "Creature-0-0000-0-0-0002", "creature:6002" }) do
+        mocks.setSourceDetail(CURRENT, mocks.Enum.DamageMeterType.EnemyDamageTaken, key, detail)
+    end
+
+    mocks.setRestricted(true)
+    mocks.setSecretValues(false)
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5), nil, "the refusal did not happen")
+
+    -- The restriction lifts. The section must come back WITHOUT anything else
+    -- having to invalidate on its behalf.
+    mocks.setRestricted(false)
+    for _, key in ipairs({ "Creature-0-0000-0-0-0002", "creature:6002" }) do
+        mocks.setSourceDetail(CURRENT, mocks.Enum.DamageMeterType.EnemyDamageTaken, key,
+            enemyDetail{ { caster = "Alpha", amount = 700 } })
+    end
+
+    local list = inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)
+    assertTrue(list ~= nil, "the section stayed shut after the restriction lifted")
+    assertEqual(list[1].total, 700)
+end)
+
+test("Targets: a new session's numbers replace the old ones", function()
+    -- THE STALENESS FAILURE THE CACHE INTRODUCES. The key is the session's
+    -- IDENTITY, and for the live Current or Overall session that identity never
+    -- changes while its CONTENTS do — so identity alone cannot detect this and
+    -- the bus has to. Without it a map built after one fight keeps showing after
+    -- the next, which looks entirely correct.
+    -- red under: dropping METER_UPDATED / METER_SESSION from the subscriptions.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 500)
+
+    -- The next pull lands on the same session identity.
+    local mocks = inst.mocks
+    for _, key in ipairs({ "Creature-0-0000-0-0-0001", "creature:6001" }) do
+        mocks.setSourceDetail(CURRENT, mocks.Enum.DamageMeterType.EnemyDamageTaken, key,
+            enemyDetail{ { caster = "Alpha", amount = 9000 } })
+    end
+
+    inst.NS.Targets.Invalidate()
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 9000,
+        "the map outlived the numbers it was summed from")
+end)
+
+test("Targets: the invalidating messages are actually subscribed", function()
+    -- Invalidate() being correct is worth nothing if nothing calls it. This
+    -- asserts the wiring rather than the function.
+    -- red under: dropping any RegisterMessage at the foot of the file.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }
+    local MSG = inst.NS.Constants.MSG
+
+    for _, message in ipairs({ MSG.METER_RESET, MSG.METER_SESSION,
+                               MSG.METER_UPDATED, MSG.PROFILE_CHANGED }) do
+        assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 500)
+        inst.mocks.resetMeterCalls()
+        inst.NS.SendMessage(inst.NS, message, {})
+        inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)
+        assertTrue(meterCalls(inst) > 0,
+            message .. " did not invalidate the cached map")
+    end
+end)
+
+test("Targets: two sessions do not share a map", function()
+    -- A player flipping between two stored segments in the header dropdown must
+    -- not be shown the first one's targets under the second one's name.
+    -- red under: a cache key that ignores sessionID.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 500)
+
+    -- Same session TYPE, a different stored segment, with different numbers.
+    local mocks = inst.mocks
+    local ENEMY = mocks.Enum.DamageMeterType.EnemyDamageTaken
+    local guid = "Creature-0-0000-0-0-0001"
+    mocks.setSession(77, ENEMY, { combatSources = {
+        { sourceGUID = guid, guid = guid, sourceCreatureID = 6001,
+          name = "Gulkat", totalAmount = 1 } }, maxAmount = 1, totalAmount = 1 })
+    for _, key in ipairs({ guid, "creature:6001" }) do
+        mocks.setSourceDetail(77, ENEMY, key, enemyDetail{ { caster = "Alpha", amount = 4242 } })
+    end
+
+    cfg.data.sessionID = 77
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)[1].total, 4242,
+        "a second segment was served the first segment's map")
+end)

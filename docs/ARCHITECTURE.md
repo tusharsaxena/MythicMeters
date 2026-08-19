@@ -109,14 +109,14 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 
 | Message | Sender | Consumers | Payload |
 |---|---|---|---|
-| `METER_UPDATED` | `core/MythicMeters.lua` | every `Window` | — |
-| `METER_SESSION` | `core/MythicMeters.lua` | `Provider`, every `Window` | `{ type, sessionID }` |
-| `METER_RESET` | `core/MythicMeters.lua`, and `Provider.Reset` for the manual path | `Provider`, `Aggregator`, `DrillDown`, every `Window` | — |
+| `METER_UPDATED` | `core/MythicMeters.lua` | `Targets`, every `Window` | — |
+| `METER_SESSION` | `core/MythicMeters.lua` | `Provider`, `Targets`, every `Window` | `{ type, sessionID }` |
+| `METER_RESET` | `core/MythicMeters.lua`, and `Provider.Reset` for the manual path | `Provider`, `Aggregator`, `Targets`, `DrillDown`, every `Window` | — |
 | `ROSTER_CHANGED` | `core/MythicMeters.lua` | `Roster`, `Visibility`, every `Window` | — |
 | `ZONE_CHANGED` | `core/MythicMeters.lua` | `Visibility`, every `Window` | — |
 | `ENTERING_WORLD` | `core/MythicMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
 | `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | every `Window` | `{ type, state }` |
-| `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
+| `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `Targets`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
 | `PREVIEW_CHANGED` | `core/State.lua` (`State.SetTestMode`) | `Roster`, every `Window` | `{ enabled }` |
@@ -356,7 +356,7 @@ and a fallback nobody can run is a fallback nobody has tested.
   enemy's matching spells, and a sum of secrets raises. Summing only the readable rows would show a
   number that is wrong, plausible and invisibly low. So `modules/Targets.lua` refuses the entire
   build on the first unreadable amount. It is also off by default and Damage-column only, because it
-  costs one provider call per enemy on a hover and keeps no cache. See
+  costs one provider call per enemy on the first hover of a session. See
   [data-flow.md §9](data-flow.md).
 - **`provider` sort mode rests on an unverified assumption** — that `combatSources` arrives sorted by
   the requested statistic. Isolated in `modules/Provider.lua`; `value` and `roster` do not depend on

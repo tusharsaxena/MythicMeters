@@ -604,7 +604,7 @@ badge and any count quoted in the docs must agree with it.
 - Clicking a stat cell routes to the drill-down; the name cell does not
 - A cell with no entry does nothing under the cursor
 
-### test_targets.lua (15)
+### test_targets.lua (22)
 
 - Targets: a player's enemies are recovered from the enemy column
 - Targets: one enemy's several spells are summed into one line
@@ -621,6 +621,13 @@ badge and any count quoted in the docs must agree with it.
 - Targets: a cross-realm caster still matches the row it belongs to
 - Targets: a realm-qualified ROW name matches a bare caster
 - Targets: two casters differing only by realm are still told apart by name
+- Targets: one walk answers for every player, not just the hovered one
+- Targets: a second hover of the same player reads nothing
+- Targets: the cap is applied to a COPY, never to the cached list
+- Targets: a refusal does not pin the section shut for the session
+- Targets: a new session's numbers replace the old ones
+- Targets: the invalidating messages are actually subscribed
+- Targets: two sessions do not share a map
 
 ### test_tooltip.lua (55)
 
@@ -978,7 +985,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator_sort.lua | 16 |
 | test_window.lua | 68 |
 | test_row.lua | 44 |
-| test_targets.lua | 15 |
+| test_targets.lua | 22 |
 | test_tooltip.lua | 55 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
@@ -990,4 +997,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **848** |
+| **Total** | **855** |

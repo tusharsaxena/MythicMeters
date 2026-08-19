@@ -948,7 +948,7 @@ NS.Schema = {
 
     -- OFF by default, and for two reasons that are worth stating separately.
     -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
-    -- no cache), and it is a SUMMATION — so it is absent for the whole of a pull
+    -- built once per session), and it is a SUMMATION — so it is absent for a pull
     -- rather than approximated. A player who wants it gets it; nobody pays for it
     -- without asking.
     {
