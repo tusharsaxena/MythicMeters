@@ -400,7 +400,8 @@ test("Database v2: every stored column is lifted to the one uniform width", func
         assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
             col.stat .. " kept its old per-stat width")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 2)
+    assertEqual(inst.NS.db.global.schemaVersion, 3,
+        "the walk must run all the way to the current version, not stop at v2")
 end)
 
 test("Database v2: the frame is widened to hold the new grid", function()
@@ -477,7 +478,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 2)
+    assertEqual(inst.NS.db.global.schemaVersion, 3)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -563,4 +564,61 @@ test("Database: a profile RESET re-seeds rather than leaving an empty registry",
     resetProfile(inst)
     assertEqual(seen.key, "Default", "the reset must name the active profile, not nil")
     assertEqual(#inst.NS.Database.GetWindows(), 1)
+end)
+
+-- ---------------------------------------------------------------------------
+-- v2 -> v3: the three row-icon toggles collapse into one
+-- ---------------------------------------------------------------------------
+
+--- A v2 account whose single window carries the three old icon flags.
+local function v2Icons(flags)
+    return preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 2,
+                windows = { { id = 1, icons = flags } },
+            },
+        },
+        global = { schemaVersion = 2 },
+    })
+end
+
+test("Database v3: ANY of the three old icon flags means the icon stays on", function()
+    -- Somebody running the ROLE icon alone had asked for an icon. Reading only
+    -- showClass would take it away from them without asking — the new slot
+    -- answers the same question better rather than withdrawing the answer.
+    -- red under: `icons.showIcon = icons.showClass`.
+    for _, flags in ipairs({
+        { showClass = true,  showSpec = false, showRole = false },
+        { showClass = false, showSpec = true,  showRole = false },
+        { showClass = false, showSpec = false, showRole = true  },
+    }) do
+        local inst = v2Icons(flags)
+        assertEqual(inst.NS.Database.FindWindow(1).icons.showIcon, true,
+            "a window with an icon on lost it in the migration")
+    end
+end)
+
+test("Database v3: all three off stays off", function()
+    -- The one combination that must NOT turn an icon on: a player who had
+    -- deliberately cleared the name column keeps it clear.
+    -- red under: defaulting showIcon to true regardless.
+    local inst = v2Icons{ showClass = false, showSpec = false, showRole = false }
+    assertEqual(inst.NS.Database.FindWindow(1).icons.showIcon, false,
+        "a deliberately icon-free window got one back")
+end)
+
+test("Database v3: the three dead keys are REMOVED, not left to rot", function()
+    -- AceDB merges defaults into a stored profile but never prunes what the
+    -- defaults stopped naming, so without this they sit in every saved profile
+    -- forever and the next reader has to work out which of four keys the code
+    -- honours.
+    -- red under: setting showIcon without clearing the old flags.
+    local inst = v2Icons{ showClass = true, showSpec = true, showRole = true }
+    local icons = inst.NS.Database.FindWindow(1).icons
+
+    assertNil(icons.showClass, "showClass survived the migration")
+    assertNil(icons.showSpec,  "showSpec survived the migration")
+    assertNil(icons.showRole,  "showRole survived the migration")
+    assertEqual(inst.NS.db.global.schemaVersion, 3)
 end)

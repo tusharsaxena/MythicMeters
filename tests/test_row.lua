@@ -603,38 +603,88 @@ test("A nil name renders empty rather than the string 'nil'", function()
     assertEqual(row.nameCell.left:GetText(), "")
 end)
 
-test("The name cell draws the class icon, and a spell icon inside a drill-down", function()
-    local inst, window, row, cfg = bench(function(c)
-        c.icons.showClass = true
-        c.icons.showSpec  = true
-        c.icons.showRole  = true
-    end)
+test("The single icon slot prefers the SPEC where there is one", function()
+    -- Spec over class because "which unit is this row" is the question the icon
+    -- answers, and a spec separates the three druids in a raid where a class
+    -- icon cannot.
+    -- red under: drawing the class icon whenever classFilename is present.
+    local _, window, row = bench()
     row:ApplyLayout(window.layout)
 
     row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
         { classFilename = "MAGE", specIconID = 135771, role = "TANK" }), 1)
 
     local icons = row.nameCell.icons
-    assertEqual(icons.class:IsShown(), true)
-    local c = inst.mocks.CLASS_ICON_TCOORDS.MAGE
-    local l = select(1, icons.class:GetTexCoord())
-    assertEqual(l, c[1])
-    assertEqual(icons.spec:IsShown(), true)
-    assertEqual(icons.spec:GetTexture(), 135771, "specIconID is a file ID and NeverSecret")
-    assertEqual(icons.role:IsShown(), true)
+    assertEqual(icons.unit:IsShown(), true, "the one slot drew nothing")
+    assertEqual(icons.unit:GetTexture(), 135771, "specIconID is a file ID and NeverSecret")
+end)
 
-    -- A drill-down row is a SPELL, not a player: the class slot carries the
-    -- spell's own icon and the spec and role slots have nothing to say.
-    row:Update({ guid = "spell:101", name = "Fireball", isDrillDown = true,
-                 icon = 135808, classFilename = "MAGE", maxAmount = 1,
-                 values = { DamageDone = { total = 1 } } }, 1)
-    assertEqual(icons.class:GetTexture(), 135808)
-    assertEqual(icons.spec:IsShown(), false)
-    assertEqual(icons.role:IsShown(), false)
-
-    cfg.icons.showSpec = false
+test("The slot falls back to the CLASS where no spec is known", function()
+    -- An NPC, a pet, a player the unit API has not resolved. A class icon is
+    -- still an answer where a spec is not available.
+    -- red under: hiding the icon when specIconID is nil.
+    local inst, window, row = bench()
     row:ApplyLayout(window.layout)
-    assertEqual(icons.spec:IsShown(), false, "an icon turned off is hidden, not destroyed")
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE", specIconID = nil, role = "TANK" }), 1)
+
+    local icons = row.nameCell.icons
+    assertEqual(icons.unit:IsShown(), true, "a row with a class but no spec drew nothing")
+    local c = inst.mocks.CLASS_ICON_TCOORDS.MAGE
+    assertEqual(select(1, icons.unit:GetTexCoord()), c[1], "the fallback is not the class icon")
+end)
+
+test("A ROLE icon is never drawn, whatever the row carries", function()
+    -- Three roles across a whole raid identifies nobody, and it was the icon
+    -- most likely to be on screen when the name column ran out of room.
+    -- red under: any surviving role branch.
+    local _, window, row = bench()
+    row:ApplyLayout(window.layout)
+
+    -- Built directly rather than through `entry`, which defaults a class in —
+    -- and a row WITH a class would legitimately draw the class icon, so the
+    -- fixture has to have neither for the assertion to mean anything.
+    row:Update({ guid = "Creature-0-1", name = "Some Add", role = "TANK",
+                 maxAmount = 1, values = { DamageDone = { total = 1, maxAmount = 1 } },
+                 cells = { DamageDone = { total = 1, maxAmount = 1 } } }, 1)
+
+    local icons = row.nameCell.icons
+    assertEqual(icons.role, nil, "a role slot still exists")
+    assertEqual(icons.unit:IsShown(), false,
+        "a row with only a role drew an icon, so the role ladder survived")
+end)
+
+test("A breakdown row draws the SPELL's icon, not a unit's", function()
+    -- The rung that is first because the row is not a unit at all: it has no
+    -- class, no spec and no role, and its `icon` is the spell's own file id.
+    -- This branch lived inside the old class drawer and would have been deleted
+    -- with it.
+    -- red under: dropping the isDrillDown branch from drawUnitIcon.
+    local _, window, row = bench()
+    row:ApplyLayout(window.layout)
+
+    row:Update({ guid = "spell:101", name = "Fireball", isDrillDown = true,
+                 icon = 135808, classFilename = "MAGE", specIconID = 135771,
+                 maxAmount = 1, values = { DamageDone = { total = 1 } } }, 1)
+
+    assertEqual(row.nameCell.icons.unit:GetTexture(), 135808,
+        "a breakdown row drew a unit icon instead of its spell's")
+end)
+
+test("Turning the icon off hides it rather than destroying it", function()
+    -- The pool's whole premise is that widget creation happens once.
+    -- red under: rebuilding the icon set on a config change.
+    local _, window, row, cfg = bench()
+    row:ApplyLayout(window.layout)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE", specIconID = 135771 }), 1)
+    assertEqual(row.nameCell.icons.unit:IsShown(), true)
+
+    cfg.icons.showIcon = false
+    row:ApplyLayout(window.layout)
+    assertEqual(row.nameCell.icons.unit:IsShown(), false,
+        "an icon turned off is hidden, not destroyed")
 end)
 
 -- ---------------------------------------------------------------------------

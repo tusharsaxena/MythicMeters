@@ -183,10 +183,9 @@ local function reportNameColumn()
     if not inst then out("  no window") return end
 
     local icons = (inst.config.icons or {})
-    out(string.format("  width=%d  showClass=%s showSpec=%s showRole=%s size=%s",
+    out(string.format("  width=%d  showIcon=%s size=%s position=%s",
         inst.layout.nameColumn.width,
-        tostring(icons.showClass), tostring(icons.showSpec),
-        tostring(icons.showRole), tostring(icons.size)))
+        tostring(icons.showIcon), tostring(icons.size), tostring(icons.position)))
 
     local row = inst.pool and inst.pool.active and inst.pool.active[1]
     if row and row.nameCell then

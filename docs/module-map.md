@@ -90,7 +90,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (101 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (99 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (15 verbs), the five
@@ -164,7 +164,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 101-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Schema.lua` | The 99-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
 | `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the five host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
@@ -173,7 +173,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Rows.lua` | The Rows page (10 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Bars.lua` | The Bars page (9 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Text.lua` | The Text page (10 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Icons.lua` | The Icons page (5 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Icons.lua` | The Icons page (3 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Tooltip.lua` | The Tooltip page (18 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
@@ -181,7 +181,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `General.lua` | The General page (4 rows) plus two session-only checkboxes (preview, debug console) and the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 101 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
+Schema rows total 99 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
 both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order

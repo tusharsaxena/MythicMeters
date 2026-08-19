@@ -241,7 +241,19 @@ column can never render a header, a bar and no number.
 
 ### `icons` — the marks in the name column
 
-`showClass = true` · `showSpec = false` · `showRole = false` · `size = 14` · `position = "LEFT"`.
+`showIcon = true` · `size = 14` · `position = "LEFT"`.
+
+**ONE SLOT, ONE TOGGLE.** There were three flags, one per icon kind, and a player who turned them all
+on got three textures competing with the name for a column that has to hold a name. The slot picks
+its own icon per row, in this order: a **breakdown row is a spell**, so it draws the spell's icon and
+stops; otherwise the **spec** where `specIconID` is known, because that separates the three druids in
+a raid where a class icon cannot; otherwise the **class**; and a **role never** — three roles across
+a whole raid identifies nobody, and it was the icon most likely to be on screen when the name column
+ran out of room.
+
+`schemaVersion` 3 migrates the old flags: `showIcon` is on if *any* of the three was, since somebody
+running the role icon alone had asked for an icon, and the three dead keys are removed rather than
+left to rot in every saved profile.
 
 `classFilename` and `specIconID` are both `NeverSecret`, so this column renders in full even when
 every number to its right is opaque.
@@ -548,7 +560,7 @@ The presence test is `stored[k] == nil`. **It is never `stored[k] or template[k]
 
 `or` cannot tell *unset* from a stored `false`, `""` or `0`, and this profile is full of exactly
 those values — `frame.locked = false`, `header.title = ""`, `rows.maxRows = 0`,
-`bars.border = false`, `icons.showSpec = false`, `visibility.world = false`. An `or` merge would
+`bars.border = false`, `icons.showIcon = false`, `visibility.world = false`. An `or` merge would
 silently reset a user's deliberate "off" back to the shipped "on" on every single login, and would
 do it invisibly, because the setting they turned off would simply be on again.
 

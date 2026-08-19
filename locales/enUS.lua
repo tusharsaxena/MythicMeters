@@ -299,15 +299,9 @@ L["Opacity of the numbers and names."] = "Opacity of the numbers and names."
 -- ---------------------------------------------------------------------------
 
 L["Row icons"] = "Row icons"
-L["Show class icon"] = "Show class icon"
-L["Show each player's class icon beside their name."] =
-    "Show each player's class icon beside their name."
-L["Show specialization icon"] = "Show specialization icon"
-L["Show each player's specialization icon beside their name."] =
-    "Show each player's specialization icon beside their name."
-L["Show role icon"] = "Show role icon"
-L["Show a tank, healer or damage icon beside each player's name."] =
-    "Show a tank, healer or damage icon beside each player's name."
+L["Show icon"] = "Show icon"
+L["Show one icon beside each player's name: their specialization where it is known, and their class where it is not."] =
+    "Show one icon beside each player's name: their specialization where it is known, and their class where it is not."
 L["Icon size"] = "Icon size"
 L["Size of the row icons in pixels."] = "Size of the row icons in pixels."
 L["Icon position"] = "Icon position"

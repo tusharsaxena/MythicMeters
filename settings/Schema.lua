@@ -844,19 +844,10 @@ NS.Schema = {
     -- classFilename and specIconID are NeverSecret, so these render correctly even
     -- mid-pull when every number beside them is opaque.
     {
-        path = "window.icons.showClass", type = "bool", default = true,
+        path = "window.icons.showIcon", type = "bool", default = true,
         page = "icons", group = L["Row icons"],
-        label = L["Show class icon"], desc = L["Show each player's class icon beside their name."],
-    },
-    {
-        path = "window.icons.showSpec", type = "bool", default = false,
-        page = "icons", group = L["Row icons"],
-        label = L["Show specialization icon"], desc = L["Show each player's specialization icon beside their name."],
-    },
-    {
-        path = "window.icons.showRole", type = "bool", default = false,
-        page = "icons", group = L["Row icons"],
-        label = L["Show role icon"], desc = L["Show a tank, healer or damage icon beside each player's name."],
+        label = L["Show icon"],
+        desc = L["Show one icon beside each player's name: their specialization where it is known, and their class where it is not."],
     },
     {
         path = "window.icons.size", type = "number", default = 14,

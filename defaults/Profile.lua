@@ -249,9 +249,13 @@ local WINDOW_TEMPLATE = {
     -- classFilename and specIconID are NeverSecret, so these render correctly
     -- even at the height of a pull when every number on the row is opaque.
     icons = {
-        showClass = true,
-        showSpec  = false,
-        showRole  = false,
+        -- ONE SLOT, ONE TOGGLE. The three separate flags let a player ask for
+        -- three icons in the name column, which is three chances to push the
+        -- name out of a column that has to hold a name. What the icon is for is
+        -- "which unit is this row", and the spec answers that better than the
+        -- class does whenever it is known — so the slot picks for itself:
+        -- spec if there is one, class otherwise, and never a role.
+        showIcon  = true,
         size      = 14,
         position  = "LEFT",   -- LEFT | RIGHT of the name text
     },

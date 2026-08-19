@@ -35,7 +35,7 @@ NS.Database = Database
 -- per-profile (savedvariables-§1), so a migration runs once per ACCOUNT.
 -- v1 is the shipped shape.
 -- v2 makes every column one uniform width (see migrations[1] below).
-local CURRENT_DB_VERSION = 2
+local CURRENT_DB_VERSION = 3
 
 -- The ONE Ka0s_MythicMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -266,6 +266,38 @@ migrations[1] = function(db)
     end
 
     db.global.schemaVersion = 2
+end
+
+--- v2 -> v3: the three row-icon toggles collapse into one.
+---
+--- `icons.showClass` / `showSpec` / `showRole` become a single `icons.showIcon`,
+--- and the slot decides for itself which icon to draw (modules/Row.lua's
+--- drawUnitIcon: spec where it is known, class where it is not, never a role).
+---
+--- ANY of the three counts as "on". Somebody running the role icon alone had
+--- asked for AN icon, and reading only `showClass` would take it away from them
+--- without asking — the new slot answers the same question better rather than
+--- withdrawing the answer.
+---
+--- The old keys are REMOVED rather than left to rot. AceDB merges defaults into
+--- a stored profile but never prunes what the defaults stopped naming, so three
+--- dead booleans would sit in every saved profile forever, and the next reader
+--- of the file would have to work out which of the four keys the code honours.
+migrations[2] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local icons = w.icons
+            if type(icons) == "table" then
+                if icons.showIcon == nil then
+                    icons.showIcon = (icons.showClass or icons.showSpec or icons.showRole)
+                        and true or false
+                end
+                icons.showClass, icons.showSpec, icons.showRole = nil, nil, nil
+            end
+        end
+    end
+
+    db.global.schemaVersion = 3
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

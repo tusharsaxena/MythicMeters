@@ -206,15 +206,9 @@ local ROLE_COLORS = {
     DAMAGER = { 0.78, 0.25, 0.25 },
 }
 
--- Role icon atlas coordinates. Hardcoded rather than taken from
--- GetTexCoordsForRoleSmallCircle so this file needs no extra global: three
--- rectangles in a shipped Blizzard texture are data, not a borrowed formatter.
-local ROLE_TCOORDS = {
-    TANK    = { 0,    0.25, 0.25, 0.5  },
-    HEALER  = { 0.25, 0.5,  0,    0.25 },
-    DAMAGER = { 0.25, 0.5,  0.25, 0.5  },
-}
-local ROLE_TEXTURE = [[Interface\LFGFrame\UI-LFG-ICON-ROLES]]
+-- The role atlas is deliberately gone with the role icon. Three roles across a
+-- whole raid identifies nobody, and it was the icon most likely to be on screen
+-- when the name column ran out of room — see drawUnitIcon's ladder.
 local CLASS_TEXTURE = [[Interface\TargetingFrame\UI-Classes-Circles]]
 
 --- The bar color for one cell, per the window's `bars.colorMode`.
@@ -809,10 +803,10 @@ end
 function Cell:ApplyIcons(layout)
     local icons = self.window.config.icons or {}
     local size = icons.size or 14
-    local slots = {}
-    if icons.showClass then slots[#slots + 1] = "class" end
-    if icons.showSpec  then slots[#slots + 1] = "spec"  end
-    if icons.showRole  then slots[#slots + 1] = "role"  end
+    -- ONE SLOT. There were three, one per icon kind, and a player who turned
+    -- them all on got three textures competing with the name for a column that
+    -- has to hold a name. The slot picks its own icon per row — see drawUnitIcon.
+    local slots = icons.showIcon and { "unit" } or {}
 
     self.iconOrder = slots
     self.icons = self.icons or {}
@@ -1003,7 +997,24 @@ end
 --- spell's icon, which is the only identity it has. The bar stays the
 --- drilled-into player's class color, so the trip into a breakdown and back
 --- reads as one continuous view.
-local function drawClassIcon(tex, entry)
+--- Draw the row's single icon: the spell's in a breakdown, otherwise the unit's.
+---
+--- THE LADDER, and each rung is there for a reason rather than as a preference:
+---
+---   1. A BREAKDOWN ROW IS A SPELL. Its `icon` is the spell's own file id and it
+---      has no class, no spec and no role — this rung has nothing to do with
+---      units and is first because the row is not one.
+---   2. SPEC IF THERE IS ONE. "Which unit is this row" is the question the icon
+---      answers, and a spec answers it better than a class: it separates the
+---      three druids in a raid, which a class icon cannot.
+---   3. CLASS OTHERWISE. A spec is not always known — an NPC, a pet, a player
+---      the unit API has not resolved — and a class icon is still an answer.
+---   4. NEVER A ROLE. Three roles across a whole raid identifies nobody, and it
+---      was the icon most likely to be showing when the name got squeezed.
+---
+--- `classFilename` and `specIconID` are both NeverSecret, so every branch here
+--- keeps working mid-pull when the numbers beside it are opaque.
+local function drawUnitIcon(tex, entry)
     if entry.isDrillDown then
         if entry.icon then
             tex:SetTexture(entry.icon)
@@ -1015,35 +1026,17 @@ local function drawClassIcon(tex, entry)
         return
     end
 
+    if entry.specIconID then
+        tex:SetTexture(entry.specIconID)
+        tex:SetTexCoord(ICON_TRIM_MIN, ICON_TRIM_MAX, ICON_TRIM_MIN, ICON_TRIM_MAX)
+        tex:Show()
+        return
+    end
+
     local coords = _G.CLASS_ICON_TCOORDS
     local c = coords and entry.classFilename and coords[entry.classFilename]
     if c then
         tex:SetTexture(CLASS_TEXTURE)
-        tex:SetTexCoord(c[1], c[2], c[3], c[4])
-        tex:Show()
-    else
-        tex:Hide()
-    end
-end
-
---- Draw the specialization icon. `specIconID` is a file ID and is NeverSecret,
---- so it is set directly. A drill-down row is a spell and has no spec.
-local function drawSpecIcon(tex, entry)
-    if not entry.isDrillDown and entry.specIconID then
-        tex:SetTexture(entry.specIconID)
-        tex:SetTexCoord(ICON_TRIM_MIN, ICON_TRIM_MAX, ICON_TRIM_MIN, ICON_TRIM_MAX)
-        tex:Show()
-    else
-        tex:Hide()
-    end
-end
-
---- Draw the role icon out of the shipped LFG atlas. A drill-down row is a spell
---- and has no role, and an unassigned role has no rectangle to show.
-local function drawRoleIcon(tex, entry)
-    local c = (not entry.isDrillDown) and ROLE_TCOORDS[entry.role or ""] or nil
-    if c then
-        tex:SetTexture(ROLE_TEXTURE)
         tex:SetTexCoord(c[1], c[2], c[3], c[4])
         tex:Show()
     else
@@ -1104,9 +1097,7 @@ function Cell:SetPlayer(entry, _sortKey)
 
     local icons = self.icons
     if not icons then return end
-    if icons.class then drawClassIcon(icons.class, entry) end
-    if icons.spec  then drawSpecIcon(icons.spec, entry)   end
-    if icons.role  then drawRoleIcon(icons.role, entry)   end
+    if icons.unit then drawUnitIcon(icons.unit, entry) end
 end
 
 -- ---------------------------------------------------------------------------
