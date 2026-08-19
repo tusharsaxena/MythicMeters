@@ -326,16 +326,10 @@ local function cellOnEnter(frame)
 
     local config = cell.window.config
 
-    -- A BREAKDOWN ROW IS A SPELL, and both tooltips below answer the wrong
-    -- question about one — the cell tooltip asks for a spell breakdown of a
-    -- spell, the name tooltip lists every statistic for a source that is not a
-    -- source. The whole row gets the client's own spell tooltip instead, name
-    -- cell included, because the row is one thing rather than a grid of
-    -- independent numbers.
-    if entry.isDrillDown then
-        if T.SpellTooltip then T:SpellTooltip(entry, frame, config) end
-        return
-    end
+    -- A BREAKDOWN ROW IS A SPELL, and the ROW owns its tooltip — see rowOnEnter.
+    -- The cell does not show it and does not hide it, which is what stops the
+    -- blink at every cell boundary.
+    if entry.isDrillDown then return end
 
     -- Hovering the NAME cell summarizes every enabled stat for that player,
     -- which is the cross-column read the whole addon exists for; hovering any
@@ -352,6 +346,10 @@ local function cellOnLeave(frame)
     local cell = frame.mmCell
     if not cell then return end
     if cell.row then cell.row:SetMouseOver(false) end
+    -- In a breakdown the ROW owns the tooltip. Hiding it here would undo the
+    -- whole point: the cursor crossing a cell seam would blank a tooltip the row
+    -- is still hovering.
+    if cell.entry and cell.entry.isDrillDown then return end
     local T = NS.Tooltip
     if T and T.Hide then T:Hide() end
 end
@@ -369,6 +367,48 @@ end
 --- would be the sort of chrome a player reads once and then looks past forever.
 ---
 --- @param button string  "LeftButton" | "RightButton"
+--- The ROW takes the mouse in a breakdown, and owns the tooltip while it does.
+---
+--- THE FLICKER THIS FIXES. Each cell is its own frame with its own OnEnter and
+--- OnLeave, so dragging the cursor sideways across a row fires hide-then-show at
+--- every cell boundary — and in a breakdown, where all the cells describe ONE
+--- spell, that is a tooltip blinking for no reason the player can see.
+---
+--- Moving between cells never leaves the ROW's bounds, so the row's OnLeave does
+--- not fire and the tooltip simply stays up. The cells sit on top and keep their
+--- clicks and their mouseover highlight; they just stop touching the tooltip.
+---
+--- The grid is deliberately unchanged: there each column asks a different
+--- question, so a per-cell tooltip is the correct behaviour rather than a bug.
+local function rowOnEnter(frame)
+    local row = frame.mmRow
+    local entry = row and row.entry
+    if not (entry and entry.isDrillDown) then return end
+    local T = NS.Tooltip
+    if T and T.SpellTooltip then T:SpellTooltip(entry, frame, row.window.config) end
+end
+
+local function rowOnLeave(frame)
+    local row = frame.mmRow
+    local entry = row and row.entry
+    if not (entry and entry.isDrillDown) then return end
+    local T = NS.Tooltip
+    if T and T.Hide then T:Hide() end
+end
+
+--- Right-click anywhere on a row leaves a breakdown.
+---
+--- On the ROW rather than only on the cells, because the cells do not tile it:
+--- there are seams between them and a margin past the last column, and a
+--- right-click that lands in one of those did nothing at all.
+local function rowOnMouseUp(frame, button)
+    if button ~= "RightButton" then return end
+    local row = frame.mmRow
+    if not row then return end
+    local D = NS.DrillDown
+    if D and D.Exit then D:Exit(row.window.config) end
+end
+
 local function cellOnMouseUp(frame, button)
     local cell = frame.mmCell
     if not (cell and cell.entry) then return end
@@ -693,26 +733,38 @@ function Cell:SetValue(entry)
     -- earlier version filled the right slot first, which put a lone number hard
     -- against the cell's right edge and a column header hard against its left —
     -- reading as two columns rather than one.
-    local rightSlot = text.rightSlot or "rate"
-    local secondary
-    if rightSlot == "rate" and isRate then
-        secondary = renderValue(rate, "rate", mode)
-    elseif rightSlot == "percent" then
-        secondary = renderPercent(percent, mode)
+    --- One slot's text, for any of the four things a slot may be set to.
+    ---
+    --- Both slots take the same four values now — None, Total, Per second,
+    --- Percent — where they used to take different three-value sets that only
+    --- overlapped on two. That asymmetry was not a design: it made "show me the
+    --- total on the right" unexpressible for no reason anyone could state.
+    ---
+    --- `rate` on a COUNTING stat answers nil rather than a number, because
+    --- "0.42 interrupts per second" is not a thing a meter should say.
+    local function slotText(which)
+        if which == "percent" then return renderPercent(percent, mode) end
+        if which == "total" then return renderValue(total, "total", mode) end
+        if which == "rate" and isRate then return renderValue(rate, "rate", mode) end
+        return nil
     end
 
-    -- A COUNTING STAT FALLS BACK TO ITS TOTAL. The shipped layout is the rate
-    -- alone — `rightSlot = "rate"`, `leftSlot = "none"` — which is what a meter
-    -- is read for. But interrupts and deaths have no meaningful rate, so that
-    -- pair would leave those columns rendering NOTHING AT ALL: a header, a bar,
-    -- and no number. Showing the only figure the stat has beats showing none.
-    local leftSlot = text.leftSlot or "none"
-    local primary
-    if leftSlot == "percent" then
-        primary = renderPercent(percent, mode)
-    elseif leftSlot ~= "none" then
-        primary = renderValue(total, "total", mode)
-    elseif secondary == nil then
+    -- TWO SLOTS, FILLED LEFT FIRST.
+    --
+    -- The left one is anchored to the cell's left edge and is left-aligned, under
+    -- a left-aligned column header. So whatever the cell has to say goes THERE,
+    -- and the right slot is only used when there are genuinely two figures. The
+    -- earlier version filled the right slot first, which put a lone number hard
+    -- against the cell's right edge and a column header hard against its left —
+    -- reading as two columns rather than one.
+    local secondary = slotText(text.rightSlot or "none")
+
+    -- A CELL WITH NOTHING TO SAY FALLS BACK TO ITS TOTAL. Both slots can be set
+    -- to None, and a counting stat silently drops a `rate` slot — either way the
+    -- column would render a header, a bar and no number at all. Showing the one
+    -- figure the stat has beats showing none.
+    local primary = slotText(text.leftSlot or "total")
+    if primary == nil and secondary == nil then
         primary = renderValue(total, "total", mode)
     end
 
@@ -1072,12 +1124,26 @@ RowProto.__index = RowProto
 function Row.New(window)
     local frame = CreateFrame("Frame", nil, window.body)
     frame:Hide()
+    -- The row's own mouse. The cells sit on top and keep their hovers and their
+    -- clicks; what the row adds is the seams BETWEEN them and the margin past
+    -- the last column, which the cells do not tile — and, in a breakdown,
+    -- ownership of the tooltip so it stops blinking at every cell boundary.
+    frame:SetScript("OnEnter",   rowOnEnter)
+    frame:SetScript("OnLeave",   rowOnLeave)
+    frame:SetScript("OnMouseUp", rowOnMouseUp)
+    if frame.RegisterForClicks then frame:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+    frame:EnableMouse(false)
 
     local row = setmetatable({
         window = window,
         frame  = frame,
         cells  = {},   -- [statKey] = cell
     }, RowProto)
+
+    -- The scripts above read the row back off the frame rather than closing over
+    -- it, matching how the cells do it: a pooled row is re-pointed at a different
+    -- player, never rebuilt, so nothing may capture the row it was built for.
+    frame.mmRow = row
 
     row.bg = frame:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints(frame)
@@ -1211,9 +1277,15 @@ end
 --- tooltips and drill-down work; an unlocked window keeps it on the frame so the
 --- whole window drags as one object.
 function RowProto:EnableCellMouse(enabled)
-    self.nameCell.frame:EnableMouse(enabled and true or false)
+    enabled = enabled and true or false
+    -- The ROW takes it on the same condition as the cells. An unlocked window
+    -- hands the mouse back to the frame so the whole thing drags as one object,
+    -- and a row still eating clicks there would be the drag bug this rule exists
+    -- to prevent.
+    self.frame:EnableMouse(enabled)
+    self.nameCell.frame:EnableMouse(enabled)
     for _, cell in pairs(self.cells) do
-        cell.frame:EnableMouse(enabled and true or false)
+        cell.frame:EnableMouse(enabled)
     end
 end
 

@@ -114,6 +114,29 @@ local WINDOW_TEMPLATE = {
     },
 
     -- -----------------------------------------------------------------------
+    -- columnHeader — the "Player | Damage | Healing" strip above the rows
+    -- -----------------------------------------------------------------------
+    --
+    -- SEPARATE FROM BOTH NEIGHBOURS, and it was not before. The column headers
+    -- used to take their font PATH from `text`, their size from `text`, their
+    -- outline from `header` and their colour from `header` — so changing the
+    -- cell font silently restyled the headers, and there was no way to make the
+    -- headers differ from the numbers under them at all.
+    --
+    -- Every default below is the value that muddle already resolved to, so an
+    -- existing window looks identical after the upgrade; what changes is that
+    -- the settings are now reachable and independent.
+    columnHeader = {
+        font     = "Friz Quadrata TT",
+        size     = 11,
+        outline  = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+        color    = { r = 1, g = 0.82, b = 0, a = 1 },   -- Blizzard gold
+        -- Transparent: the strip has never had a backdrop, and defaulting one on
+        -- would change every existing window's appearance to introduce a setting.
+        bgColor  = { r = 0, g = 0, b = 0, a = 0 },
+    },
+
+    -- -----------------------------------------------------------------------
     -- rows — one per group member
     -- -----------------------------------------------------------------------
     rows = {
@@ -189,8 +212,11 @@ local WINDOW_TEMPLATE = {
         -- A stat with no rate (interrupts, deaths) ignores rightSlot and renders
         -- its total in the left slot regardless — a column that showed nothing
         -- would be worse than one that shows the only number it has.
-        leftSlot     = "none",    -- total | percent | none
-        rightSlot    = "rate",    -- rate | percent | none
+        -- Both slots take the same four values. The shipped pair is the TOTAL
+        -- alone, which is what a meter is read for; a player who wants the rate
+        -- beside it sets the right slot to "rate".
+        leftSlot     = "total",   -- none | total | rate | percent
+        rightSlot    = "none",    -- none | total | rate | percent
         numberFormat = "abbreviated",  -- abbreviated | full
         -- Characters, not bytes, and 0 means "no cap". Above WoW's 12-character
         -- player-name limit because a meter also lists NPCs, which are not bound
@@ -272,6 +298,10 @@ local WINDOW_TEMPLATE = {
         font               = "Friz Quadrata TT",
         fontSize           = 12,
         fontOutline        = "NONE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+        -- Both number slots on a spell line. The amount used to be hardcoded
+        -- gold and the share hardcoded white, which read as two kinds of number
+        -- when they are one row's two figures.
+        textColor          = { r = 1, g = 1, b = 1, a = 1 },
 
         -- Which enemies this player hit, cross-referenced out of the
         -- EnemyDamageTaken column by modules/Targets.lua. OFF by default: it is

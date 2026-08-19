@@ -172,10 +172,10 @@ test("Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden o
     assertEqual(bar:HasSecretValues(), false)
 end)
 
-test("A rate-capable column renders the RATE ALONE by default", function()
-    -- The shipped layout: `leftSlot = "none"`, `rightSlot = "rate"`. "Who is
-    -- doing the most damage right now" is what a meter is read for, and the
-    -- running total is the number that answers it least well.
+test("A rate-capable column renders the TOTAL ALONE by default", function()
+    -- The shipped layout: `leftSlot = "total"`, `rightSlot = "none"`. Both slots
+    -- take the same four values now, and the total is the figure a player reads
+    -- a meter for; anyone who wants the rate beside it sets the right slot.
     local inst, _, row = bench()
     inst.mocks.setRestricted(true)
 
@@ -189,12 +189,12 @@ test("A rate-capable column renders the RATE ALONE by default", function()
     -- left-aligned column header. Filling the right slot first put a lone number
     -- hard against the cell's right edge and the header hard against its left.
     local cell = row.cells.DamageDone
-    assertEqual(cell.left:GetText(), "14.0K")
-    assertEqual(cell.right:GetText(), "", "the total is off unless it is asked for")
+    assertEqual(cell.left:GetText(), "4.2M")
+    assertEqual(cell.right:GetText(), "", "the rate is off unless it is asked for")
 end)
 
-test("Both figures appear when the left slot is turned on", function()
-    local inst, _, row = bench(function(c) c.text.leftSlot = "total" end)
+test("Both figures appear when the right slot is turned on", function()
+    local inst, _, row = bench(function(c) c.text.rightSlot = "rate" end)
     inst.mocks.setRestricted(true)
 
     row:Update(entry{
@@ -243,9 +243,37 @@ test("The text slots are configurable, and percent is the one that goes quiet", 
 end)
 
 test("A 'none' text slot renders nothing", function()
-    local _, _, row = bench(function(cfg) cfg.text.leftSlot = "none" end)
-    row:Update(entry{ DamageDone = { total = 100, maxAmount = 100 } }, 1)
-    assertEqual(row.cells.DamageDone.left:GetText(), "")
+    -- The RIGHT slot, because a cell whose slots are both None falls back to its
+    -- total rather than rendering a header, a bar and no number — see the case
+    -- below, which pins that fallback.
+    local _, _, row = bench(function(cfg) cfg.text.rightSlot = "none" end)
+    row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+    assertEqual(row.cells.DamageDone.right:GetText(), "")
+end)
+
+test("A cell with BOTH slots off still shows its total", function()
+    -- Otherwise the column renders a header, a bar and no number at all, which
+    -- reads as a broken addon rather than as a deliberate setting. The same
+    -- fallback covers a counting stat whose only slot is set to Per second.
+    -- red under: honouring "none" on both slots literally.
+    local _, _, row = bench(function(cfg)
+        cfg.text.leftSlot, cfg.text.rightSlot = "none", "none"
+    end)
+    row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "100")
+end)
+
+test("Both slots take the same four values, in either position", function()
+    -- They used to take different three-value sets overlapping on two, which
+    -- made "the total on the right" unexpressible for no reason anyone could
+    -- state.
+    -- red under: a rightSlot that ignores "total", or a leftSlot that ignores "rate".
+    local _, _, row = bench(function(cfg)
+        cfg.text.leftSlot, cfg.text.rightSlot = "rate", "total"
+    end)
+    row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "10", "the left slot refused a rate")
+    assertEqual(row.cells.DamageDone.right:GetText(), "100", "the right slot refused a total")
 end)
 
 test("Cell figures are read out of EITHER row shape the addon produces", function()
@@ -783,19 +811,65 @@ local function spellEntry(opts)
     return e
 end
 
-test("Hovering ANY cell of a breakdown row shows the client's spell tooltip", function()
-    -- The name cell included: a breakdown row is one thing rather than a grid of
-    -- independent numbers, so every part of it asks the same question.
+test("Hovering a breakdown ROW shows the client's spell tooltip", function()
+    -- The ROW, not a cell: a breakdown row is one thing rather than a grid of
+    -- independent numbers, so the whole of it asks one question and one frame
+    -- owns the answer.
     -- red under: routing a drill row to CellTooltip / NameTooltip.
     local inst, _, row = bench()
     row:Update(spellEntry(), 1)
 
-    for _, frame in ipairs({ row.cells.DamageDone.frame, row.nameCell.frame }) do
-        inst.mocks.GameTooltip.__spellID = nil
-        frame:_run("OnEnter")
-        assertEqual(inst.mocks.GameTooltip.__spellID, 49998,
-            "the row did not hand the client a spell id")
-    end
+    row.frame:_run("OnEnter")
+    assertEqual(inst.mocks.GameTooltip.__spellID, 49998,
+        "the row did not hand the client a spell id")
+end)
+
+test("Crossing a cell boundary does NOT blink the breakdown tooltip", function()
+    -- THE FLICKER. Each cell has its own OnEnter/OnLeave, so dragging the cursor
+    -- sideways across a row fired hide-then-show at every seam — a tooltip
+    -- blinking for no reason the player can see, on a row where every cell
+    -- describes the same spell.
+    -- red under: cellOnLeave hiding the tooltip for a drill row.
+    local inst, _, row = bench()
+    row:Update(spellEntry(), 1)
+
+    row.frame:_run("OnEnter")
+    assertEqual(inst.mocks.GameTooltip.__spellID, 49998)
+
+    -- The cursor moves from one cell to the next, inside the same row.
+    row.cells.DamageDone.frame:_run("OnEnter")
+    row.cells.DamageDone.frame:_run("OnLeave")
+    row.cells.Interrupts.frame:_run("OnEnter")
+
+    assertTrue(inst.mocks.GameTooltip:IsShown(),
+        "a cell seam hid the tooltip the row is still hovering")
+    assertEqual(inst.mocks.GameTooltip.__spellID, 49998,
+        "and it is still the same spell")
+end)
+
+test("Leaving the row hides the breakdown tooltip", function()
+    -- The other half: the row owns the hide too, or the tooltip never goes away.
+    -- red under: rowOnLeave not calling Tooltip:Hide.
+    local inst, _, row = bench()
+    row:Update(spellEntry(), 1)
+    row.frame:_run("OnEnter")
+    assertTrue(inst.mocks.GameTooltip:IsShown())
+
+    row.frame:_run("OnLeave")
+    assertFalse(inst.mocks.GameTooltip:IsShown(), "the tooltip outlived the row hover")
+end)
+
+test("On the GRID a cell still owns its own tooltip", function()
+    -- Each column asks a different question there, so per-cell is correct rather
+    -- than a bug — the row-level behaviour must not leak out of the breakdown.
+    -- red under: giving every row the spell tooltip.
+    local inst, _, row = bench()
+    local seen
+    inst.NS.Tooltip.CellTooltip = function(_, _, key) seen = key end
+
+    row:Update(entry{ DamageDone = { total = 1, maxAmount = 1 } }, 1)
+    row.cells.DamageDone.frame:_run("OnEnter")
+    assertEqual(seen, "DamageDone", "a grid cell stopped showing its own tooltip")
 end)
 
 test("A breakdown row with no resolvable spell still says which spell it is", function()
@@ -804,7 +878,7 @@ test("A breakdown row with no resolvable spell still says which spell it is", fu
     -- red under: returning early when spellID is nil.
     local inst, _, row = bench()
     row:Update(spellEntry{ spellID = false }, 1)
-    row.cells.DamageDone.frame:_run("OnEnter")
+    row.frame:_run("OnEnter")
 
     assertNil(inst.mocks.GameTooltip.__spellID)
     local lines = inst.mocks.GameTooltip.__lines
@@ -842,6 +916,23 @@ test("A right click leaves the breakdown", function()
     row.cells.DamageDone.frame:_run("OnMouseUp", "RightButton")
 
     assertFalse(D.IsActive(cfg), "right click did not leave the breakdown")
+end)
+
+test("A right click on the ROW ITSELF leaves the breakdown", function()
+    -- Distinct from the cell case, and not covered by it: the cells do not tile
+    -- the row. There are seams between them and a margin past the last column,
+    -- and a right-click landing in one of those used to do nothing at all.
+    -- red under: dropping rowOnMouseUp from the row frame.
+    local inst, _, row, cfg = bench()
+    local D = inst.NS.DrillDown
+
+    D:Enter(cfg, entry({ DamageDone = { total = 100 } }), "DamageDone")
+    assertTrue(D.IsActive(cfg), "the fixture never entered a breakdown")
+
+    row:Update(spellEntry(), 1)
+    row.frame:_run("OnMouseUp", "RightButton")
+
+    assertFalse(D.IsActive(cfg), "a right click on the row's own frame did nothing")
 end)
 
 test("A right click on the GRID is a harmless no-op", function()

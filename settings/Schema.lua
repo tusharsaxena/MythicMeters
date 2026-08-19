@@ -304,11 +304,18 @@ local BARBG_VALUES = {
 }
 local BARBG_SORT = { "class", "stat", "custom", "none" }
 
-local LEFTSLOT_VALUES = { total = L["Total"], percent = L["Percent"], none = L["None"] }
-local LEFTSLOT_SORT   = { "total", "percent", "none" }
-
-local RIGHTSLOT_VALUES = { rate = L["Per second"], percent = L["Percent"], none = L["None"] }
-local RIGHTSLOT_SORT   = { "rate", "percent", "none" }
+-- ONE set for both slots. They used to take different three-value sets that
+-- overlapped on two, which made "show me the total on the right" unexpressible
+-- for no reason anyone could state. A counting stat still drops `rate` at render
+-- time — modules/Row.lua — because "0.42 interrupts per second" is not a thing a
+-- meter should say; that is a property of the STAT, not of the slot.
+local SLOT_VALUES = {
+    none    = L["None"],
+    total   = L["Total"],
+    rate    = L["Per second"],
+    percent = L["Percent"],
+}
+local SLOT_SORT   = { "none", "total", "rate", "percent" }
 
 local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
 local NUMFMT_SORT    = { "abbreviated", "full" }
@@ -591,6 +598,45 @@ NS.Schema = {
         label = L["Header background"], desc = L["Color drawn behind the header text."],
     },
 
+    -- ── Column headers ───────────────────────────────────────────────────────
+    -- A group of their own, on the Header page beside the title strip. They used
+    -- to borrow the font and size from `text` and the outline and colour from
+    -- `header`, which meant changing the cell font silently restyled them and
+    -- nothing could make them differ from the numbers beneath. Every default here
+    -- is the value that arrangement already produced.
+    {
+        path = "window.columnHeader.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "header", group = L["Column headers"],
+        label = L["Font"], desc = L["Font used for the column header strip above the rows."],
+    },
+    {
+        path = "window.columnHeader.size", type = "number", default = 11,
+        min = 6, max = 32, step = 1, fmt = "%d px",
+        page = "header", group = L["Column headers"],
+        label = L["Font size"], desc = L["Column header text size in pixels."],
+        validate = isNumberIn(6, 32),
+    },
+    {
+        path = "window.columnHeader.outline", type = "string", default = "OUTLINE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "header", group = L["Column headers"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the column headers."],
+    },
+    {
+        path = "window.columnHeader.color", type = "color",
+        default = { r = 1, g = 0.82, b = 0, a = 1 },
+        page = "header", group = L["Column headers"],
+        label = L["Text color"], desc = L["Color of the column header labels."],
+    },
+    {
+        path = "window.columnHeader.bgColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 0 },
+        page = "header", group = L["Column headers"],
+        label = L["Background color"],
+        desc = L["Color drawn behind the column header strip. Transparent by default \226\128\148 the strip has never had a backdrop."],
+    },
+
     -- ── Rows ─────────────────────────────────────────────────────────────────
     {
         path = "window.rows.maxRows", type = "number", default = 0,
@@ -726,14 +772,14 @@ NS.Schema = {
     -- formatter does the division natively — the only legal way to render "12.4M"
     -- from a secret (design §4).
     {
-        path = "window.text.leftSlot", type = "string", default = "none",
-        values = LEFTSLOT_VALUES, sorting = LEFTSLOT_SORT,
+        path = "window.text.leftSlot", type = "string", default = "total",
+        values = SLOT_VALUES, sorting = SLOT_SORT,
         page = "text", group = L["Cell text"],
         label = L["Left text"], desc = L["What to show on the left of each cell. Set it to Total for the `1.41M  83.2K` pair; leave it empty for the per-second figure alone."],
     },
     {
-        path = "window.text.rightSlot", type = "string", default = "rate",
-        values = RIGHTSLOT_VALUES, sorting = RIGHTSLOT_SORT,
+        path = "window.text.rightSlot", type = "string", default = "none",
+        values = SLOT_VALUES, sorting = SLOT_SORT,
         page = "text", group = L["Cell text"],
         label = L["Right text"],
         desc = L["What to show on the right of each cell. Per-second figures are only shown for Damage and Healing."],
@@ -944,6 +990,12 @@ NS.Schema = {
         values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
         page = "tooltip", group = L["Tooltip text"],
         label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
+    },
+    {
+        path = "window.tooltip.textColor", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
     },
 
     -- OFF by default, and for two reasons that are worth stating separately.

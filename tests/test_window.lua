@@ -1407,3 +1407,69 @@ test("A drill-down draws its rows from the top of the body, with none hanging ou
     assertEqual(drillTop, gridTop,
         "a breakdown's first row starts lower than the grid's, so its last row overflows")
 end)
+
+test("Right-clicking empty space below the rows leaves a breakdown", function()
+    -- The rows handle their own right-click, but a short breakdown leaves most
+    -- of the body bare and "right-click anywhere" has to mean anywhere.
+    -- red under: no OnMouseUp on the body.
+    local inst, window, cfg = scene()
+    inst.NS.DrillDown:Enter(cfg,
+        { guid = ALPHA, name = "Alpha", values = {} }, "DamageDone")
+    assertTrue(inst.NS.DrillDown.IsActive(cfg), "the fixture never entered a breakdown")
+
+    window.body:_run("OnMouseUp", "RightButton")
+    assertFalse(inst.NS.DrillDown.IsActive(cfg), "the body ignored the right click")
+end)
+
+test("The body claims the mouse only while a breakdown is open", function()
+    -- There is a hard-won comment saying the body taking the mouse "stole every
+    -- hover from the cells underneath it". The cells are descendants and should
+    -- still win, but that was learned the expensive way — so the grid keeps
+    -- exactly the behaviour it has today and only a drilled window changes.
+    -- red under: EnableMouse(true) on the body unconditionally.
+    local _, window = scene()
+    local rows = { { guid = ALPHA, name = "Alpha", values = {}, cells = {} } }
+
+    window:Render(rows, false, false)
+    assertFalse(window.body:IsMouseEnabled(), "the grid's body took the mouse")
+
+    window:Render(rows, false, true, "Alpha - Damage")
+    assertTrue(window.body:IsMouseEnabled(), "a breakdown's body did not take the mouse")
+end)
+
+test("Column headers take their own font, not the cells'", function()
+    -- They used to borrow the font PATH and size from `text` and the outline and
+    -- colour from `header`, so changing the cell font silently restyled the
+    -- headers and nothing could make the strip differ from the numbers beneath.
+    -- red under: reading textCfg.font / textCfg.size in ApplyColumnHeaders.
+    local _, window = scene{ configure = function(c)
+        c.text.size = 9
+        c.columnHeader.size = 21
+        c.columnHeader.outline = "THICKOUTLINE"
+    end }
+    window:ApplyColumnHeaders()
+
+    local _, size, flags = window.columnHeaders[1].text:GetFont()
+    assertEqual(size, 21, "the header took the cell text size")
+    assertEqual(flags, "THICKOUTLINE", "the header took its outline from somewhere else")
+end)
+
+test("Column headers have their own colour and background", function()
+    -- The strip has never had a backdrop, so the setting is new capability and
+    -- defaults transparent — an existing window must look identical.
+    -- red under: tinting from header.color, or no headerBg texture at all.
+    local _, window = scene{ configure = function(c)
+        c.header.color = { r = 0, g = 1, b = 0, a = 1 }
+        c.columnHeader.color = { r = 1, g = 0, b = 0, a = 1 }
+        c.columnHeader.bgColor = { r = 0, g = 0, b = 1, a = 0.5 }
+    end }
+    window:ApplyColumnHeaders()
+
+    local r, g = window.columnHeaders[1].text:GetTextColor()
+    assertEqual(r, 1, "the header label took the title strip's colour")
+    assertEqual(g, 0, "the header label took the title strip's colour")
+
+    local bg = window.headerBg.__colorTexture
+    assertTrue(bg ~= nil, "the header strip has no backdrop texture")
+    assertEqual(bg[3], 1, "the backdrop did not take the configured colour")
+end)

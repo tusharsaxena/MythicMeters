@@ -29,12 +29,12 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 |---|---|---|---|---|---|
 | 1 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
 | 2 | Frame | `frame` | 15 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip · **Reset position** button |
-| 3 | Header | `header` | 11 | yes | Title text, session name / duration / totals, font, alignment, strip height and background |
+| 3 | Header | `header` | 16 | yes | Title text, session name / duration / totals, font, alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own font, size, outline, colour and background |
 | 4 | Rows | `rows` | 8 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
 | 5 | Bars | `bars` | 8 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |
 | 6 | Text | `text` | 9 | yes | Left slot, right slot, number format, font, size, outline, shadow, color, opacity |
 | 7 | Icons | `icons` | 5 | yes | Class / spec / role icons, size, side |
-| 8 | Tooltip | `tooltip` | 17 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own font/size/outline, and the Targets section |
+| 8 | Tooltip | `tooltip` | 18 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own font/size/outline, and the Targets section |
 | 9 | Visibility | `visibility` | 7 | yes | Dungeon / raid / arena / battleground / world, hide when solo, hide in vehicle |
 | 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
 | 11 | Data | `data` | 4 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |

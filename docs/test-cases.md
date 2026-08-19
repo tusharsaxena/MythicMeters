@@ -486,7 +486,7 @@ badge and any count quoted in the docs must agree with it.
 - roster mode's NAME TIEBREAK refuses to compare two secret names
 - roster mode compares names when they are plain
 
-### test_window.lua (78)
+### test_window.lua (82)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -566,8 +566,12 @@ badge and any count quoted in the docs must agree with it.
 - The wheel scrolls up on a positive delta
 - Entering or leaving a breakdown puts the view back at the top
 - A drill-down draws its rows from the top of the body, with none hanging out
+- Right-clicking empty space below the rows leaves a breakdown
+- The body claims the mouse only while a breakdown is open
+- Column headers take their own font, not the cells'
+- Column headers have their own colour and background
 
-### test_row.lua (50)
+### test_row.lua (56)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -575,11 +579,13 @@ badge and any count quoted in the docs must agree with it.
 - modules/Row.lua contains no geometry getter at all
 - Cell:SetValue hands the raw handle to SetValue and SetMinMaxValues
 - Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden one
-- A rate-capable column renders the RATE ALONE by default
-- Both figures appear when the left slot is turned on
+- A rate-capable column renders the TOTAL ALONE by default
+- Both figures appear when the right slot is turned on
 - A counting column renders the total only
 - The text slots are configurable, and percent is the one that goes quiet
 - A 'none' text slot renders nothing
+- A cell with BOTH slots off still shows its total
+- Both slots take the same four values, in either position
 - Cell figures are read out of EITHER row shape the addon produces
 - Class color comes from classFilename, which keeps working while restricted
 - Every color mode falls back to one neutral, never to a fourth palette
@@ -613,10 +619,14 @@ badge and any count quoted in the docs must agree with it.
 - Hovering a stat cell asks the tooltip the narrow question
 - Clicking a stat cell routes to the drill-down; the name cell does not
 - A cell with no entry does nothing under the cursor
-- Hovering ANY cell of a breakdown row shows the client's spell tooltip
+- Hovering a breakdown ROW shows the client's spell tooltip
+- Crossing a cell boundary does NOT blink the breakdown tooltip
+- Leaving the row hides the breakdown tooltip
+- On the GRID a cell still owns its own tooltip
 - A breakdown row with no resolvable spell still says which spell it is
 - A left click inside a breakdown does nothing
 - A right click leaves the breakdown
+- A right click on the ROW ITSELF leaves the breakdown
 - A right click on the GRID is a harmless no-op
 - Cells register for BOTH buttons, or the right click never arrives
 
@@ -645,7 +655,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (55)
+### test_tooltip.lua (56)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -679,7 +689,8 @@ badge and any count quoted in the docs must agree with it.
 - A spell line carries its SHARE of the player's total beside the amount
 - The percent slot GOES QUIET mid-pull rather than approximating
 - The amount and the share sit in FIXED right-aligned slots
-- The share is WHITE, and the amount keeps its gold
+- Both number slots are white by default, not two kinds of number
+- The tooltip text colour is configurable, and reaches every slot
 - The AMOUNT survives a hover the bar cannot
 - The tooltip is widened for the slots, and put back afterwards
 - Every anchor the schema offers resolves to a real GameTooltip token
@@ -999,10 +1010,10 @@ badge and any count quoted in the docs must agree with it.
 | test_roster.lua | 22 |
 | test_aggregator.lua | 52 |
 | test_aggregator_sort.lua | 16 |
-| test_window.lua | 78 |
-| test_row.lua | 50 |
+| test_window.lua | 82 |
+| test_row.lua | 56 |
 | test_targets.lua | 22 |
-| test_tooltip.lua | 55 |
+| test_tooltip.lua | 56 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
@@ -1013,4 +1024,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **871** |
+| **Total** | **882** |

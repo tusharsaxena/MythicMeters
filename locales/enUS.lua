@@ -371,6 +371,18 @@ L["Maximum targets"] = "Maximum targets"
 L["How many enemies to list before stopping."] =
     "How many enemies to list before stopping."
 
+L["Column headers"] = "Column headers"
+L["Font used for the column header strip above the rows."] =
+    "Font used for the column header strip above the rows."
+L["Column header text size in pixels."] = "Column header text size in pixels."
+L["Outline and monochrome flags applied to the column headers."] =
+    "Outline and monochrome flags applied to the column headers."
+L["Color of the column header labels."] = "Color of the column header labels."
+L["Color drawn behind the column header strip. Transparent by default \226\128\148 the strip has never had a backdrop."] =
+    "Color drawn behind the column header strip. Transparent by default \226\128\148 the strip has never had a backdrop."
+L["Color of the amount and percentage on each tooltip line."] =
+    "Color of the amount and percentage on each tooltip line."
+
 -- Tooltip headers and rows, rendered at runtime.
 L["Spell breakdown"] = "Spell breakdown"
 L["Targets"] = "Targets"

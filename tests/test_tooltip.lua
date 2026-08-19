@@ -719,19 +719,38 @@ test("The amount and the share sit in FIXED right-aligned slots", function()
     end
 end)
 
-test("The share is WHITE, and the amount keeps its gold", function()
-    -- red under: reinstating the gray the share shipped with.
+test("Both number slots are white by default, not two kinds of number", function()
+    -- The amount used to be gold and the share white. They are one row's two
+    -- figures, and colouring them differently made the line read as two.
+    -- red under: reinstating either hardcoded colour.
     local inst, cfg, anchor = bench()
     inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
 
     local carrier = spellLines(inst)[1]
-    local share = carrier.share.__textColor
-    assertEqual(share[1], 1, "the share is not white")
-    assertEqual(share[2], 1, "the share is not white")
-    assertEqual(share[3], 1, "the share is not white")
+    for _, slot in ipairs({ "share", "amount" }) do
+        local c = carrier[slot].__textColor
+        assertEqual(c[1], 1, slot .. " is not white")
+        assertEqual(c[2], 1, slot .. " is not white")
+        assertEqual(c[3], 1, slot .. " is not white")
+    end
+end)
 
-    local amount = carrier.amount.__textColor
-    assertEqual(amount[2], 0.82, "the amount lost its gold")
+test("The tooltip text colour is configurable, and reaches every slot", function()
+    -- Including the target label, which lives on the carrier rather than in the
+    -- tooltip's own line and would otherwise keep the default silently.
+    -- red under: colouring only the amount, or reading the colour once at
+    -- widget-creation time rather than on every draw.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.textColor = { r = 1, g = 0, b = 0, a = 1 }
+    end }
+    inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
+
+    local carrier = spellLines(inst)[1]
+    for _, slot in ipairs({ "amount", "share", "label" }) do
+        local c = carrier[slot].__textColor
+        assertEqual(c[1], 1, slot .. " did not take the configured colour")
+        assertEqual(c[2], 0, slot .. " did not take the configured colour")
+    end
 end)
 
 test("The AMOUNT survives a hover the bar cannot", function()

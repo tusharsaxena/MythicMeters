@@ -70,7 +70,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **95 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **101 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 

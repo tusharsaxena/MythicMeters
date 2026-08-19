@@ -565,6 +565,26 @@ function WindowProto:BuildFrame()
     -- untouched).
     self.scrollOffset = 0
     self.body:EnableMouseWheel(true)
+
+    -- RIGHT-CLICK ON EMPTY SPACE leaves a breakdown. The rows handle their own
+    -- (modules/Row.lua), but a short breakdown leaves most of the body bare and
+    -- "right-click anywhere" has to mean anywhere.
+    --
+    -- The body's mouse is enabled ONLY while a breakdown is open. There is a
+    -- comment on the frame above saying the body used to take the mouse and
+    -- "stole every hover from the cells underneath it" — the cells are
+    -- descendants and should still win, but that was learned the hard way, so the
+    -- grid keeps exactly the behaviour it has today and only a drilled window
+    -- changes.
+    self.body:SetScript("OnMouseUp", function(_, button)
+        if button ~= "RightButton" then return end
+        local D = mod("DrillDown")
+        if D and D.Exit then D:Exit(self.config) end
+    end)
+    if self.body.RegisterForClicks then
+        self.body:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
+    self.body:EnableMouse(false)
     self.body:SetScript("OnMouseWheel", function(_, delta)
         -- Up scrolls toward the top, which is `delta > 0` and a SMALLER offset.
         self:ScrollBy(delta > 0 and -1 or 1)
@@ -575,6 +595,12 @@ function WindowProto:BuildFrame()
     -- safely be measured — and still is not, for one rule rather than two.
     self.columnHeaders = {}
     self.headerFrame = CreateFrame("Frame", nil, frame)
+    -- The column-header strip's backdrop. A plain texture rather than a
+    -- BackdropTemplate: it is a flat fill behind text, nothing measures it, and a
+    -- texture is a leaf the way the row backgrounds are. Transparent by default,
+    -- so a window that never touches the setting looks exactly as it always did.
+    self.headerBg = self.headerFrame:CreateTexture(nil, "BACKGROUND")
+    self.headerBg:SetAllPoints(self.headerFrame)
 
     -- The meter-unavailable notice. Built once and kept hidden: it replaces the
     -- rows entirely when C_DamageMeter has nothing to give (design §6), and a
@@ -707,6 +733,17 @@ end
 --- The header's text color, defaulting to the gold WoW uses for its own headers.
 local function headerColor(header)
     return RGBA(header.color, 1, 0.82, 0, 1)
+end
+
+--- The column-header strip's own font, size and flags.
+---
+--- Its OWN group, and that is the point of it existing. These used to come from
+--- two different places — the path and size off `text`, the outline off `header`
+--- — so changing the cell font silently restyled the headers and no setting
+--- could make the strip differ from the numbers beneath it.
+local function columnHeaderFont(colHeader)
+    local flags = (colHeader.outline ~= "NONE") and colHeader.outline or nil
+    return fontPath(colHeader.font), colHeader.size or 11, flags
 end
 
 --- Where the header's two text lines must stop on the right: the frame padding,
@@ -895,11 +932,11 @@ end
 --- The column labels above the grid.
 function WindowProto:ApplyColumnHeaders()
     local cfg    = self.config
-    local header = cfg.header or {}
     local layout = self.layout
     local pad    = layout.padding
-    local _, _, flags = headerFont(header)
-    local hr, hg, hb, ha = headerColor(header)
+    local colHeader = cfg.columnHeader or {}
+    local colFont, colSize, flags = columnHeaderFont(colHeader)
+    local hr, hg, hb, ha = RGBA(colHeader.color, 1, 0.82, 0, 1)
 
     -- One FontString per drawn column plus the name column's, placed at the same
     -- x offsets the cells will use — from the SAME layout table, so a header can
@@ -908,8 +945,8 @@ function WindowProto:ApplyColumnHeaders()
     self.headerFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", pad, -(pad + layout.titleHeight))
     self.headerFrame:SetSize(layout.rowWidth, layout.headerHeight)
 
-    local textCfg = cfg.text or {}
-    local cellFont = fontPath(textCfg.font)
+    local bgr, bgg, bgb, bga = RGBA(colHeader.bgColor, 0, 0, 0, 0)
+    self.headerBg:SetColorTexture(bgr, bgg, bgb, bga)
 
     local data = cfg.data or {}
     -- The arrow belongs on whichever header the CURRENT order came from, and in
@@ -953,7 +990,7 @@ function WindowProto:ApplyColumnHeaders()
         -- belonged to them.
         button.text:SetWidth(width)
         button.text:SetHeight(layout.headerHeight)
-        button.text:SetFont(cellFont, textCfg.size or 11, flags)
+        button.text:SetFont(colFont, colSize, flags)
         button.text:SetTextColor(hr, hg, hb, ha)
         button.text:SetJustifyH("LEFT")
         button.text:SetText(label)
@@ -981,7 +1018,7 @@ function WindowProto:ApplyColumnHeaders()
                 button.arrowTex:Show()
                 button.arrow:Hide()
             else
-                button.arrow:SetFont(cellFont, textCfg.size or 11, flags)
+                button.arrow:SetFont(colFont, colSize, flags)
                 button.arrow:SetTextColor(hr, hg, hb, ha)
                 button.arrow:SetText(data.sortAscending and SORT_ASCII_UP or SORT_ASCII_DOWN)
                 button.arrow:ClearAllPoints()
@@ -1408,6 +1445,10 @@ function WindowProto:Render(entries, preview, isDrill, drillTitle)
     if DrillDown and DrillDown.ReleaseBackButton then
         DrillDown:ReleaseBackButton(self.config)
     end
+
+    -- See the note where this script was installed: the body claims the mouse
+    -- only while a breakdown is open, so the grid's hover behaviour is untouched.
+    self.body:EnableMouse(isDrill and true or false)
 
     -- THE CLAMP LIVES HERE, and only here. `ScrollBy` applies the floor; this
     -- applies the ceiling, against the list actually being drawn rather than

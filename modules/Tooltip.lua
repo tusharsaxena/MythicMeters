@@ -214,6 +214,7 @@ local function tooltipConfig(window)
         maxSpells          = field("maxSpells", 10),
         showAllStatsOnName = field("showAllStatsOnName", true),
         hideInCombat       = field("hideInCombat", false),
+        textColor          = field("textColor", nil),
         barTexture         = field("barTexture", "Blizzard Raid Bar"),
         barSpacing         = field("barSpacing", 1),
         barBorderStyle     = field("barBorderStyle", "None"),
@@ -569,9 +570,12 @@ local NAME_GAP = 10
 --- only to widen the tooltip, never to place anything.
 local TOOLTIP_H_PADDING = 20
 
---- The white the share is drawn in, and the gold the amount keeps.
-local AMOUNT_COLOR = { 1, 0.82, 0 }
-local SHARE_COLOR  = { 1, 1, 1 }
+--- The fallback for both number slots when no color is configured.
+---
+--- They used to be two constants — a gold amount and a white share — which read
+--- as two kinds of number when they are one row's two figures. One color now,
+--- and it is a setting.
+local SLOT_COLOR_DEFAULT = { 1, 1, 1 }
 
 local linePool = {}
 
@@ -801,7 +805,7 @@ local function lineWidget(index)
     share:SetWidth(SHARE_SLOT_WIDTH)
     share:SetJustifyH("RIGHT")
     share:SetPoint("RIGHT", frame, "RIGHT", -SLOT_RIGHT_PAD, 0)
-    share:SetTextColor(SHARE_COLOR[1], SHARE_COLOR[2], SHARE_COLOR[3])
+
 
     -- The LABEL slot, used by target lines and left empty by spell lines.
     --
@@ -823,7 +827,7 @@ local function lineWidget(index)
     amount:SetWidth(AMOUNT_SLOT_WIDTH)
     amount:SetJustifyH("RIGHT")
     amount:SetPoint("RIGHT", share, "LEFT", -SLOT_GAP, 0)
-    amount:SetTextColor(AMOUNT_COLOR[1], AMOUNT_COLOR[2], AMOUNT_COLOR[3])
+
 
     -- Keyed onto the carrier the way Blizzard's own `parentKey` does, so the
     -- pool holds one object rather than a record of four.
@@ -867,8 +871,12 @@ local function lineStyle(config, color)
     local borderSize = config.barBorderSize
     if type(borderSize) ~= "number" or borderSize < 0 then borderSize = 0 end
 
+    local tr, tg, tb = rgba(config.textColor,
+        SLOT_COLOR_DEFAULT[1], SLOT_COLOR_DEFAULT[2], SLOT_COLOR_DEFAULT[3], 1)
+
     return {
         color      = color,
+        textColor  = { tr, tg, tb },
         texture    = mediaPath("statusbar", config.barTexture),
         -- Size zero drops the FILE with it. A zero edgeSize with a texture still
         -- present is the combination WoW draws as a hard 1px line, which is the
@@ -939,6 +947,14 @@ local function drawLine(lineIndex, amount, share, value, max, style, label)
     frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.label:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+
+    -- Re-stated every draw rather than once at creation, exactly like the font:
+    -- the carrier is pooled, so line 4 of this hover is the frame that drew line
+    -- 4 of the last one, under whatever color that hover was configured with.
+    local tc = style.textColor
+    frame.amount:SetTextColor(tc[1], tc[2], tc[3])
+    frame.share:SetTextColor(tc[1], tc[2], tc[3])
+    frame.label:SetTextColor(tc[1], tc[2], tc[3])
     applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags)
 
     applyLineBorder(frame, style)

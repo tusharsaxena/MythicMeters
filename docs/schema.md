@@ -174,6 +174,20 @@ where it was.
 `showTotals` shows the group total **for the sort column**, taken off the aggregate the render pass
 just parked on the window — never a second provider read.
 
+### `columnHeader` — the "Player | Damage | Healing" strip
+
+`font = "Friz Quadrata TT"` · `size = 11` · `outline = "OUTLINE"` ·
+`color = { r=1, g=0.82, b=0, a=1 }` · `bgColor = { r=0, g=0, b=0, a=0 }`.
+
+**Separate from both neighbours, and it was not before.** The strip used to take its font path and
+size from `text` and its outline and colour from `header`, so changing the cell font silently
+restyled the headers and no setting could make the strip differ from the numbers beneath it. Every
+default above is the value that arrangement already resolved to, so an existing window is
+pixel-identical after the upgrade — what changed is that the settings exist and are independent.
+
+`bgColor` is new capability rather than a moved one: the strip has never had a backdrop, which is why
+it defaults fully transparent.
+
 ### `rows` — one per group member
 
 `maxRows = 0` (0 means "as many as fit the frame"; a positive value caps it, hard-ceilinged at
@@ -197,8 +211,9 @@ bar grows rightward (`SetReverseFill(false)`).
 
 ### `text` — the FontString in every cell
 
-`leftSlot = "total"` (`total` / `percent` / `none`) · `rightSlot = "rate"` (`rate` / `percent` /
-`none`) · `numberFormat = "abbreviated"` (`abbreviated` / `full`) · `maxNameLength = 20` (0 = no
+`leftSlot = "total"` · `rightSlot = "none"` — **both take the same four values**, `none` / `total` /
+`rate` / `percent`. They used to take different three-value sets overlapping on two, which made "the
+total on the right" unexpressible for no reason anyone could state. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) · `maxNameLength = 20` (0 = no
 cap) · `font = Const.FONT_MONO_NAME` ("JetBrains Mono") · `size = 11` · `outline = "NONE"` ·
 `shadow = true` · `color = { r=1, g=1, b=1, a=1 }` · `alpha = 1.0`.
 
@@ -215,12 +230,14 @@ name reaches the widget untouched and uncapped.
 `modules/Format.lua` hands the value to; the formatter does the division natively, which is the only
 legal way to render "12.4M" from a secret. `percent` is the one slot that goes quiet in combat —
 `modules/Aggregator.lua` only produces it when both operands were accessible, and empty means
-"cannot be known right now", never "zero percent". That is why the shipped slots are `total` and
-`rate`.
+"cannot be known right now", never "zero percent". That is why the shipped pair is `total` and
+`none`.
 
-`rightSlot = "rate"` renders only for stats whose catalog row sets `isRate` — `DamageDone` and
-`HealingDone`. Counting stats leave the slot empty rather than announcing "0.42 interrupts per
-second".
+A `rate` slot renders only for stats whose catalog row sets `isRate` — `DamageDone` and
+`HealingDone`. Counting stats leave it empty rather than announcing "0.42 interrupts per second";
+that is a property of the **stat**, not of the slot, which is why both slots offer `rate` and both
+drop it on the same columns. A cell whose slots both come back empty falls back to its total, so a
+column can never render a header, a bar and no number.
 
 ### `icons` — the marks in the name column
 
@@ -238,7 +255,10 @@ Its own appearance, kept separate from `bars` and `text` on purpose — a 14px s
 cell are different surfaces, and a texture or a size that reads across one often does not across the
 other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `barBorderStyle = "None"` ·
 `barBorderSize = 1` · `barBorderColor = { r = 0, g = 0, b = 0, a = 1 }` ·
-`font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"`.
+`font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"` ·
+`textColor = { r = 1, g = 1, b = 1, a = 1 }`. One colour for **both** number slots: the amount used
+to be hardcoded gold and the share hardcoded white, which read as two kinds of number when they are
+one line's two figures.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
 
