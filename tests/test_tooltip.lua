@@ -773,3 +773,297 @@ test("The tooltip is widened for the slots, and put back afterwards", function()
     assertEqual(inst.mocks.GameTooltip:GetMinimumWidth(), 0,
         "our minimum width outlived our tooltip")
 end)
+
+-- ---------------------------------------------------------------------------
+-- Anchoring and offsets
+-- ---------------------------------------------------------------------------
+
+test("Every anchor the schema offers resolves to a real GameTooltip token", function()
+    -- The setting is worded for a player ("Bottom right") and the token is
+    -- Blizzard's, so the translation table is the one thing standing between a
+    -- typo'd "ANCHOR_BOTTOMRIGHT" and a silent fallback to the cursor. Every value
+    -- the dropdown can produce is walked, which is what makes adding a ninth
+    -- anchor without adding its token a failing test rather than a shrug.
+    -- red under: dropping any entry from ANCHOR_TOKENS.
+    local expected = {
+        CURSOR      = "ANCHOR_CURSOR",
+        TOP         = "ANCHOR_TOP",
+        BOTTOM      = "ANCHOR_BOTTOM",
+        LEFT        = "ANCHOR_LEFT",
+        RIGHT       = "ANCHOR_RIGHT",
+        TOPLEFT     = "ANCHOR_TOPLEFT",
+        TOPRIGHT    = "ANCHOR_TOPRIGHT",
+        BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
+        BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
+    }
+
+    for value, token in pairs(expected) do
+        local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.anchor = value end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+        assertEqual(inst.mocks.GameTooltip.__anchor, token,
+            "anchor " .. value .. " did not reach the client")
+    end
+end)
+
+test("The anchor dropdown offers nothing the token table cannot resolve", function()
+    -- Two independent statements of one list is exactly what a test can check. A
+    -- value offered by the dropdown with no token behind it does not error — it
+    -- falls back to the cursor, which reads as "the setting does nothing".
+    -- red under: adding a value to ANCHOR_VALUES without adding its token.
+    local probe = T.load()
+    local anchorRow
+    for _, r in ipairs(probe.NS.Schema) do
+        if r.path == "window.tooltip.anchor" then anchorRow = r end
+    end
+    assertTrue(anchorRow ~= nil, "the anchor row left the schema")
+
+    for value in pairs(anchorRow.values) do
+        local inst, cfg, frame = bench{ configure = function(c) c.tooltip.anchor = value end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", frame, cfg)
+        local token = inst.mocks.GameTooltip.__anchor
+        if value == "CURSOR" then
+            assertEqual(token, "ANCHOR_CURSOR")
+        else
+            assertTrue(token ~= "ANCHOR_CURSOR",
+                "anchor " .. value .. " silently fell back to the cursor")
+        end
+        assertTrue(anchorRow.values[value] ~= nil)
+    end
+
+    -- Sorting and values must agree, or the dropdown lists an option it cannot order.
+    for _, key in ipairs(anchorRow.sorting) do
+        assertTrue(anchorRow.values[key] ~= nil, "sorted anchor " .. key .. " has no label")
+    end
+    local sorted = 0
+    for _ in pairs(anchorRow.values) do sorted = sorted + 1 end
+    assertEqual(#anchorRow.sorting, sorted, "the sort order and the value list disagree")
+end)
+
+test("The x/y offset reaches SetOwner rather than a SetPoint of our own", function()
+    -- The offsets go to the CLIENT, as SetOwner's third and fourth arguments, so
+    -- the client still does the placing and still keeps the tooltip on screen.
+    -- Nudging it ourselves would mean reading a point back off a frame that has
+    -- held a secret value, which is rule R3 exactly.
+    -- red under: dropping the offsets from the SetOwner call.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.offsetX, c.tooltip.offsetY = 25, -40
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(inst.mocks.GameTooltip.__ownerX, 25, "the horizontal offset never arrived")
+    assertEqual(inst.mocks.GameTooltip.__ownerY, -40, "the vertical offset never arrived")
+end)
+
+test("A junk offset off an old profile is clamped, never handed to the client", function()
+    -- A string here raises inside Blizzard's own code, where the traceback names
+    -- neither this addon nor the setting that caused it.
+    -- red under: passing config.offsetX straight through.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.offsetX, c.tooltip.offsetY = "left a bit", 99999
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(inst.mocks.GameTooltip.__ownerX, 0, "a non-number offset was not neutralized")
+    assertEqual(inst.mocks.GameTooltip.__ownerY, 400, "an out-of-range offset was not clamped")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Line spacing
+-- ---------------------------------------------------------------------------
+
+test("Bar spacing is applied to the tooltip, and taken back off when it hides", function()
+    -- Line spacing belongs to the SHARED GameTooltip, like the minimum width, and
+    -- a value left on it silently respaces the next addon's item tooltip.
+    -- red under: dropping either the SetCustomLineSpacing call or its reset.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.barSpacing = 5 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(inst.mocks.GameTooltip:GetCustomLineSpacing(), 5,
+        "the configured spacing never reached the tooltip")
+
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+
+    assertEqual(inst.mocks.GameTooltip:GetCustomLineSpacing(), 0,
+        "our line spacing outlived our tooltip")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The font, and putting it back
+-- ---------------------------------------------------------------------------
+
+test("The configured font reaches both number slots and the spell name", function()
+    -- The names are the bulk of the tooltip's text, so a font that reached only
+    -- our own two slots would look half-applied — which is why this asserts the
+    -- shared line FontString as well as the carrier's.
+    -- red under: dropping the applyLineFont call.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.fontSize    = 17
+        c.tooltip.fontOutline = "THICKOUTLINE"
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local lines = spellLines(inst)
+    assertTrue(#lines > 0, "no spell lines were drawn")
+
+    local _, size, flags = lines[1].amount:GetFont()
+    assertEqual(size, 17, "the amount slot did not take the configured size")
+    assertEqual(flags, "THICKOUTLINE", "the amount slot did not take the outline flag")
+
+    local _, shareSize = lines[1].share:GetFont()
+    assertEqual(shareSize, 17, "the share slot did not take the configured size")
+
+    local left = inst.mocks["GameTooltipTextLeft4"]
+    assertTrue(left ~= nil, "the first spell line has no left FontString")
+    local _, lineSize = left:GetFont()
+    assertEqual(lineSize, 17, "the spell NAME kept the game's tooltip font")
+end)
+
+test("NONE is an absent outline flag, not the literal string", function()
+    -- WoW wants nil here. The string "NONE" is not a flag it knows, and the
+    -- difference is invisible until a font renders wrong.
+    -- red under: passing config.fontOutline through unconditionally.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontOutline = "NONE" end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local lines = spellLines(inst)
+    local _, _, flags = lines[1].amount:GetFont()
+    assertEqual(flags, nil, "\"NONE\" was passed to SetFont as a flag string")
+end)
+
+test("Every tooltip line we restyled is put back when the tooltip hides", function()
+    -- THE ONE THAT MATTERS. GameTooltipTextLeft<N> is SHARED with every other
+    -- addon and with every unit, item and quest hover in the game. A SetFont left
+    -- on one is this addon silently restyling somebody else's tooltip until the
+    -- next reload — the same class of bug as a bar left Shown, and less visible.
+    -- red under: dropping restoreFonts from releaseLines.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = 19 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local left = inst.mocks["GameTooltipTextLeft4"]
+    assertTrue(select(2, left:GetFont()) == 19, "the line never took our font to begin with")
+
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+
+    assertEqual(left:GetFont(), nil, "our font outlived our tooltip on a SHARED line")
+    assertEqual(left:GetFontObject(), inst.mocks.GameTooltipText,
+        "the line was cleared but never put back on the game's own font object")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Bar texture and border
+-- ---------------------------------------------------------------------------
+
+test("The tooltip's own bar texture is used, not the grid's", function()
+    -- These were one setting and are now two, deliberately: a 14px spell line and
+    -- a 90px cell are different surfaces, and a texture that reads across one
+    -- often does not across the other. Two DISTINCT files are registered so the
+    -- assertion can tell which setting was read — with one file, or with none,
+    -- both settings resolve to the same path and the test proves nothing.
+    -- red under: reading window.bars.texture here again.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.bars.texture       = "GridTexture"
+        c.tooltip.barTexture = "TipTexture"
+    end }
+    local media = inst.mocks.__libs["LibSharedMedia-3.0"]
+    media:Register("statusbar", "GridTexture", [[Interface\Grid]])
+    media:Register("statusbar", "TipTexture",  [[Interface\Tip]])
+
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local lines = spellLines(inst)
+    assertTrue(#lines > 0, "no spell lines were drawn")
+    assertEqual(lines[1].bar.__barTexture, [[Interface\Tip]],
+        "the tooltip bar took the GRID's texture instead of its own")
+end)
+
+test("A bar border is applied when asked and cleared off the POOLED line when not", function()
+    -- The carrier drawing line 4 of this hover drew line 4 of the last one, so a
+    -- player who turns the border off between two hovers keeps it unless the
+    -- clear is explicit.
+    -- red under: skipping the SetBackdrop(nil) branch.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barBorderStyle = "None"
+        c.tooltip.barBorderSize  = 1
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local lines = spellLines(inst)
+    assertTrue(#lines > 0, "no spell lines were drawn")
+    assertEqual(lines[1].__backdrop, nil, "\"None\" still drew a border")
+end)
+
+test("Border size zero drops the border FILE with it", function()
+    -- A zero edgeSize with a texture still present is the combination WoW draws
+    -- as a hard 1px line, which is the setting doing the opposite of what it says.
+    -- red under: keeping edgeFile when borderSize is 0.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barBorderStyle = "Blizzard Tooltip"
+        c.tooltip.barBorderSize  = 0
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local lines = spellLines(inst)
+    assertEqual(lines[1].__backdrop, nil, "a zero-thickness border still carried a file")
+end)
+
+-- ---------------------------------------------------------------------------
+-- maxSpells = 0
+-- ---------------------------------------------------------------------------
+
+test("maxSpells 0 lists every spell the breakdown collected", function()
+    -- 0 is the same "no cap" spelling rows.maxRows and text.maxNameLength use.
+    -- red under: the old `cap < 1 then return 10` clamp, which turns 0 into 10.
+    local spells = {}
+    for i = 1, 18 do spells[i] = { spellID = 100 + i, totalAmount = i * 1000 } end
+
+    local inst, cfg, anchor = bench{
+        detail = { combatSpells = spells, maxAmount = 18000, totalAmount = 171000 },
+        configure = function(c) c.tooltip.maxSpells = 0 end,
+    }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(#spellLines(inst), 18, "a 0 cap did not list every spell")
+end)
+
+test("maxSpells 0 is bounded by the collector, and says so", function()
+    -- "Every spell" is honest only up to COLLECT_LIMIT, because that is all
+    -- collectSpells ever pulls. What must not happen is a silent truncation: the
+    -- "and N more" line counts the remainder with SafeCount and keeps saying so.
+    -- red under: returning math.huge from spellLineCap, which drops the more-line.
+    local spells = {}
+    for i = 1, 80 do spells[i] = { spellID = 100 + i, totalAmount = i * 1000 } end
+
+    local inst, cfg, anchor = bench{
+        detail = { combatSpells = spells, maxAmount = 80000, totalAmount = 1 },
+        configure = function(c) c.tooltip.maxSpells = 0 end,
+    }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(#spellLines(inst), 64, "the collector's own ceiling was not respected")
+
+    local sawMore = false
+    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
+        if type(line.text) == "string" and line.text:match("^and %d+ more$") then sawMore = true end
+    end
+    assertTrue(sawMore, "80 spells were cut to 64 with nothing said about it")
+end)
+
+test("A negative or non-numeric cap still falls back to the shipped default", function()
+    -- 0 gained a meaning; junk did not.
+    -- red under: treating every non-positive number as "no cap".
+    local spells = {}
+    for i = 1, 18 do spells[i] = { spellID = 100 + i, totalAmount = i * 1000 } end
+    local detail = { combatSpells = spells, maxAmount = 18000, totalAmount = 171000 }
+
+    for _, junk in ipairs({ -4, "ten" }) do
+        local inst, cfg, anchor = bench{
+            detail = detail,
+            configure = function(c) c.tooltip.maxSpells = junk end,
+        }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+        assertEqual(#spellLines(inst), 10,
+            "a junk cap (" .. tostring(junk) .. ") did not fall back to 10")
+    end
+end)

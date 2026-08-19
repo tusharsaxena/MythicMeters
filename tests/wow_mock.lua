@@ -451,6 +451,19 @@ function FRAME.GetFont(self)
     if not f then return nil end
     return f.path, f.size, f.flags
 end
+--- Adopt a font OBJECT, which is how a restyled widget is put back.
+---
+--- Recorded rather than no-op'd because it is the whole of modules/Tooltip.lua's
+--- font-restore contract: the addon writes SetFont onto GameTooltip's SHARED line
+--- FontStrings and has to undo it, and a stub that swallowed the call would make
+--- "did it clean up" unassertable. `__font` is cleared so `GetFont` answers nil
+--- again — a restored line is one that no longer carries an explicit font.
+function FRAME.SetFontObject(self, obj)
+    self.__fontObject = obj
+    self.__font = nil
+    return self
+end
+function FRAME.GetFontObject(self) return self.__fontObject end
 function FRAME.SetTextColor(self, r, g, b, a)
     self.__textColor = { r, g, b, a or 1 }
     return self
@@ -1478,8 +1491,13 @@ local function build()
     -- case pass without asserting anything.
     local tooltip = makeFrame("GameTooltip", nil, "GameTooltip")
     tooltip.__lines = {}
-    function tooltip:SetOwner(owner, anchor)
+    -- The OFFSET PAIR is recorded, not dropped. `tooltip.offsetX/offsetY` reach
+    -- the client only through these two arguments — the addon deliberately never
+    -- places the tooltip itself — so a SetOwner that ignored them would make the
+    -- entire setting untestable while looking implemented.
+    function tooltip:SetOwner(owner, anchor, x, y)
         self.__owner, self.__anchor = owner, anchor
+        self.__ownerX, self.__ownerY = x, y
         return self
     end
     function tooltip:GetOwner() return self.__owner end
@@ -1538,7 +1556,17 @@ local function build()
     -- of that unassertable.
     function tooltip:SetMinimumWidth(w) self.__minWidth = w or 0; return self end
     function tooltip:GetMinimumWidth() return self.__minWidth or 0 end
+    -- Line spacing is a property of the SHARED tooltip, exactly like the minimum
+    -- width above, and it is left behind the same way — so it is recorded for the
+    -- same reason: "did the addon put it back" has to be a question a suite can
+    -- ask.
+    function tooltip:SetCustomLineSpacing(s) self.__lineSpacing = s or 0; return self end
+    function tooltip:GetCustomLineSpacing() return self.__lineSpacing or 0 end
     M.GameTooltip = tooltip
+    -- The font object GameTooltip's own line FontStrings inherit, and the one
+    -- modules/Tooltip.lua restores them to. A plain sentinel table: nothing reads
+    -- through it, and identity is the whole assertion.
+    M.GameTooltipText = { __fontObject = "GameTooltipText" }
     M.GameTooltip_SetDefaultAnchor = function() end
 
     -- ── timers ─────────────────────────────────────────────────────────────

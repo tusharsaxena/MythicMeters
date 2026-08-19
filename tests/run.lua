@@ -212,6 +212,7 @@ local SUITES = {
     -- the display
     "test_window",
     "test_row",
+    "test_targets",
     "test_tooltip",
     "test_drilldown",
     "test_visibility",

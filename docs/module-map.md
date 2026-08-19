@@ -78,15 +78,19 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │   ├── Row.lua         — one row and its cells: the StatusBar + two FontStrings,
 │                         the name column's icons, the bar colors, the mouse
 │                         hand-off. Nothing here looks at a number
-│   ├── Tooltip.lua     — the per-cell spell breakdown and the all-statistics
-│                         summary on a name, both on GameTooltip
+│   ├── Targets.lua     — the enemy cross-reference: reconstructs "who did this
+│                         player hit" out of the EnemyDamageTaken column, and
+│                         refuses outright rather than summing secrets
+│   ├── Tooltip.lua     — the per-cell spell breakdown, the all-statistics
+│                         summary on a name and the Targets section, all on
+│                         GameTooltip
 │   ├── DrillDown.lua   — per-player per-stat breakdown rendered through the SAME
 │                         row path, the back button, and the death-recap hand-off
 │   ├── Visibility.lua  — the context predicate. Publishes no message and touches
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (83 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (95 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (15 verbs), the five
@@ -150,7 +154,8 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetPreview` / `IsPreview`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
 | `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)` and the `WindowProto` methods | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 9 messages on **its own** private bus target |
 | `Row.lua` | plain table + prototype | Row and cell widgets, the cell descriptor, bar colors, icon placement, the mouse hand-off | `NS.Row.New(window)`, `NS.Row.OffsetFor(layout, index)` | `NS.Constants`, `NS.RGBA`, `NS.Format` / `NS.NumberFormat`, and `NS.Tooltip` / `NS.DrillDown` resolved at call time |
-| `Tooltip.lua` | AceAddon | Both tooltip builders, the legal-only spell sort, the "and N more" line | `NS.Tooltip` — `CellTooltip`, `NameTooltip`, `Hide` | `NS.Provider`, `NS.Secrets`, `NS.Numbers`, `NS.Compat.GetSpellInfo`, `NS.WINDOW_TEMPLATE`, `NS.Database.FindWindow` |
+| `Targets.lua` | plain table | The enemy cross-reference. Walks every `EnemyDamageTaken` source's spells and keeps the ones whose `combatSpellDetails.unitName` is the hovered player, summing per enemy. **All-or-nothing**: one unreadable amount abandons the whole build | `NS.Targets` — `ForPlayer`, `Total` | `NS.Provider.GetColumn` / `GetSourceDetail`, `NS.Secrets`, `NS.Constants.SESSION_TYPE`. Holds no cache and subscribes to nothing |
+| `Tooltip.lua` | AceAddon | Both tooltip builders, the legal-only spell sort, the "and N more" line, the Targets section, and the tooltip's own bar/font styling (including restoring the SHARED line FontStrings) | `NS.Tooltip` — `CellTooltip`, `NameTooltip`, `Hide` | `NS.Provider`, `NS.Secrets`, `NS.Numbers`, `NS.Compat.GetSpellInfo`, `NS.WINDOW_TEMPLATE`, `NS.Database.FindWindow` |
 | `DrillDown.lua` | AceAddon | Per-window view state (session-only, in `State.Cache`), the spell-row contract, the back button, click routing, the death recap | `NS.DrillDown` — `GetState`, `IsActive`, `Enter`, `Exit`, `ExitAll`, `OnCellClick`, `BuildRows`, `Title`, `AcquireBackButton`, `ReleaseBackButton` | `NS.Provider`, `NS.Secrets`, `NS.Compat`, `NS.Database.FindWindow`. Subscribes `METER_RESET`, `PROFILE_CHANGED`, `WINDOWS_CHANGED`. **The one `DRILLDOWN_CHANGED` sender** |
 | `Visibility.lua` | AceAddon | The context translation table and the predicate. No frame is touched and no message is sent | `NS.Visibility` — `GetContext`, `ShouldShow`, `Allows`, `Evaluate`, `Refresh`, `LastResult`, `Forget` | `NS.Database.GetWindows`, the instance API through `_G`. Subscribes `ZONE_CHANGED`, `ENTERING_WORLD`, `ROSTER_CHANGED`, `PROFILE_CHANGED` |
 | `Minimap.lua` | plain table | The LDB launcher object and the LibDBIcon registration | `NS.Minimap.Init`, `NS.Minimap.Refresh` | `NS.db.profile.minimap` (owned by LibDBIcon once registered), `NS.WindowManager`, `NS.OpenOptionsPanel` |
@@ -159,7 +164,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 77-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Schema.lua` | The 95-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
 | `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the five host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
@@ -169,14 +174,14 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Bars.lua` | The Bars page (8 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Text.lua` | The Text page (9 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Icons.lua` | The Icons page (5 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Tooltip.lua` | The Tooltip page (5 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Tooltip.lua` | The Tooltip page (17 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
 | `Data.lua` | The Data page (4 rows) plus the "Reset meter data" confirmation, which routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration | `NS.Helpers`, `NS.Provider.Reset` |
 | `General.lua` | The General page (4 rows) plus two session-only checkboxes (preview, debug console) and the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 77 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
+Schema rows total 95 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
 both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order
@@ -207,8 +212,10 @@ both are bespoke by necessity, and both say why in their file headers.
 4. **`defaults/Profile.lua`** — after `core/Constants.lua`, whose stat catalog it captures at load.
 5. **`modules/`** — `Format` first (nothing reads another module, and `Row` and `Tooltip` both format
    on their first render), then `Provider` → `Roster` → `Aggregator` → `WindowManager` → `Window` →
-   `Row` → `Tooltip` → `DrillDown` → `Visibility` → `Minimap`. `Row.lua` loads before `Tooltip.lua`
-   and `DrillDown.lua` and therefore resolves both at *call* time.
+   `Row` → `Targets` → `Tooltip` → `DrillDown` → `Visibility` → `Minimap`. `Row.lua` loads before
+   `Tooltip.lua` and `DrillDown.lua` and therefore resolves both at *call* time. `Targets.lua` loads
+   before `Tooltip.lua`, which is its only caller, and resolves the provider at *call* time for the
+   same reason `Tooltip.lua` does.
 6. **`settings/`** — last, and `Schema.lua` first inside it: `Slash.lua` and `OptionsSetup.lua` both
    point their seams at `NS.SetByPath` / `NS.GetSetting` / `NS.FindSchemaRow` / `NS.ApplyDefault` at
    load. `OptionsSetup.lua` must precede every page file, because the pages call `NS.Helpers` members

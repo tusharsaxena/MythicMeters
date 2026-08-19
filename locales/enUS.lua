@@ -326,9 +326,15 @@ L["At cursor"] = "At cursor"
 L["Show spell breakdown"] = "Show spell breakdown"
 L["List the individual spells behind a cell's number when you hover it."] =
     "List the individual spells behind a cell's number when you hover it."
+L["Horizontal offset"] = "Horizontal offset"
+L["Nudge the tooltip sideways from wherever the anchor puts it. Positive moves it right."] =
+    "Nudge the tooltip sideways from wherever the anchor puts it. Positive moves it right."
+L["Vertical offset"] = "Vertical offset"
+L["Nudge the tooltip up or down from wherever the anchor puts it. Positive moves it up."] =
+    "Nudge the tooltip up or down from wherever the anchor puts it. Positive moves it up."
 L["Maximum spells"] = "Maximum spells"
-L["How many spells to list in the breakdown before stopping."] =
-    "How many spells to list in the breakdown before stopping."
+L["How many spells to list in the breakdown before stopping. 0 lists every spell the breakdown found."] =
+    "How many spells to list in the breakdown before stopping. 0 lists every spell the breakdown found."
 L["Summarize on the name"] = "Summarize on the name"
 L["Hovering a player's name shows every enabled statistic for that player at once."] =
     "Hovering a player's name shows every enabled statistic for that player at once."
@@ -336,8 +342,39 @@ L["Hide tooltips in combat"] = "Hide tooltips in combat"
 L["Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."] =
     "Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."
 
+L["Tooltip bars"] = "Tooltip bars"
+L["LibSharedMedia statusbar texture drawn behind each spell line."] =
+    "LibSharedMedia statusbar texture drawn behind each spell line."
+L["Bar spacing"] = "Bar spacing"
+L["Gap in pixels between one tooltip line and the next."] =
+    "Gap in pixels between one tooltip line and the next."
+L["Bar border style"] = "Bar border style"
+L["LibSharedMedia border drawn around each spell bar. Most border art is cut for a window rather than a 14px line, so it may look heavy here."] =
+    "LibSharedMedia border drawn around each spell bar. Most border art is cut for a window rather than a 14px line, so it may look heavy here."
+L["Bar border thickness"] = "Bar border thickness"
+L["Bar border color"] = "Bar border color"
+L["Color of the border around each spell bar."] =
+    "Color of the border around each spell bar."
+
+L["Tooltip text"] = "Tooltip text"
+L["Font used for the tooltip's spell names and numbers."] =
+    "Font used for the tooltip's spell names and numbers."
+L["Tooltip text size in pixels."] = "Tooltip text size in pixels."
+L["Outline and monochrome flags applied to the tooltip text."] =
+    "Outline and monochrome flags applied to the tooltip text."
+
+L["Tooltip targets"] = "Tooltip targets"
+L["Show targets"] = "Show targets"
+L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."] =
+    "On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."
+L["Maximum targets"] = "Maximum targets"
+L["How many enemies to list before stopping."] =
+    "How many enemies to list before stopping."
+
 -- Tooltip headers and rows, rendered at runtime.
 L["Spell breakdown"] = "Spell breakdown"
+L["Targets"] = "Targets"
+L["Unknown"] = "Unknown"
 L["All statistics"] = "All statistics"
 L["Overkill"] = "Overkill"
 L["Deadly"] = "Deadly"

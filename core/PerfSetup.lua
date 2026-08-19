@@ -112,6 +112,12 @@ NS.Perf = lib:New({
         { key = "render",       within = "refresh" },    -- window render
         { key = "renderRow",    within = "render"  },    -- one row's cells
         { key = "tooltip" },                             -- a tooltip build
+        -- Nested under `tooltip`, because that is the only thing that triggers
+        -- one — and because it is the expensive half: modules/Targets.lua makes
+        -- a provider call PER ENEMY to reconstruct a list the API does not carry.
+        -- Its own bucket precisely so the cost of the Targets section is separable
+        -- from the cost of the tooltip that holds it.
+        { key = "targets",      within = "tooltip" },    -- the target cross-reference
     },
 
     --- Make the addon inert without a /reload.

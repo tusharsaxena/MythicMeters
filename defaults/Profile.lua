@@ -234,8 +234,20 @@ local WINDOW_TEMPLATE = {
     -- tooltip — the cell spell breakdown
     -- -----------------------------------------------------------------------
     tooltip = {
-        anchor             = "CURSOR",   -- CURSOR | TOPLEFT | TOPRIGHT | BOTTOMLEFT | BOTTOMRIGHT
+        -- CURSOR | TOP | BOTTOM | LEFT | RIGHT
+        --        | TOPLEFT | TOPRIGHT | BOTTOMLEFT | BOTTOMRIGHT
+        anchor             = "CURSOR",
+        -- Nudge applied on top of whichever anchor is chosen, in pixels. Passed
+        -- to GameTooltip:SetOwner, which takes the pair natively — so the client
+        -- still does the placing and nothing here reads geometry back off a
+        -- frame (rule R3).
+        offsetX            = 0,
+        offsetY            = 0,
         showSpells         = true,
+        -- 0 means "every spell the breakdown collected", which is
+        -- modules/Tooltip.lua's COLLECT_LIMIT and not literally unbounded — the
+        -- collector never pulls more than that, and the "and N more" line stays
+        -- honest about anything past it.
         maxSpells          = 10,
         -- Hovering the NAME cell summarizes every enabled stat for that player,
         -- which is the cross-column read the whole addon exists for.
@@ -244,6 +256,29 @@ local WINDOW_TEMPLATE = {
         -- the formatter like any other, so there is nothing unsafe about it in
         -- combat — but a tooltip under the cursor during a pull is in the way.
         hideInCombat       = false,
+
+        -- The spell line's own appearance. Separate from `bars` on purpose: the
+        -- tooltip is a different surface at a different size, and a texture that
+        -- reads well across a 90px cell often does not across a 14px line.
+        barTexture         = "Blizzard Raid Bar",  -- LSM "statusbar" key
+        barSpacing         = 1,                    -- px between tooltip lines
+        barBorderStyle     = "None",               -- LSM "border" key
+        barBorderSize      = 1,
+        barBorderColor     = { r = 0, g = 0, b = 0, a = 1 },
+
+        -- Applied to the addon's own number slots AND to the tooltip's line
+        -- FontStrings, which are SHARED with every other addon — so every line
+        -- touched is restored when the tooltip hides. See modules/Tooltip.lua.
+        font               = "Friz Quadrata TT",
+        fontSize           = 12,
+        fontOutline        = "NONE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+
+        -- Which enemies this player hit, cross-referenced out of the
+        -- EnemyDamageTaken column by modules/Targets.lua. OFF by default: it is
+        -- one provider call per enemy on a hover, and it is a summation, so it is
+        -- absent for the whole of a pull (see that file's header).
+        showTargets        = false,
+        maxTargets         = 3,
     },
 
     -- -----------------------------------------------------------------------

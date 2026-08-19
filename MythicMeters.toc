@@ -60,6 +60,7 @@ modules\Aggregator.lua
 modules\WindowManager.lua
 modules\Window.lua
 modules\Row.lua
+modules\Targets.lua
 modules\Tooltip.lua
 modules\DrillDown.lua
 modules\Visibility.lua

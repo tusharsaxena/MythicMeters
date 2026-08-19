@@ -490,6 +490,53 @@ title travels to a `SetText` and nowhere else, and "is this window drilled in" i
 `WindowProto:Refresh` branches on the returned `drillRows` table and carries the title alongside as
 text only.
 
+## 9. The target cross-reference, and the one place refusal beats degradation
+
+`modules/Targets.lua` answers "which enemies did this player hit", and it is the only place in the
+addon where the display **withholds information rather than decoration** while the restriction is
+active. Worth understanding before touching it, because the reasoning inverts the rule everywhere
+else.
+
+**It is a join, not a read.** A `DamageDone` source knows its spells and nothing about who they hit.
+The information is filed under the other party: an `EnemyDamageTaken` source is one enemy, its
+`combatSpells` are the spells that hit it, and each carries `combatSpellDetails.unitName` — the
+player who cast it. So the walk is enemy-first:
+
+```
+Provider.GetColumn(session, "EnemyDamageTaken")     -- enumerate the enemies
+  └─ per enemy: Provider.GetSourceDetail(session, "EnemyDamageTaken", guid, creatureID)
+       └─ SafeIterate(combatSpells)
+            └─ keep spell where combatSpellDetails.unitName == the hovered player
+                 └─ totals[enemy] += spell.totalAmount
+```
+
+**The GUID is dropped whenever it is secret**, and that is the line the whole section depends on
+mid-pull. `sourceGUID` is secret and inaccessible for the entire of a pull (§2), and it is the
+*first* argument to `GetSourceDetail` — so passing it resolves nothing and the section silently
+disappears for a whole fight. `sourceCreatureID` is a plain number, is never secret, and identifies
+an enemy exactly as well, so a GUID that fails `Secrets.IsSafeKey` is replaced with `nil` and the
+lookup falls to the creature ID.
+
+**Why the section vanishes instead of degrading.** Everywhere else a restricted value travels on as
+an opaque handle and the display loses a bar or a percentage. That escape does not exist here,
+because the number does not exist in the API: one enemy's damage from one player is a **sum**, and a
+sum of secrets raises. So the answer is binary and is decided *before* any arithmetic — every amount
+is checked with `CanAccess` as it is collected, and the first inaccessible one abandons the whole
+build and returns `nil`. Skipping the unreadable rows and carrying on would produce a total summed
+from whatever happened to be visible: wrong, plausible, and in the direction of "this enemy took less
+than it did". An absent section is a visible absence; an under-reported one is a lie the player
+cannot see.
+
+An unreadable *caster name* is different and is skipped rather than fatal — a spell nobody can be
+attributed to belongs to nobody rather than to everybody, so dropping it costs one spell's
+contribution instead of corrupting a number that is still on screen.
+
+**No cache, and that is deliberate.** A cache here would hold meter values across time, which is the
+one thing this addon does not do. The cost is paid by the caller instead: the section is off by
+default, drawn on the Damage column only, capped at ten entries and bounded at 64 enemies, and it
+runs on a *hover* rather than on the refresh tick. Its own perf bucket, `targets`, is nested under
+`tooltip` so that cost stays separable.
+
 ## Where the guards live
 
 If you are adding to the data path, these are the only files that may know anything about a value:

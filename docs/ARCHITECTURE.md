@@ -61,7 +61,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Aggregator`, `Format` | Read → join → order → render as text. |
-| `modules/` display | `WindowManager`, `Window`, `Row`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the two hover surfaces, the breakdown, the context predicate, the launcher. |
+| `modules/` display | `WindowManager`, `Window`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
@@ -70,7 +70,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **83 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **95 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -342,6 +342,14 @@ and a fallback nobody can run is a fallback nobody has tested.
 - **Pets are separate rows for the whole of a pull, whatever `data.mergePets` says.** Folding needs
   the owner link, the owner link needs a GUID, and there is none while restricted.
 - **Percentage text slots render empty in combat.** By design; the slots default to total and rate.
+- **The tooltip's Targets section is absent for the whole of a pull, not degraded.** It is the one
+  place in the addon where restriction costs *information* rather than decoration, and it is
+  deliberate: one enemy's damage from one player does not exist in the API, it is a **sum** over that
+  enemy's matching spells, and a sum of secrets raises. Summing only the readable rows would show a
+  number that is wrong, plausible and invisibly low. So `modules/Targets.lua` refuses the entire
+  build on the first unreadable amount. It is also off by default and Damage-column only, because it
+  costs one provider call per enemy on a hover and keeps no cache. See
+  [data-flow.md §9](data-flow.md).
 - **`provider` sort mode rests on an unverified assumption** — that `combatSources` arrives sorted by
   the requested statistic. Isolated in `modules/Provider.lua`; `value` and `roster` do not depend on
   it.
@@ -463,7 +471,8 @@ per-file reasoning in [module-map.md](module-map.md#load-order). The binding con
    and **before every `modules/` file that takes `local Perf = NS.Perf` as a load-time upvalue**.
 6. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
 7. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
-   `DrillDown` at *call* time because both load after it.
+   `DrillDown` at *call* time because both load after it. `modules/Targets.lua` loads before
+   `modules/Tooltip.lua`, its only caller.
 8. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
    their seams at `NS.SetByPath` / `NS.GetSetting` at load — and `settings/OptionsSetup.lua` before
    every page file, which call `NS.Helpers` members inside schema-row literals at file load.

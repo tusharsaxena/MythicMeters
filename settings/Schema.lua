@@ -313,14 +313,27 @@ local RIGHTSLOT_SORT   = { "rate", "percent", "none" }
 local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
 local NUMFMT_SORT    = { "abbreviated", "full" }
 
+-- Every ANCHOR_* token GameTooltip:SetOwner accepts, minus ANCHOR_NONE and
+-- ANCHOR_PRESERVE — both of which mean "the caller places it itself", which is
+-- the one thing this addon may not do: a cell handed a secret value has secret
+-- geometry, so there is no legal way to compute a point from it (rule R3).
+-- Ordered cursor first, then the four edges, then the four corners.
 local ANCHOR_VALUES  = {
     CURSOR      = L["At cursor"],
+    TOP         = L["Top"],
+    BOTTOM      = L["Bottom"],
+    LEFT        = L["Left"],
+    RIGHT       = L["Right"],
     TOPLEFT     = L["Top left"],
     TOPRIGHT    = L["Top right"],
     BOTTOMLEFT  = L["Bottom left"],
     BOTTOMRIGHT = L["Bottom right"],
 }
-local ANCHOR_SORT    = { "CURSOR", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
+local ANCHOR_SORT    = {
+    "CURSOR",
+    "TOP", "BOTTOM", "LEFT", "RIGHT",
+    "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT",
+}
 
 local SORTMODE_VALUES = {
     value    = L["By value"],
@@ -820,16 +833,37 @@ NS.Schema = {
         label = L["Tooltip anchor"], desc = L["Where the tooltip appears relative to the cursor or the window."],
     },
     {
+        path = "window.tooltip.offsetX", type = "number", default = 0,
+        min = -400, max = 400, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Tooltip behavior"],
+        label = L["Horizontal offset"],
+        desc = L["Nudge the tooltip sideways from wherever the anchor puts it. Positive moves it right."],
+        validate = isNumberIn(-400, 400),
+    },
+    {
+        path = "window.tooltip.offsetY", type = "number", default = 0,
+        min = -400, max = 400, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Tooltip behavior"],
+        label = L["Vertical offset"],
+        desc = L["Nudge the tooltip up or down from wherever the anchor puts it. Positive moves it up."],
+        validate = isNumberIn(-400, 400),
+    },
+    {
         path = "window.tooltip.showSpells", type = "bool", default = true,
         page = "tooltip", group = L["Tooltip behavior"],
         label = L["Show spell breakdown"], desc = L["List the individual spells behind a cell's number when you hover it."],
     },
+    -- 0 is the explicit "no cap" value, the same spelling `rows.maxRows` and
+    -- `text.maxNameLength` already use. It is honest rather than infinite: the
+    -- collector stops at 64 rows however this is set, and the "and N more" line
+    -- says so.
     {
         path = "window.tooltip.maxSpells", type = "number", default = 10,
-        min = 1, max = 30, step = 1,
+        min = 0, max = 30, step = 1,
         page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Maximum spells"], desc = L["How many spells to list in the breakdown before stopping."],
-        validate = isNumberIn(1, 30),
+        label = L["Maximum spells"],
+        desc = L["How many spells to list in the breakdown before stopping. 0 lists every spell the breakdown found."],
+        validate = isNumberIn(0, 30),
     },
     {
         path = "window.tooltip.showAllStatsOnName", type = "bool", default = true,
@@ -845,6 +879,90 @@ NS.Schema = {
         page = "tooltip", group = L["Tooltip behavior"],
         label = L["Hide tooltips in combat"],
         desc = L["Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."],
+    },
+
+    -- Tooltip bars are configured SEPARATELY from the grid's, rather than
+    -- inherited from `window.bars`. They are a different surface at a different
+    -- size — a 14px spell line against a 90px cell — and a texture that reads
+    -- well across one often does not across the other.
+    {
+        path = "window.tooltip.barTexture", type = "string", default = "Blizzard Raid Bar",
+        values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar texture"], desc = L["LibSharedMedia statusbar texture drawn behind each spell line."],
+    },
+    {
+        path = "window.tooltip.barSpacing", type = "number", default = 1,
+        min = 0, max = 12, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar spacing"], desc = L["Gap in pixels between one tooltip line and the next."],
+        validate = isNumberIn(0, 12),
+    },
+    -- Defaults to None, and that is not timidity. Most LibSharedMedia border art
+    -- carries an 8-16px corner inset, and a spell bar is 14px tall — so on a
+    -- majority of the list the corners eat the whole edge. The option is here
+    -- because it was asked for; the default is the one that always looks right.
+    {
+        path = "window.tooltip.barBorderStyle", type = "string", default = "None",
+        values = lsmValues("border"), dialogControl = "LSM30_Border",
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar border style"],
+        desc = L["LibSharedMedia border drawn around each spell bar. Most border art is cut for a window rather than a 14px line, so it may look heavy here."],
+    },
+    {
+        path = "window.tooltip.barBorderSize", type = "number", default = 1,
+        min = 0, max = 16, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar border thickness"], desc = L["Border edge size in pixels."],
+        validate = isNumberIn(0, 16),
+    },
+    {
+        path = "window.tooltip.barBorderColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 1 },
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar border color"], desc = L["Color of the border around each spell bar."],
+    },
+
+    -- The font reaches GameTooltip's own line FontStrings, which are SHARED with
+    -- every other addon — so modules/Tooltip.lua restores every line it touched
+    -- when the tooltip hides. See that file's `releaseLines`.
+    {
+        path = "window.tooltip.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Font"], desc = L["Font used for the tooltip's spell names and numbers."],
+    },
+    {
+        path = "window.tooltip.fontSize", type = "number", default = 12,
+        min = 6, max = 32, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Font size"], desc = L["Tooltip text size in pixels."],
+        validate = isNumberIn(6, 32),
+    },
+    {
+        path = "window.tooltip.fontOutline", type = "string", default = "NONE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
+    },
+
+    -- OFF by default, and for two reasons that are worth stating separately.
+    -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
+    -- no cache), and it is a SUMMATION — so it is absent for the whole of a pull
+    -- rather than approximated. A player who wants it gets it; nobody pays for it
+    -- without asking.
+    {
+        path = "window.tooltip.showTargets", type = "bool", default = false,
+        page = "tooltip", group = L["Tooltip targets"],
+        label = L["Show targets"],
+        desc = L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."],
+    },
+    {
+        path = "window.tooltip.maxTargets", type = "number", default = 3,
+        min = 1, max = 10, step = 1,
+        page = "tooltip", group = L["Tooltip targets"],
+        label = L["Maximum targets"], desc = L["How many enemies to list before stopping."],
+        validate = isNumberIn(1, 10),
     },
 
     -- ── Visibility ───────────────────────────────────────────────────────────

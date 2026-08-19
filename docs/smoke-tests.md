@@ -59,6 +59,8 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 | 20 | Names | [Realm strip and truncation](#20-realm-strip-and-truncation) |
 | 21 | **Segments** | [**The header segment selector**](#21-the-header-segment-selector) |
 | 22 | Migration | [v1 → v2 uniform column widths](#22-v1--v2-uniform-column-widths) |
+| 23 | Tooltip styling | [Tooltip appearance, anchor and offsets](#23-tooltip-appearance-anchor-and-offsets) |
+| 24 | **Targets** | [**The Targets section, and its absence mid-pull**](#24-the-targets-section-and-its-absence-mid-pull) |
 
 ---
 
@@ -645,6 +647,77 @@ Needs a profile written by v0.1.0, so do this before wiping SavedVariables.
 5. Check a **second profile** you had not activated this session. Its widths are lifted too.
 
 ---
+
+### 23. Tooltip appearance, anchor and offsets
+
+Everything here is cosmetic except the last item, which is the one that can damage another addon.
+
+**Steps:**
+1. Settings → **Tooltip**. Set **Bar texture** to something visibly different from the grid's, set
+   **Bar spacing** to 6, set **Font** and **Font size** to something obviously different, and set
+   **Font outline** to Thick outline.
+2. Hover a Damage cell.
+3. Set **Bar border style** to a real LSM border with thickness 2, hover again; then set it back to
+   **None** and hover the same cell again.
+4. Walk **Tooltip anchor** through all nine values, hovering after each.
+5. Set **Horizontal offset** to 60 and **Vertical offset** to -60, hover again.
+6. Set **Maximum spells** to 0 and hover a cell for someone with a long spell list.
+7. **Now hover a bag item, a party member's unit frame, and a quest in the tracker.**
+
+**Pass.**
+- The tooltip's bars wear the **tooltip's** texture, not the grid's — these are two settings now and
+  changing one must not move the other.
+- Spacing visibly opens up between lines; 0 restores the tight default.
+- The font, size and outline apply to the **spell names as well as** the two number columns. A font
+  that reached only the numbers means the shared line FontStrings were skipped.
+- The border appears around each spell bar and **disappears completely** when set back to None. A
+  border that lingers means the pooled carrier was not cleared — the lines are recycled, so line 4
+  of this hover is the same frame as line 4 of the last one.
+- Every anchor moves the tooltip somewhere different. An anchor that behaves identically to **At
+  cursor** means its token is missing and it silently fell back.
+- The offsets move the tooltip and it **still stays on screen** near the edges — the client is doing
+  the placing, and an offset that lets the tooltip run off the edge means it is being positioned by
+  hand, which is a rule R3 violation.
+- **Maximum spells 0** lists every spell, up to the collector's own ceiling of 64, with an *"and N
+  more"* line if the player had more than that. 0 must not behave like 10.
+- **Step 7 is the one that matters.** The item, unit and quest tooltips must look **exactly as they
+  always do** — stock font, stock spacing, no bars, no borders. Anything carried over means the
+  addon has restyled the shared `GameTooltip` and left it that way, which persists until a reload
+  and is invisible until somebody else's tooltip looks wrong.
+
+### 24. The Targets section, and its absence mid-pull
+
+The one place in this addon where the restriction costs *information* rather than decoration. Read
+[data-flow.md §9](data-flow.md) before judging a failure here — "the section is missing mid-pull" is
+the **correct** behavior, not the bug.
+
+**Steps:**
+1. Settings → **Tooltip** → enable **Show targets**, leave **Maximum targets** at 3.
+2. **Out of combat**, after a pull with several different enemies, hover your own **Damage** cell.
+3. Hover a **Healing** cell and an **Interrupts** cell.
+4. Hover another player's Damage cell.
+5. **During a pull**, hover a Damage cell.
+6. Raise **Maximum targets** to 10, repeat step 2.
+7. Turn **Show targets** back off and repeat step 2.
+
+**Pass.**
+- Out of combat, a **Targets** header appears below the spell breakdown, listing the enemies you hit,
+  biggest first, with bars and a share column exactly like the spell lines.
+- The section appears on **Damage cells only**. A Targets list under Healing or Interrupts means the
+  column guard is missing.
+- Another player's tooltip lists **their** targets, not yours and not the group's. This is the
+  failure worth hunting: every enemy's spell list holds the whole group mixed together, so a broken
+  caster filter shows everyone the same list and looks entirely plausible.
+- **Mid-pull the section is absent entirely.** Not a shorter list, not zeroes — absent. A Targets
+  list that *does* appear during a pull is a hard fail: the numbers behind it were summed from
+  whichever rows happened to be readable and every one of them is too low.
+- No Lua error at any point in step 5. The build touches secret amounts and secret GUIDs on that
+  path, and it must refuse rather than raise.
+- Raising the cap lists more enemies, still ordered biggest-first — the cap trims **after** ordering,
+  so the top three at cap 3 are the same three enemies that lead the list at cap 10.
+- With the setting off, no Targets header and — check with `/mm perf` — **no `targets` bucket
+  activity at all**. The section costs one provider call per enemy, and an off switch that still
+  pays for the walk is a bug.
 
 ## What to report
 

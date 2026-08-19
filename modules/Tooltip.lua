@@ -208,11 +208,64 @@ local function tooltipConfig(window)
 
     return {
         anchor             = field("anchor", "CURSOR"),
+        offsetX            = field("offsetX", 0),
+        offsetY            = field("offsetY", 0),
         showSpells         = field("showSpells", true),
         maxSpells          = field("maxSpells", 10),
         showAllStatsOnName = field("showAllStatsOnName", true),
         hideInCombat       = field("hideInCombat", false),
+        barTexture         = field("barTexture", "Blizzard Raid Bar"),
+        barSpacing         = field("barSpacing", 1),
+        barBorderStyle     = field("barBorderStyle", "None"),
+        barBorderSize      = field("barBorderSize", 1),
+        barBorderColor     = field("barBorderColor", nil),
+        font               = field("font", "Friz Quadrata TT"),
+        fontSize           = field("fontSize", 12),
+        fontOutline        = field("fontOutline", "NONE"),
+        showTargets        = field("showTargets", false),
+        maxTargets         = field("maxTargets", 3),
     }
+end
+
+-- ---------------------------------------------------------------------------
+-- Media
+-- ---------------------------------------------------------------------------
+
+local function lsm()
+    return LibStub and LibStub("LibSharedMedia-3.0", true)
+end
+
+--- An LSM path, or nil. Nil is a real answer everywhere it is used here: a
+--- StatusBar with no texture falls back to BAR_FALLBACK_TEXTURE, and a backdrop
+--- with no edgeFile draws no border, which is what "None" has to mean.
+local function mediaPath(mediaType, name)
+    if type(name) ~= "string" or name == "" or name == "None" then return nil end
+    local media = lsm()
+    return media and media:Fetch(mediaType, name, true) or nil
+end
+
+--- The font this tooltip draws in: a path, a size, and the flag string WoW wants
+--- as nil rather than as the literal "NONE".
+---
+--- The path falls all the way back to the client's own standard face rather than
+--- to nil, because a FontString with NO font raises on SetText — and every
+--- caller here sets text immediately afterwards.
+---
+--- @param config table
+--- @return string path, number size, string|nil flags
+local function tooltipFont(config)
+    local path = mediaPath("font", config.font)
+        or Const.FONT_MONO or _G.STANDARD_TEXT_FONT
+    local size = config.fontSize
+    if type(size) ~= "number" or size < 1 then size = 12 end
+    local flags = (config.fontOutline ~= "NONE") and config.fontOutline or nil
+    return path, size, flags
+end
+
+--- A color table's four channels, with a fallback per channel.
+local function rgba(color, dr, dg, db, da)
+    if type(color) ~= "table" then return dr, dg, db, da end
+    return color.r or dr, color.g or dg, color.b or db, color.a or da
 end
 
 --- The window config a row belongs to.
@@ -258,12 +311,18 @@ end
 
 --- How many spell lines the breakdown may draw.
 ---
---- Clamped here rather than trusted, because `maxSpells` comes off a saved
---- profile that an older build — or a hand edit — may have left as a string, as
---- zero, or as a negative. The shipped default is the answer in every one of
---- those cases.
+--- ZERO MEANS EVERY SPELL, and the honest value of "every" is COLLECT_LIMIT:
+--- `collectSpells` never pulls more than that however this is set, so returning
+--- anything larger would be a cap that lies about itself. Nothing is hidden by
+--- the difference — the "and N more" line counts what was left out with
+--- SafeCount and keeps saying so.
+---
+--- Everything else is clamped rather than trusted, because `maxSpells` comes off
+--- a saved profile that an older build — or a hand edit — may have left as a
+--- string or as a negative. The shipped default is the answer in both cases.
 local function spellLineCap(config)
     local cap = config.maxSpells
+    if cap == 0 then return COLLECT_LIMIT end
     if type(cap) ~= "number" or cap < 1 then return 10 end
     return cap
 end
@@ -281,13 +340,32 @@ end
 -- tooltip. We never read GetPoint / GetLeft / GetWidth off the anchor frame to
 -- position anything ourselves — a cell that has been handed a secret value has
 -- secret geometry, and reading it back is rule R3's exact prohibition.
+--
+-- ANCHOR_NONE and ANCHOR_PRESERVE are deliberately absent. Both mean "the owner
+-- places the tooltip itself", and placing it ourselves would mean computing a
+-- point from the anchor frame — which is the read rule R3 forbids.
 local ANCHOR_TOKENS = {
     CURSOR      = "ANCHOR_CURSOR",
+    TOP         = "ANCHOR_TOP",
+    BOTTOM      = "ANCHOR_BOTTOM",
+    LEFT        = "ANCHOR_LEFT",
+    RIGHT       = "ANCHOR_RIGHT",
     TOPLEFT     = "ANCHOR_TOPLEFT",
     TOPRIGHT    = "ANCHOR_TOPRIGHT",
     BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
     BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
 }
+
+--- An offset that is safe to hand to SetOwner: a real number, bounded to the
+--- range the schema offers. A saved profile carrying a string here would
+--- otherwise raise inside Blizzard's own code, where the traceback names
+--- neither this file nor the setting.
+local function offset(v)
+    if type(v) ~= "number" then return 0 end
+    if v < -400 then return -400 end
+    if v > 400 then return 400 end
+    return v
+end
 
 --- Claim GameTooltip for this hover, or answer false if it must not open.
 ---
@@ -306,8 +384,22 @@ local function openTooltip(anchorFrame, config)
         return false
     end
 
-    GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_CURSOR")
+    -- The offsets are passed to SetOwner rather than applied afterwards with a
+    -- SetPoint of our own: the client still does the placing, and it still keeps
+    -- the tooltip on screen. Nudging it ourselves would mean reading a point back
+    -- off a frame that has held a secret (rule R3).
+    GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_CURSOR",
+        offset(config.offsetX), offset(config.offsetY))
     GameTooltip:ClearLines()
+
+    -- Line spacing is a property of the SHARED tooltip, like the minimum width,
+    -- so releaseLines puts it back. Guarded because it arrived with the modern
+    -- tooltip template and this addon still loads on a client without it.
+    if GameTooltip.SetCustomLineSpacing then
+        local spacing = config.barSpacing
+        if type(spacing) ~= "number" or spacing < 0 then spacing = 0 end
+        GameTooltip:SetCustomLineSpacing(spacing)
+    end
     return true
 end
 
@@ -479,6 +571,44 @@ local linePool = {}
 --- that implies. Reset per hover by `releaseLines`.
 local widestName = 0
 
+-- ---------------------------------------------------------------------------
+-- THE FONT, AND WHY IT HAS TO BE PUT BACK
+-- ---------------------------------------------------------------------------
+--
+-- Our two number slots are our own FontStrings and may be set to anything. The
+-- SPELL NAME is not: it is GameTooltipTextLeft<N>, which belongs to the SHARED
+-- GameTooltip, and the tooltip is recycled by every addon and every unit, item
+-- and quest hover in the game. A SetFont left on one is not a cosmetic leak —
+-- it is this addon silently restyling somebody else's tooltip, and it survives
+-- until a reload.
+--
+-- So every line index this hover wrote a font onto is recorded, and each one is
+-- put back with SetFontObject("GameTooltipText") — the font object the real ones
+-- inherit, which restores face, size and flags in one call rather than
+-- reconstructing three values we would have had to read back off the widget.
+--
+-- `restoreFonts` runs from `releaseLines`, which is already wired to
+-- GameTooltip's own OnHide — so it covers every route out of a hover, including
+-- the ones that do not come back through this file.
+local fontedLines = {}
+
+--- Give one tooltip line our font, and remember that we did.
+local function applyLineFont(fontString, index, path, size, flags)
+    if not (fontString and fontString.SetFont) then return end
+    fontString:SetFont(path, size, flags)
+    fontedLines[index] = fontString
+end
+
+--- Put every line this hover restyled back onto the game's own tooltip font.
+local function restoreFonts()
+    for index, fontString in pairs(fontedLines) do
+        if fontString.SetFontObject and _G.GameTooltipText then
+            fontString:SetFontObject(_G.GameTooltipText)
+        end
+        fontedLines[index] = nil
+    end
+end
+
 --- Take every line down, and put GameTooltip back the way it was found.
 ---
 --- `pairs`, NOT `ipairs`. The pool is keyed by TOOLTIP LINE INDEX, and a spell
@@ -499,8 +629,15 @@ local function releaseLines()
         frame:Hide()
     end
     widestName = 0
+    restoreFonts()
     if _G.GameTooltip and GameTooltip.SetMinimumWidth then
         GameTooltip:SetMinimumWidth(0)
+    end
+    -- Line spacing belongs to the shared tooltip too, and a value left on it is
+    -- the same class of bug as a bar left Shown: the next addon's item tooltip
+    -- inherits our spacing for no reason it can discover.
+    if _G.GameTooltip and GameTooltip.SetCustomLineSpacing then
+        GameTooltip:SetCustomLineSpacing(0)
     end
 end
 
@@ -539,7 +676,12 @@ local function lineWidget(index)
     -- OnHide hook, and the earliest point in this file that can install it.
     ensureTooltipHook()
 
-    local frame = CreateFrame("Frame", nil, GameTooltip)
+    -- BackdropTemplate for the optional LSM border. Asked for at CREATION, since
+    -- a template cannot be added to a frame afterwards — so a player who turns
+    -- the border on mid-session gets it on lines that were pooled before they
+    -- did. Nothing is read back off the backdrop; it is set and forgotten, which
+    -- is what keeps it clear of rule R3.
+    local frame = CreateFrame("Frame", nil, GameTooltip, "BackdropTemplate")
     frame:SetHeight(BAR_HEIGHT)
     -- The tooltip's own level, NOT one above it: see the layering note above.
     frame:SetFrameLevel(GameTooltip:GetFrameLevel())
@@ -592,6 +734,63 @@ local function applyMinimumWidth()
         + SLOT_GAP + SHARE_SLOT_WIDTH + TOOLTIP_H_PADDING)
 end
 
+--- Everything a line needs to draw itself, resolved ONCE per hover.
+---
+--- Resolved once rather than per line because every one of these is an LSM fetch
+--- or a config walk and a breakdown may be sixty-four lines deep — and because a
+--- style that could differ between two lines of one tooltip would be a bug with
+--- no way to see it.
+---
+--- @param config table      the resolved tooltip config
+--- @param color table|nil   the hovered player's class color, or nil
+--- @return table
+local function lineStyle(config, color)
+    local path, size, flags = tooltipFont(config)
+    local borderSize = config.barBorderSize
+    if type(borderSize) ~= "number" or borderSize < 0 then borderSize = 0 end
+
+    return {
+        color      = color,
+        texture    = mediaPath("statusbar", config.barTexture),
+        -- Size zero drops the FILE with it. A zero edgeSize with a texture still
+        -- present is the combination WoW draws as a hard 1px line, which is the
+        -- setting doing the opposite of what it says (modules/Window.lua says
+        -- the same about the window's own border).
+        border     = (borderSize > 0) and mediaPath("border", config.barBorderStyle) or nil,
+        borderSize = borderSize,
+        borderColor = config.barBorderColor,
+        fontPath   = path,
+        fontSize   = size,
+        fontFlags  = flags,
+    }
+end
+
+--- Put the configured border around one line's carrier, or take it off.
+---
+--- Called on every draw and not once at creation, because the carrier is POOLED:
+--- the frame drawing line 4 of this hover drew line 4 of the last one, and a
+--- player who turned the border off between the two would otherwise keep it.
+--- Clearing is an explicit SetBackdrop(nil) for exactly that reason.
+local function applyLineBorder(frame, style)
+    if not frame.SetBackdrop then return end
+
+    if not style.border then
+        frame:SetBackdrop(nil)
+        return
+    end
+
+    frame:SetBackdrop({
+        -- No bgFile: the bar underneath already draws the line's background, and
+        -- a backdrop fill on top of it would flatten every bar to one color.
+        edgeFile = style.border,
+        edgeSize = style.borderSize,
+    })
+    if frame.SetBackdropBorderColor then
+        local r, g, b, a = rgba(style.borderColor, 0, 0, 0, 1)
+        frame:SetBackdropBorderColor(r, g, b, a)
+    end
+end
+
 --- Lay out one spell line and fill in its numbers.
 ---
 --- THE BAR IS ABSENT WHILE THE VALUES CANNOT BE DIVIDED. A bar's length is
@@ -606,14 +805,23 @@ end
 --- @param share string       the formatted share, or "" when it may not be taken
 --- @param value any          the spell's raw total, possibly secret
 --- @param max any            the largest total in this breakdown, possibly secret
---- @param color table|nil    { r, g, b }
---- @param texture string|nil an LSM statusbar path
-local function drawLine(lineIndex, amount, share, value, max, color, texture)
+--- @param style table        a resolved style from `lineStyle`
+local function drawLine(lineIndex, amount, share, value, max, style)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
     if not left then return end
 
     local frame = lineWidget(lineIndex)
+
+    -- The player's font, on OUR two slots and on the tooltip's own line. The
+    -- line is shared and is restored by `restoreFonts`; the slots are ours and
+    -- are simply re-set on every draw.
+    frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+    frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+    applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags)
+
+    applyLineBorder(frame, style)
+
     frame:ClearAllPoints()
     -- Past the icon on the left, out to the tooltip's own right margin on the
     -- right. Anchoring the right edge to GameTooltip rather than to the line's
@@ -642,7 +850,7 @@ local function drawLine(lineIndex, amount, share, value, max, color, texture)
     end
 
     local b = frame.bar
-    b:SetStatusBarTexture(texture or BAR_FALLBACK_TEXTURE)
+    b:SetStatusBarTexture(style.texture or BAR_FALLBACK_TEXTURE)
     -- BORDER, so the tooltip's ARTWORK spell name reads on top of the fill rather
     -- than under it. SetStatusBarTexture replaces the texture object, so the layer
     -- has to be re-stated every draw and not once at creation.
@@ -650,12 +858,13 @@ local function drawLine(lineIndex, amount, share, value, max, color, texture)
     if fill and fill.SetDrawLayer then fill:SetDrawLayer("BORDER") end
     b:SetMinMaxValues(0, max)
     b:SetValue(value)
+    local color = style.color
     b:SetStatusBarColor((color and color.r) or 0.6, (color and color.g) or 0.6,
         (color and color.b) or 0.6, 0.85)
     b:Show()
 end
 
-local function addSpellLine(spell, numberStyle, max, color, texture, sourceTotal)
+local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
     local spellID = spell.spellID
     local spellName, iconID
     if spellID ~= nil and Compat and Compat.GetSpellInfo then
@@ -692,8 +901,7 @@ local function addSpellLine(spell, numberStyle, max, color, texture, sourceTotal
 
     -- The line widget goes BEHIND the tooltip line that was just added, so it
     -- needs that line's index — which is NumLines now that the line exists.
-    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max,
-        color, texture)
+    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style)
 end
 
 --- The extra facts an Avoidable Damage row carries: whether the hit was
@@ -768,7 +976,7 @@ end
 --- @param cap number         the most lines this section may draw
 --- @param numberStyle string|nil
 --- @return number  lines drawn
-local function addSpellBreakdown(source, statKey, cap, numberStyle, color, texture)
+local function addSpellBreakdown(source, statKey, cap, numberStyle, style)
     local spells, spellTotal = collectSpells(source)
     sortSpellsIfLegal(spells)
 
@@ -789,7 +997,7 @@ local function addSpellBreakdown(source, statKey, cap, numberStyle, color, textu
     local shown = 0
     for i = 1, #spells do
         if i > cap then break end
-        addSpellLine(spells[i], numberStyle, barMax, color, texture, source.totalAmount)
+        addSpellLine(spells[i], numberStyle, barMax, style, source.totalAmount)
         if wantAvoidableDetail then
             addAvoidableDetail(spells[i], numberStyle)
         end
@@ -805,6 +1013,68 @@ local function addSpellBreakdown(source, statKey, cap, numberStyle, color, textu
     end
 
     return shown
+end
+
+-- ---------------------------------------------------------------------------
+-- Targets — which enemies this player hit
+-- ---------------------------------------------------------------------------
+
+--- The stat whose cells this section appears under. Damage only: "who did you
+--- hit" is a question about damage dealt, and the same list under a Healing or
+--- an Interrupts cell would be answering a question nobody asked of it.
+local TARGET_STAT = "DamageDone"
+
+--- Draw the "Targets" section, and answer how many lines it drew.
+---
+--- Everything hard about this lives in modules/Targets.lua, which either hands
+--- back a list whose numbers are PLAIN — it refuses outright rather than sum
+--- secrets — or hands back nil. So this function is ordinary: nil means no
+--- section, and a list means the amounts may be formatted, divided and drawn
+--- exactly like any other.
+---
+--- The bars scale to the biggest target rather than to the player's own total,
+--- for the same reason the spell bars scale to the biggest spell: a breakdown is
+--- read against itself.
+---
+--- @param row table
+--- @param statKey string
+--- @param config table
+--- @param style table
+--- @param numberStyle string|nil
+--- @param window table|nil
+--- @return number  lines drawn
+local function addTargetBreakdown(row, statKey, config, style, numberStyle, window)
+    if not config.showTargets then return 0 end
+    if statKey ~= TARGET_STAT then return 0 end
+
+    local T = NS.Targets
+    if not (T and T.ForPlayer) then return 0 end
+
+    local cap = config.maxTargets
+    if type(cap) ~= "number" or cap < 1 then cap = 3 end
+
+    local list = T.ForPlayer(window, row and row.name, cap)
+    if not list then return 0 end
+
+    local total = T.Total(list)
+    local max = list[1] and list[1].total
+
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(L["Targets"], 1, 0.82, 0)
+
+    for i = 1, #list do
+        local entry = list[i]
+        -- No icon escape, so no BAR_INSET_LEFT to clear — but the line is added
+        -- with a leading space anyway, so a target name and a spell name start at
+        -- the same x and the two sections read as one table.
+        GameTooltip:AddLine(string.format(" %s", entry.name or L["Unknown"]), 1, 1, 1)
+        drawLine(GameTooltip:NumLines(),
+            formatNumber(entry.total, numberStyle),
+            formatShare(entry.total, total),
+            entry.total, max, style)
+    end
+
+    return #list
 end
 
 --- Tell the player that the Deaths column answers a click.
@@ -844,28 +1114,25 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     GameTooltip:AddDoubleLine(displayName(row), stat and L[stat.label] or statKey,
         1, 1, 1, 1, 0.82, 0)
 
+    -- The bars wear the hovered player's class color, so a tooltip reads as
+    -- belonging to the row it came off. `classFilename` is NeverSecret, which is
+    -- why this keeps working mid-pull when the bar LENGTHS cannot.
+    local classes = _G.RAID_CLASS_COLORS
+    local color = classes and row and row.classFilename and classes[row.classFilename] or nil
+    local style = lineStyle(config, color)
+
     local shown = 0
     local source = config.showSpells and sourceDetailFor(window, statKey, row)
     if source then
-        -- The bars wear the hovered player's class color, so a tooltip reads as
-        -- belonging to the row it came off. `classFilename` is NeverSecret, which
-        -- is why this keeps working mid-pull when the bar LENGTHS cannot.
-        local classes = _G.RAID_CLASS_COLORS
-        local color = classes and row and row.classFilename and classes[row.classFilename] or nil
-        -- The window's OWN bar texture, so a tooltip looks like the grid it came
-        -- off rather than like a second addon.
-        local media = LibStub and LibStub("LibSharedMedia-3.0", true)
-        local barsCfg = (window and window.bars) or {}
-        local texture = media and barsCfg.texture
-            and media:Fetch("statusbar", barsCfg.texture, true) or nil
-
         shown = addSpellBreakdown(source, statKey, spellLineCap(config),
-            numberStyleOf(window), color, texture)
+            numberStyleOf(window), style)
     end
 
     if shown == 0 then
         GameTooltip:AddLine(L["No data yet"], 0.6, 0.6, 0.6)
     end
+
+    addTargetBreakdown(row, statKey, config, style, numberStyleOf(window), window)
 
     addDeathRecapHint(row, statKey)
 
