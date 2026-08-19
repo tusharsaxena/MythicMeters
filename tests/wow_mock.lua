@@ -423,6 +423,10 @@ function FRAME.SetText(self, t)
     if self.__objectType == "FontString" and not (self.__font or self.__template) then
         error("FontString:SetText(): Font not set", 2)
     end
+    -- A widget handed a secret STRING is as tainted as one handed a secret
+    -- number. SetValue already recorded this; SetText did not, and a FontString
+    -- is where most of this addon's secrets actually land.
+    if isSimulatedSecret(t) then self.__hasSecretValues = true end
     self.__text = t
     return self
 end
@@ -441,7 +445,31 @@ function FRAME.GetText(self) return self.__text end
 --- Answers 0 for anything that is not a plain string — a FontString handed a
 --- SECRET must not be measured, and a double that measured one anyway would let
 --- a rule-R3 violation through.
+--- Whether this frame OR ANY ANCESTOR has been handed a secret.
+---
+--- SECRETNESS PROPAGATES UPWARD, and that is the half the first version of this
+--- double missed. A widget handed a secret makes its PARENT secret, and the
+--- parent's layout is then what every sibling is measured against — so a
+--- FontString that never held a value of its own still answers a secret width
+--- once anything else inside the same frame has held one.
+---
+--- Modelling only the direct case let a real rule-R3 violation ship green: the
+--- addon measured GameTooltip's own line while its own amount slot, parented to
+--- the same tooltip, had just been handed a secret amount.
+local function inheritsSecret(frame)
+    local f, guard = frame, 0
+    while f and guard < 32 do
+        if f.__hasSecretValues then return true end
+        f, guard = f.__parent, guard + 1
+    end
+    return false
+end
+
 function FRAME.GetStringWidth(self)
+    -- The width of anything inside a tainted frame is itself secret. Returning a
+    -- simulated secret is what makes a `w > widest` comparison raise here the way
+    -- it raises in the client, instead of quietly answering a number.
+    if inheritsSecret(self) then return secret(#(tostring(self.__text or "")) * 6) end
     local t = self.__text
     if type(t) ~= "string" then return 0 end
     return #t * 6
@@ -1502,6 +1530,18 @@ local function build()
     -- case pass without asserting anything.
     local tooltip = makeFrame("GameTooltip", nil, "GameTooltip")
     tooltip.__lines = {}
+    -- GAMETOOLTIP IS BLIZZARD'S, AND THIS ADDON'S EXECUTION IS TAINTED.
+    --
+    -- Measured in game: `GameTooltipTextLeft5:GetStringWidth()` answers a SECRET
+    -- number even when every value on the line is plainly readable — the error
+    -- reads "while execution tainted by 'MythicMeters'". So it is not our own
+    -- secrets propagating; it is that tainted code may not measure inside a
+    -- shared Blizzard frame at all, whatever is in it.
+    --
+    -- Marking the tooltip itself is what makes `inheritsSecret` cover every line
+    -- widget and every carrier we park inside it, which is the real rule: layout
+    -- in here is computed from config and never read back (rule R3).
+    tooltip.__hasSecretValues = true
     -- The OFFSET PAIR is recorded, not dropped. `tooltip.offsetX/offsetY` reach
     -- the client only through these two arguments — the addon deliberately never
     -- places the tooltip itself — so a SetOwner that ignored them would make the

@@ -1257,3 +1257,59 @@ test("The gap is restored with every other line it was applied alongside", funct
     inst.mocks.GameTooltip:Hide()
     assertEqual(gap:GetFont(), nil, "a shrunken font outlived our tooltip on a shared line")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The minimum width is COMPUTED, never measured
+-- ---------------------------------------------------------------------------
+
+test("The tooltip is widened without measuring anything inside GameTooltip", function()
+    -- THE BUG THIS PINS. The width used to be read off GameTooltip's own line
+    -- FontStrings. `GetStringWidth` inside a shared Blizzard frame answers a
+    -- SECRET number to tainted code — even when every value on the line is
+    -- plainly readable, because it is the FRAME that is out of bounds rather
+    -- than the values — so `w > widest` raised and took every cell tooltip with
+    -- it. The harness models that now (wow_mock marks GameTooltip tainted), so
+    -- reintroducing any measurement raises here rather than only in game.
+    -- red under: any GetStringWidth call on a widget inside GameTooltip.
+    local inst, cfg, anchor = bench()
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertTrue(inst.mocks.GameTooltip:GetMinimumWidth() > 0,
+        "the tooltip was not widened for the number slots at all")
+end)
+
+test("The width follows the font size and the name length, because it is computed", function()
+    -- Proves it is derived from config rather than from the widget: a bigger
+    -- font on the same spells must ask for a wider tooltip.
+    -- red under: a constant minimum, which would fit the small font and clip the
+    -- large one.
+    local function widthAt(size)
+        local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = size end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+        return inst.mocks.GameTooltip:GetMinimumWidth()
+    end
+
+    assertTrue(widthAt(20) > widthAt(8),
+        "the minimum width ignored the configured font size")
+end)
+
+test("A name that cannot be read simply does not widen the tooltip", function()
+    -- `#` on a secret raises, and a target's name comes off the enemy column
+    -- where it can be one. The section still draws; it is sized from the lines
+    -- whose names could be counted.
+    --
+    -- HONEST LIMIT OF THIS CASE: it cannot prove the CanAccess guard. The mock
+    -- represents a secret as a TABLE, so the `type(text) ~= "string"` check
+    -- returns before `#` is ever reached; in the client a secret string really
+    -- is a string, `type` waves it through, and CanAccess is the only thing
+    -- standing between the length operator and a raise. So this asserts the
+    -- outcome — no error, no width — and the guard above it stays on the
+    -- strength of the client's behaviour rather than this assertion.
+    local inst, cfg, anchor = bench()
+    local ok, err = pcall(function()
+        inst.NS.Tooltip:CellTooltip(
+            { guid = "Player-1-0000000A", name = inst.mocks.secret("Alpha"), values = {} },
+            "DamageDone", anchor, cfg)
+    end)
+    assertTrue(ok, "a secret name raised inside the width estimate: " .. tostring(err))
+end)

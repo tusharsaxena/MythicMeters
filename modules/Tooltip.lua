@@ -555,6 +555,24 @@ local SHARE_SLOT_WIDTH  = 36
 local SLOT_GAP          = 6
 local AMOUNT_SLOT_WIDTH = 66
 
+--- Rough width of one character, as a fraction of the font's point size.
+---
+--- AN ESTIMATE, AND IT HAS TO BE. The tooltip's minimum width used to be
+--- measured off GameTooltip's own line FontStrings, and that is a rule-R3
+--- violation that raises in game: `GetStringWidth` inside a shared Blizzard
+--- frame answers a SECRET number to tainted code — even when every value on the
+--- line is plainly readable, because it is the FRAME that is out of bounds
+--- rather than the values. Comparing that width to anything is a Lua error, and
+--- it took every cell tooltip down with it.
+---
+--- So the width is computed from what this addon owns: the character count of a
+--- plain caption and the configured font size. Proportional fonts make that
+--- approximate — 0.55 is a middling ratio for the faces LSM ships — and
+--- approximate is fine here, because the number is only ever a MINIMUM. Too
+--- small and GameTooltip sizes itself from its own text as it always did; too
+--- large and the tooltip is a little wider than it needed to be.
+local NAME_WIDTH_PER_CHAR = 0.55
+
 --- Where a target's name starts inside its carrier.
 ---
 --- The carrier's left edge already sits one icon past the line's left edge
@@ -711,6 +729,26 @@ local function restoreFonts()
         end
         fontedLines[index] = nil
     end
+end
+
+--- Widen the tooltip for one line's name, WITHOUT measuring anything.
+---
+--- The caption is checked accessible before `#` touches it: a length operator on
+--- a secret raises, and a target's name comes off the enemy column where it can
+--- be one. An unreadable name simply does not widen the tooltip — the section is
+--- still drawn, it is just sized from the lines whose names could be counted.
+---
+--- @param text any     a caption, possibly secret, possibly nil
+--- @param style table   the resolved line style, for its font size
+--- @param inset number  how far into the line this text starts
+local function noteNameWidth(text, style, inset)
+    local Secrets = NS.Secrets
+    if text == nil then return end
+    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(text)) then return end
+    if type(text) ~= "string" then return end
+
+    local w = #text * (style.fontSize or 12) * NAME_WIDTH_PER_CHAR + (inset or 0)
+    if w > widestName then widestName = w end
 end
 
 --- Take every line down, and put GameTooltip back the way it was found.
@@ -934,7 +972,8 @@ end
 --- @param style table        a resolved style from `lineStyle`
 --- @param label string|nil   text for the carrier's own name slot (target lines);
 ---                           nil leaves it empty, which is what a spell line wants
-local function drawLine(lineIndex, amount, share, value, max, style, label)
+--- @param caption any|nil    the plain name on this line, for the width estimate
+local function drawLine(lineIndex, amount, share, value, max, style, label, caption)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
     if not left then return end
@@ -972,22 +1011,10 @@ local function drawLine(lineIndex, amount, share, value, max, style, label)
     frame.share:SetText(share)
     frame.label:SetText(label or "")
 
-    -- WIDTH. A spell line is measured off GameTooltip's own FontString, which
-    -- holds the icon escape and the name. A target line's text is on OUR label
-    -- instead, so it is measured there and offset by how far in the carrier
-    -- starts — otherwise the tooltip narrows to the width of the word "Targets"
-    -- and every unit name is clipped.
-    --
-    -- Both are safe to measure: neither has ever been handed a meter value.
-    if label ~= nil then
-        if frame.label.GetStringWidth then
-            local w = (frame.label:GetStringWidth() or 0) + BAR_INSET_LEFT + LABEL_INSET_LEFT
-            if w > widestName then widestName = w end
-        end
-    elseif left.GetStringWidth then
-        local w = left:GetStringWidth() or 0
-        if w > widestName then widestName = w end
-    end
+    -- A target's text starts inside the carrier; a spell's starts at the line's
+    -- own left edge, past its icon. Both offsets are constants of ours.
+    noteNameWidth(caption, style,
+        (label ~= nil) and (BAR_INSET_LEFT + LABEL_INSET_LEFT) or BAR_INSET_LEFT)
 
     local Secrets = NS.Secrets
     if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(value, max)) then
@@ -1051,7 +1078,8 @@ local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
 
     -- The line widget goes BEHIND the tooltip line that was just added, so it
     -- needs that line's index — which is NumLines now that the line exists.
-    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style)
+    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style,
+        nil, caption)
 end
 
 --- The extra facts an Avoidable Damage row carries: whether the hit was
@@ -1224,7 +1252,7 @@ local function addTargetBreakdown(row, statKey, config, style, numberStyle, wind
             formatNumber(entry.total, numberStyle),
             formatShare(entry.total, total),
             entry.total, max, style,
-            entry.name or L["Unknown"])
+            entry.name or L["Unknown"], entry.name or L["Unknown"])
     end
 
     return #list

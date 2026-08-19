@@ -655,7 +655,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (56)
+### test_tooltip.lua (59)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -713,6 +713,9 @@ badge and any count quoted in the docs must agree with it.
 - The gap above a section is half the text size, not a whole blank line
 - The half-size gap survives the post-layout pass
 - The gap is restored with every other line it was applied alongside
+- The tooltip is widened without measuring anything inside GameTooltip
+- The width follows the font size and the name length, because it is computed
+- A name that cannot be read simply does not widen the tooltip
 
 ### test_drilldown.lua (31)
 
@@ -1013,7 +1016,7 @@ badge and any count quoted in the docs must agree with it.
 | test_window.lua | 82 |
 | test_row.lua | 56 |
 | test_targets.lua | 22 |
-| test_tooltip.lua | 56 |
+| test_tooltip.lua | 59 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
@@ -1024,4 +1027,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **882** |
+| **Total** | **885** |
