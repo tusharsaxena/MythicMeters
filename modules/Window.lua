@@ -69,12 +69,6 @@ WindowProto.__index = WindowProto
 -- core/Database.lua's width migration sizes a frame around the same seam.
 local COLUMN_GAP = Const.COLUMN_GAP
 
--- Vertical space the drill-down's back button takes at the top of the body. A
--- constant rather than a measurement of the button: modules/DrillDown.lua owns
--- that widget, and asking it how tall it is would be the geometry read-back rule
--- R3 forbids everywhere else in this file.
-local DRILL_BUTTON_HEIGHT = 22
-
 -- How tall the column-header strip is, as a multiple of the row height. The
 -- headers are the same text at the same size as the rows, so tying them to the
 -- row height keeps the grid on one rhythm when a player changes it.
@@ -556,6 +550,25 @@ function WindowProto:BuildFrame()
     self.sessionText:SetAllPoints(self.sessionButton)
 
     self.body = CreateFrame("Frame", nil, frame)
+
+    -- ── SCROLLING ────────────────────────────────────────────────────────────
+    --
+    -- NOT a ScrollFrame, and not because one would be hard. This window already
+    -- draws `layout.maxRows` rows chosen out of a longer list, so scrolling is
+    -- choosing a DIFFERENT window into that list — one integer, applied at the
+    -- top of the render loop. A ScrollFrame would mean building every row and
+    -- letting the client clip them, which is more frames, more work per refresh,
+    -- and a scroll child whose height would have to be measured.
+    --
+    -- The offset is plain and comes from a wheel event, so nothing here reads
+    -- geometry back off a frame or looks at a meter value (rules R1 and R3 are
+    -- untouched).
+    self.scrollOffset = 0
+    self.body:EnableMouseWheel(true)
+    self.body:SetScript("OnMouseWheel", function(_, delta)
+        -- Up scrolls toward the top, which is `delta > 0` and a SMALLER offset.
+        self:ScrollBy(delta > 0 and -1 or 1)
+    end)
 
     -- The column-header strip lives on the BODY and holds plain FontStrings that
     -- never receive a value, so it is one of the few things here that could
@@ -1150,6 +1163,51 @@ end
 
 --- Mark the window as needing a redraw. Every message handler ends here and
 --- nothing else, which is what makes the throttle the only clock in the file.
+--- The largest legal scroll offset for a list of `count` rows.
+---
+--- Derived from `layout.maxRows`, which is itself derived from the configured
+--- frame height — so this is config arithmetic rather than a measurement, and it
+--- answers 0 whenever everything already fits.
+function WindowProto:MaxScroll(count)
+    local visible = (self.layout and self.layout.maxRows) or 1
+    local over = (count or 0) - visible
+    return (over > 0) and over or 0
+end
+
+--- Move the scroll offset by `delta` rows and redraw.
+---
+--- ONLY THE FLOOR IS APPLIED HERE. The ceiling is the length of a list this
+--- function does not have: it runs from a wheel event, between refreshes, and
+--- asking the aggregator for a fresh list to find out how long it is would turn
+--- a scroll into a meter read. So the offset is allowed to run optimistically
+--- past the end and `Render` clamps it against the list it is actually drawing.
+---
+--- That is not a shortcut, it is the only ordering that cannot go stale: a
+--- remembered row count is one refresh out of date the moment the group changes,
+--- and clamping against a stale count is how a scroll silently stops one row
+--- short of the bottom.
+---
+--- @param delta number  rows to move; negative is toward the top
+function WindowProto:ScrollBy(delta)
+    local want = (self.scrollOffset or 0) + (delta or 0)
+    if want < 0 then want = 0 end
+    if want == self.scrollOffset then return end
+
+    self.scrollOffset = want
+    self:MarkDirty()
+    -- The wheel must answer NOW rather than on the next throttle tick, for the
+    -- same reason a drill-down click does.
+    self.elapsed = self.throttle
+end
+
+--- Put the view back at the top. Called when the LIST CHANGES IDENTITY —
+--- entering or leaving a breakdown — because an offset carried across is an
+--- offset into a list that no longer exists.
+function WindowProto:ResetScroll()
+    if self.scrollOffset == 0 then return end
+    self.scrollOffset = 0
+end
+
 function WindowProto:MarkDirty()
     self.dirty = true
 end
@@ -1341,22 +1399,38 @@ function WindowProto:Render(entries, preview, isDrill, drillTitle)
     -- window's body at a config-derived offset — nothing measures it, and
     -- nothing measures the body it lands in (rule R3).
     local DrillDown = mod("DrillDown")
-    if DrillDown then
-        if isDrill and DrillDown.AcquireBackButton then
-            DrillDown:AcquireBackButton(self.config, self.body, 0, 0)
-        elseif DrillDown.ReleaseBackButton then
-            DrillDown:ReleaseBackButton(self.config)
-        end
+    -- NO BACK BUTTON. It used to be acquired here and every drill row shifted
+    -- down by its height — which is what pushed the last row out through the
+    -- bottom of the frame, since `layout.maxRows` is derived from the body
+    -- height and knew nothing about a button drawn inside it. Right-click on any
+    -- row leaves a breakdown now (modules/Row.lua), so the height is the rows'
+    -- again and the overflow cannot recur.
+    if DrillDown and DrillDown.ReleaseBackButton then
+        DrillDown:ReleaseBackButton(self.config)
     end
 
+    -- THE CLAMP LIVES HERE, and only here. `ScrollBy` applies the floor; this
+    -- applies the ceiling, against the list actually being drawn rather than
+    -- against a remembered count that a group change would have made stale.
+    --
+    -- Re-clamping every draw is what covers the list shrinking under a
+    -- stationary offset, which happens constantly — a player leaves the group, a
+    -- breakdown has fewer spells than the grid had rows — and an offset past the
+    -- end would render an empty window that scrolling could not fix.
+    local offset = self.scrollOffset or 0
+    local maxOffset = self:MaxScroll(#entries)
+    if offset > maxOffset then offset = maxOffset end
+    if offset < 0 then offset = 0 end
+    self.scrollOffset = offset
+
     local drawn = 0
-    for i = 1, #entries do
+    for i = 1 + offset, #entries do
         if drawn >= layout.maxRows then break end
         local entry = entries[i]
         if entry then
             drawn = drawn + 1
             local row = self:Acquire()
-            local y = NS.Row.OffsetFor(layout, drawn) + (isDrill and DRILL_BUTTON_HEIGHT or 0)
+            local y = NS.Row.OffsetFor(layout, drawn)
             row.frame:ClearAllPoints()
             if layout.growUp then
                 row.frame:SetPoint("BOTTOMLEFT", self.body, "BOTTOMLEFT", 0, y)
@@ -1901,6 +1975,9 @@ function WindowProto:RegisterBus()
         function(_, payload)
             local id = payload and payload.windowId
             if id ~= nil and id ~= self.id then return end
+            -- The list is about to become a different list. An offset carried
+            -- from the grid into a breakdown points into rows that are not there.
+            self:ResetScroll()
             self:MarkDirty()
             self.elapsed = self.throttle   -- a click must not wait a full tick
         end)

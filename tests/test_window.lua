@@ -1246,3 +1246,164 @@ test("Closing cancels the request, so it does not reappear", function()
     inst.NS:SendMessage(inst.NS.Constants.MSG.CONFIG_CHANGED, { windowId = window.id })
     assertFalse(window:IsShown(), "a closed window stays closed")
 end)
+
+-- ---------------------------------------------------------------------------
+-- Scrolling
+-- ---------------------------------------------------------------------------
+--
+-- NOT a ScrollFrame. The window already draws `layout.maxRows` rows chosen out
+-- of a longer list, so scrolling is choosing a different window into that list —
+-- one integer applied at the top of the render loop. Which means the cases worth
+-- writing are about the INTEGER: is it clamped, does it survive a refresh, and
+-- does it reset when the list stops being the same list.
+
+--- A window whose frame fits exactly `visible` rows, rendering `total` entries.
+local function scrollScene(visible, total)
+    local inst, window, cfg = scene{ configure = function(c)
+        c.rows.maxRows = visible
+    end }
+    local rows = {}
+    for i = 1, total do
+        rows[i] = { guid = string.format("Player-1-%08X", i), name = "Mock" .. i,
+                    classFilename = "MAGE", values = {}, cells = {} }
+    end
+    return inst, window, cfg, rows
+end
+
+--- The names the window actually drew, top to bottom.
+local function drawnNames(window)
+    local out = {}
+    for _, row in ipairs(window.pool.active or {}) do
+        out[#out + 1] = row.entry and row.entry.name
+    end
+    return out
+end
+
+test("Scrolling moves the window into the list, it does not shorten it", function()
+    -- red under: a render loop that always starts at index 1.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:Render(rows, false)
+    assertEqual(drawnNames(window)[1], "Mock1", "the fixture did not start at the top")
+    assertEqual(#drawnNames(window), 3, "the row cap is not what the fixture set")
+
+    window:ScrollBy(2)
+    window:Render(rows, false)
+    assertEqual(drawnNames(window)[1], "Mock3", "scrolling down did not move the first row")
+    assertEqual(#drawnNames(window), 3, "scrolling changed how many rows are drawn")
+end)
+
+test("The offset survives a refresh, or scrolling is impossible", function()
+    -- The window redraws four times a second. An offset reset per render would
+    -- snap the view back to the top before a player let go of the wheel.
+    -- red under: zeroing scrollOffset in Render.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:ScrollBy(4)
+    for _ = 1, 5 do window:Render(rows, false) end
+    assertEqual(window.scrollOffset, 4, "a redraw threw the scroll position away")
+end)
+
+test("The offset cannot run past the end of the list", function()
+    -- red under: an unclamped offset, which renders an empty window that
+    -- scrolling cannot recover from.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:ScrollBy(500)
+    window:Render(rows, false)
+
+    assertEqual(window.scrollOffset, 7, "the offset was not clamped to the last full page")
+    assertEqual(#drawnNames(window), 3, "the last page is not full")
+    assertEqual(drawnNames(window)[3], "Mock10", "the last row is not the last entry")
+end)
+
+test("A list that shrinks under a stationary offset re-clamps on the next draw", function()
+    -- This happens constantly: a player leaves the group, a breakdown has fewer
+    -- spells than the grid had rows. An offset left past the end renders nothing.
+    -- red under: clamping only inside ScrollBy.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:ScrollBy(7)
+    window:Render(rows, false)
+    assertEqual(#drawnNames(window), 3)
+
+    local short = { rows[1], rows[2], rows[3], rows[4] }
+    window:Render(short, false)
+    assertEqual(window.scrollOffset, 1, "the offset was not re-clamped to the shorter list")
+    assertTrue(#drawnNames(window) > 0, "the window rendered empty after the list shrank")
+end)
+
+test("Scrolling up stops at the top", function()
+    -- red under: a negative offset.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:ScrollBy(-5)
+    window:Render(rows, false)
+    assertEqual(window.scrollOffset, 0)
+    assertEqual(drawnNames(window)[1], "Mock1")
+end)
+
+test("A list that fits entirely cannot be scrolled", function()
+    -- red under: MaxScroll returning a negative, which would let the view slide
+    -- off the top of a list that was never long enough to scroll.
+    local _, window, _, rows = scrollScene(10, 3)
+    window:ScrollBy(5)
+    window:Render(rows, false)
+    assertEqual(window.scrollOffset, 0, "a window with room to spare still scrolled")
+    assertEqual(#drawnNames(window), 3, "and it still drew every row it had")
+end)
+
+test("The body takes the wheel, or the handler is never called in game", function()
+    -- A live OnMouseWheel script on a frame that never called EnableMouseWheel
+    -- runs perfectly in a harness and does nothing in the client.
+    -- red under: dropping EnableMouseWheel.
+    local _, window = scrollScene(3, 10)
+    assertTrue(window.body:IsMouseWheelEnabled(), "the body does not accept the wheel")
+end)
+
+test("The wheel scrolls up on a positive delta", function()
+    -- Getting this backwards is the kind of thing no unit test catches unless it
+    -- names the direction: delta > 0 is "wheel up", which means a SMALLER offset.
+    -- red under: inverting the sign.
+    local _, window, _, rows = scrollScene(3, 10)
+    window:ScrollBy(5)
+    window:Render(rows, false)
+    local before = window.scrollOffset
+    assertTrue(before > 0, "the fixture never scrolled at all")
+
+    window.body:_run("OnMouseWheel", 1)
+    window:Render(rows, false)
+    assertTrue(window.scrollOffset < before, "wheel up moved the view down the list")
+
+    window.body:_run("OnMouseWheel", -1)
+    window:Render(rows, false)
+    assertEqual(window.scrollOffset, before, "wheel down did not undo it")
+end)
+
+test("Entering or leaving a breakdown puts the view back at the top", function()
+    -- An offset carried from the grid into a breakdown points into rows that are
+    -- not there — and it would then be re-clamped rather than reset, leaving a
+    -- player part-way down a list they never scrolled.
+    -- red under: dropping ResetScroll from the DRILLDOWN_CHANGED handler.
+    local inst, window, cfg, rows = scrollScene(3, 10)
+    window:ScrollBy(5)
+    window:Render(rows, false)
+    assertEqual(window.scrollOffset, 5)
+
+    inst.NS.DrillDown:Enter(cfg,
+        { guid = "Player-1-00000001", name = "Mock1", values = {} }, "DamageDone")
+    assertEqual(window.scrollOffset, 0, "the grid's scroll position followed us into the breakdown")
+end)
+
+test("A drill-down draws its rows from the top of the body, with none hanging out", function()
+    -- THE OVERFLOW. `layout.maxRows` is derived from the body height, and every
+    -- drill row used to be pushed down by the height of a Back button drawn
+    -- inside that body — so a full page of rows put its last row through the
+    -- bottom of the frame. The button is gone and the offset with it.
+    -- red under: re-adding a fixed drill offset to Row.OffsetFor's result.
+    local _, window, _, rows = scrollScene(3, 10)
+
+    window:Render(rows, false, false)
+    local gridTop = window.pool.active[1].frame.__points[1].y
+
+    window:Render(rows, false, true, "Alpha - Damage")
+    local drillTop = window.pool.active[1].frame.__points[1].y
+
+    assertEqual(drillTop, gridTop,
+        "a breakdown's first row starts lower than the grid's, so its last row overflows")
+end)

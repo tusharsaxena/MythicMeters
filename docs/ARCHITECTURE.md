@@ -364,6 +364,10 @@ and a fallback nobody can run is a fallback nobody has tested.
 - **Scoring is deferred**, and cannot be computed in combat at all. See
   [scope.md](scope.md#deferred-scoring).
 - **No in-window column drag editor** — settings-panel only, and structurally so (rule R3).
+- **Scrolling is the mouse wheel only — there is no scrollbar.** A window draws `layout.maxRows`
+  rows chosen out of a longer list, so scrolling moves an integer offset rather than a scroll child;
+  there is no widget to size and nothing measured. The cost is that a player cannot see there are
+  rows above or below without trying the wheel.
 - Debug logging is session-only (`NS.State.debug`) and resets on every `/reload`.
 - No automated in-client tests: headless suites plus manual in-game smoke tests.
 - Not published — `X-Curse-Project-ID` and `X-Wago-ID` are deliberately absent from the TOC.

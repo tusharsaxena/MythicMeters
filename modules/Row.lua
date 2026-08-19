@@ -324,10 +324,22 @@ local function cellOnEnter(frame)
     local T = NS.Tooltip
     if not (T and entry) then return end
 
+    local config = cell.window.config
+
+    -- A BREAKDOWN ROW IS A SPELL, and both tooltips below answer the wrong
+    -- question about one — the cell tooltip asks for a spell breakdown of a
+    -- spell, the name tooltip lists every statistic for a source that is not a
+    -- source. The whole row gets the client's own spell tooltip instead, name
+    -- cell included, because the row is one thing rather than a grid of
+    -- independent numbers.
+    if entry.isDrillDown then
+        if T.SpellTooltip then T:SpellTooltip(entry, frame, config) end
+        return
+    end
+
     -- Hovering the NAME cell summarizes every enabled stat for that player,
     -- which is the cross-column read the whole addon exists for; hovering any
     -- other cell asks the narrower question the column is about.
-    local config = cell.window.config
     local wantSummary = (config.tooltip or {}).showAllStatsOnName ~= false
     if cell.key == "name" and wantSummary and T.NameTooltip then
         T:NameTooltip(entry, frame, config)
@@ -344,13 +356,40 @@ local function cellOnLeave(frame)
     if T and T.Hide then T:Hide() end
 end
 
-local function cellOnMouseUp(frame)
+--- A click on a cell: left opens a breakdown, right leaves one.
+---
+--- RIGHT-CLICK IS THE ONLY WAY OUT that does not require finding the cell you
+--- came in on. It replaced a Back button drawn above the rows — which cost a row
+--- of height on every drilled window, and cost it in a way that pushed the last
+--- row out through the bottom of the frame, because `layout.maxRows` is computed
+--- from the body height and knew nothing about the button.
+---
+--- It is deliberately undocumented in the UI: right-click-to-go-back is the
+--- conventional idiom in this class of addon, and a permanent hint in the header
+--- would be the sort of chrome a player reads once and then looks past forever.
+---
+--- @param button string  "LeftButton" | "RightButton"
+local function cellOnMouseUp(frame, button)
     local cell = frame.mmCell
     if not (cell and cell.entry) then return end
+
+    local D = NS.DrillDown
+    if button == "RightButton" then
+        -- Harmless on the grid: Exit answers false when there is no view to
+        -- leave, so a stray right-click is a no-op rather than a special case.
+        if D and D.Exit then D:Exit(cell.window.config) end
+        return
+    end
+
+    -- INSIDE A BREAKDOWN, A LEFT CLICK DOES NOTHING. The rows here are spells,
+    -- and a spell has no breakdown of its own — asking the provider for one
+    -- answers nothing and the window renders empty, which reads as a broken
+    -- addon rather than as "there is nothing here".
+    if cell.entry.isDrillDown then return end
+
     -- The name column has no breakdown of its own to open — its question is
     -- "how is this player doing overall", which the tooltip already answers.
     if cell.key == "name" then return end
-    local D = NS.DrillDown
     if D and D.OnCellClick then D:OnCellClick(cell.window.config, cell.entry, cell.key) end
 end
 
@@ -415,6 +454,8 @@ local function newCell(row, key)
     bar:SetScript("OnEnter",   cellOnEnter)
     bar:SetScript("OnLeave",   cellOnLeave)
     bar:SetScript("OnMouseUp", cellOnMouseUp)
+    -- Both buttons, or the OnMouseUp above never sees a right-click at all.
+    if bar.RegisterForClicks then bar:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     bar:EnableMouse(false)
 
     return cell

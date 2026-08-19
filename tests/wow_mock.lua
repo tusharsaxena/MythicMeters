@@ -307,6 +307,17 @@ function FRAME.Hide(self)
     if was then self:_run("OnHide") end
     return self
 end
+--- Mouse-wheel plumbing. Recorded rather than no-op'd because a window that
+--- forgot EnableMouseWheel has a live OnMouseWheel script the client will never
+--- call — the scroll code runs perfectly in a harness and does nothing in game.
+function FRAME.EnableMouseWheel(self, v) self.__mouseWheel = v and true or false; return self end
+function FRAME.IsMouseWheelEnabled(self) return self.__mouseWheel and true or false end
+--- Which buttons a frame asked for. A right-click handler on a frame that never
+--- called RegisterForClicks is the same class of silent failure.
+function FRAME.RegisterForClicks(self, ...)
+    self.__clicks = { ... }
+    return self
+end
 function FRAME.SetShown(self, v)
     if v then self:Show() else self:Hide() end
     return self
@@ -1549,6 +1560,14 @@ local function build()
         return self
     end
     function tooltip:NumLines() return #self.__lines end
+    -- The client's own spell tooltip. It REPLACES the content, which is why the
+    -- addon treats it as the last word rather than something to add lines to —
+    -- so the double records what it was asked for and clears the line list.
+    function tooltip:SetSpellByID(id)
+        self.__spellID = id
+        self.__lines = {}
+        return true
+    end
     -- The tooltip sizes itself from its own text, and modules/Tooltip.lua's amount
     -- and share slots are NOT its text — they are addon widgets. So the addon
     -- widens the frame itself, and has to put the width back afterwards or the

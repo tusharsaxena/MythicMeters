@@ -488,6 +488,14 @@ free. A spell is a "row" whose synthesized `guid` is `"spell:<id>"` (a plain str
 key on it). It does **not** sort: a live view that reshuffled under the cursor the instant the
 restriction lifted is worse than an order the player can learn.
 
+Three things follow from a breakdown row being a **spell** rather than a player, and all three were
+wrong until they were stated: hovering any cell of it shows the *client's* spell tooltip rather than
+either of this addon's, because a spell has no per-stat breakdown and no cross-column summary — both
+rendered honestly and uselessly; a left-click does nothing, because it used to ask the provider for a
+breakdown of a spell and render an empty window; and leaving is a **right-click on any row**, which
+replaced a Back button that cost a row of height and pushed the last row out through the bottom of
+the frame.
+
 Its title is the trap worth knowing about. `DrillDown.Title` builds its string with `string.format`
 from `view.name`, which is `ConditionalSecret` — and `string.format` on a secret returns a **secret
 string**, which poisons `if title then`, `title ~= ""`, `#title` and using it as a table key. So the

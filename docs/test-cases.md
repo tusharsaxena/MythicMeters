@@ -486,7 +486,7 @@ badge and any count quoted in the docs must agree with it.
 - roster mode's NAME TIEBREAK refuses to compare two secret names
 - roster mode compares names when they are plain
 
-### test_window.lua (68)
+### test_window.lua (78)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -556,8 +556,18 @@ badge and any count quoted in the docs must agree with it.
 - Changing a setting does not close a window the player asked for
 - A zone change is what makes an explicit show stale
 - Closing cancels the request, so it does not reappear
+- Scrolling moves the window into the list, it does not shorten it
+- The offset survives a refresh, or scrolling is impossible
+- The offset cannot run past the end of the list
+- A list that shrinks under a stationary offset re-clamps on the next draw
+- Scrolling up stops at the top
+- A list that fits entirely cannot be scrolled
+- The body takes the wheel, or the handler is never called in game
+- The wheel scrolls up on a positive delta
+- Entering or leaving a breakdown puts the view back at the top
+- A drill-down draws its rows from the top of the body, with none hanging out
 
-### test_row.lua (44)
+### test_row.lua (50)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -603,6 +613,12 @@ badge and any count quoted in the docs must agree with it.
 - Hovering a stat cell asks the tooltip the narrow question
 - Clicking a stat cell routes to the drill-down; the name cell does not
 - A cell with no entry does nothing under the cursor
+- Hovering ANY cell of a breakdown row shows the client's spell tooltip
+- A breakdown row with no resolvable spell still says which spell it is
+- A left click inside a breakdown does nothing
+- A right click leaves the breakdown
+- A right click on the GRID is a harmless no-op
+- Cells register for BOTH buttons, or the right click never arrives
 
 ### test_targets.lua (22)
 
@@ -983,8 +999,8 @@ badge and any count quoted in the docs must agree with it.
 | test_roster.lua | 22 |
 | test_aggregator.lua | 52 |
 | test_aggregator_sort.lua | 16 |
-| test_window.lua | 68 |
-| test_row.lua | 44 |
+| test_window.lua | 78 |
+| test_row.lua | 50 |
 | test_targets.lua | 22 |
 | test_tooltip.lua | 55 |
 | test_drilldown.lua | 31 |
@@ -997,4 +1013,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **855** |
+| **Total** | **871** |

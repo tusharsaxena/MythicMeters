@@ -1395,6 +1395,61 @@ function Tooltip:NameTooltip(row, anchorFrame, window)
 end
 
 -- ---------------------------------------------------------------------------
+-- Spell tooltip — a row inside a breakdown
+-- ---------------------------------------------------------------------------
+
+--- Show the GAME's own tooltip for the spell a drill-down row stands for.
+---
+--- The rows of a breakdown are spells, not players, and the two tooltips this
+--- file otherwise builds both answer the wrong question about one. The cell
+--- tooltip asks the provider for a spell breakdown OF a spell and renders "No
+--- data yet"; the name tooltip lists every tracked statistic for a source that
+--- is not a source and renders a column of zeros. Both are honest and both are
+--- useless.
+---
+--- What a player wants there is the spell — what it does, what it costs, what it
+--- scales with — and the client already renders that better than this addon
+--- could. So the row hands GameTooltip a spell ID and gets out of the way.
+---
+--- EVERY CELL IN THE ROW, the name included. A breakdown row is one thing rather
+--- than a grid of independent numbers, so hovering any part of it asks the same
+--- question and must get the same answer.
+---
+--- @param row table         a drill-down row (needs .spellID)
+--- @param anchorFrame table the cell frame the tooltip anchors to
+--- @param window table|nil  the window config
+function Tooltip:SpellTooltip(row, anchorFrame, window)
+    local t0 = Perf.on and debugprofilestop()
+
+    window = resolveWindow(row, window)
+    local config = tooltipConfig(window)
+    -- Our own line widgets come down first: this tooltip is the client's, and a
+    -- pooled bar left over from a spell breakdown would sit behind its text.
+    releaseLines()
+    if not openTooltip(anchorFrame, config) then return end
+
+    local spellID = row and row.spellID
+    -- SetSpellByID replaces the tooltip's whole content, so it is the last word
+    -- rather than something to add lines to.
+    if spellID ~= nil and GameTooltip.SetSpellByID then
+        local ok = pcall(GameTooltip.SetSpellByID, GameTooltip, spellID)
+        if ok then
+            GameTooltip:Show()
+            if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
+            return
+        end
+    end
+
+    -- No id, or a client that refused it. A one-line name beats an empty frame:
+    -- the row is still telling the player which spell it is.
+    GameTooltip:AddLine(displayName(row), 1, 1, 1)
+    GameTooltip:Show()
+    reapplyFonts()
+
+    if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
+end
+
+-- ---------------------------------------------------------------------------
 -- Teardown
 -- ---------------------------------------------------------------------------
 

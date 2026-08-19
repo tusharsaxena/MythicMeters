@@ -311,7 +311,7 @@ a raider most wants to know what killed them is the moment they are still fighti
 **Steps, all performed during a pull with the window locked:**
 1. Hover a **Damage** cell.
 2. Hover the **name** cell.
-3. Click a Damage cell; then click the **Back** button; then click the same cell twice.
+3. Click a Damage cell; then **right-click any row** to leave; then click the same cell twice.
 4. Hover a **Deaths** cell on a row for someone who has died, then click it.
 5. Move the mouse off the window.
 
@@ -329,8 +329,18 @@ a raider most wants to know what killed them is the moment they are still fighti
 - **Name tooltip** lists **every** tracked statistic for that player, including the ones this window
   is not showing — the extras dimmed gray. That cross-column read is the reason the addon exists.
 - **Drill-down**: clicking a cell replaces the grid with that player's spell breakdown, styled
-  identically (same fonts, bars, row height — it is the same renderer), with a **Back** button at the
-  top and the header reading `<player> - <stat>`. Clicking the same cell again returns to the grid.
+  identically (same fonts, bars, row height — it is the same renderer), with the header reading
+  `<player> - <stat>`. Clicking the same cell again returns to the grid, and so does a **right-click
+  on any row** — there is no Back button, deliberately: it cost a row of height on every drilled
+  window and pushed the last row out through the bottom of the frame.
+- **Every row of a breakdown is a spell, so the whole row shows the SPELL's tooltip** — the client's
+  own, not this addon's. Hovering the name cell must show it too. A tooltip reading "No data yet" or
+  a column of zeroed statistics means a drill row reached one of the player tooltips.
+- **A left-click inside a breakdown does nothing at all.** It used to ask the provider for a
+  breakdown of a spell and render an empty window.
+- **The mouse wheel scrolls both the grid and a breakdown** when there are more rows than fit. It
+  stops at both ends, survives the refresh tick rather than snapping back, and resets to the top when
+  you enter or leave a breakdown. Shrink the window until rows are hidden to test it.
 - The drill-down **does not reshuffle** while you watch it, in or out of combat.
 - **Deaths cell**: the tooltip ends with *"Click for details"*, and clicking opens **Blizzard's own
   death recap** rather than a spell list. If the recap is unavailable the click must fall through to

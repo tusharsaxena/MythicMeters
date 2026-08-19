@@ -764,3 +764,107 @@ test("A cell with no entry does nothing under the cursor", function()
     row.cells.DamageDone.frame:_run("OnMouseUp")
     assertFalse(touched)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Inside a breakdown, the row is a SPELL
+-- ---------------------------------------------------------------------------
+--
+-- The rows of a drill-down are spells, and the two player tooltips answer the
+-- wrong question about one. Both answers were honest and both were useless: the
+-- cell tooltip asked the provider for a spell breakdown OF a spell and rendered
+-- "No data yet"; the name tooltip listed every tracked statistic for a source
+-- that is not a source and rendered a column of zeros.
+
+local function spellEntry(opts)
+    opts = opts or {}
+    local e = entry({ DamageDone = { total = 9900 } },
+        { guid = "spell:49998", name = "Death Strike", isDrillDown = true })
+    e.spellID = opts.spellID ~= false and (opts.spellID or 49998) or nil
+    return e
+end
+
+test("Hovering ANY cell of a breakdown row shows the client's spell tooltip", function()
+    -- The name cell included: a breakdown row is one thing rather than a grid of
+    -- independent numbers, so every part of it asks the same question.
+    -- red under: routing a drill row to CellTooltip / NameTooltip.
+    local inst, _, row = bench()
+    row:Update(spellEntry(), 1)
+
+    for _, frame in ipairs({ row.cells.DamageDone.frame, row.nameCell.frame }) do
+        inst.mocks.GameTooltip.__spellID = nil
+        frame:_run("OnEnter")
+        assertEqual(inst.mocks.GameTooltip.__spellID, 49998,
+            "the row did not hand the client a spell id")
+    end
+end)
+
+test("A breakdown row with no resolvable spell still says which spell it is", function()
+    -- An empty tooltip frame is worse than a plain one. The row is still telling
+    -- the player something even when the client cannot name the spell.
+    -- red under: returning early when spellID is nil.
+    local inst, _, row = bench()
+    row:Update(spellEntry{ spellID = false }, 1)
+    row.cells.DamageDone.frame:_run("OnEnter")
+
+    assertNil(inst.mocks.GameTooltip.__spellID)
+    local lines = inst.mocks.GameTooltip.__lines
+    assertTrue(#lines > 0, "an unresolvable spell produced an empty tooltip")
+    assertEqual(lines[1].text, "Death Strike")
+end)
+
+test("A left click inside a breakdown does nothing", function()
+    -- It used to reach OnCellClick with a spell row, which asked the provider
+    -- for a breakdown of a spell, got nothing, and rendered an EMPTY WINDOW —
+    -- which reads as a broken addon rather than as "there is nothing here".
+    -- red under: falling through to DrillDown:OnCellClick.
+    local inst, _, row, cfg = bench()
+    row:Update(spellEntry(), 1)
+
+    local calls = 0
+    local real = inst.NS.DrillDown.OnCellClick
+    inst.NS.DrillDown.OnCellClick = function(...) calls = calls + 1; return real(...) end
+
+    row.cells.DamageDone.frame:_run("OnMouseUp", "LeftButton")
+    assertEqual(calls, 0, "a left click on a spell row still tried to drill into it")
+    assertTrue(cfg ~= nil)
+end)
+
+test("A right click leaves the breakdown", function()
+    -- The only way out that does not require finding the cell you came in on.
+    -- red under: OnMouseUp ignoring the button argument.
+    local inst, _, row, cfg = bench()
+    local D = inst.NS.DrillDown
+
+    D:Enter(cfg, entry({ DamageDone = { total = 100 } }), "DamageDone")
+    assertTrue(D.IsActive(cfg), "the fixture never entered a breakdown")
+
+    row:Update(spellEntry(), 1)
+    row.cells.DamageDone.frame:_run("OnMouseUp", "RightButton")
+
+    assertFalse(D.IsActive(cfg), "right click did not leave the breakdown")
+end)
+
+test("A right click on the GRID is a harmless no-op", function()
+    -- Exit answers false when there is no view to leave, so a stray right click
+    -- costs nothing and needs no special case at the call site.
+    -- red under: an Exit that errors or a handler that drills on right click.
+    local inst, _, row, cfg = bench()
+    row:Update(entry({ DamageDone = { total = 100 } }), 1)
+
+    row.cells.DamageDone.frame:_run("OnMouseUp", "RightButton")
+    assertFalse(inst.NS.DrillDown.IsActive(cfg), "a right click on the grid opened something")
+end)
+
+test("Cells register for BOTH buttons, or the right click never arrives", function()
+    -- A right-click handler on a frame that never called RegisterForClicks is a
+    -- silent failure: the code is correct and the client never calls it.
+    -- red under: dropping the RegisterForClicks call.
+    local _, _, row = bench()
+    local clicks = row.cells.DamageDone.frame.__clicks
+    assertTrue(clicks ~= nil, "the cell never registered for clicks at all")
+
+    local seen = {}
+    for _, b in ipairs(clicks) do seen[b] = true end
+    assertTrue(seen["LeftButtonUp"], "left clicks are not registered")
+    assertTrue(seen["RightButtonUp"], "right clicks are not registered")
+end)
