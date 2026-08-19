@@ -314,3 +314,60 @@ test("Targets: every meter read goes through the provider", function()
         end
     end
 end)
+
+-- ---------------------------------------------------------------------------
+-- The realm suffix
+-- ---------------------------------------------------------------------------
+
+test("Targets: a cross-realm caster still matches the row it belongs to", function()
+    -- MEASURED IN GAME, not imagined. The two sides arrive in different shapes:
+    -- a combat source's `name` is bare, and a spell's `combatSpellDetails.
+    -- unitName` is realm-qualified for anyone from another realm. So same-realm
+    -- players matched and cross-realm players silently did not — which looked
+    -- like "targets work on every other row" and was really "targets work for
+    -- everyone on your own realm".
+    -- red under: comparing the two names as they arrive.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = {
+            { caster = "Juanaveli-Sargeras", amount = 500 },
+            { caster = "Helya",              amount = 200 },
+        } },
+    }
+
+    local cross = inst.NS.Targets.ForPlayer(cfg, "Juanaveli", 5)
+    assertTrue(cross ~= nil, "a cross-realm player got no targets at all")
+    assertEqual(cross[1].total, 500, "the cross-realm caster's damage went missing")
+
+    -- The same-realm case must not regress on the way.
+    local same = inst.NS.Targets.ForPlayer(cfg, "Helya", 5)
+    assertEqual(same[1].total, 200, "the same-realm caster stopped matching")
+end)
+
+test("Targets: a realm-qualified ROW name matches a bare caster", function()
+    -- Both sides go through the same normalizer, so it does not matter which of
+    -- them carried the realm — and which one does is not something this addon
+    -- controls or should depend on.
+    -- red under: stripping only the caster side.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = { { caster = "Oruuta", amount = 700 } } },
+    }
+    local list = inst.NS.Targets.ForPlayer(cfg, "Oruuta-Zul'jin", 5)
+    assertTrue(list ~= nil, "a realm-qualified row name matched nothing")
+    assertEqual(list[1].total, 700)
+end)
+
+test("Targets: two casters differing only by realm are still told apart by name", function()
+    -- The cost of normalizing: two players with the same name on different
+    -- realms now collide into one row. Recorded as a test rather than left to be
+    -- discovered — it is the known and accepted price of matching at all, and if
+    -- it ever needs fixing this is the case that says what changed.
+    -- red under: nothing. This pins current behavior.
+    local inst, cfg = bench{
+        { name = "Gulkat", hits = {
+            { caster = "Helya-RealmA", amount = 100 },
+            { caster = "Helya-RealmB", amount = 300 },
+        } },
+    }
+    local list = inst.NS.Targets.ForPlayer(cfg, "Helya", 5)
+    assertEqual(list[1].total, 400, "same-name cross-realm casters are merged, as documented")
+end)

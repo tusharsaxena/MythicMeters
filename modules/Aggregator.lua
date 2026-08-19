@@ -562,12 +562,13 @@ end
 --- string.format.
 local function logDrop(pass, src, guid)
     NS.Debug("Aggregator",
-        "dropped guid=%s secret=%s access=%s member=%s owner=%s local=%s/%s class=%s/%s lookup=%s",
+        "dropped guid=%s secret=%s access=%s member=%s owner=%s local=%s/%s class=%s/%s display=%s lookup=%s",
         NS.SafeToString(guid), tostring(Secrets.IsSecret(guid)),
         tostring(Secrets.CanAccess(guid)),
         tostring(Roster.IsGroupMember(guid)), NS.SafeToString(Roster.OwnerOf(guid)),
         NS.SafeToString(src.isLocalPlayer), tostring(Secrets.IsSecret(src.isLocalPlayer)),
         NS.SafeToString(src.classFilename), tostring(Secrets.IsSecret(src.classFilename)),
+        NS.SafeToString(src.sourceDisplayType),
         Provider.ProbeSourceByGuid(pass.sessionType, pass.sortColumn, guid))
 end
 
@@ -651,6 +652,73 @@ local function placedRow(pass, src, index, isSortColumn, ownerGuid, isOwn)
     return row, isOwn
 end
 
+--- Whether this source is an enemy rather than one of us.
+---
+--- `sourceDisplayType` is a plain enum, which is what makes it usable here: the
+--- unrestricted path filters mobs out by asking the roster, and the roster
+--- cannot answer for a source it cannot key on.
+local function isEnemySource(src)
+    local kind = src.sourceDisplayType
+    if kind == nil or Secrets.IsSecret(kind) then return false end
+    return kind == Const.SOURCE_DISPLAY_TYPE.Enemy
+end
+
+--- A row for an ALLY nobody in the group owns.
+---
+--- ---------------------------------------------------------------------------
+--- WHY THIS IS NOT "MISLABELING A ROW"
+--- ---------------------------------------------------------------------------
+---
+--- Everything else in this file drops a source it cannot attribute, on the rule
+--- that a dropped row is a visible absence and a mislabeled one is a lie. That
+--- rule is about ATTRIBUTION — putting one player's numbers under another
+--- player's name — and it does not apply here, because this row makes no claim
+--- about an owner at all. It carries the source's OWN name and the source's own
+--- figures. Nothing is inferred.
+---
+--- What was being lost: a warlock's felguard, a shaman's elemental, a death
+--- knight's ghoul, every totem and every temporary guardian. Their owner link
+--- needs the unit API to have seen them, which for a guardian it often never
+--- does — so their damage and their interrupts simply vanished off the grid,
+--- while Blizzard's own meter and every other addon showed them.
+---
+--- ENEMIES ARE STILL REFUSED, and that is what keeps this safe: without the
+--- `sourceDisplayType` gate the EnemyDamageTaken column would put every mob in
+--- the pull on the grid as a row. `mergePets` is not consulted, because merging
+--- is addition into an OWNER's row and there is no owner to add into — the whole
+--- reason we are here.
+---
+--- @return table|nil row, boolean isOwn
+local function unownedAllyRow(pass, src, index, isSortColumn, guid)
+    -- EXPLICITLY Ally, not merely "not Enemy". The difference matters on a
+    -- source whose displayType is absent or None: read as "not an enemy" it
+    -- becomes a row, and the failure mode is the whole trash pack appearing on
+    -- the grid. Read as "not an ally" it stays dropped, and the failure mode is
+    -- this fix doing nothing — visible, and far cheaper to diagnose.
+    local kind = src.sourceDisplayType
+    if kind == nil or Secrets.IsSecret(kind) then return dropSource(pass, src, guid) end
+    if kind ~= Const.SOURCE_DISPLAY_TYPE.Ally then return dropSource(pass, src, guid) end
+    -- Keyed on its own GUID, so it needs to BE a legal key. Mid-pull it is not,
+    -- and identity mode is running instead anyway.
+    if not Secrets.IsSafeKey(guid) then return dropSource(pass, src, guid) end
+
+    local row = pass.byGuid[guid]
+    if row == nil then
+        row = newRow(guid, src, pass.windowId)
+        -- `isPet` drives the row's presentation, and it is the honest flag even
+        -- for a totem or a guardian: what it means downstream is "not a group
+        -- member of its own right". `ownerGuid` stays nil — there is no owner.
+        row.isPet = true
+        row.isUnowned = true
+        row.providerIndex = isSortColumn and index or (UNRANKED + index)
+        pass.byGuid[guid] = row
+        pass.rows[#pass.rows + 1] = row
+    elseif isSortColumn then
+        row.providerIndex = index
+    end
+    return row, true
+end
+
 --- The row `src` should be written into.
 ---
 --- @return table|nil row  nil when the source was dropped (and counted)
@@ -666,8 +734,12 @@ local function rowForSource(pass, src, index, isSortColumn)
         -- comparison, and a comparison raises. The row is the member's own by
         -- construction, so there is nothing to work out.
         local claimed = localClaim(src)
-        if claimed == nil then return dropSource(pass, src, guid) end
-        return claimedRow(pass, src, index, isSortColumn, claimed), true
+        if claimed ~= nil then
+            return claimedRow(pass, src, index, isSortColumn, claimed), true
+        end
+        -- Not a member, not a member's pet, and not us — but possibly still one
+        -- of ours. See `unownedAllyRow`.
+        return unownedAllyRow(pass, src, index, isSortColumn, guid)
     end
 
     return placedRow(pass, src, index, isSortColumn, ownerGuid, ownerGuid == guid)
@@ -714,17 +786,6 @@ local function identityKey(src)
     -- Concatenation only, on values just proved plain. Never `..` on a secret.
     return (class or "UNKNOWN") .. "_" .. tostring(icon or 0)
         .. "_" .. tostring(plainTruth(src.isLocalPlayer))
-end
-
---- Whether this source is an enemy rather than one of us.
----
---- `sourceDisplayType` is a plain enum, which is what makes it usable here: the
---- unrestricted path filters mobs out by asking the roster, and the roster
---- cannot answer for a source it cannot key on.
-local function isEnemySource(src)
-    local kind = src.sourceDisplayType
-    if kind == nil or Secrets.IsSecret(kind) then return false end
-    return kind == Const.SOURCE_DISPLAY_TYPE.Enemy
 end
 
 --- One correlated column: identity key -> the figures to show, plus the keys

@@ -43,6 +43,7 @@ local function src(guid, total, opts)
         amountPerSecond  = opts.rate,
         deathTimeSeconds = opts.deathTime,
         deathRecapID     = opts.recapID,
+        sourceDisplayType = opts.displayType,
     }
 end
 
@@ -865,4 +866,92 @@ test("Counting a death is legal mid-pull, where summing two secrets is not", fun
 
     local ok, err = pcall(inst.NS.Aggregator.Build, makeWindow{ columns = { "Deaths" } })
     assertTrue(ok, "counting inspected a meter value: " .. tostring(err))
+end)
+
+-- ---------------------------------------------------------------------------
+-- Allies nobody owns — pets, guardians, totems
+-- ---------------------------------------------------------------------------
+
+test("An ALLY nobody owns gets its own row, under its own name", function()
+    -- A warlock's felguard, a shaman's elemental, a death knight's ghoul, every
+    -- totem: their owner link needs the unit API to have seen them, which for a
+    -- guardian it often never does. They used to vanish off the grid entirely
+    -- while Blizzard's own meter showed them.
+    --
+    -- This is NOT the mislabeling the drop rule protects against. That rule is
+    -- about attribution — one player's numbers under another player's name — and
+    -- this row makes no claim about an owner at all. It carries the source's own
+    -- name and the source's own figures.
+    -- red under: dropping every source the roster cannot place.
+    local inst = loaded()
+    local ALLY = inst.mocks.Enum.DamageMeterSourceDisplayType.Ally
+    install(inst, {
+        src(ALPHA, 100),
+        src(PET, 40, { name = "Gargoyle", displayType = ALLY }),
+    }, { maxAmount = 100, totalAmount = 140 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 2, "the unowned ally was dropped")
+
+    local ally
+    for _, row in ipairs(result) do if row.guid == PET then ally = row end end
+    assertTrue(ally ~= nil, "no row was keyed on the ally's own GUID")
+    assertEqual(ally.name, "Gargoyle", "the row did not carry the source's own name")
+    assertEqual(ally.values.DamageDone.total, 40, "the row did not carry its own figures")
+    assertTrue(ally.isPet, "the row does not read as a non-member")
+    assertEqual(ally.ownerGuid, nil, "an owner was invented for a source that has none")
+end)
+
+test("The owner is still not credited for an unowned ally's damage", function()
+    -- Giving it a row must not also fold it into somebody. Folding is addition
+    -- into an OWNER's row, and the whole reason we are here is that there is no
+    -- owner to add into.
+    -- red under: crediting the local player for anything the roster could not place.
+    local inst = loaded()
+    local ALLY = inst.mocks.Enum.DamageMeterSourceDisplayType.Ally
+    install(inst, {
+        src(ALPHA, 100),
+        src(PET, 40, { name = "Gargoyle", displayType = ALLY }),
+    }, { maxAmount = 100, totalAmount = 140 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    for _, row in ipairs(result) do
+        if row.guid == ALPHA then
+            assertEqual(row.values.DamageDone.total, 100, "the owner absorbed the ally's total")
+        end
+    end
+end)
+
+test("An ENEMY nobody owns is still refused", function()
+    -- THE ONE THAT KEEPS THIS SAFE. Without the display-type gate the
+    -- EnemyDamageTaken column puts every mob in the pull on the grid as a row.
+    -- red under: keeping any source the roster cannot place.
+    local inst = loaded()
+    local ENEMY = inst.mocks.Enum.DamageMeterSourceDisplayType.Enemy
+    install(inst, {
+        src(ALPHA, 100),
+        src("Creature-0-1234", 80, { name = "Some Boss", displayType = ENEMY }),
+    }, { maxAmount = 100, totalAmount = 180 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 1, "an enemy was promoted to a grid row")
+    assertEqual(result[1].guid, ALPHA)
+end)
+
+test("A source with NO display type is refused, not assumed friendly", function()
+    -- The gate asks for Ally explicitly rather than for "not Enemy". Read as
+    -- "not an enemy", a source with an absent or None display type becomes a
+    -- row and the failure mode is the whole trash pack on the grid. Read as
+    -- "not an ally" it stays dropped, and the failure mode is this feature doing
+    -- nothing — visible, and far cheaper to diagnose.
+    -- red under: `if isEnemySource(src) then drop end`.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 100),
+        src("Player-2-0000DEAD", 90, { name = "PassingStranger" }),
+    }, { maxAmount = 100, totalAmount = 190 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 1, "a source of unknown allegiance was given a row")
+    assertEqual(result[1].guid, ALPHA)
 end)

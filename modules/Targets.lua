@@ -103,6 +103,35 @@ local function sessionIDOf(window)
     return data and data.sessionID or nil
 end
 
+--- A player name with its realm removed, for comparison only.
+---
+--- THE BUG THIS EXISTS FOR. The two sides of the match arrive in different
+--- shapes: a combat source's `name` is bare, and a spell's
+--- `combatSpellDetails.unitName` is realm-qualified for anyone from another
+--- realm. So same-realm players matched and cross-realm players silently did
+--- not — which looked like "targets work for every other row" and was really
+--- "targets work for everyone on your own realm".
+---
+--- Splitting at the first hyphen is exact here rather than heuristic, because
+--- both sides are PLAYER names and a player name cannot contain a hyphen. That
+--- is not true elsewhere in this addon — modules/Row.lua gates the same strip on
+--- the GUID because an NPC like "Crenna Earth-Daughter" keeps its hyphen — but
+--- nothing but a player casts a spell into the enemy column.
+---
+--- Blizzard's own Ambiguate is preferred where it exists, so the rule stays
+--- theirs rather than ours.
+---
+--- @param name string
+--- @return string
+local function bareName(name)
+    local ambiguate = _G.Ambiguate
+    if ambiguate then
+        local ok, short = pcall(ambiguate, name, "short")
+        if ok and type(short) == "string" and short ~= "" then return short end
+    end
+    return name:match("^([^-]+)") or name
+end
+
 --- The caster name on one spell row, or nil when there is nothing usable.
 ---
 --- Three separate refusals, and they are not the same refusal written three
@@ -126,7 +155,7 @@ local function casterName(spell)
     -- Keyed on below, so the key rule applies and not merely the access rule.
     if not Secrets.IsSafeKey(name) then return nil end
     if type(name) ~= "string" or name == "" then return nil end
-    return name
+    return bareName(name)
 end
 
 --- Add one enemy's contribution from `player` into `totals`, or answer false.
@@ -186,6 +215,9 @@ function Targets.ForPlayer(window, player, limit)
     -- make, which is the same nil as everything else.
     if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(player)) then return nil end
     if type(player) ~= "string" or player == "" then return nil end
+    -- Both sides go through the same normalizer, so it does not matter which of
+    -- them carried a realm.
+    player = bareName(player)
 
     local P = provider()
     if not (P and P.GetColumn and P.GetSourceDetail) then return nil end

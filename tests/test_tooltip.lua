@@ -1129,3 +1129,112 @@ test("The post-layout pass still restores every line it touched", function()
 
     assertEqual(left:GetFont(), nil, "our font outlived our tooltip on a SHARED line")
 end)
+
+test("A target's name is drawn on our own carrier, not on the tooltip's line", function()
+    -- A target has no icon — a unit is not a spell — but its name still has to
+    -- start where a spell NAME starts rather than where a spell ICON starts, or
+    -- the two sections read as two unrelated tables. There is no way to indent
+    -- GameTooltip's own line text (a `|T…|t` spacer needs a transparent texture
+    -- to point at, and padding with spaces is font-dependent), so the name goes
+    -- on the carrier's own label slot, which is already anchored past the icon.
+    -- red under: passing the name to AddLine and leaving the label empty.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.showTargets = true
+        c.tooltip.maxTargets  = 2
+    end }
+
+    local mocks = inst.mocks
+    local ENEMY_STAT = mocks.Enum.DamageMeterType.EnemyDamageTaken
+    local sources = {}
+    for i, enemy in ipairs({ "Primal Thundercloud", "Storm Warrior" }) do
+        local guid = string.format("Creature-0-0000-0-0-%04d", i)
+        sources[i] = { sourceGUID = guid, guid = guid, sourceCreatureID = 7000 + i,
+                       name = enemy, totalAmount = 1 }
+        local detail = { combatSpells = { { spellID = i, totalAmount = 900 - i * 100,
+            combatSpellDetails = { unitName = "Alpha" } } } }
+        mocks.setSourceDetail(CURRENT, ENEMY_STAT, guid, detail)
+        mocks.setSourceDetail(CURRENT, ENEMY_STAT, "creature:" .. (7000 + i), detail)
+    end
+    mocks.setSession(CURRENT, ENEMY_STAT,
+        { combatSources = sources, maxAmount = 1, totalAmount = 1 })
+
+    inst.NS.Tooltip:CellTooltip(row{ name = "Alpha" }, "DamageDone", anchor, cfg)
+
+    local labels = {}
+    for _, carrier in ipairs(spellLines(inst)) do
+        local text = carrier.label and carrier.label:GetText()
+        if text and text ~= "" then labels[#labels + 1] = text end
+    end
+
+    assertEqual(#labels, 2, "the target names never reached a carrier label")
+    assertEqual(labels[1], "Primal Thundercloud")
+
+    -- And the tooltip's own line for a target is blank, so nothing is drawn
+    -- twice at two different indents.
+    local sawNameInLine = false
+    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
+        if type(line.text) == "string" and line.text:find("Primal Thundercloud") then
+            sawNameInLine = true
+        end
+    end
+    assertFalse(sawNameInLine, "the name was also written into the tooltip's own line")
+end)
+
+test("The gap above a section is half the text size, not a whole blank line", function()
+    -- A blank AddLine is a WHOLE line of the tooltip's font, which read as a
+    -- paragraph gap above "Spell breakdown" and again above "Targets". There is
+    -- no half-line in GameTooltip, but a line's HEIGHT follows its font — so the
+    -- spacer takes the same face at half the size.
+    -- red under: a bare AddLine(" ") before the section header.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = 20 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    -- Line 2 is the gap: line 1 is the "<player> / <stat>" header, line 3 is
+    -- "Spell breakdown", and the spell lines follow.
+    local gap = inst.mocks["GameTooltipTextLeft2"]
+    assertTrue(gap ~= nil, "there is no line where the section gap should be")
+    assertEqual(select(2, gap:GetFont()), 10, "the gap is not half the configured size")
+
+    -- The header beneath it keeps the full size, or the section title shrinks too.
+    local spell = inst.mocks["GameTooltipTextLeft4"]
+    assertEqual(select(2, spell:GetFont()), 20, "the spell line was shrunk along with the gap")
+end)
+
+test("The half-size gap survives the post-layout pass", function()
+    -- The re-apply after Show walks every line it touched. Remembering ONE font
+    -- for the hover would have it stamp full size back over the gap and quietly
+    -- restore the blank line this just halved.
+    -- red under: reapplyFonts using a single remembered font.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = 20 end }
+    local mocks = inst.mocks
+
+    mocks.GameTooltip:Hide()
+    mocks.GameTooltip:HookScript("OnShow", function()
+        local i = 1
+        while mocks["GameTooltipTextLeft" .. i] do
+            local fs = mocks["GameTooltipTextLeft" .. i]
+            local path = fs:GetFont()
+            if path then fs:SetFont(path, 11, "") end
+            i = i + 1
+        end
+    end)
+
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+    assertEqual(select(2, mocks["GameTooltipTextLeft2"]:GetFont()), 10,
+        "the gap was restored to full size by the re-apply")
+end)
+
+test("The gap is restored with every other line it was applied alongside", function()
+    -- A shrunken font left on a SHARED line is the same leak as any other, and
+    -- it would land on whatever the next addon puts there.
+    -- red under: applying the gap's font outside the restore bookkeeping.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = 20 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local gap = inst.mocks["GameTooltipTextLeft2"]
+    assertEqual(select(2, gap:GetFont()), 10, "the gap never took the half size")
+
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+    assertEqual(gap:GetFont(), nil, "a shrunken font outlived our tooltip on a shared line")
+end)

@@ -554,6 +554,14 @@ local SHARE_SLOT_WIDTH  = 36
 local SLOT_GAP          = 6
 local AMOUNT_SLOT_WIDTH = 66
 
+--- Where a target's name starts inside its carrier.
+---
+--- The carrier's left edge already sits one icon past the line's left edge
+--- (BAR_INSET_LEFT), and a spell name additionally clears the single space in
+--- its own format string. This is that space, so a target name and a spell name
+--- share an x.
+local LABEL_INSET_LEFT = 4
+
 --- Breathing room between the longest spell name and the amount slot.
 local NAME_GAP = 10
 
@@ -592,9 +600,6 @@ local widestName = 0
 -- the ones that do not come back through this file.
 local fontedLines = {}
 
---- The font this hover is drawing in, so the post-layout pass can re-apply it
---- without re-deriving it. Cleared by `releaseLines`.
-local currentFont = nil
 
 --- What the font probe saw on the last spell line drawn, or nil.
 ---
@@ -608,10 +613,15 @@ local currentFont = nil
 Tooltip.__fontProbe = nil
 
 --- Give one tooltip line our font, and remember that we did.
+---
+--- The record keeps the font PER LINE rather than one font for the hover,
+--- because they are not all the same: a section gap gets the same face at half
+--- the size, and a single remembered font would have the post-layout pass stamp
+--- full size back over it and quietly restore the gap this addon just halved.
 local function applyLineFont(fontString, index, path, size, flags)
     if not (fontString and fontString.SetFont) then return end
     fontString:SetFont(path, size, flags)
-    fontedLines[index] = fontString
+    fontedLines[index] = { fs = fontString, path = path, size = size, flags = flags }
 
     if State.debug and fontString.GetFont then
         local gotPath, gotSize, gotFlags = fontString:GetFont()
@@ -629,6 +639,31 @@ local function sampleFontAfterShow()
     local probe = Tooltip.__fontProbe
     if not (probe and probe.line and probe.line.GetFont) then return end
     probe.showPath, probe.showSize, probe.showFlags = probe.line:GetFont()
+end
+
+--- Add the gap that separates one tooltip section from the next.
+---
+--- A blank AddLine is a WHOLE line of the tooltip's font, which is more air than
+--- a section break needs — it read as a paragraph gap above "Spell breakdown"
+--- and again above "Targets". There is no half-line in GameTooltip, but a line's
+--- HEIGHT follows its font, so the spacer is given the configured font at half
+--- size and takes half the room.
+---
+--- It goes through `applyLineFont` like every other line we touch, so it is
+--- restored with them — a shrunken font left on a shared line is the same leak
+--- as any other, and it would land on whatever the next addon puts there.
+---
+--- @param style table  a resolved style from `lineStyle`
+local function addSectionGap(style)
+    GameTooltip:AddLine(" ")
+    local name = GameTooltip:GetName()
+    local index = GameTooltip:NumLines()
+    local left = name and _G[name .. "TextLeft" .. index]
+    if not left then return end
+
+    local half = math.floor((style.fontSize or 12) / 2)
+    if half < 1 then half = 1 end
+    applyLineFont(left, index, style.fontPath, half, style.fontFlags)
 end
 
 --- Put our font back on every line, AFTER GameTooltip:Show() has laid out.
@@ -655,12 +690,9 @@ end
 --- this, and the tooltip is already sized — `applyMinimumWidth` ran before Show
 --- and a smaller font only ever leaves slack.
 local function reapplyFonts()
-    local f = currentFont
-    if f then
-        for _, fontString in pairs(fontedLines) do
-            if fontString.SetFont then
-                fontString:SetFont(f.path, f.size, f.flags)
-            end
+    for _, entry in pairs(fontedLines) do
+        if entry.fs.SetFont then
+            entry.fs:SetFont(entry.path, entry.size, entry.flags)
         end
     end
     sampleFontAfterShow()
@@ -668,7 +700,8 @@ end
 
 --- Put every line this hover restyled back onto the game's own tooltip font.
 local function restoreFonts()
-    for index, fontString in pairs(fontedLines) do
+    for index, entry in pairs(fontedLines) do
+        local fontString = entry.fs
         if fontString.SetFontObject and _G.GameTooltipText then
             fontString:SetFontObject(_G.GameTooltipText)
         end
@@ -696,7 +729,6 @@ local function releaseLines()
         frame:Hide()
     end
     widestName = 0
-    currentFont = nil
     restoreFonts()
     if _G.GameTooltip and GameTooltip.SetMinimumWidth then
         GameTooltip:SetMinimumWidth(0)
@@ -771,6 +803,22 @@ local function lineWidget(index)
     share:SetPoint("RIGHT", frame, "RIGHT", -SLOT_RIGHT_PAD, 0)
     share:SetTextColor(SHARE_COLOR[1], SHARE_COLOR[2], SHARE_COLOR[3])
 
+    -- The LABEL slot, used by target lines and left empty by spell lines.
+    --
+    -- A target has no icon — a unit is not a spell — but its name still has to
+    -- start where a spell NAME starts, not where a spell ICON starts, or the two
+    -- sections read as two different tables. There is no way to indent
+    -- GameTooltip's own line text (a `|T…|t` spacer needs a transparent texture
+    -- to point at, and padding with spaces is font-dependent), so the name goes
+    -- on OUR carrier instead — which is already anchored past the icon, wears the
+    -- configured font for free, and can be placed to the pixel.
+    --
+    -- Bounded on the right by the amount slot so a long unit name is clipped
+    -- rather than drawn underneath the numbers.
+    local label = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    label:SetJustifyH("LEFT")
+    label:SetPoint("LEFT", frame, "LEFT", LABEL_INSET_LEFT, 0)
+
     local amount = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     amount:SetWidth(AMOUNT_SLOT_WIDTH)
     amount:SetJustifyH("RIGHT")
@@ -779,7 +827,9 @@ local function lineWidget(index)
 
     -- Keyed onto the carrier the way Blizzard's own `parentKey` does, so the
     -- pool holds one object rather than a record of four.
-    frame.bar, frame.amount, frame.share = b, amount, share
+    label:SetPoint("RIGHT", amount, "LEFT", -SLOT_GAP, 0)
+
+    frame.bar, frame.amount, frame.share, frame.label = b, amount, share, label
     linePool[index] = frame
     return frame
 end
@@ -816,8 +866,6 @@ local function lineStyle(config, color)
     local path, size, flags = tooltipFont(config)
     local borderSize = config.barBorderSize
     if type(borderSize) ~= "number" or borderSize < 0 then borderSize = 0 end
-
-    currentFont = { path = path, size = size, flags = flags }
 
     return {
         color      = color,
@@ -876,7 +924,9 @@ end
 --- @param value any          the spell's raw total, possibly secret
 --- @param max any            the largest total in this breakdown, possibly secret
 --- @param style table        a resolved style from `lineStyle`
-local function drawLine(lineIndex, amount, share, value, max, style)
+--- @param label string|nil   text for the carrier's own name slot (target lines);
+---                           nil leaves it empty, which is what a spell line wants
+local function drawLine(lineIndex, amount, share, value, max, style, label)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
     if not left then return end
@@ -888,6 +938,7 @@ local function drawLine(lineIndex, amount, share, value, max, style)
     -- are simply re-set on every draw.
     frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+    frame.label:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags)
 
     applyLineBorder(frame, style)
@@ -903,8 +954,21 @@ local function drawLine(lineIndex, amount, share, value, max, style)
 
     frame.amount:SetText(amount)
     frame.share:SetText(share)
+    frame.label:SetText(label or "")
 
-    if left.GetStringWidth then
+    -- WIDTH. A spell line is measured off GameTooltip's own FontString, which
+    -- holds the icon escape and the name. A target line's text is on OUR label
+    -- instead, so it is measured there and offset by how far in the carrier
+    -- starts — otherwise the tooltip narrows to the width of the word "Targets"
+    -- and every unit name is clipped.
+    --
+    -- Both are safe to measure: neither has ever been handed a meter value.
+    if label ~= nil then
+        if frame.label.GetStringWidth then
+            local w = (frame.label:GetStringWidth() or 0) + BAR_INSET_LEFT + LABEL_INSET_LEFT
+            if w > widestName then widestName = w end
+        end
+    elseif left.GetStringWidth then
         local w = left:GetStringWidth() or 0
         if w > widestName then widestName = w end
     end
@@ -1050,7 +1114,7 @@ local function addSpellBreakdown(source, statKey, cap, numberStyle, style)
     local spells, spellTotal = collectSpells(source)
     sortSpellsIfLegal(spells)
 
-    GameTooltip:AddLine(" ")
+    addSectionGap(style)
     GameTooltip:AddLine(L["Spell breakdown"], 1, 0.82, 0)
 
     -- The bars scale to the BIGGEST SPELL in this breakdown, not to the source's
@@ -1129,19 +1193,22 @@ local function addTargetBreakdown(row, statKey, config, style, numberStyle, wind
     local total = T.Total(list)
     local max = list[1] and list[1].total
 
-    GameTooltip:AddLine(" ")
+    addSectionGap(style)
     GameTooltip:AddLine(L["Targets"], 1, 0.82, 0)
 
     for i = 1, #list do
         local entry = list[i]
-        -- No icon escape, so no BAR_INSET_LEFT to clear — but the line is added
-        -- with a leading space anyway, so a target name and a spell name start at
-        -- the same x and the two sections read as one table.
-        GameTooltip:AddLine(string.format(" %s", entry.name or L["Unknown"]), 1, 1, 1)
+        -- The tooltip line is deliberately BLANK. Its only job is to exist, so
+        -- the carrier has something to anchor to and the tooltip reserves a row
+        -- of height; the visible name is drawn on the carrier's own label slot,
+        -- which is the only way to start it where a spell name starts rather
+        -- than where a spell icon starts. See `lineWidget`.
+        GameTooltip:AddLine(" ", 1, 1, 1)
         drawLine(GameTooltip:NumLines(),
             formatNumber(entry.total, numberStyle),
             formatShare(entry.total, total),
-            entry.total, max, style)
+            entry.total, max, style,
+            entry.name or L["Unknown"])
     end
 
     return #list
