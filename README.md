@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-792%2F792_passing-green)
+![Tests](https://img.shields.io/badge/Tests-848%2F848_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -36,8 +36,10 @@ The first release.
 - **Deep configuration** — frame, header, rows, bars, text, icons, tooltips, visibility, columns and
   data, all per window.
 - **Hover for the detail.** A cell tells you which spells made up that number; a name tells you
-  everything tracked for that player. Click a cell to drill into it, or a Deaths cell to open the
-  death recap.
+  everything tracked for that player. A Damage cell can also list **which enemies that player hit**.
+  Click a cell to drill into it, or a Deaths cell to open the death recap.
+- **The tooltip is yours too.** Its own bar texture, spacing and border, its own font, nine anchor
+  positions with an x/y nudge, and a spell cap you can set to zero for "show me all of them".
 - **Stays out of the way.** Shows in dungeons, raids, arenas and battlegrounds; hidden in the open
   world and when you are alone, unless you say otherwise.
 
@@ -87,7 +89,7 @@ are currently looking at, not all of them.
 | Bars | Texture, color mode, background, border, opacity, fill direction |
 | Text | Which text sits left and right, number format, max name length, font, size, outline, shadow, color |
 | Icons | Class, spec and role icons — which to show, how big, where |
-| Tooltip | What appears on hover, where it anchors, how many spells to list |
+| Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
 | Visibility | Dungeon, raid, arena, battleground, open world; hide when solo or in a vehicle |
 | Columns | Add, remove and reorder columns; per-column width and whether it draws a bar |
 | Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |

@@ -400,9 +400,12 @@ elemental and a shaman's elementals are also good, and are the cases the unit-fr
 **Steps.** Complete a pull, then check the grid **out of combat**.
 
 **Pass.**
-- **No phantom pet row.** The grid shows one row per group member and nothing named after a pet, a
-  guardian or a totem. An unattributable pet is **dropped**, not shown: a phantom row looks like a
-  bug, whereas a slightly low number is explainable.
+- **An unowned ally has its own row, under its own name.** A guardian, a totem or a pet whose owner
+  the unit API never saw is shown rather than dropped — it names itself, so nothing is being
+  attributed to the wrong player.
+- **No ENEMY ever gets a row.** This is the half that can go badly wrong: the gate is an explicit
+  `sourceDisplayType == Ally` test, and read loosely it would put the whole trash pack on the grid.
+  If a mob's name appears as a row, stop and report it.
 - **Out of combat, pet damage folds into the owner.** Compare the hunter's Damage figure against
   Blizzard's own meter, which also attributes pet damage to the owner. They should agree.
 - **In combat the owner's number is low by whatever the pet contributed**, and that is correct

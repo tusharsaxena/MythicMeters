@@ -231,8 +231,28 @@ every number to its right is opaque.
 
 ### `tooltip`
 
-`anchor = "CURSOR"` · `showSpells = true` · `maxSpells = 10` · `showAllStatsOnName = true` ·
-`hideInCombat = false`.
+`anchor = "CURSOR"` · `offsetX = 0` · `offsetY = 0` · `showSpells = true` · `maxSpells = 10` ·
+`showAllStatsOnName = true` · `hideInCombat = false`.
+
+Its own appearance, kept separate from `bars` and `text` on purpose — a 14px spell line and a 90px
+cell are different surfaces, and a texture or a size that reads across one often does not across the
+other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `barBorderStyle = "None"` ·
+`barBorderSize = 1` · `barBorderColor = { r = 0, g = 0, b = 0, a = 1 }` ·
+`font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"`.
+
+The Targets section: `showTargets = false` · `maxTargets = 3`.
+
+`anchor` takes nine values — `CURSOR`, the four edges and the four corners — and each maps to a
+GameTooltip `ANCHOR_*` token. `ANCHOR_NONE` and `ANCHOR_PRESERVE` are deliberately absent: both mean
+"the owner places the tooltip itself", which would require computing a point from a frame that has
+held a secret value.
+
+`maxSpells = 0` means "every spell the breakdown collected", which is the collector's own ceiling of
+64 rather than literally unbounded — the "and N more" line stays honest about anything past it.
+
+`showTargets` is off by default for two separate reasons: it costs one provider call per enemy on a
+hover and keeps no cache, and it is a **summation**, so it is absent for the whole of a pull rather
+than approximated ([data-flow.md §9](data-flow.md)).
 
 `hideInCombat` is a **preference, not a guard**: a tooltip's numbers go through the formatter like
 every other, so nothing about it is unsafe mid-pull — it is simply in the way. The combat test

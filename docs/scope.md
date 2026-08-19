@@ -142,8 +142,11 @@ Two behaviors look like missing features and are documented limitations of the d
 owner link, so `modules/Roster.lua` matches pets to owners by asking `UnitGUID` for each member's pet
 unit. That is exact for what it covers — `playerpet`, `partyNpet`, `raidNpet` — and covers nothing
 else: guardians, totems, temporary summons, a second pet, or a pet whose owner is out of unit-API
-range at build time. An unattributable pet is **dropped** rather than shown, because a phantom row
-with a pet's name in a group meter looks like a bug while a slightly low number is explainable.
+range at build time. An unattributable ally — a guardian, a totem, a second pet — is shown as **its own row under its own
+name** rather than dropped or folded into a guessed owner. A row that names itself is not the failure
+the drop rule was written for: that rule is about one player's numbers appearing under another
+player's *name*, and this row makes no claim about an owner. Enemies are still refused, on an
+explicit `sourceDisplayType == Ally` test.
 
 **Percentage text slots go quiet in combat.** A percentage is a division. `modules/Aggregator.lua`
 computes it once per cell when the operands are accessible and answers `nil` when they are not —

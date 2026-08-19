@@ -242,7 +242,8 @@ in a follower dungeon `UnitGUID("party3pet")` answers a secret string, and keyin
 refresh tick. `modules/Roster.lua` — the addon's only reader of the unit API — therefore vets every
 GUID through `NS.Secrets.IsSafeKey` before using it as a key, and vets the argument of `Get`,
 `IsGroupMember` and `OwnerOf` the same way. An unreadable pet falls into the existing
-"unattributable" case: no map entry, `OwnerOf` nil, row dropped.
+"unattributable" case: no map entry, `OwnerOf` nil — and it then gets a row **of its own**, under its
+own name, rather than being dropped (see [Known limitations](#known-limitations)).
 
 Three design rules follow, and they are enforced in one place each rather than remembered in twenty:
 
@@ -281,7 +282,7 @@ listens for that edge: it existed to take one last value-sort and freeze the res
 `guid → position` map cannot be applied to rows that have no GUID.
 
 Two consequences worth stating once, because both look like bugs: **percentage text slots go quiet in
-combat** (a percentage is a division), and **a pet's row is dropped rather than summed into its
+combat** (a percentage is a division), and **a pet keeps its own row rather than being summed into its
 owner's while restricted** (a sum is arithmetic, and the native formatter renders but does not sum).
 The second is why the scoring feature is deferred — [scope.md](scope.md#deferred-scoring).
 
@@ -321,9 +322,16 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 - English (`enUS`) only. The locale plumbing and the metatable fallback exist; no second locale ships.
 - Retail / Midnight only — a single `## Interface` line. `C_DamageMeter` does not exist on Classic.
-- **Pet attribution is best-effort.** Guardians, totems, temporary summons and any pet whose owner
-  was never within unit-API range are unattributable and their rows are dropped. The roster REMEMBERS
-  every attribution it once made, so leaving the group does not lose one.
+- **Pet attribution is best-effort, but an unattributable ally is no longer lost.** Guardians,
+  totems, temporary summons and any pet whose owner was never within unit-API range cannot be tied
+  to an owner — the roster REMEMBERS every attribution it once made, so leaving the group does not
+  lose one, but a guardian the unit API never saw was never attributable in the first place. Such a
+  source now gets **its own row, under its own name**, rather than vanishing off the grid. That is
+  not the mislabeling the drop rule guards against: the rule is about putting one player's numbers
+  under another player's *name*, and this row claims no owner at all. The gate that keeps it safe is
+  `sourceDisplayType`, and it asks for **Ally explicitly** rather than for "not Enemy" — read the
+  loose way, a source whose display type is absent becomes a row and the whole trash pack lands on
+  the grid.
 - **`data.mergePets` is off by default, and has no effect during a pull.** A pet gets its own row,
   which needs no arithmetic and is exact in both states. Merging is addition and needs the owner
   link, so it runs only where GUIDs are plain — out of combat.
@@ -364,7 +372,9 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 Every `.md` under `docs/` appears in exactly one of the three tables below (`documentation-§3`).
 Frozen and generated directories are named once and never enumerated per run: `docs/automated-tests/`,
-`docs/perf-analysis/`, `docs/superpowers/`.
+`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` holds image evidence attached to GitHub
+issues (GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
+committed file is the only way a screenshot reaches one); it carries no `.md` and so registers no row.
 
 ### Canonical trio (Tier 1)
 

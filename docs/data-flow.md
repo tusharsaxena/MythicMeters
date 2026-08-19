@@ -142,6 +142,12 @@ Two habits are visible in every function there and are the reason it cannot rais
   stops at the first `nil`, bounds itself at 512 iterations, and never inspects the value it passes
   to the callback.
 
+A source is kept when **either** identifier is present — `sourceGUID` **or** `sourceCreatureID`.
+Requiring the GUID silently emptied the entire `EnemyDamageTaken` column, because an NPC source
+carries a creature id and no player GUID: every enemy failed the guard, and the column then reported
+zero sources with `reason = nil`, which reads as "the session was fine and held nothing". A source
+carrying neither identifier is still dropped — it can be neither joined, keyed, nor looked up.
+
 Every field is *copied*, never examined. `name` is `ConditionalSecret`; `totalAmount`,
 `amountPerSecond` and `deathTimeSeconds` are secret in combat. They land in table **values**, which is
 explicitly permitted, and travel onward as opaque handles.
@@ -526,6 +532,15 @@ build and returns `nil`. Skipping the unreadable rows and carrying on would prod
 from whatever happened to be visible: wrong, plausible, and in the direction of "this enemy took less
 than it did". An absent section is a visible absence; an under-reported one is a lie the player
 cannot see.
+
+**Both names are normalized before they are compared.** They arrive in different shapes: a combat
+source's `name` is bare, and a spell's `combatSpellDetails.unitName` is realm-qualified for anyone
+from another realm. Compared as they arrive, same-realm players matched and cross-realm players
+silently did not — which reads in game as "targets work on every other row" and is really "targets
+work for everyone on your own realm". Splitting at the first hyphen is exact rather than heuristic
+here, because both sides are *player* names and a player name cannot contain one; `modules/Row.lua`
+gates the same strip on the GUID precisely because an NPC like "Crenna Earth-Daughter" keeps hers.
+The accepted cost is that two players sharing a name on different realms merge into one row.
 
 An unreadable *caster name* is different and is skipped rather than fatal — a spell nobody can be
 attributed to belongs to nobody rather than to everybody, so dropping it costs one spell's

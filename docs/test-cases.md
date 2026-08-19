@@ -179,7 +179,7 @@ badge and any count quoted in the docs must agree with it.
 - Database: the profile a swap lands on is migrated and normalized before anything reads it
 - Database: a profile RESET re-seeds rather than leaving an empty registry
 
-### test_diagnostics.lua (8)
+### test_diagnostics.lua (13)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -189,6 +189,11 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: one broken section cannot take the report down
 - Diagnostics: it never renders a meter value
 - Diagnostics: with no window it says so rather than erroring
+- Diagnostics: the report lands in the debug console, not in chat
+- Diagnostics: the console is OPENED, so the report is not written out of sight
+- Diagnostics: with no console the report falls back to chat
+- Diagnostics: a font size read back as 10.000000953674 is not called a failure
+- Diagnostics: a font the layout reverted is named as such
 
 ### test_defaults.lua (24)
 
@@ -344,7 +349,7 @@ badge and any count quoted in the docs must agree with it.
 - Format.Number and Format.Rate contain no division at all
 - A ladder the client silently refuses is DETECTED, not assumed
 
-### test_provider.lua (33)
+### test_provider.lua (35)
 
 - Provider: core/Compat.lua is the only file that names C_DamageMeter
 - Provider: modules/Provider.lua is the only caller of the meter shims
@@ -379,6 +384,8 @@ badge and any count quoted in the docs must agree with it.
 - Provider: a suspended capture answers no segment questions
 - Provider: reading a segment never inspects a value
 - Provider.ProbeSourceByGuid names what the API did with a GUID it was handed
+- Provider: an NPC source with no GUID is KEPT, on its creature ID
+- Provider: a source with NEITHER identifier is still dropped
 
 ### test_roster.lua (22)
 
@@ -405,7 +412,7 @@ badge and any count quoted in the docs must agree with it.
 - A complete build IS cached
 - Solo is complete, not partial
 
-### test_aggregator.lua (48)
+### test_aggregator.lua (52)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -455,6 +462,10 @@ badge and any count quoted in the docs must agree with it.
 - A counted column scales its bars to the highest count, never to 0
 - The NEWEST death wins the recap id
 - Counting a death is legal mid-pull, where summing two secrets is not
+- An ALLY nobody owns gets its own row, under its own name
+- The owner is still not credited for an unowned ally's damage
+- An ENEMY nobody owns is still refused
+- A source with NO display type is refused, not assumed friendly
 
 ### test_aggregator_sort.lua (16)
 
@@ -593,7 +604,25 @@ badge and any count quoted in the docs must agree with it.
 - Clicking a stat cell routes to the drill-down; the name cell does not
 - A cell with no entry does nothing under the cursor
 
-### test_tooltip.lua (25)
+### test_targets.lua (15)
+
+- Targets: a player's enemies are recovered from the enemy column
+- Targets: one enemy's several spells are summed into one line
+- Targets: another player's damage is not credited to this one
+- Targets: a player who hit nothing gets nil, not an empty list
+- Targets: the cap trims the list after ordering, not before
+- Targets: Total adds a list up, for the share column
+- Targets: an unreadable amount abandons the WHOLE build, not one enemy
+- Targets: the enemy lookup drops a SECRET guid and resolves on creatureID
+- Targets: an unreadable caster name is skipped, and skipping it is safe
+- Targets: an unreadable HOVERED name answers nil rather than raising
+- Targets: no enemy column means no section, not an error
+- Targets: every meter read goes through the provider
+- Targets: a cross-realm caster still matches the row it belongs to
+- Targets: a realm-qualified ROW name matches a bare caster
+- Targets: two casters differing only by realm are still told apart by name
+
+### test_tooltip.lua (55)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -620,6 +649,36 @@ badge and any count quoted in the docs must agree with it.
 - A spell line carries a real class-colored BAR, not a run of characters
 - Bars are released between hovers, never stacked
 - The bar is OMITTED while the values cannot be divided
+- A bar spans the FULL line, so its length is comparable down the column
+- A bar clears the icon rather than running underneath it
+- A bar sits UNDER the tooltip's text, not over it
+- Bars come down when GameTooltip closes, whoever closed it
+- A spell line carries its SHARE of the player's total beside the amount
+- The percent slot GOES QUIET mid-pull rather than approximating
+- The amount and the share sit in FIXED right-aligned slots
+- The share is WHITE, and the amount keeps its gold
+- The AMOUNT survives a hover the bar cannot
+- The tooltip is widened for the slots, and put back afterwards
+- Every anchor the schema offers resolves to a real GameTooltip token
+- The anchor dropdown offers nothing the token table cannot resolve
+- The x/y offset reaches SetOwner rather than a SetPoint of our own
+- A junk offset off an old profile is clamped, never handed to the client
+- Bar spacing is applied to the tooltip, and taken back off when it hides
+- The configured font reaches both number slots and the spell name
+- NONE is an absent outline flag, not the literal string
+- Every tooltip line we restyled is put back when the tooltip hides
+- The tooltip's own bar texture is used, not the grid's
+- A bar border is applied when asked and cleared off the POOLED line when not
+- Border size zero drops the border FILE with it
+- maxSpells 0 lists every spell the breakdown collected
+- maxSpells 0 is bounded by the collector, and says so
+- A negative or non-numeric cap still falls back to the shipped default
+- The font survives a UI skin that re-fonts every line on show
+- The post-layout pass still restores every line it touched
+- A target's name is drawn on our own carrier, not on the tooltip's line
+- The gap above a section is half the text size, not a whole blank line
+- The half-size gap survives the post-layout pass
+- The gap is restored with every other line it was applied alongside
 
 ### test_drilldown.lua (31)
 
@@ -905,7 +964,7 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 35 |
-| test_diagnostics.lua | 8 |
+| test_diagnostics.lua | 13 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
@@ -913,13 +972,14 @@ badge and any count quoted in the docs must agree with it.
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 25 |
-| test_provider.lua | 33 |
+| test_provider.lua | 35 |
 | test_roster.lua | 22 |
-| test_aggregator.lua | 48 |
+| test_aggregator.lua | 52 |
 | test_aggregator_sort.lua | 16 |
 | test_window.lua | 68 |
 | test_row.lua | 44 |
-| test_tooltip.lua | 25 |
+| test_targets.lua | 15 |
+| test_tooltip.lua | 55 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
@@ -930,4 +990,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **792** |
+| **Total** | **848** |

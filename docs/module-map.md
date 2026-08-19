@@ -170,14 +170,14 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
 | `Frame.lua` | The Frame page (15 rows) plus the bespoke "Reset position" button | a page registration | `NS.Helpers`, `NS.WindowManager.ResetPosition` |
 | `Header.lua` | The Header page (11 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Rows.lua` | The Rows page (8 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Bars.lua` | The Bars page (8 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Text.lua` | The Text page (9 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Rows.lua` | The Rows page (10 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Bars.lua` | The Bars page (9 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Text.lua` | The Text page (10 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Icons.lua` | The Icons page (5 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Tooltip.lua` | The Tooltip page (17 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
-| `Data.lua` | The Data page (4 rows) plus the "Reset meter data" confirmation, which routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration | `NS.Helpers`, `NS.Provider.Reset` |
+| `Data.lua` | The Data page (6 rows) plus the "Reset meter data" confirmation, which routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration | `NS.Helpers`, `NS.Provider.Reset` |
 | `General.lua` | The General page (4 rows) plus two session-only checkboxes (preview, debug console) and the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 

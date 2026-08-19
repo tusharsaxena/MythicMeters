@@ -64,7 +64,7 @@ local Const = NS.Constants
 
 -- Used for exactly one question: may this GUID be looked at. A source GUID off
 -- the meter is never secret, but a row can also carry one the roster read off
--- the unit API, and those can be (core/Roster.lua's header).
+-- the unit API, and those can be (modules/Roster.lua's header).
 local Secrets = NS.Secrets
 
 local Row = {}
