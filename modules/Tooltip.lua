@@ -592,11 +592,43 @@ local widestName = 0
 -- the ones that do not come back through this file.
 local fontedLines = {}
 
+--- What the font probe saw on the last spell line drawn, or nil.
+---
+--- Populated ONLY while the debug flag is on, and read by core/Diagnostics.lua.
+--- It exists because "the spell name kept the game's font" has two completely
+--- different causes — our SetFont was refused, or something after us put the font
+--- back — and no screenshot can tell them apart. The probe samples the SAME
+--- FontString twice, once immediately after we set it and once after
+--- GameTooltip:Show() has laid the tooltip out, which is the only step between
+--- the two that could revert it.
+Tooltip.__fontProbe = nil
+
 --- Give one tooltip line our font, and remember that we did.
 local function applyLineFont(fontString, index, path, size, flags)
     if not (fontString and fontString.SetFont) then return end
     fontString:SetFont(path, size, flags)
     fontedLines[index] = fontString
+
+    if State.debug and fontString.GetFont then
+        local gotPath, gotSize, gotFlags = fontString:GetFont()
+        Tooltip.__fontProbe = {
+            index     = index,
+            line      = fontString,
+            askedPath = path, askedSize = size, askedFlags = flags,
+            setPath   = gotPath, setSize = gotSize, setFlags = gotFlags,
+        }
+    end
+end
+
+--- Re-read the probed line after the tooltip has been shown and laid out.
+---
+--- Called from the two builders immediately after GameTooltip:Show(). If the
+--- font read back here differs from the one read back inside applyLineFont, the
+--- layout pass is reverting it and the fix belongs after Show, not before it.
+local function sampleFontAfterShow()
+    local probe = Tooltip.__fontProbe
+    if not (probe and probe.line and probe.line.GetFont) then return end
+    probe.showPath, probe.showSize, probe.showFlags = probe.line:GetFont()
 end
 
 --- Put every line this hover restyled back onto the game's own tooltip font.
@@ -1141,6 +1173,7 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     applyMinimumWidth()
 
     GameTooltip:Show()
+    sampleFontAfterShow()
 
     if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
     if State.debug and Debug then

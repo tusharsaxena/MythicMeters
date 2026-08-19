@@ -246,12 +246,164 @@ end
 --- Every section is independent and wrapped, so one broken probe cannot take the
 --- rest of the report with it — a diagnostic that dies halfway is worse than no
 --- diagnostic, because it looks like the thing it was diagnosing.
+-- ---------------------------------------------------------------------------
+-- Tooltip font — did our SetFont stick, and did it survive the layout?
+-- ---------------------------------------------------------------------------
+
+--- Report what the last spell line's font actually was, at two moments.
+---
+--- "The spell name kept the game's font" has two causes that look identical on
+--- screen and need opposite fixes:
+---
+---   * SetFont was REFUSED or given a bad path — then `asked` and `after set`
+---     disagree, and the fix is in what we pass;
+---   * SetFont took and something later put it back — then `asked` and `after
+---     set` agree while `after Show` differs, and the fix is to apply the font
+---     after GameTooltip:Show() rather than before it.
+---
+--- modules/Tooltip.lua samples the same FontString at both moments while the
+--- debug flag is on. A missing probe means no tooltip has been built since the
+--- flag went on, which is its own useful answer.
+local function reportTooltipFont()
+    out("|cff00ff00-- tooltip font --|r")
+
+    local Tip = NS.Tooltip
+    local sample = Tip and Tip.__fontProbe
+    if not sample then
+        out("  no sample yet — turn the debug flag on, then hover a cell with a")
+        out("  spell breakdown, then run this again.")
+        return
+    end
+
+    local function line(label, path, size, flags)
+        out(string.format("  %-12s %-42s %s / %s", label,
+            tostring(path):gsub("^.*[\\/]", ""), tostring(size), tostring(flags)))
+    end
+
+    out(string.format("  tooltip line index: %s", tostring(sample.index)))
+    line("asked:",      sample.askedPath, sample.askedSize, sample.askedFlags)
+    line("after set:",  sample.setPath,   sample.setSize,   sample.setFlags)
+    line("after Show:", sample.showPath,  sample.showSize,  sample.showFlags)
+
+    if sample.setSize ~= sample.askedSize then
+        out("  |cffff2020SetFont did not take|r — the path or size we passed was refused.")
+    elseif sample.showSize ~= sample.setSize then
+        out("  |cffff2020the layout reverted it|r — apply the font AFTER Show.")
+    else
+        out("  the font stuck through layout; if the name still looks wrong the")
+        out("  cause is elsewhere (wrong FontString, or the name is not line N).")
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Targets — where the enemy cross-reference stops
+-- ---------------------------------------------------------------------------
+
+--- Walk the enemy column the way modules/Targets.lua does, and say where it dies.
+---
+--- The section has five places it can silently produce nothing, and they are
+--- indistinguishable from "no Targets header": no enemy column, enemies dropped
+--- for want of a GUID, a source detail that will not resolve, spells with no
+--- `combatSpellDetails`, or a `unitName` that never matches the row's name. This
+--- prints a count at each step, so the first zero is the answer.
+---
+--- Rule R1 holds: every read goes through modules/Provider.lua. No amount is
+--- inspected — spells are COUNTED and names are described, never rendered.
+local function reportTargets()
+    out("|cff00ff00-- targets cross-reference --|r")
+
+    local P = NS.Provider
+    if not (P and P.GetColumn and P.GetSourceDetail) then
+        out("  provider unavailable")
+        return
+    end
+
+    local windows = NS.Database and NS.Database.GetWindows and NS.Database.GetWindows()
+    local cfg = windows and windows[1]
+    local sessionType = (cfg and cfg.data and cfg.data.sessionType) or 1
+    local sessionID   = cfg and cfg.data and cfg.data.sessionID or nil
+    out(string.format("  session type=%s id=%s", tostring(sessionType), tostring(sessionID)))
+
+    local column = P:GetColumn(sessionType, "EnemyDamageTaken", sessionID)
+    if type(column) ~= "table" then
+        out("  enemy column: nil")
+        return
+    end
+    out(string.format("  enemy column: %d sources, reason=%s",
+        #column.sources, tostring(column.reason)))
+    if #column.sources == 0 then
+        out("  |cffff2020no enemies|r — either the session holds none, or every one")
+        out("  was dropped by the provider's `sourceGUID == nil` guard.")
+        return
+    end
+
+    local Secrets = NS.Secrets
+    local withDetail, withSpells, withDetails, sampleNames = 0, 0, 0, {}
+
+    for i = 1, math.min(#column.sources, 8) do
+        local enemy = column.sources[i]
+        local guid = enemy.guid
+        local safe = Secrets and Secrets.IsSafeKey(guid)
+        out(string.format("  [%d] name=%s guid=%s creatureID=%s",
+            i, tostring(enemy.name), safe and "plain" or "secret/absent",
+            tostring(enemy.creatureID)))
+
+        local source = P:GetSourceDetail(sessionType, "EnemyDamageTaken",
+            safe and guid or nil, enemy.creatureID, sessionID)
+        if type(source) ~= "table" then
+            out("        detail: nil")
+        else
+            withDetail = withDetail + 1
+            local spells = 0
+            Secrets.SafeIterate(source.combatSpells, function(_, spell)
+                if type(spell) ~= "table" then return end
+                spells = spells + 1
+                local d = spell.combatSpellDetails
+                if Secrets.CanAccessTable(d) then
+                    withDetails = withDetails + 1
+                    local n = d.unitName
+                    if n ~= nil and Secrets.CanAccess(n) and type(n) == "string"
+                        and #sampleNames < 6 then
+                        sampleNames[#sampleNames + 1] = n
+                    end
+                end
+            end)
+            if spells > 0 then withSpells = withSpells + 1 end
+            out(string.format("        detail: yes, %d spells", spells))
+        end
+    end
+
+    out(string.format("  enemies with a detail: %d · with spells: %d · spells carrying combatSpellDetails: %d",
+        withDetail, withSpells, withDetails))
+
+    if withDetails == 0 then
+        out("  |cffff2020no combatSpellDetails on any spell|r — this build does not")
+        out("  carry the caster, and the cross-reference cannot work at all.")
+    end
+
+    if #sampleNames > 0 then
+        out("  caster names seen: " .. table.concat(sampleNames, ", "))
+    else
+        out("  caster names seen: none readable")
+    end
+
+    -- The comparison that actually decides it. A realm suffix on one side and not
+    -- the other makes every match fail while both strings look right in print.
+    local roster = NS.Roster and NS.Roster.GetGroup and NS.Roster.GetGroup()
+    if roster then
+        local names = {}
+        for i = 1, math.min(#roster, 6) do names[#names + 1] = tostring(roster[i].name) end
+        out("  roster names:      " .. table.concat(names, ", "))
+        out("  ^ these two lists must match EXACTLY for a target row to appear.")
+    end
+end
+
 function Diagnostics.Report()
     out("|cffffd100Ka0s Mythic Meters — diagnostics|r  v" .. tostring(NS.version))
 
     for _, section in ipairs({
         reportAtlases, reportFormatter, reportVisibility, reportHeader,
-        reportNameColumn, reportCells,
+        reportNameColumn, reportCells, reportTooltipFont, reportTargets,
     }) do
         local ok, err = pcall(section)
         if not ok then out("  |cffff2020section failed:|r " .. tostring(err)) end
