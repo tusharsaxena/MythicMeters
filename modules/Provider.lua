@@ -215,13 +215,25 @@ local function collectSource(_, src)
     -- loop could raise.
     if not Secrets.CanAccessTable(src) then return end
 
-    local guid = src.sourceGUID
-    -- Nil-ness only. Never `if guid then`, which is a boolean test.
-    if guid == nil then return end
+    local guid       = src.sourceGUID
+    local creatureID = src.sourceCreatureID
+    -- A source is kept when EITHER identifier is present.
+    --
+    -- This used to require a `sourceGUID`, and that silently emptied the whole
+    -- EnemyDamageTaken column: an NPC source carries a `sourceCreatureID` and NO
+    -- player GUID, so every enemy failed the guard and the column reported zero
+    -- sources with `reason = nil` — "the session was fine and held nothing",
+    -- which is the most misleading answer available. It took the tooltip's
+    -- Targets section down with it, since that column is what the cross-reference
+    -- is built from.
+    --
+    -- Nil-ness only, on both. Never `if guid then`, which is a boolean test and
+    -- raises on a secret.
+    if guid == nil and creatureID == nil then return end
 
     collect[#collect + 1] = {
         guid              = guid,
-        creatureID        = src.sourceCreatureID,
+        creatureID        = creatureID,
         name              = src.name,
         classFilename     = src.classFilename,
         specIconID        = src.specIconID,

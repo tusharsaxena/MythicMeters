@@ -592,6 +592,10 @@ local widestName = 0
 -- the ones that do not come back through this file.
 local fontedLines = {}
 
+--- The font this hover is drawing in, so the post-layout pass can re-apply it
+--- without re-deriving it. Cleared by `releaseLines`.
+local currentFont = nil
+
 --- What the font probe saw on the last spell line drawn, or nil.
 ---
 --- Populated ONLY while the debug flag is on, and read by core/Diagnostics.lua.
@@ -621,14 +625,45 @@ local function applyLineFont(fontString, index, path, size, flags)
 end
 
 --- Re-read the probed line after the tooltip has been shown and laid out.
----
---- Called from the two builders immediately after GameTooltip:Show(). If the
---- font read back here differs from the one read back inside applyLineFont, the
---- layout pass is reverting it and the fix belongs after Show, not before it.
 local function sampleFontAfterShow()
     local probe = Tooltip.__fontProbe
     if not (probe and probe.line and probe.line.GetFont) then return end
     probe.showPath, probe.showSize, probe.showFlags = probe.line:GetFont()
+end
+
+--- Put our font back on every line, AFTER GameTooltip:Show() has laid out.
+---
+--- ---------------------------------------------------------------------------
+--- WHY THE FONT IS SET TWICE
+--- ---------------------------------------------------------------------------
+---
+--- Setting it once, before Show, is the obvious thing and it does not hold. The
+--- probe in `applyLineFont` measured it on a live client: the SetFont takes
+--- (`asked 10/OUTLINE` reads back as `10/OUTLINE`), and after Show the SAME
+--- FontString reads `11/no flags`. Something in the show path re-fonts the
+--- tooltip's lines.
+---
+--- That something is very often not Blizzard: a UI skin that restyles
+--- GameTooltip hooks OnShow and re-applies its own face to every line. On the
+--- client this was measured on, the PATH survived and only the size and flags
+--- changed — which is the signature of a skin re-applying the same font at its
+--- own size, not of a reset to the stock font object.
+---
+--- So the first pass (in `drawLine`) is what makes the width measurement honest,
+--- and this second pass is what the player actually sees. Show is NOT called
+--- again afterwards: whatever re-fonts on show would simply run again and undo
+--- this, and the tooltip is already sized — `applyMinimumWidth` ran before Show
+--- and a smaller font only ever leaves slack.
+local function reapplyFonts()
+    local f = currentFont
+    if f then
+        for _, fontString in pairs(fontedLines) do
+            if fontString.SetFont then
+                fontString:SetFont(f.path, f.size, f.flags)
+            end
+        end
+    end
+    sampleFontAfterShow()
 end
 
 --- Put every line this hover restyled back onto the game's own tooltip font.
@@ -661,6 +696,7 @@ local function releaseLines()
         frame:Hide()
     end
     widestName = 0
+    currentFont = nil
     restoreFonts()
     if _G.GameTooltip and GameTooltip.SetMinimumWidth then
         GameTooltip:SetMinimumWidth(0)
@@ -780,6 +816,8 @@ local function lineStyle(config, color)
     local path, size, flags = tooltipFont(config)
     local borderSize = config.barBorderSize
     if type(borderSize) ~= "number" or borderSize < 0 then borderSize = 0 end
+
+    currentFont = { path = path, size = size, flags = flags }
 
     return {
         color      = color,
@@ -1173,7 +1211,9 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     applyMinimumWidth()
 
     GameTooltip:Show()
-    sampleFontAfterShow()
+    -- AFTER Show, not before: the show path re-fonts the tooltip's lines. See
+    -- `reapplyFonts`.
+    reapplyFonts()
 
     if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
     if State.debug and Debug then

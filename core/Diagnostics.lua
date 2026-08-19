@@ -66,8 +66,23 @@ local NUMBER_PROBES = {
     { value = 12400000,        want = "12.4M"  },
 }
 
---- Print one line through the addon's chat prefix.
+--- Where this run's report goes. Set by Report(), cleared when it finishes.
+---
+--- The console is the right home: a diagnostic is forty lines that a player has
+--- to hand back verbatim, and the console already has the buffer, the scrollback
+--- and the copy window that a chat frame does not. Chat also TRUNCATES nothing
+--- but interleaves everything, so a report pasted out of it arrives shuffled
+--- with combat spam.
+local emit = nil
+
+--- Print one line, to the console when there is one and to chat otherwise.
+---
+--- The fallback is not decoration. With LibKa0s absent, `NS.DebugLog` is a stub
+--- whose `Add` is a NO-OP — so routing there unconditionally would make the one
+--- command a player runs when something is wrong print absolutely nothing, on
+--- exactly the broken install where they need it most.
 local function out(line)
+    if emit then emit(line) return end
     if NS.Print then NS.Print(line) else print(line) end
 end
 
@@ -285,9 +300,19 @@ local function reportTooltipFont()
     line("after set:",  sample.setPath,   sample.setSize,   sample.setFlags)
     line("after Show:", sample.showPath,  sample.showSize,  sample.showFlags)
 
-    if sample.setSize ~= sample.askedSize then
+    -- NEAR-equality, not equality. The client stores a font size as a float and
+    -- reads 10 back as 10.000000953674, so `~=` reported "SetFont did not take"
+    -- for a SetFont that took perfectly — a diagnostic confidently naming the
+    -- wrong cause, which is worse than no diagnostic at all.
+    local function near(a, b)
+        if type(a) ~= "number" or type(b) ~= "number" then return a == b end
+        return math.abs(a - b) < 0.5
+    end
+
+    if not near(sample.setSize, sample.askedSize) then
         out("  |cffff2020SetFont did not take|r — the path or size we passed was refused.")
-    elseif sample.showSize ~= sample.setSize then
+    elseif not near(sample.showSize, sample.setSize)
+        or (sample.showFlags or "") ~= (sample.askedFlags or "") then
         out("  |cffff2020the layout reverted it|r — apply the font AFTER Show.")
     else
         out("  the font stuck through layout; if the name still looks wrong the")
@@ -399,6 +424,19 @@ local function reportTargets()
 end
 
 function Diagnostics.Report()
+    -- Open the console and route into it — but only once it has actually opened.
+    -- `IsShown` is asked rather than the library's presence assumed, because the
+    -- degraded stub answers every member and shows nothing, and a report that
+    -- vanished into a no-op sink would look exactly like a report with nothing
+    -- to say.
+    local D = NS.DebugLog
+    if D and D.Add and D.Show and D.IsShown then
+        pcall(function() D:Show() end)
+        if D:IsShown() then
+            emit = function(line) D:Add("Diag", line) end
+        end
+    end
+
     out("|cffffd100Ka0s Mythic Meters — diagnostics|r  v" .. tostring(NS.version))
 
     for _, section in ipairs({
@@ -409,5 +447,11 @@ function Diagnostics.Report()
         if not ok then out("  |cffff2020section failed:|r " .. tostring(err)) end
     end
 
-    out("Copy the block above into the bug report.")
+    if emit then
+        out("Copy the block above into the bug report — the console's copy button")
+        out("takes the whole buffer.")
+    else
+        out("Copy the block above into the bug report.")
+    end
+    emit = nil
 end

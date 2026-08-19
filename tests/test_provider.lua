@@ -593,3 +593,40 @@ test("Provider.ProbeSourceByGuid names what the API did with a GUID it was hande
     assertEqual(inst.NS.Provider.ProbeSourceByGuid(CURRENT, "DamageDone", "Player-1-0000NONE"), "nil")
     assertEqual(inst.NS.Provider.ProbeSourceByGuid(CURRENT, "NoSuchStat", guid), "no stat")
 end)
+
+test("Provider: an NPC source with no GUID is KEPT, on its creature ID", function()
+    -- THE BUG THAT EMPTIED THE ENEMY COLUMN. An NPC carries a sourceCreatureID
+    -- and no player GUID, so a `sourceGUID == nil` guard dropped every enemy —
+    -- and the column then reported zero sources with `reason = nil`, which reads
+    -- as "the session was fine and held nothing": the most misleading answer
+    -- available, and one that took the tooltip's Targets section with it.
+    -- red under: `if guid == nil then return end`.
+    local inst = T.load()
+    inst.mocks.setSession(1, inst.mocks.Enum.DamageMeterType.EnemyDamageTaken, {
+        combatSources = {
+            { sourceGUID = nil, sourceCreatureID = 6001, name = "Spirit of Hunger", totalAmount = 100 },
+            { sourceGUID = nil, sourceCreatureID = 6002, name = "Thornclaw",        totalAmount = 50 },
+        }, maxAmount = 100, totalAmount = 150 })
+
+    local col = inst.NS.Provider:GetColumn(1, "EnemyDamageTaken", nil)
+    assertEqual(#col.sources, 2, "every enemy was dropped for want of a player GUID")
+    assertEqual(col.sources[1].creatureID, 6001, "the creature ID did not survive the flatten")
+    assertEqual(col.sources[1].guid, nil, "a GUID was invented for a source that has none")
+end)
+
+test("Provider: a source with NEITHER identifier is still dropped", function()
+    -- Loosening the guard must not turn it off. A row that can be identified by
+    -- nothing cannot be joined, keyed or looked up, and keeping it would put an
+    -- unaddressable entry in front of every consumer.
+    -- red under: dropping the guard entirely.
+    local inst = T.load()
+    inst.mocks.setSession(1, inst.mocks.Enum.DamageMeterType.EnemyDamageTaken, {
+        combatSources = {
+            { sourceGUID = nil, sourceCreatureID = nil,  name = "Nobody",   totalAmount = 10 },
+            { sourceGUID = nil, sourceCreatureID = 6003, name = "Somebody", totalAmount = 20 },
+        }, maxAmount = 20, totalAmount = 30 })
+
+    local col = inst.NS.Provider:GetColumn(1, "EnemyDamageTaken", nil)
+    assertEqual(#col.sources, 1, "an unidentifiable source was kept")
+    assertEqual(col.sources[1].name, "Somebody")
+end)

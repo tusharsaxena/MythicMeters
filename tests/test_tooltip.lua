@@ -1067,3 +1067,65 @@ test("A negative or non-numeric cap still falls back to the shipped default", fu
             "a junk cap (" .. tostring(junk) .. ") did not fall back to 10")
     end
 end)
+
+test("The font survives a UI skin that re-fonts every line on show", function()
+    -- MEASURED ON A LIVE CLIENT, not imagined. The in-game probe reported the
+    -- SetFont taking (asked 10/OUTLINE, read back 10/OUTLINE) and the SAME
+    -- FontString reading 11/no-flags after Show — the signature of a tooltip skin
+    -- hooking OnShow and re-applying its own face at its own size. Setting the
+    -- font before Show is therefore not enough, however correct it looks.
+    --
+    -- The skin is modelled with a real OnShow hook so the ORDERING is the real
+    -- one: Show fires the hook, the hook restyles, and our second pass runs after
+    -- Show returns. A test that just called SetFont twice would prove nothing.
+    -- red under: applying the font only inside drawLine.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.fontSize    = 17
+        c.tooltip.fontOutline = "THICKOUTLINE"
+    end }
+
+    local mocks = inst.mocks
+    -- Hidden first, deliberately. The mock fires OnShow only on a hide->show
+    -- TRANSITION, and a GameTooltip left shown by an earlier case makes the hook
+    -- below never run — which made this case pass against the very code it was
+    -- written to catch. `restyled` is asserted at the end for the same reason: a
+    -- skin that never ran proves nothing about surviving one.
+    mocks.GameTooltip:Hide()
+    local restyled = 0
+    mocks.GameTooltip:HookScript("OnShow", function()
+        restyled = restyled + 1
+        local i = 1
+        while mocks["GameTooltipTextLeft" .. i] do
+            local fs = mocks["GameTooltipTextLeft" .. i]
+            local path = fs:GetFont()
+            if path then fs:SetFont(path, 11, "") end
+            i = i + 1
+        end
+    end)
+
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertTrue(restyled > 0, "the simulated skin never ran, so this proves nothing")
+    local left = mocks["GameTooltipTextLeft4"]
+    assertTrue(left ~= nil, "the first spell line has no left FontString")
+    local _, size, flags = left:GetFont()
+    assertEqual(size, 17, "the skin's re-font on Show won — our pass runs too early")
+    assertEqual(flags, "THICKOUTLINE", "the outline flag was lost to the skin")
+end)
+
+test("The post-layout pass still restores every line it touched", function()
+    -- Applying the font twice must not leave twice as much to clean up. The
+    -- lines are SHARED with every other addon, so a second pass that escaped the
+    -- restore bookkeeping would be the original leak with an extra step.
+    -- red under: reapplyFonts writing to lines it never recorded.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = 19 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local left = inst.mocks["GameTooltipTextLeft4"]
+    assertEqual(select(2, left:GetFont()), 19, "the line never took our font")
+
+    inst.mocks.GameTooltip:Show()
+    inst.mocks.GameTooltip:Hide()
+
+    assertEqual(left:GetFont(), nil, "our font outlived our tooltip on a SHARED line")
+end)

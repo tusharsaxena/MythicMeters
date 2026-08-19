@@ -14,11 +14,27 @@ local assertTrue  = T.assertTrue
 local assertFalse = T.assertFalse
 
 --- Run the report and hand back everything it printed, as one string.
+---
+--- BOTH SINKS are drained, because the report has two and picks between them at
+--- run time: the debug console when one is open, and chat when it is not. A
+--- helper that read only chat reported "the report printed nothing" for a report
+--- that printed forty lines into the console — so the content cases below would
+--- all have to be rewritten every time the routing changed. Draining both keeps
+--- every content assertion about CONTENT, and leaves the routing itself to the
+--- two cases that actually test it.
 local function report(inst)
-    local n = #inst.mocks.__chat
+    local D      = inst.NS.DebugLog
+    local buffer = D and D.buffer
+    local chatN  = #inst.mocks.__chat
+    local bufN   = buffer and #buffer or 0
+
     inst.NS.Diagnostics.Report()
+
     local lines = {}
-    for i = n + 1, #inst.mocks.__chat do lines[#lines + 1] = inst.mocks.__chat[i] end
+    if buffer then
+        for i = bufN + 1, #buffer do lines[#lines + 1] = buffer[i] end
+    end
+    for i = chatN + 1, #inst.mocks.__chat do lines[#lines + 1] = inst.mocks.__chat[i] end
     return table.concat(lines, "\n"), lines
 end
 
@@ -105,4 +121,98 @@ test("Diagnostics: with no window it says so rather than erroring", function()
     local inst = T.load{}
     local text = report(inst)
     assertFalse(text == "", "the report must still print")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Where the report goes
+-- ---------------------------------------------------------------------------
+
+test("Diagnostics: the report lands in the debug console, not in chat", function()
+    -- Forty lines a player has to hand back verbatim belong in the window that
+    -- has a buffer, scrollback and a copy button. Chat interleaves them with
+    -- combat spam, so a report pasted out of it arrives shuffled.
+    -- red under: `out` printing straight to NS.Print.
+    local inst = T.load{ enable = true }
+    local D = inst.NS.DebugLog
+
+    local chatN, bufN = #inst.mocks.__chat, #D.buffer
+    inst.NS.Diagnostics.Report()
+
+    assertTrue(#D.buffer > bufN + 10, "the report did not reach the console buffer")
+    assertEqual(#inst.mocks.__chat, chatN, "the report also spammed chat")
+end)
+
+test("Diagnostics: the console is OPENED, so the report is not written out of sight", function()
+    -- Writing into a closed window would be the same failure as writing into a
+    -- no-op: the player sees nothing and reports that the command does nothing.
+    -- red under: Add without Show.
+    local inst = T.load{ enable = true }
+    inst.NS.DebugLog:Hide()
+    assertFalse(inst.NS.DebugLog:IsShown(), "the console was already open")
+
+    inst.NS.Diagnostics.Report()
+    assertTrue(inst.NS.DebugLog:IsShown(), "the report never opened the console")
+end)
+
+test("Diagnostics: with no console the report falls back to chat", function()
+    -- THE ONE THAT MATTERS. With LibKa0s absent, NS.DebugLog is a stub whose Add
+    -- is a NO-OP and whose IsShown always answers false — so routing there
+    -- unconditionally makes the one command a player runs when something is
+    -- wrong print absolutely nothing, on exactly the broken install where they
+    -- need it most.
+    -- red under: `emit` set without checking IsShown.
+    local inst = T.load{ enable = true }
+    local swallowed = 0
+    inst.NS.DebugLog = {
+        buffer    = {},
+        Add       = function() swallowed = swallowed + 1 end,
+        Show      = function() end,
+        IsShown   = function() return false end,
+    }
+
+    local n = #inst.mocks.__chat
+    inst.NS.Diagnostics.Report()
+
+    assertTrue(#inst.mocks.__chat > n + 10, "the report vanished into a no-op sink")
+    assertEqual(swallowed, 0, "the report was written to a console that never opened")
+end)
+
+test("Diagnostics: a font size read back as 10.000000953674 is not called a failure", function()
+    -- The client stores a font size as a float and reads 10 back as
+    -- 10.000000953674, so an equality test reported "SetFont did not take" for a
+    -- SetFont that took perfectly. A diagnostic that confidently names the wrong
+    -- cause is worse than no diagnostic — it sends the fix to the wrong place.
+    -- red under: `sample.setSize ~= sample.askedSize`.
+    local inst = T.load{ enable = true }
+    inst.NS.Tooltip.__fontProbe = {
+        index = 4, line = inst.mocks.__stubFrame("FontString"),
+        askedPath = "X.ttf", askedSize = 10,               askedFlags = "OUTLINE",
+        setPath   = "X.ttf", setSize   = 10.000000953674,  setFlags   = "OUTLINE",
+        showPath  = "X.ttf", showSize  = 10.000000953674,  showFlags  = "OUTLINE",
+    }
+
+    local text = report(inst)
+    assertFalse(text:find("SetFont did not take") ~= nil,
+        "a float-precision difference was reported as a refused SetFont")
+    assertTrue(text:find("stuck through layout") ~= nil,
+        "the font verdict is missing entirely")
+end)
+
+test("Diagnostics: a font the layout reverted is named as such", function()
+    -- The other half of the same verdict, and the one the live client hit: the
+    -- SetFont takes, and the show path re-fonts the line at its own size with no
+    -- flags. That needs the opposite fix to a refused SetFont, so the report has
+    -- to tell them apart.
+    -- red under: collapsing the two branches into one message.
+    local inst = T.load{ enable = true }
+    inst.NS.Tooltip.__fontProbe = {
+        index = 13, line = inst.mocks.__stubFrame("FontString"),
+        askedPath = "X.ttf", askedSize = 10,              askedFlags = "OUTLINE",
+        setPath   = "X.ttf", setSize   = 10.000000953674, setFlags   = "OUTLINE",
+        showPath  = "X.ttf", showSize  = 10.999999046326, showFlags  = "",
+    }
+
+    local text = report(inst)
+    assertTrue(text:find("the layout reverted it") ~= nil,
+        "a reverted font was not reported as a revert")
 end)
