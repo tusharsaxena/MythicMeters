@@ -74,15 +74,22 @@ overlap, and **a parent must never be summed with its children**.
 | Bucket | Inside | What it brackets | Call sites |
 |---|---|---|---|
 | `meterEvent` | — | one `DAMAGE_METER_*` handler, i.e. the bus fan-out to every window | `core/MythicMeters.lua:200`, `:210`, `:218` |
-| `refresh` | — | one coalesced window refresh pass | `modules/Window.lua:699`, `:709`, `:731`, `:746` (every exit) |
-| `providerRead` | `refresh` | one `C_DamageMeter` column read | `modules/Provider.lua:255` |
-| `aggregate` | `refresh` | the GUID join and the ordering pass | `modules/Aggregator.lua:509`, `modules/DrillDown.lua:417` |
-| `render` | `refresh` | the window's draw | `modules/Window.lua:826` |
-| `renderRow` | `render` | one row's cells | `modules/Row.lua:835` |
-| `tooltip` | — | one tooltip build | `modules/Tooltip.lua:464`, `:503`, `:547` |
+| `refresh` | — | one coalesced window refresh pass | `modules/Window.lua:1274`, `:1284`, `:1307`, `:1314` (every exit) |
+| `providerRead` | `refresh` | one `C_DamageMeter` column read | `modules/Provider.lua:332` |
+| `aggregate` | `refresh` | the GUID join and the ordering pass | `modules/Aggregator.lua:1220`, `modules/DrillDown.lua:435` |
+| `render` | `refresh` | the window's draw | `modules/Window.lua:1394` |
+| `renderRow` | `render` | one row's cells | `modules/Row.lua:1158` |
+| `tooltip` | — | one tooltip build | `modules/Tooltip.lua:1285`, `:1376`, `:1391` |
+| `targets` | `tooltip` | the enemy cross-reference behind the Targets section | `modules/Targets.lua:378`, `:386`, `:400` |
 
 The three buckets under `refresh` exist to answer "which third of the pass is it" — reading the
 columns off `C_DamageMeter`, joining them by GUID and ordering them, or drawing.
+
+`targets` nests inside `tooltip` because a tooltip is the only thing that triggers one, and it is the
+expensive half: the cross-reference makes a provider call **per enemy** to reconstruct a list the API
+does not carry. Its own bucket precisely so the cost of the Targets section stays separable from the
+cost of the tooltip that holds it — the section is off by default, and a reader comparing two
+captures needs to know which of them had it on.
 
 `renderRow` nests inside `render` rather than sitting beside it because twenty players times seven
 columns is 140 cells per pass, and per-row is the only grain at which *"the window is slow"* becomes
