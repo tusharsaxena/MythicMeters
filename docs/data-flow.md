@@ -524,17 +524,31 @@ Provider.GetColumn(session, "EnemyDamageTaken")     -- enumerate the enemies
                  └─ totals[enemy] += spell.totalAmount
 ```
 
-**The GUID is dropped whenever it is secret**, and that is the line the whole section depends on
+**Neither identifier may be assumed plain**, and that is the line the whole section depends on
 mid-pull. `sourceGUID` is secret and inaccessible for the entire of a pull (§2), and it is the
 *first* argument to `GetSourceDetail` — so passing it resolves nothing and the section silently
-disappears for a whole fight. `sourceCreatureID` is a plain number, is never secret, and identifies
-an enemy exactly as well, so a GUID that fails `Secrets.IsSafeKey` is replaced with `nil` and the
-lookup falls to the creature ID.
+disappears for a whole fight.
+
+This used to read "`sourceCreatureID` is a plain number, is never secret, and identifies an enemy
+exactly as well", and the lookup fell to the creature ID on that basis. **It was wrong.** A
+`sourceCreatureID` is plain out of combat and **secret in a pull**, and passing a secret one does not
+merely fail to resolve — the client refuses the call outright with `bad argument #4 … Secret values
+are only allowed during untainted execution`. Because `Targets.ForPlayer` runs on the tooltip's
+render path, that raise took *every cell tooltip* down for the whole pull, not just this section. The
+belief survived because the only state the offline harness ever put a creature ID in was the plain
+one.
+
+So both identifiers now go through `Secrets.IsSafeKey`, and each that fails is replaced with `nil`.
+When **neither** survives, the enemy is abandoned rather than looked up: calling with both arguments
+nil does not fail, it answers for a **different source**, whose numbers would be summed in as though
+they were this enemy's.
 
 **Why the section vanishes instead of degrading.** Everywhere else a restricted value travels on as
-an opaque handle and the display loses a bar or a percentage. That escape does not exist here,
-because the number does not exist in the API: one enemy's damage from one player is a **sum**, and a
-sum of secrets raises. So the answer is binary and is decided *before* any arithmetic — every amount
+an opaque handle and the display loses a bar or a percentage. That escape does not exist here, and
+there are now **two independent reasons**, either of which is sufficient on its own. The first is the
+identity blocker above: mid-pull neither identifier can name an enemy, so there is nothing to look
+up. The second is that the number does not exist in the API even when an enemy *can* be named: one
+enemy's damage from one player is a **sum**, and a sum of secrets raises. So the answer is binary and is decided *before* any arithmetic — every amount
 is checked with `CanAccess` as it is collected, and the first inaccessible one abandons the whole
 build and returns `nil`. Skipping the unreadable rows and carrying on would produce a total summed
 from whatever happened to be visible: wrong, plausible, and in the direction of "this enemy took less

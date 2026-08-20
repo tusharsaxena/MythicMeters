@@ -286,20 +286,36 @@ local function buildMap(sessionType, sessionID)
         if walked >= ENEMY_LIMIT then break end
         local enemy = column.sources[index]
         if type(enemy) == "table" then
-            -- THE GUID IS DROPPED WHENEVER IT IS SECRET, and this is the line
+            -- NEITHER IDENTIFIER MAY BE ASSUMED PLAIN, and this is the line
             -- that makes the section work mid-pull at all. A meter sourceGUID is
             -- secret and inaccessible for the whole of a pull (docs/data-flow.md
-            -- §2), and handing one back to the API resolves nothing — so the
-            -- lookup falls to `sourceCreatureID`, which is a plain number, is
-            -- never secret, and identifies an enemy exactly as well.
+            -- §2), and handing one back to the API resolves nothing.
             --
-            -- Passing both and hoping is not the same thing: the GUID is the
-            -- FIRST argument, so a secret one is what the API tries first.
+            -- The GUID was dropped here for that reason and the creature ID was
+            -- forwarded beside it, on the belief that a `sourceCreatureID` is a
+            -- plain number and never secret. IT IS NOT. In a live pull the
+            -- client refuses the call outright — `bad argument #4 … Secret
+            -- values are only allowed during untainted execution` — and because
+            -- this runs on the render path, that raise took EVERY cell tooltip
+            -- down with it, not just the Targets section. It looked plain only
+            -- because it is plain out of combat, which is where it was read.
+            --
+            -- So both go through the same gate. Passing a secret and hoping is
+            -- not an option for either argument.
             local guid = enemy.guid
             if not Secrets.IsSafeKey(guid) then guid = nil end
+            local creatureID = enemy.creatureID
+            if not Secrets.IsSafeKey(creatureID) then creatureID = nil end
+
+            -- With neither identifier there is no way to ask about THIS enemy,
+            -- and asking with both nil does not fail — it answers for a
+            -- different source, whose numbers would be summed in as if they were
+            -- this one's. Abandon, for the same reason a restricted read below
+            -- abandons: a wrong total is worse than an absent section.
+            if guid == nil and creatureID == nil then return nil end
 
             local source = P:GetSourceDetail(sessionType, ENEMY_STAT,
-                guid, enemy.creatureID, sessionID)
+                guid, creatureID, sessionID)
             if type(source) == "table" then
                 walked = walked + 1
                 names[index] = enemy.name

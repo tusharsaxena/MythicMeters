@@ -323,53 +323,29 @@ end
 -- Tooltip width — why the spell names and the amounts collide
 -- ---------------------------------------------------------------------------
 
---- Report what the last tooltip build decided about its minimum width.
+--- Report how the tooltip's minimum width is composed.
 ---
---- The tooltip lays out correctly out of combat and collides in it, while the
---- offline harness computes the SAME minimum width in both states. So the
---- divergence is somewhere only a live client can show, and this prints every
---- step of the decision rather than the conclusion:
----
----   * how many spell lines offered a name, and how many were refused for being
----     unreadable — a refused name does not widen anything, and enough of them
----     leave `widestName` at 0 and the minimum unapplied;
----   * whether the ruler MEASURED each name or fell back to the character
----     estimate, which is the difference between exact and roughly-right;
----   * what width was asked for, and what the tooltip actually became.
----
---- Run it in combat and out, and compare the two blocks.
+--- Every term comes from config or from the tooltip's own ruler, never from a
+--- widget that has held a meter value, so this is safe to run at any time. It is
+--- here because the width was got wrong three times: the spell captions are
+--- SECRET in combat, so the span reserved for a name is a fixed number of
+--- characters rather than anything measured off the names. See
+--- `applyMinimumWidth` in modules/Tooltip.lua.
 local function reportTooltipWidth()
     out("|cff00ff00-- tooltip width --|r")
 
     local Tip = NS.Tooltip
-    local p = Tip and Tip.__widthProbe
-    if not p then
-        out("  no sample yet — turn the debug flag on, then hover a cell with a")
-        out("  spell breakdown, then run this again.")
+    local parts = Tip and Tip.WidthParts and Tip.WidthParts()
+    if not parts then
+        out("  the tooltip module is not loaded.")
         return
     end
 
-    out(string.format("  lines offering a name: %s", tostring(p.lines or 0)))
-    out(string.format("    refused (unreadable): %s   nil: %s   not a string: %s",
-        tostring(p.refusedAccess or 0), tostring(p.nilText or 0),
-        tostring(p.notAString or 0)))
-    out(string.format("    measured on the ruler: %s   fell back to the estimate: %s",
-        tostring(p.measured or 0), tostring(p.estimated or 0)))
-    out(string.format("  last name: %q  len=%s  fontSize=%s  measured=%s",
-        tostring(p.lastText), tostring(p.lastLen), tostring(p.fontSize),
-        tostring(p.lastMeasured)))
-    out(string.format("  widestName=%s  minimum applied: %s  requested=%s",
-        tostring(p.widestName), tostring(p.applied), tostring(p.requested)))
-    out(string.format("  tooltip read back: width=%s  minWidth=%s",
-        tostring(p.actualWidth), tostring(p.readBackMin)))
-
-    if (p.refusedAccess or 0) > 0 then
-        out("  |cffff2020names were refused as unreadable|r — that is why the")
-        out("  tooltip is not being widened for them.")
-    elseif (p.estimated or 0) > 0 then
-        out("  |cffff2020the ruler could not measure|r — the estimate is in use, and")
-        out("  it runs short on a narrow font.")
-    end
+    out(string.format("  name span: %s chars -> %.1fpx", tostring(parts.chars), parts.nameSpan))
+    out(string.format("  + gap %s + amount %s + gap %s + share %.1f + padding %s",
+        tostring(parts.nameGap), tostring(parts.amount), tostring(parts.slotGap),
+        parts.share, tostring(parts.padding)))
+    out(string.format("  = minimum width %.1fpx, the same in combat and out", parts.total))
 end
 
 -- ---------------------------------------------------------------------------
@@ -421,12 +397,20 @@ local function reportTargets()
         local enemy = column.sources[i]
         local guid = enemy.guid
         local safe = Secrets and Secrets.IsSafeKey(guid)
+        -- The creature ID gets the same gate as the GUID. It is plain out of
+        -- combat and SECRET in a pull, and forwarding a secret one is what
+        -- raised `bad argument #4` here and, more seriously, on the tooltip's
+        -- own render path — see modules/Targets.lua.
+        local creatureID = enemy.creatureID
+        local safeID = Secrets and Secrets.IsSafeKey(creatureID)
         out(string.format("  [%d] name=%s guid=%s creatureID=%s",
             i, tostring(enemy.name), safe and "plain" or "secret/absent",
-            tostring(enemy.creatureID)))
+            safeID and tostring(creatureID) or "secret/absent"))
 
-        local source = P:GetSourceDetail(sessionType, "EnemyDamageTaken",
-            safe and guid or nil, enemy.creatureID, sessionID)
+        local source = (safe or safeID)
+            and P:GetSourceDetail(sessionType, "EnemyDamageTaken",
+                safe and guid or nil, safeID and creatureID or nil, sessionID)
+            or nil
         if type(source) ~= "table" then
             out("        detail: nil")
         else

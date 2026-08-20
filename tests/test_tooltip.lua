@@ -524,22 +524,29 @@ test("Bars are released between hovers, never stacked", function()
     assertEqual(#tooltipBars(inst), first, "the second hover doubled the bars")
 end)
 
-test("The bar is OMITTED while the values cannot be divided", function()
-    -- A bar's length is amount / max, which raises on two secrets. So it is drawn
-    -- when core/Secrets.lua says both operands are readable and omitted when they
-    -- are not — exactly like the percent text slot. The NUMBER never goes away,
-    -- so a mid-pull tooltip loses decoration rather than information.
-    -- red under: dividing without the CanCompare2 gate.
+test("The bar is DRAWN mid-pull, because the widget does the division", function()
+    -- THE ASSERTION THAT USED TO SAY THE OPPOSITE, and it cost the tooltip its
+    -- bars for the whole of every pull. It read: "a bar's length is amount / max,
+    -- which raises on two secrets", and gated the bar on CanCompare2 — so in
+    -- combat, where every operand is secret, every bar was hidden. The main
+    -- window kept its own bars the entire time, which is what gives the lie away.
+    --
+    -- The rule forbids TAINTED CODE doing the division. It does not forbid the
+    -- division: a StatusBar computes its own fill natively, in code that may see
+    -- secrets, and core/Secrets.lua lists SetValue and SetMinMaxValues among the
+    -- things tainted code MAY do with a handle. modules/Row.lua has always taken
+    -- them raw for exactly this reason.
+    -- red under: restoring the CanCompare2 gate, or any `max <= 0` beside it.
     local inst, cfg, anchor = bench{ restricted = true }
     inst.mocks.setSecretValues(true)
 
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
     end)
-    assertTrue(ok, "the tooltip divided a secret")
+    assertTrue(ok, "the tooltip compared or divided a secret: " .. tostring(err))
 
-    assertEqual(#tooltipBars(inst), 0,
-        "a bar cannot be sized from values we may not divide")
+    assertEqual(#tooltipBars(inst), 3,
+        "the bars were hidden mid-pull, which is the whole bug this pins")
 end)
 
 test("A bar spans the FULL line, so its length is comparable down the column", function()
@@ -753,23 +760,27 @@ test("The tooltip text colour is configurable, and reaches every slot", function
     end
 end)
 
-test("The AMOUNT survives a hover the bar cannot", function()
-    -- This is the inversion the carrier Frame exists to prevent. The bar is a
-    -- division and goes when the values may not be divided; the amount is the
-    -- INFORMATION and must not. Hanging the number slots off the bar would empty
-    -- the tooltip mid-pull — the exact opposite of the rule.
+test("The AMOUNT rides on the carrier, not on the bar", function()
+    -- This is the inversion the carrier Frame exists to prevent: the amount is
+    -- the INFORMATION, and hanging the number slots off the bar would tie them
+    -- to whether the bar draws. That is a live risk even now that the bar
+    -- survives a pull, because a bar still goes when a line has no max to scale
+    -- against — and an empty tooltip is the exact opposite of the rule.
     -- red under: parenting the amount and share to the bar instead of the carrier.
     local inst, cfg, anchor = bench{ restricted = true }
     inst.mocks.setSecretValues(true)
 
     inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
 
-    assertEqual(#tooltipBars(inst), 0, "a bar was sized from values we may not divide")
-
     local carriers = spellLines(inst)
-    assertEqual(#carriers, 3, "the spell lines went down with the bars")
+    assertEqual(#carriers, 3, "the spell lines went down with the restriction")
     for _, carrier in ipairs(carriers) do
         assertTrue(carrier.amount.__text ~= nil, "a spell line lost its amount")
+        -- Asserted non-nil first, so the parent check below cannot pass by being
+        -- vacuous on a mock that never recorded a parent at all.
+        assertTrue(carrier.amount.__parent ~= nil, "the mock recorded no parent to check")
+        assertTrue(carrier.amount.__parent ~= carrier.bar,
+            "the amount is parented to the bar, so it dies whenever the bar does")
     end
 end)
 
@@ -1278,11 +1289,11 @@ test("The tooltip is widened without measuring anything inside GameTooltip", fun
         "the tooltip was not widened for the number slots at all")
 end)
 
-test("The width follows the font size and the name length, because it is computed", function()
+test("The width follows the font size, because it is computed", function()
     -- Proves it is derived from config rather than from the widget: a bigger
     -- font on the same spells must ask for a wider tooltip.
-    -- red under: a constant minimum, which would fit the small font and clip the
-    -- large one.
+    -- red under: a flat pixel constant, which would fit the small font and clip
+    -- the large one.
     local function widthAt(size)
         local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = size end }
         inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
@@ -1293,58 +1304,80 @@ test("The width follows the font size and the name length, because it is compute
         "the minimum width ignored the configured font size")
 end)
 
-test("A name that cannot be read simply does not widen the tooltip", function()
-    -- `#` on a secret raises, and a target's name comes off the enemy column
-    -- where it can be one. The section still draws; it is sized from the lines
-    -- whose names could be counted.
-    --
-    -- HONEST LIMIT OF THIS CASE: it cannot prove the CanAccess guard. The mock
-    -- represents a secret as a TABLE, so the `type(text) ~= "string"` check
-    -- returns before `#` is ever reached; in the client a secret string really
-    -- is a string, `type` waves it through, and CanAccess is the only thing
-    -- standing between the length operator and a raise. So this asserts the
-    -- outcome — no error, no width — and the guard above it stays on the
-    -- strength of the client's behaviour rather than this assertion.
+test("A name that cannot be read does not change the width, because none is read", function()
+    -- The captions in a spell breakdown ARE secret in combat: C_DamageMeter
+    -- hands out a secret spellID, so the name resolved from it is secret too. It
+    -- renders — SetText takes a secret happily — but it cannot be measured, and
+    -- an earlier version that tried left the tooltip un-widened and the numbers
+    -- sitting on top of the names. Nothing here reads a caption at all now, so a
+    -- secret one is simply not an event.
+    -- red under: any reintroduction of caption measurement.
     local inst, cfg, anchor = bench()
     local ok, err = pcall(function()
         inst.NS.Tooltip:CellTooltip(
             { guid = "Player-1-0000000A", name = inst.mocks.secret("Alpha"), values = {} },
             "DamageDone", anchor, cfg)
     end)
-    assertTrue(ok, "a secret name raised inside the width estimate: " .. tostring(err))
+    assertTrue(ok, "a secret name raised inside the width computation: " .. tostring(err))
 end)
 
-test("The name's room is MEASURED, not estimated from a character count", function()
-    -- TWO BUGS IN ONE ASSERTION, and it has to be exact to catch either.
+test("The name's room is a FIXED span, not the length of the names on screen", function()
+    -- THE BUG THIS PINS, and it took a live client to see. Two versions sized
+    -- the name span from the names themselves — first by reading GameTooltip's
+    -- own FontStrings, then by measuring the captions on a ruler of our own —
+    -- and both collapsed to zero width in combat, because every caption is
+    -- secret there and a refused name widens nothing. The tooltip was never
+    -- widened at all and the amounts drew straight through the names.
     --
-    -- Measuring GameTooltip's own line raised "attempt to compare a secret
-    -- number" — tainted code may not read geometry inside a shared Blizzard
-    -- frame. Estimating from a character count instead avoided the raise and
-    -- introduced a subtler failure: a proportional font is not a fixed number of
-    -- pixels per character, the estimate ran short, and the names overran the
-    -- fixed amount slot. That is what "all mangled up" looked like on screen.
-    --
-    -- So the width is measured on a ruler FontString of our own, outside the
-    -- tooltip. The mock measures at 0.5px per character per point and the old
-    -- estimate used 0.55, so asserting the EXACT figure fails if the code falls
-    -- back to the estimate — and also if the ruler is parented into GameTooltip,
-    -- since the measurement then answers a secret and the estimate takes over.
-    -- red under: either regression.
+    -- So the span is a RESERVATION: NAME_COLUMN_CHARS characters at the
+    -- configured font, identical whatever the names are. Two different sets of
+    -- spells must therefore ask for exactly the same width.
+    -- red under: any width that varies with the captions.
     local SIZE = 10
-    local inst, cfg, anchor = bench{
-        detail = { combatSpells = { { spellID = 101, totalAmount = 655000 } },
-                   maxAmount = 655000, totalAmount = 655000 },
-        configure = function(c) c.tooltip.fontSize = SIZE end,
-    }
-    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+    local function widthFor(spells)
+        local inst, cfg, anchor = bench{
+            detail = { combatSpells = spells, maxAmount = 655000, totalAmount = 655000 },
+            configure = function(c) c.tooltip.fontSize = SIZE end,
+        }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+        return inst.mocks.GameTooltip:GetMinimumWidth()
+    end
 
-    -- The caption is the spell NAME; the icon escape is not measured with it.
-    local caption = "Mock Spell 101"
-    local measured = #caption * SIZE * 0.5      -- the mock's ruler
-    local expected = measured + 14              -- BAR_INSET_LEFT
-        + 10 + 66 + 6 + 36 + 20                 -- name gap, amount, gap, share, padding
+    local short = widthFor{ { spellID = 1, totalAmount = 655000 } }
+    local long  = widthFor{ { spellID = 1234567, totalAmount = 655000 },
+                            { spellID = 7654321, totalAmount = 100 } }
+    assertEqual(short, long,
+        "the width moved with the spell names, so it will collapse in combat")
 
-    assertEqual(inst.mocks.GameTooltip:GetMinimumWidth(), expected,
-        "the width was estimated rather than measured, so long names overlap the amount")
+    -- And it is the reservation, exactly: 25 'n' on the mock's ruler (0.5px per
+    -- character per point), plus the slots. Asserting the figure catches a
+    -- silent fall back to the character estimate, which uses 0.55.
+    local nameSpan = 25 * SIZE * 0.5
+    local share    = math.max(#"100.0%" * SIZE * 0.5 + 3, 44)
+    assertEqual(short, nameSpan + 10 + 66 + 6 + share + 20,
+        "the reserved span is not 25 characters at the configured font")
+end)
+
+test("The share slot fits a full 100.0%, at any configured font size", function()
+    -- WHAT WENT WRONG. The slot was a flat 36px, sized for "xx.x%" on the
+    -- reasoning that a share cannot exceed 100% and so cannot get wider. But
+    -- Format.Percent renders "%.1f%%", so a capped row is "100.0%" — six glyphs,
+    -- not five — and it drew as "100...." on screen. The font size is the
+    -- player's to choose besides, so no pixel constant can be the answer: the
+    -- slot is measured per font, with the old constant kept only as a floor.
+    -- red under: a fixed share slot, at the default size or at a large one.
+    for _, size in ipairs({ 8, 10, 16, 24 }) do
+        local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.fontSize = size end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+        local carriers = spellLines(inst)
+        assertTrue(#carriers > 0, "the breakdown drew no lines to measure")
+
+        -- The mock's ruler is 0.5px per character per point.
+        local needed = #"100.0%" * size * 0.5
+        assertTrue(carriers[1].share.__w >= needed, string.format(
+            "the share slot is %s at font size %d, which clips 100.0%% at %s",
+            tostring(carriers[1].share.__w), size, tostring(needed)))
+    end
 end)
 

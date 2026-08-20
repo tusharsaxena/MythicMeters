@@ -637,7 +637,7 @@ badge and any count quoted in the docs must agree with it.
 - A right click on the GRID is a harmless no-op
 - Cells register for BOTH buttons, or the right click never arrives
 
-### test_targets.lua (22)
+### test_targets.lua (24)
 
 - Targets: a player's enemies are recovered from the enemy column
 - Targets: one enemy's several spells are summed into one line
@@ -647,6 +647,8 @@ badge and any count quoted in the docs must agree with it.
 - Targets: Total adds a list up, for the share column
 - Targets: an unreadable amount abandons the WHOLE build, not one enemy
 - Targets: the enemy lookup drops a SECRET guid and resolves on creatureID
+- Targets: a SECRET creatureID is dropped rather than handed to the API
+- Targets: with neither identifier readable the section is ABANDONED, not guessed
 - Targets: an unreadable caster name is skipped, and skipping it is safe
 - Targets: an unreadable HOVERED name answers nil rather than raising
 - Targets: no enemy column means no section, not an error
@@ -662,7 +664,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (60)
+### test_tooltip.lua (61)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -688,7 +690,7 @@ badge and any count quoted in the docs must agree with it.
 - modules/Tooltip.lua never applies `#` to a meter array
 - A spell line carries a real class-colored BAR, not a run of characters
 - Bars are released between hovers, never stacked
-- The bar is OMITTED while the values cannot be divided
+- The bar is DRAWN mid-pull, because the widget does the division
 - A bar spans the FULL line, so its length is comparable down the column
 - A bar clears the icon rather than running underneath it
 - A bar sits UNDER the tooltip's text, not over it
@@ -698,7 +700,7 @@ badge and any count quoted in the docs must agree with it.
 - The amount and the share sit in FIXED right-aligned slots
 - Both number slots are white by default, not two kinds of number
 - The tooltip text colour is configurable, and reaches every slot
-- The AMOUNT survives a hover the bar cannot
+- The AMOUNT rides on the carrier, not on the bar
 - The tooltip is widened for the slots, and put back afterwards
 - Every anchor the schema offers resolves to a real GameTooltip token
 - The anchor dropdown offers nothing the token table cannot resolve
@@ -721,9 +723,10 @@ badge and any count quoted in the docs must agree with it.
 - The half-size gap survives the post-layout pass
 - The gap is restored with every other line it was applied alongside
 - The tooltip is widened without measuring anything inside GameTooltip
-- The width follows the font size and the name length, because it is computed
-- A name that cannot be read simply does not widen the tooltip
-- The name's room is MEASURED, not estimated from a character count
+- The width follows the font size, because it is computed
+- A name that cannot be read does not change the width, because none is read
+- The name's room is a FIXED span, not the length of the names on screen
+- The share slot fits a full 100.0%, at any configured font size
 
 ### test_drilldown.lua (31)
 
@@ -1023,8 +1026,8 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator_sort.lua | 16 |
 | test_window.lua | 82 |
 | test_row.lua | 60 |
-| test_targets.lua | 22 |
-| test_tooltip.lua | 60 |
+| test_targets.lua | 24 |
+| test_tooltip.lua | 61 |
 | test_drilldown.lua | 31 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
@@ -1035,4 +1038,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **893** |
+| **Total** | **896** |

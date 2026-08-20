@@ -1109,6 +1109,22 @@ local function build()
 
         GetCombatSessionSourceFromType = function(sessionType, statType, sourceGUID, creatureID)
             bump("GetCombatSessionSourceFromType")
+            -- THE CLIENT REFUSES A SECRET creatureID, and it refuses it loudly:
+            -- `bad argument #4 … Secret values are only allowed during untainted
+            -- execution`. A secret one used to slip through this mock and merely
+            -- fail to match a fixture key, which is why the raise shipped —
+            -- `sourceCreatureID` is plain out of combat and SECRET in a pull, so
+            -- nothing offline disagreed. Modelled so it fails here first.
+            --
+            -- ARGUMENT #3 IS DELIBERATELY NOT MODELLED THE SAME WAY. A secret
+            -- sourceGUID is believed to resolve nothing rather than to raise
+            -- (modules/Targets.lua drops one before calling, so no path in this
+            -- addon passes one), and there is no observed client raise for it.
+            -- Asserting one here would be inventing behaviour.
+            if isSimulatedSecret(creatureID) then
+                error("bad argument #4 to 'GetCombatSessionSourceFromType' "
+                    .. "(Secret values are only allowed during untainted execution)", 2)
+            end
             local byStat = meter.sourceSpecs[sessionType]
             local byKey = byStat and (byStat[statType] or byStat["*"])
             if not byKey then return nil end

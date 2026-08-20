@@ -352,12 +352,24 @@ and a fallback nobody can run is a fallback nobody has tested.
 - **Percentage text slots render empty in combat.** By design; the slots default to total and rate.
 - **The tooltip's Targets section is absent for the whole of a pull, not degraded.** It is the one
   place in the addon where restriction costs *information* rather than decoration, and it is
-  deliberate: one enemy's damage from one player does not exist in the API, it is a **sum** over that
-  enemy's matching spells, and a sum of secrets raises. Summing only the readable rows would show a
-  number that is wrong, plausible and invisibly low. So `modules/Targets.lua` refuses the entire
-  build on the first unreadable amount. It is also off by default and Damage-column only, because it
-  costs one provider call per enemy on the first hover of a session. See
-  [data-flow.md §9](data-flow.md).
+  deliberate, and there are now **two independent reasons**, either of which is sufficient:
+
+  1. *The enemy cannot be identified.* Both identifiers the API accepts are secret in a pull —
+     `sourceGUID` is `SecretWhenInCombat`, and `sourceCreatureID` turns out to be too. Passing a
+     secret `sourceCreatureID` does not merely fail to resolve, it **raises**
+     (`bad argument #4 … Secret values are only allowed during untainted execution`), and because
+     `Targets.ForPlayer` runs on the tooltip's render path that raise took *every cell tooltip* down
+     for the whole pull, not just this section. `modules/Targets.lua` now gates both identifiers
+     through `NS.Secrets.IsSafeKey` and abandons the build when neither survives — calling with both
+     nil does not fail, it answers for a **different source**, whose numbers would be summed in as
+     though they were this enemy's.
+  2. *The sum is illegal.* One enemy's damage from one player does not exist in the API; it is a
+     **sum** over that enemy's matching spells, and a sum of secrets raises. Summing only the
+     readable rows would show a number that is wrong, plausible and invisibly low, so the build is
+     refused entire on the first unreadable amount.
+
+  It is also off by default and Damage-column only, because it costs one provider call per enemy on
+  the first hover of a session. See [data-flow.md §9](data-flow.md).
 - **`provider` sort mode rests on an unverified assumption** — that `combatSources` arrives sorted by
   the requested statistic. Isolated in `modules/Provider.lua`; `value` and `roster` do not depend on
   it.

@@ -548,30 +548,21 @@ local BAR_INSET_LEFT = TOOLTIP_ICON_SIZE
 --- widget that has held a secret has secret geometry (rule R3). Fixed slots also
 --- happen to be the requirement: they are what makes the column a column.
 ---
---- SHARE_SLOT_WIDTH fits "xx.x%" — the widest share there is, since a share
---- cannot exceed 100% and 100.0% is rendered at the same five glyphs.
+--- SHARE_SLOT_WIDTH is a FLOOR rather than the whole answer. It was sized for
+--- "xx.x%" on the reasoning that a share cannot exceed 100% and so cannot get
+--- wider — which is wrong twice over: `Format.Percent` renders "%.1f%%", so a
+--- full share is "100.0%" at SIX glyphs, and the tooltip font is configurable,
+--- so any fixed pixel count clips at a large enough size. A capped row showed as
+--- "100...." on screen. The drawn width is measured per font by `shareSlotWidth`
+--- and this is what a client that refuses the measurement falls back to.
 local SLOT_RIGHT_PAD    = 3
-local SHARE_SLOT_WIDTH  = 36
+local SHARE_SLOT_WIDTH  = 44
 local SLOT_GAP          = 6
 local AMOUNT_SLOT_WIDTH = 66
 
---- Rough width of one character, as a fraction of the font's point size.
----
---- AN ESTIMATE, AND IT HAS TO BE. The tooltip's minimum width used to be
---- measured off GameTooltip's own line FontStrings, and that is a rule-R3
---- violation that raises in game: `GetStringWidth` inside a shared Blizzard
---- frame answers a SECRET number to tainted code — even when every value on the
---- line is plainly readable, because it is the FRAME that is out of bounds
---- rather than the values. Comparing that width to anything is a Lua error, and
---- it took every cell tooltip down with it.
----
---- So the width is computed from what this addon owns: the character count of a
---- plain caption and the configured font size. Proportional fonts make that
---- approximate — 0.55 is a middling ratio for the faces LSM ships — and
---- approximate is fine here, because the number is only ever a MINIMUM. Too
---- small and GameTooltip sizes itself from its own text as it always did; too
---- large and the tooltip is a little wider than it needed to be.
-local NAME_WIDTH_PER_CHAR = 0.55
+--- The widest share there is, and therefore what the share slot must hold.
+local SHARE_WIDEST = "100.0%"
+
 
 --- Where a target's name starts inside its carrier.
 ---
@@ -581,7 +572,25 @@ local NAME_WIDTH_PER_CHAR = 0.55
 --- share an x.
 local LABEL_INSET_LEFT = 4
 
---- Breathing room between the longest spell name and the amount slot.
+--- How many characters of spell name the tooltip reserves room for.
+---
+--- DELIBERATELY NOT A SETTING, and deliberately not the grid's own
+--- `Const.NAME_COLUMN_WIDTH`. The window's name column holds a player name and
+--- this holds a spell name, which is a much longer thing — "Fury of the Storm
+--- Elemental" does not fit where "Traxex" does — so the two are sized apart on
+--- purpose and neither should drift into the other.
+local NAME_COLUMN_CHARS = 25
+
+--- Rough width of one character, as a fraction of the font's point size.
+---
+--- A FALLBACK ONLY. The span above is measured properly on `measureText`; this
+--- is what a client that refuses the measurement gets instead. 0.55 is a
+--- middling ratio for the faces LSM ships, and it runs short on a narrow face —
+--- which is survivable here and was not survivable when it sized a real name,
+--- because the result is only ever a MINIMUM.
+local NAME_WIDTH_PER_CHAR = 0.55
+
+--- Breathing room between the name column and the amount slot.
 local NAME_GAP = 10
 
 --- What GameTooltip adds around its own content, left and right together. Used
@@ -596,10 +605,6 @@ local TOOLTIP_H_PADDING = 20
 local SLOT_COLOR_DEFAULT = { 1, 1, 1 }
 
 local linePool = {}
-
---- The widest spell name this hover has drawn, in pixels, and the tooltip width
---- that implies. Reset per hover by `releaseLines`.
-local widestName = 0
 
 -- ---------------------------------------------------------------------------
 -- THE FONT, AND WHY IT HAS TO BE PUT BACK
@@ -633,15 +638,6 @@ local fontedLines = {}
 --- GameTooltip:Show() has laid the tooltip out, which is the only step between
 --- the two that could revert it.
 Tooltip.__fontProbe = nil
-
---- What the last tooltip build did about its minimum width, or nil.
----
---- Populated ONLY while the debug flag is on, and read by core/Diagnostics.lua.
---- It exists because the tooltip renders correctly out of combat and mangled in
---- it, while an offline harness measures the SAME minimum width in both states —
---- so the divergence is somewhere only the live client can see, and two fixes
---- shipped on reasoning alone have already missed it.
-Tooltip.__widthProbe = nil
 
 --- Give one tooltip line our font, and remember that we did.
 ---
@@ -740,95 +736,6 @@ local function restoreFonts()
     end
 end
 
---- Widen the tooltip for one line's name, WITHOUT measuring anything.
----
---- The caption is checked accessible before `#` touches it: a length operator on
---- a secret raises, and a target's name comes off the enemy column where it can
---- be one. An unreadable name simply does not widen the tooltip — the section is
---- still drawn, it is just sized from the lines whose names could be counted.
----
---- @param text any     a caption, possibly secret, possibly nil
---- @param style table   the resolved line style, for its font size
---- @param inset number  how far into the line this text starts
---- A hidden FontString kept solely to measure text, OUTSIDE GameTooltip.
----
---- WHY A RULER RATHER THAN THE LINE ITSELF. Measuring GameTooltip's own line is
---- what raised "attempt to compare a secret number": tainted code may not read
---- geometry inside a shared Blizzard frame, whatever is in it. Estimating from a
---- character count instead avoided the raise and introduced a subtler bug — a
---- proportional font is not a fixed number of pixels per character, the estimate
---- ran short on a narrow face, and the names overran the fixed amount slot.
----
---- This is the third answer and it is exact. The ruler is OURS: created without
---- a parent, never placed inside the tooltip, and never handed a meter value —
---- only a plain caption. So `GetStringWidth` on it is an ordinary read of an
---- ordinary widget, and rule R3 is untouched because nothing secret has ever
---- reached it.
-local ruler = nil
-
-local function measureText(text, path, size, flags)
-    if not ruler then
-        local host = CreateFrame("Frame")
-        host:Hide()
-        ruler = host:CreateFontString(nil, "OVERLAY")
-    end
-    if not ruler.SetFont then return nil end
-    ruler:SetFont(path, size, flags)
-    ruler:SetText(text)
-    local ok, w = pcall(ruler.GetStringWidth, ruler)
-    if not ok or type(w) ~= "number" then return nil end
-    return w
-end
-
---- Widen the tooltip for one line's name, measured on the ruler above.
----
---- The caption is checked accessible before it is measured or counted: `#` on a
---- secret raises, and a target's name comes off the enemy column where it can be
---- one. An unreadable name simply does not widen the tooltip — the section is
---- still drawn, it is just sized from the lines whose names could be read.
----
---- The character estimate survives as a FALLBACK for a client that refuses the
---- measurement. It is known to run short, which is why it is second.
----
---- @param text any     a caption, possibly secret, possibly nil
---- @param style table   the resolved line style, for its font
---- @param inset number  how far into the line this text starts
-local function noteNameWidth(text, style, inset)
-    local Secrets = NS.Secrets
-    local probe = State.debug and Tooltip.__widthProbe or nil
-    if probe then probe.lines = (probe.lines or 0) + 1 end
-
-    if text == nil then
-        if probe then probe.nilText = (probe.nilText or 0) + 1 end
-        return
-    end
-    if not (Secrets and Secrets.CanAccess and Secrets.CanAccess(text)) then
-        if probe then probe.refusedAccess = (probe.refusedAccess or 0) + 1 end
-        return
-    end
-    if type(text) ~= "string" then
-        if probe then probe.notAString = (probe.notAString or 0) + 1 end
-        return
-    end
-
-    local measured = measureText(text, style.fontPath, style.fontSize, style.fontFlags)
-    if probe then
-        if measured then
-            probe.measured = (probe.measured or 0) + 1
-            probe.lastMeasured = measured
-        else
-            probe.estimated = (probe.estimated or 0) + 1
-        end
-        probe.lastText = text
-        probe.lastLen  = #text
-        probe.fontSize = style.fontSize
-    end
-
-    local w = (measured or (#text * (style.fontSize or 12) * NAME_WIDTH_PER_CHAR))
-        + (inset or 0)
-    if w > widestName then widestName = w end
-end
-
 --- Take every line down, and put GameTooltip back the way it was found.
 ---
 --- `pairs`, NOT `ipairs`. The pool is keyed by TOOLTIP LINE INDEX, and a spell
@@ -848,7 +755,6 @@ local function releaseLines()
         frame.bar:Hide()
         frame:Hide()
     end
-    widestName = 0
     restoreFonts()
     if _G.GameTooltip and GameTooltip.SetMinimumWidth then
         GameTooltip:SetMinimumWidth(0)
@@ -954,6 +860,93 @@ local function lineWidget(index)
     return frame
 end
 
+--- A hidden FontString kept solely to measure text, OUTSIDE GameTooltip.
+---
+--- IT ONLY EVER SEES A CONSTANT OF OURS. An earlier version measured the spell
+--- captions on it, which is what the note on `applyMinimumWidth` describes as
+--- having failed: a caption can be secret, and a secret measured is a secret
+--- back. Everything it is given now is a literal in this file, so the width it
+--- answers is an ordinary number and rule R3 is not in play — the ruler is
+--- parentless, never placed inside the tooltip, and has never been handed a
+--- meter value.
+local ruler = nil
+
+--- The width of one PLAIN string at one font, or nil if unmeasurable.
+---
+--- @param text string  a literal of ours — never a caption, never a meter value
+local function measureText(text, path, size, flags)
+    if not ruler then
+        local host = CreateFrame("Frame")
+        host:Hide()
+        ruler = host:CreateFontString(nil, "OVERLAY")
+    end
+    if not ruler.SetFont then return nil end
+    ruler:SetFont(path, size, flags)
+    ruler:SetText(text)
+    local ok, w = pcall(ruler.GetStringWidth, ruler)
+    if not ok or type(w) ~= "number" then return nil end
+    return w
+end
+
+--- The width of `NAME_COLUMN_CHARS` characters at one font.
+---
+--- 'n' is the reference glyph on purpose: it is the classic average-width letter
+--- (the "en"), so 25 of them approximate 25 characters of a real name far better
+--- than 25 of a wide 'W' or a narrow 'i' would.
+local function measureNameSpan(path, size, flags)
+    return measureText(string.rep("n", NAME_COLUMN_CHARS), path, size, flags)
+        or (NAME_COLUMN_CHARS * size * NAME_WIDTH_PER_CHAR)
+end
+
+--- How wide the share slot must be at one font to hold a full "100.0%".
+---
+--- Measured rather than assumed, for the reason on SHARE_SLOT_WIDTH: the share
+--- is six glyphs at its widest, not five, and the font size is the player's to
+--- choose. The constant is the floor, so this never makes the slot narrower than
+--- it has always been.
+local function shareSlotWidth(path, size, flags)
+    local w = measureText(SHARE_WIDEST, path, size, flags)
+    if not w then return SHARE_SLOT_WIDTH end
+    w = w + SLOT_RIGHT_PAD
+    return (w > SHARE_SLOT_WIDTH) and w or SHARE_SLOT_WIDTH
+end
+
+--- The terms the minimum width is built from, for `/mm debug diag`.
+---
+--- Split out so the diagnostic reports the SAME arithmetic the tooltip runs
+--- rather than a restatement of it that can drift. Every term comes from config
+--- or from the ruler, so this is safe to call outside a hover — and it reads no
+--- widget that has ever held a meter value.
+---
+--- @param style table|nil  a resolved style; nil resolves the configured tooltip
+---   font instead, which is what the diagnostic has — it runs outside a hover
+---   and so has no style in hand.
+--- @return table
+function Tooltip.WidthParts(style)
+    local path, size, flags
+    if style then
+        path, size, flags = style.fontPath, style.fontSize, style.fontFlags
+    else
+        path, size, flags = tooltipFont(tooltipConfig(nil))
+    end
+    if type(size) ~= "number" or size < 1 then size = 12 end
+
+    local nameSpan = measureNameSpan(path, size, flags)
+    local share    = shareSlotWidth(path, size, flags)
+
+    return {
+        chars    = NAME_COLUMN_CHARS,
+        nameSpan = nameSpan,
+        nameGap  = NAME_GAP,
+        amount   = AMOUNT_SLOT_WIDTH,
+        slotGap  = SLOT_GAP,
+        share    = share,
+        padding  = TOOLTIP_H_PADDING,
+        total    = nameSpan + NAME_GAP + AMOUNT_SLOT_WIDTH + SLOT_GAP
+            + share + TOOLTIP_H_PADDING,
+    }
+end
+
 --- Widen the tooltip enough that the two number slots never sit on a spell name.
 ---
 --- GameTooltip sizes itself from its own text, and our numbers are not its text
@@ -961,39 +954,27 @@ end
 --- the slots overlap them. A MINIMUM is exactly the right instrument: a longer
 --- header line still wins, and nothing here shrinks the tooltip.
 ---
---- The name width is read off GameTooltip's own left FontString for a SPELL line,
---- which holds an icon escape and a spell name and has never been handed a meter
---- amount. Rule R3 is about widgets that HAVE held one — and note this is
---- deliberately not read off our own amount slot, which has.
-local function applyMinimumWidth()
-    local probe = State.debug and Tooltip.__widthProbe or nil
-    if probe then probe.widestName = widestName end
-
-    if widestName <= 0 then
-        if probe then probe.applied = "no — widestName is 0" end
-        return
-    end
-    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then
-        if probe then probe.applied = "no — SetMinimumWidth is absent" end
-        return
-    end
-
-    local want = widestName + NAME_GAP + AMOUNT_SLOT_WIDTH
-        + SLOT_GAP + SHARE_SLOT_WIDTH + TOOLTIP_H_PADDING
-    GameTooltip:SetMinimumWidth(want)
-
-    if probe then
-        probe.requested = want
-        probe.applied = "yes"
-        -- What the tooltip ACTUALLY ended up as, read back under pcall: it is a
-        -- Blizzard frame and this read is exactly the one that is not allowed on
-        -- the render path. Here it is the answer we are after, and a refusal is
-        -- itself the finding.
-        local ok, got = pcall(GameTooltip.GetWidth, GameTooltip)
-        probe.actualWidth = ok and got or "<refused>"
-        local ok2, got2 = pcall(GameTooltip.GetMinimumWidth, GameTooltip)
-        probe.readBackMin = ok2 and got2 or "<refused>"
-    end
+--- THE NAME SPAN IS FIXED, AND IT HAS TO BE. Two earlier versions sized it from
+--- the names themselves — first by reading GameTooltip's own FontStrings, then
+--- by measuring the captions on a ruler of our own — and both failed in combat
+--- for the same reason, which took instrumenting the live client to see: a spell
+--- breakdown's captions are SECRET mid-pull. `C_DamageMeter` hands out a secret
+--- `spellID`, so the name the client resolves from it is secret too. It RENDERS
+--- — `SetText` is a widget setter and takes a secret happily, which is why the
+--- tooltip shows "Chain Lightning" while this code cannot tell that it does —
+--- but it cannot be measured, because taking the widest of several measurements
+--- is a comparison and rule R3 forbids comparing a secret. There is no
+--- arrangement of a ruler that escapes that: secret in, secret out.
+---
+--- So the span is a reservation rather than a measurement — `NAME_COLUMN_CHARS`
+--- characters at the configured font, the same in combat and out. Nothing here
+--- clips a longer name: the result is a FLOOR, and GameTooltip still grows past
+--- it for its own longer text.
+---
+--- @param style table  a resolved style from `lineStyle`, for its font
+local function applyMinimumWidth(style)
+    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then return end
+    GameTooltip:SetMinimumWidth(Tooltip.WidthParts(style).total)
 end
 
 --- Everything a line needs to draw itself, resolved ONCE per hover.
@@ -1074,8 +1055,7 @@ end
 --- @param style table        a resolved style from `lineStyle`
 --- @param label string|nil   text for the carrier's own name slot (target lines);
 ---                           nil leaves it empty, which is what a spell line wants
---- @param caption any|nil    the plain name on this line, for the width estimate
-local function drawLine(lineIndex, amount, share, value, max, style, label, caption)
+local function drawLine(lineIndex, amount, share, value, max, style, label)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
     if not left then return end
@@ -1088,6 +1068,12 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, capt
     frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.label:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+
+    -- The share slot is sized from the font, so it is re-stated every draw for
+    -- the same reason the font is: the carrier is pooled, and line 4 of this
+    -- hover is the frame that drew line 4 of the last one, at whatever size that
+    -- hover was configured with.
+    frame.share:SetWidth(shareSlotWidth(style.fontPath, style.fontSize, style.fontFlags))
 
     -- Re-stated every draw rather than once at creation, exactly like the font:
     -- the carrier is pooled, so line 4 of this hover is the frame that drew line
@@ -1113,21 +1099,24 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, capt
     frame.share:SetText(share)
     frame.label:SetText(label or "")
 
-    -- A target's text starts inside the carrier; a spell's starts at the line's
-    -- own left edge, past its icon. Both offsets are constants of ours.
-    noteNameWidth(caption, style,
-        (label ~= nil) and (BAR_INSET_LEFT + LABEL_INSET_LEFT) or BAR_INSET_LEFT)
-
-    local Secrets = NS.Secrets
-    if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(value, max)) then
-        frame.bar:Hide()
-        return
-    end
-    if type(value) ~= "number" or type(max) ~= "number" or max <= 0 then
-        frame.bar:Hide()
-        return
-    end
-
+    -- THE BAR TAKES THE HANDLES RAW, exactly as modules/Row.lua's cells do.
+    --
+    -- This used to gate on `CanCompare2(value, max)` and hide the bar whenever
+    -- the two could not be compared — which is every line of every breakdown in
+    -- combat, so the tooltip lost its bars for the whole of every pull while the
+    -- main window kept its own. That was a misreading of the rule. A bar's fill
+    -- is amount/max computed NATIVELY, by the widget, in code that is allowed to
+    -- see secrets; tainted code only may not do that division ITSELF.
+    -- core/Secrets.lua says so in as many words: SetValue and SetMinMaxValues are
+    -- on the MAY list.
+    --
+    -- So the only test applied here is `== nil`, which is legal on a non-boolean
+    -- secret and is the one test Row.lua applies too. How big the value is, and
+    -- how it compares to the max, is the widget's business.
+    --
+    -- The consequence is the documented one and it is already paid: a frame that
+    -- has been handed a secret has secret geometry, so nothing anchored to this
+    -- bar may be read back. Layout here is computed from config (rule R3).
     local b = frame.bar
     b:SetStatusBarTexture(style.texture or BAR_FALLBACK_TEXTURE)
     -- BORDER, so the tooltip's ARTWORK spell name reads on top of the fill rather
@@ -1135,8 +1124,12 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, capt
     -- has to be re-stated every draw and not once at creation.
     local fill = b.GetStatusBarTexture and b:GetStatusBarTexture()
     if fill and fill.SetDrawLayer then fill:SetDrawLayer("BORDER") end
-    b:SetMinMaxValues(0, max)
-    b:SetValue(value)
+    if max == nil then
+        b:SetMinMaxValues(0, 1)
+    else
+        b:SetMinMaxValues(0, max)
+    end
+    b:SetValue(value == nil and 0 or value)
     local color = style.color
     b:SetStatusBarColor((color and color.r) or 0.6, (color and color.g) or 0.6,
         (color and color.b) or 0.6, 0.85)
@@ -1180,8 +1173,7 @@ local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
 
     -- The line widget goes BEHIND the tooltip line that was just added, so it
     -- needs that line's index — which is NumLines now that the line exists.
-    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style,
-        nil, caption)
+    drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style, nil)
 end
 
 --- The extra facts an Avoidable Damage row carries: whether the hit was
@@ -1354,7 +1346,7 @@ local function addTargetBreakdown(row, statKey, config, style, numberStyle, wind
             formatNumber(entry.total, numberStyle),
             formatShare(entry.total, total),
             entry.total, max, style,
-            entry.name or L["Unknown"], entry.name or L["Unknown"])
+            entry.name or L["Unknown"])
     end
 
     return #list
@@ -1391,7 +1383,6 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     -- and re-anchored, so a stale one would otherwise sit behind a tooltip line it
     -- no longer describes.
     releaseLines()
-    if State.debug then Tooltip.__widthProbe = {} end
     if not openTooltip(anchorFrame, config) then return end
 
     local stat = Const.STAT_BY_KEY[statKey]
@@ -1422,7 +1413,7 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
 
     -- After every line, before the Show that sizes the frame: the number slots are
     -- our widgets, so GameTooltip cannot size itself around them.
-    applyMinimumWidth()
+    applyMinimumWidth(style)
 
     GameTooltip:Show()
     -- AFTER Show, not before: the show path re-fonts the tooltip's lines. See

@@ -52,9 +52,16 @@ local function bench(enemies, opts)
     local sources = {}
     for i, enemy in ipairs(enemies) do
         local guid = string.format("Creature-0-0000-0-0-%04d", i)
+        -- `secretCreatureIDs` models a live pull's creature ID; adding
+        -- `secretGUIDs` leaves an enemy with NO usable identifier at all, which
+        -- is a different branch and needs the GUID secreted explicitly — the
+        -- mock ties sourceGUID secrecy to __secretValues, so a case that wants
+        -- readable amounts cannot get a secret GUID from the restriction alone.
         sources[i] = {
-            sourceGUID = guid, guid = guid,
-            sourceCreatureID = 6000 + i,
+            sourceGUID = opts.secretGUIDs and mocks.secret(guid) or guid,
+            guid = guid,
+            sourceCreatureID = opts.secretCreatureIDs
+                and mocks.secret(6000 + i) or (6000 + i),
             name = enemy.name,
             totalAmount = 1,
             sourceDisplayType = mocks.Enum.DamageMeterSourceDisplayType.Enemy,
@@ -245,6 +252,47 @@ test("Targets: the enemy lookup drops a SECRET guid and resolves on creatureID",
     local list = inst.NS.Targets.ForPlayer(cfg, "Alpha", 5)
     assertTrue(list ~= nil, "a secret enemy GUID took the whole section down with it")
     assertEqual(list[1].total, 500)
+end)
+
+test("Targets: a SECRET creatureID is dropped rather than handed to the API", function()
+    -- THE BUG THIS PINS, and it did not merely break the Targets section — it
+    -- took EVERY cell tooltip down for the whole pull. The GUID was gated here
+    -- and the creature ID was forwarded beside it, on a comment asserting that a
+    -- `sourceCreatureID` "is a plain number, is never secret". In a live pull it
+    -- is secret, and the client refuses it outright:
+    --
+    --   bad argument #4 to '?' … Secret values are only allowed during untainted
+    --
+    -- It read as plain because it IS plain out of combat, which is the only
+    -- state the offline harness ever put it in. The mock now refuses a secret
+    -- argument #4 the way the client does, so this raises without the gate.
+    -- red under: forwarding enemy.creatureID unguarded.
+    local inst, cfg = bench({
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }, { secretCreatureIDs = true })
+    inst.mocks.setRestricted(true)
+
+    local ok, err = pcall(inst.NS.Targets.ForPlayer, cfg, "Alpha", 5)
+    assertTrue(ok, "a secret creatureID reached the API and took the tooltip down: "
+        .. tostring(err))
+end)
+
+test("Targets: with neither identifier readable the section is ABANDONED, not guessed", function()
+    -- Asking with both identifiers nil does not fail — it answers for a
+    -- DIFFERENT source, whose numbers would be summed in as though they were
+    -- this enemy's. That is worse than an absent section, and it is the same
+    -- rule the restricted-read path follows.
+    -- red under: calling through with both arguments nil.
+    -- Amounts stay READABLE so a nil here can only mean "abandoned", never
+    -- "the numbers could not be summed" — the sibling case above shows this
+    -- same fixture returns a list of 500 when the creature ID is usable.
+    local inst, cfg = bench({
+        { name = "Gulkat", hits = { { caster = "Alpha", amount = 500 } } },
+    }, { secretCreatureIDs = true, secretGUIDs = true })
+    inst.mocks.setSecretValues(false)
+
+    assertEqual(inst.NS.Targets.ForPlayer(cfg, "Alpha", 5), nil,
+        "an enemy with no usable identifier was resolved anyway, so the totals are someone else's")
 end)
 
 test("Targets: an unreadable caster name is skipped, and skipping it is safe", function()
