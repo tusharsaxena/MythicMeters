@@ -413,6 +413,54 @@ end
 -- Targets — where the enemy cross-reference stops
 -- ---------------------------------------------------------------------------
 
+--- What the client flags the enemy column's sources as.
+---
+--- THE BELT ON A LOOSENED GATE. modules/Aggregator.lua used to admit an unowned
+--- source only on an explicit `Ally`, and a delve companion filed under `None`
+--- was dropped for the whole of a run because of it. `None` is now admitted when
+--- the source carries a real player class — which is safe exactly as long as
+--- enemies keep reporting `Enemy`, and that is an assumption about a live client
+--- rather than a fact about the code.
+---
+--- So it is printed rather than assumed. A `None` in this tally is the warning
+--- that the class test is the only thing standing between a trash pack and the
+--- grid, and it arrives in a report instead of as a wrong row nobody can explain.
+---
+--- @param column table
+local function reportEnemyDisplayTypes(column)
+    local tally, order = {}, {}
+    for _, src in ipairs(column.sources) do
+        local key = shown(src.sourceDisplayType)
+        if tally[key] == nil then order[#order + 1] = key end
+        tally[key] = (tally[key] or 0) + 1
+    end
+
+    local parts = {}
+    for _, key in ipairs(order) do
+        parts[#parts + 1] = string.format("%s x%d", key, tally[key])
+    end
+    out("  display types: " .. (parts[1] and table.concat(parts, " · ") or "none"))
+
+    -- THE BELT CANNOT ANSWER MID-PULL, and it must say so rather than look calm.
+    -- `sourceDisplayType` is secret for the whole of a pull — measured, not
+    -- assumed: a live report printed `display types: <secret> x5`. With every
+    -- entry unreadable the check below finds no `0` and prints nothing, which
+    -- reads exactly like "checked, all clear" and is not.
+    if tally[SECRET] and tally[SECRET] == #column.sources then
+        out("  |cffffd100every display type is secret|r — they are for the whole of a")
+        out("  pull, so this check has not run. Re-run out of combat.")
+        return
+    end
+
+    -- 2 is Enemy. Naming the number rather than the enum keeps this readable
+    -- against a raw log line, which is the form it is pasted back in.
+    if tally["0"] then
+        out("  |cffff2020an enemy is flagged None (0)|r — the aggregator admits a")
+        out("  None source that carries a real player class, so a mob with a class")
+        out("  filename could now reach the grid. Report this line.")
+    end
+end
+
 --- Walk the enemy column the way modules/Targets.lua does, and say where it dies.
 ---
 --- The section has five places it can silently produce nothing, and they are
@@ -445,6 +493,7 @@ local function reportTargets()
     end
     out(string.format("  enemy column: %d sources, reason=%s",
         #column.sources, tostring(column.reason)))
+    reportEnemyDisplayTypes(column)
     if #column.sources == 0 then
         out("  |cffff2020no enemies|r — either the session holds none, or every one")
         out("  was dropped by the provider's `sourceGUID == nil` guard.")
@@ -470,9 +519,10 @@ local function reportTargets()
         -- own render path — see modules/Targets.lua.
         local creatureID = enemy.creatureID
         local safeID = Secrets and Secrets.IsSafeKey(creatureID)
-        out(string.format("  [%d] name=%s guid=%s creatureID=%s",
+        out(string.format("  [%d] name=%s guid=%s creatureID=%s display=%s",
             i, shown(enemy.name), plainGUID and "plain" or "secret/absent",
-            safeID and tostring(creatureID) or "secret/absent"))
+            safeID and tostring(creatureID) or "secret/absent",
+            shown(enemy.sourceDisplayType)))
 
         local source = (plainGUID or safeID)
             and P:GetSourceDetail(sessionType, "EnemyDamageTaken",

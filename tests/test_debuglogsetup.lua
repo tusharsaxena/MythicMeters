@@ -271,3 +271,195 @@ test("DebugLogSetup degraded: the buffer introspection answers rather than error
     assertFalse(D:IsShown())
     assertNil(D.MakeCloseButton())
 end)
+
+-- ── the steady-state sink ───────────────────────────────────────────────────
+--
+-- debug-logging-§9 collapses per-ITEM to per-PASS. These cases are about the
+-- axis it leaves open: a pass on a timer that reports the same thing every time.
+-- Measured on this addon, that is twelve lines a second into a 500-line buffer —
+-- forty seconds of history, and a single steady state evicts everything behind
+-- it. Recorded as an accepted deviation in docs/ARCHITECTURE.md.
+
+--- Every line the sink emitted while `body` ran.
+local function lines(inst, body)
+    local D = inst.NS.DebugLog
+    local n = #D.buffer
+    body()
+    local out = {}
+    for i = n + 1, #D.buffer do out[#out + 1] = D.buffer[i] end
+    return out
+end
+
+test("DebugSteady: an unchanged pass emits once, not once per pass", function()
+    -- THE BUG THIS EXISTS FOR. A live capture showed one identity line repeating
+    -- byte-identically for forty-one seconds — about 160 passes, ~480 lines, one
+    -- string — which is the whole buffer spent on a single steady state.
+    -- red under: forwarding straight to NS.Debug.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 40 do inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 2, 2) end
+    end)
+    assertEqual(#emitted, 1, "an unchanged pass was logged more than once")
+end)
+
+test("DebugSteady: a CHANGE emits on the pass it happens, never delayed", function()
+    -- The one thing a clock-based throttle gets wrong. A change is the only
+    -- content these lines carry, so suppressing one to save nine identical ones
+    -- throws away the signal to save the noise.
+    -- red under: gating the emission on the heartbeat interval.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 2, 2)
+        inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 2, 2)
+        inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 3, 3)
+    end)
+    assertTrue(emitted[#emitted]:find("3/3", 1, true) ~= nil,
+        "the changed line did not come out on the pass it changed")
+end)
+
+test("DebugSteady: the run's count lands on the line it describes", function()
+    -- `(x40)` belongs to the state it counts, not to the state that replaced it.
+    -- Reported before the line that broke the run, so a reader sees "this held
+    -- for forty passes, then became that" in the order it happened.
+    -- red under: appending the count to the NEW line.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 40 do inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 2, 2) end
+        inst.NS.DebugSteady(1, "Render", "drew %d/%d rows", 3, 3)
+    end)
+    assertEqual(#emitted, 3, "expected the first line, the run summary, then the change")
+    assertTrue(emitted[2]:find("2/2", 1, true) ~= nil, "the run summary lost its own figures")
+    assertTrue(emitted[2]:find("(x40)", 1, true) ~= nil, "the run summary lost its count")
+    assertTrue(emitted[3]:find("3/3", 1, true) ~= nil, "the changed line is missing")
+end)
+
+test("DebugSteady: the (xN) line keeps EVERY field, not just the first", function()
+    -- The seam where getting it wrong is silent. `NS.Debug(tag, fmt, ..., count)`
+    -- truncates the vararg to its first value — Lua adjusts a multi-value
+    -- expansion to one result anywhere but the last argument position — so the
+    -- line still prints, with every field after the first replaced by the count,
+    -- and nothing raises.
+    -- red under: passing the count after `...` instead of appending it to a list.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 3 do inst.NS.DebugSteady(1, "Aggregator", "rows=%d keys=%d filled=%d", 2, 3, 7) end
+        inst.NS.DebugSteady(1, "Aggregator", "rows=%d keys=%d filled=%d", 2, 3, 8)
+    end)
+    assertTrue(emitted[2]:find("rows=2 keys=3 filled=7", 1, true) ~= nil,
+        "the run summary lost fields to the count: " .. emitted[2])
+end)
+
+test("DebugSteady: two windows sharing a tag do not defeat each other", function()
+    -- A tag-only cache would see the two windows alternate, call every pass a
+    -- change, and suppress nothing — the fix silently doing nothing, and only on
+    -- an install with a second window.
+    -- red under: keying the cache on the tag alone.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 20 do
+            inst.NS.DebugSteady(1, "Render", "window %d drew %d rows", 1, 2)
+            inst.NS.DebugSteady(2, "Render", "window %d drew %d rows", 2, 5)
+        end
+    end)
+    assertEqual(#emitted, 2, "the two windows defeated each other's comparison")
+end)
+
+test("DebugSteady: an unchanged run re-announces itself, so silence still means something", function()
+    -- Without this a frozen refresh loop and a healthy idle one produce
+    -- identical logs, and "no lines" stops meaning "nothing changed".
+    -- red under: dropping the heartbeat and suppressing on content alone.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 8 do inst.NS.DebugSteady(1, "Render", "drew %d rows", 2) end
+        inst.mocks.__now = inst.mocks.__now + 11
+        inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)
+    end)
+    assertEqual(#emitted, 2, "an unchanged run never re-announced itself")
+    assertTrue(emitted[2]:find("(x9)", 1, true) ~= nil,
+        "the heartbeat did not say how many passes it stood for")
+end)
+
+test("DebugSteady: a SECRET argument is emitted at once and never replayed", function()
+    -- Holding a secret is legal and comparing one is legal, but a suppressed run
+    -- gets RE-EMITTED later — and replaying a handle captured ten seconds ago
+    -- prints a stale figure under a current timestamp. That is the one failure a
+    -- debug line must not have.
+    -- red under: storing every argument regardless of what it is.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local secret = inst.mocks.secret(42)
+    local emitted = lines(inst, function()
+        for _ = 1, 5 do inst.NS.DebugSteady(1, "Render", "value=%s", secret) end
+    end)
+    assertEqual(#emitted, 5, "a secret was held across passes and replayed")
+end)
+
+test("DebugSteady: it exists without the library, because the render path calls it", function()
+    -- The stub branch RETURNS, so anything defined after it does not exist on an
+    -- install without LibKa0s — and this is called behind `if State.debug`, so
+    -- the absence would surface only for a player who turned logging on with the
+    -- library missing. debug-logging-§7 is about exactly this surface.
+    -- red under: defining the helper after the library fork.
+    local inst = T.load{ libFiles = {} }
+    assertEqual(type(inst.NS.DebugSteady), "function")
+    inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)   -- must not raise
+end)
+
+test("DebugSteady: a reset makes the next pass speak again", function()
+    -- After the console is cleared, the first line a reader waits for is the one
+    -- describing the state they are looking at. Suppressing it against a
+    -- comparison they can no longer see is the console lying by omission.
+    -- red under: no reset seam.
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)
+        inst.NS.DebugSteadyReset()
+        inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)
+    end)
+    assertEqual(#emitted, 2, "the pass stayed silent after a reset")
+end)
+
+test("DebugSteady: toggling the flag forgets every run", function()
+    -- Logging turned off and on again must not resume mid-comparison. The first
+    -- pass after the toggle would match a run the reader never saw, be
+    -- suppressed, and leave the console silent for up to the heartbeat — which
+    -- reads exactly like the addon doing nothing.
+    -- red under: setEnabled writing the flag and nothing else.
+    local inst = T.load{ enable = true }
+    inst.NS.DebugLog:SetEnabled(true)
+    inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)
+    inst.NS.DebugLog:SetEnabled(false)
+    inst.NS.DebugLog:SetEnabled(true)
+
+    local emitted = lines(inst, function()
+        inst.NS.DebugSteady(1, "Render", "drew %d rows", 2)
+    end)
+    assertEqual(#emitted, 1, "the first pass after a toggle stayed silent")
+end)
+
+test("DebugSteady: two call sites under ONE tag do not defeat each other", function()
+    -- THE BUG THE FIRST VERSION SHIPPED WITH, and it looked like a tuning problem
+    -- rather than a defect. modules/Aggregator.lua has two call sites under the
+    -- tag `Aggregator` — the pass summary and the identity line — and on a single
+    -- window they share a key. Through one slot they alternated: each call found
+    -- the other's format sitting there, called itself a change, and emitted. In a
+    -- live log `[Render]` deduped to `(x41)` while `[Aggregator]` repeated four
+    -- times a second exactly as before.
+    -- red under: caching on (tag, key) instead of (format, key).
+    local inst = T.load{ enable = true }
+    inst.NS.State.debug = true
+    local emitted = lines(inst, function()
+        for _ = 1, 20 do
+            inst.NS.DebugSteady(1, "Aggregator", "window=%d rows=%d", 1, 2)
+            inst.NS.DebugSteady(1, "Aggregator", "identity rows=%d keys=%d", 2, 3)
+        end
+    end)
+    assertEqual(#emitted, 2, "two call sites sharing a tag defeated each other's comparison")
+end)

@@ -38,6 +38,192 @@ local addonName, NS = ...
 -- NS.Constants.FONT_MONO (the PATH) directly below either way, so it needs no
 -- registration of its own.
 
+-- ABOVE THE LIBRARY FORK ON PURPOSE. The stub branch below `return`s, so
+-- anything defined after it does not exist on an install without LibKa0s — and
+-- NS.DebugSteady is called from the render path behind `if State.debug`, so the
+-- absence would surface only for a player who turned logging on with the library
+-- missing. That is precisely the "crash moved to a rarer code path" the stub's
+-- own comment warns about. It needs no library: it holds its own state and
+-- forwards to NS.Debug, which both branches publish.
+-- ---------------------------------------------------------------------------
+-- The steady-state sink — one line per CHANGE, not one line per pass
+-- ---------------------------------------------------------------------------
+--
+-- debug-logging-§9 collapses a repeating path from one line per ITEM to one line
+-- per PASS. That is the right rule and this addon obeys it. It leaves the other
+-- axis open: a pass that runs on a TIMER and reports the same thing every time.
+--
+-- Measured on this addon. `throttle = 0.25` is four passes a second, each
+-- emitting an `[Aggregator]` line and a `[Render]` line, plus a second
+-- `[Aggregator]` line while restricted — twelve lines a second, into a buffer
+-- capped at 500 (§1). THE CONSOLE HOLDS FORTY SECONDS. A live capture showed
+-- `identity rows=2 keys=3 collisions=0 filled=3/10` repeating byte-identically
+-- for forty-one seconds: roughly 160 passes, ~480 lines, one string. That single
+-- steady state evicts the entire history behind it, which is exactly the harm §9
+-- names ("it EVICTS it") arriving by a route §9 does not cover.
+--
+-- So the pass is coalesced one step further, and the shape is chosen so that
+-- nothing a reader wants is ever the thing that goes missing:
+--
+--   * A CHANGE IS NEVER DELAYED AND NEVER DROPPED. It emits on the pass it
+--     happens. Throttling on a clock would suppress changes, and a change is the
+--     only content these lines carry — a log that drops one to save nine
+--     identical ones has thrown away the signal to save the noise.
+--   * A RUN IS REPORTED ON THE LINE IT DESCRIBES. When a run of identical passes
+--     ends, the run is emitted as `… (x160)` BEFORE the line that broke it, so
+--     the count belongs to the state it counts rather than to the next one.
+--   * SILENCE STILL MEANS SOMETHING. Without a heartbeat, a frozen refresh loop
+--     and a healthy idle one produce identical logs, and "no lines" stops meaning
+--     "nothing changed". An unchanged run re-emits at most once every
+--     STEADY_HEARTBEAT seconds, so the log always shows the pass is alive and
+--     when the current state began.
+--
+-- Recorded as an accepted deviation in docs/ARCHITECTURE.md -> Documented
+-- deviations, against §8's "each recompute, as a single summary line".
+
+--- How long an unchanged run may stay silent before it re-announces itself.
+---
+--- Ten seconds is one line per tag per ten seconds in a steady state — about 80
+--- minutes of history in the same 500-line buffer that held 40 seconds, and
+--- still frequent enough that a reader who grabs the log mid-pull sees the
+--- current state rather than inferring it from a line five minutes old.
+local STEADY_HEARTBEAT = 10
+
+--- Per FORMAT STRING, per key: the last arguments emitted and how the run stands.
+---
+--- KEYED ON THE FORMAT, NOT THE TAG, and the first version got this wrong in a
+--- way that looked like tuning rather than a bug. `modules/Aggregator.lua` has
+--- TWO call sites under the tag `Aggregator` — the pass summary and the identity
+--- line — and on one window they share a key. Sharing one slot, they alternated
+--- through it: every call found the other's format sitting there, called itself a
+--- change, and emitted. `[Render]` deduped perfectly while `[Aggregator]` never
+--- deduped once, which reads as "the throttle is too generous" and is really
+--- "the cache cannot tell two call sites apart".
+---
+--- A format string is a literal, so it identifies the call site for free and the
+--- outer table holds one entry per site. `key` then separates emitters that share
+--- a site — two windows both rendering. Both axes are needed and neither is
+--- sufficient: the tag is not, which is what this comment is for.
+local steady = {}
+
+--- Whether every argument may be held and compared.
+---
+--- A SECRET IS NEVER STORED AND NEVER REPLAYED. Holding one is legal (rule R1
+--- permits store and pass), and comparing one is legal too — `==` against a
+--- secret answers false rather than raising. The problem is the third thing this
+--- function does: a suppressed run is RE-EMITTED later, and re-emitting a handle
+--- captured ten seconds ago prints a stale figure with a current timestamp on it.
+--- That is the one failure mode a debug line must not have. So an argument that
+--- is not concat-safe forces the line out immediately and keeps it out of the
+--- store.
+local function holdable(n, ...)
+    for i = 1, n do
+        local v = select(i, ...)
+        if v ~= nil and not NS.IsConcatSafe(v) then return false end
+    end
+    return true
+end
+
+--- Whether `...` differs from the run recorded in `slot`.
+---
+--- Compared as ARGUMENTS rather than as a formatted string, so a suppressed pass
+--- builds nothing it then throws away — which is the whole point of §4's
+--- deferred format, applied to the comparison as well as to the emission.
+local function changed(slot, n, fmt, ...)
+    if slot.fmt ~= fmt or slot.n ~= n then return true end
+    for i = 1, n do
+        if slot[i] ~= select(i, ...) then return true end
+    end
+    return false
+end
+
+local function remember(slot, n, fmt, ...)
+    slot.fmt, slot.n = fmt, n
+    for i = 1, n do slot[i] = select(i, ...) end
+end
+
+--- One shared buffer for building the `(xN)` argument list.
+---
+--- IT HAS TO BE A TABLE, and this is the seam where getting it wrong is silent.
+--- `NS.Debug(tag, fmt, ..., count)` and `NS.Debug(tag, fmt, unpack(slot), count)`
+--- both TRUNCATE the expansion to its first value — Lua adjusts a vararg or a
+--- multi-return to one result anywhere but the last argument position. The line
+--- would still print, with every field after the first replaced by the count, and
+--- nothing would raise. So the count is appended to a real list and the whole
+--- list is expanded last.
+---
+--- Reused rather than allocated per emission: this runs on the refresh path.
+local scratch = {}
+
+--- Re-emit the run recorded in `slot`, carrying how many passes it stood for.
+local function emitRun(tag, slot, passes)
+    local n = slot.n
+    for i = 1, n do scratch[i] = slot[i] end
+    scratch[n + 1] = passes
+    NS.Debug(tag, slot.fmt .. " (x%d)", unpack(scratch, 1, n + 1))
+end
+
+--- One debug line per CHANGE of a timer-driven pass, plus a bounded heartbeat.
+---
+--- `key` separates emitters that share a CALL SITE — two windows both logging the
+--- same `Render` line would otherwise alternate and defeat each other's
+--- comparison. The call site itself is identified by `fmt`; see the cache above
+--- for why the tag cannot do that job.
+---
+--- Callers stay gated exactly as they were: this is not a replacement for the
+--- `if State.debug` check at the call site, because the arguments are evaluated
+--- to get here.
+---
+--- @param key any        stable identity of the emitter (a window id)
+--- @param tag string     the log tag, as NS.Debug takes it
+--- @param fmt string     the format string, a literal at the call site
+local function DebugSteady(key, tag, fmt, ...)
+    local byKey = steady[fmt]
+    if byKey == nil then byKey = {} steady[fmt] = byKey end
+    local slot = byKey[key]
+    if slot == nil then slot = { n = -1 } byKey[key] = slot end
+
+    local n = select("#", ...)
+    local now = _G.GetTime and _G.GetTime() or 0
+
+    if not holdable(n, ...) then
+        slot.n, slot.fmt, slot.repeats, slot.at = -1, nil, 0, now
+        NS.Debug(tag, fmt, ...)
+        return
+    end
+
+    if changed(slot, n, fmt, ...) then
+        -- The run that just ended gets its count, on its own line, before the
+        -- line that ended it.
+        if (slot.repeats or 0) > 0 and slot.fmt then
+            emitRun(tag, slot, slot.repeats + 1)
+        end
+        remember(slot, n, fmt, ...)
+        slot.repeats, slot.at = 0, now
+        NS.Debug(tag, fmt, ...)
+        return
+    end
+
+    slot.repeats = (slot.repeats or 0) + 1
+    if now - (slot.at or 0) >= STEADY_HEARTBEAT then
+        emitRun(tag, slot, slot.repeats + 1)
+        slot.repeats, slot.at = 0, now
+    end
+end
+
+NS.DebugSteady = DebugSteady
+
+--- Forget every run, so the next pass of each speaks again.
+---
+--- Wired to the enable toggle below. NOT wired to the console's Clear button:
+--- that lives inside the library and offers the host no hook, so a cleared
+--- console can still sit silent until the heartbeat. Worth knowing before
+--- reading a cleared log as "nothing is happening"; worth a library seam if it
+--- ever bites in practice.
+function NS.DebugSteadyReset()
+    for fmt in pairs(steady) do steady[fmt] = nil end
+end
+
 local lib = LibStub and LibStub("LibKa0s-DebugLog-1.0", true)
 
 if not lib then
@@ -137,7 +323,15 @@ NS.DebugLog = lib:New({
     -- nobody asked for — and it is read by the settings panel and by `/mm debug`,
     -- so a second copy inside the library would be a second truth.
     isEnabled  = function() return NS.State and NS.State.debug or false end,
-    setEnabled = function(on) if NS.State then NS.State.debug = on end end,
+    -- Toggling the flag also forgets every steady-state run. Without it, logging
+    -- turned off and on again resumes mid-comparison: the first pass after the
+    -- toggle matches a run the reader never saw and is suppressed, so the console
+    -- opens on silence for up to the heartbeat interval — which reads exactly
+    -- like the addon doing nothing.
+    setEnabled = function(on)
+        if NS.State then NS.State.debug = on end
+        if NS.DebugSteadyReset then NS.DebugSteadyReset() end
+    end,
 
     -- Both resolved at CALL time rather than captured. core/CoreSetup.lua has
     -- already run, so a captured reference would in fact be correct here — but

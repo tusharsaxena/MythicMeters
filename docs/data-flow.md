@@ -331,8 +331,13 @@ Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
   Class alone identifies nobody in a raid; class plus spec plus "is it me" identifies almost
   everybody almost always, and the exceptions are detected rather than guessed at. An empty cell is a
   visible absence; a mislabeled number is a lie the player cannot see.
-- Enemies are filtered by the plain `sourceDisplayType`, because the roster cannot answer for a
-  source it cannot key on.
+- Enemies are filtered on `sourceDisplayType`, because the roster cannot answer for a source it
+  cannot key on — but **that field is secret for the whole of a pull**, measured on a live client
+  (`/mm debug diag` mid-pull printed `display types: <secret> x5` over a five-enemy column). So the
+  filter answers "not an enemy" for everything while restricted, and identity mode is what keeps
+  mobs off the grid: it builds rows from the *sort* column's source list, which holds allies. The
+  companion admission in `modules/Aggregator.lua` guards on the same secrecy and therefore runs only
+  out of combat, which is the only place the GUID join runs at all.
 - **Pets are rows**, not folded contributions. The fold needs the owner link, the owner link needs a
   GUID, and there is none — so a pet appears as the source Blizzard reports, with its own name and
   numbers, and nothing is summed.

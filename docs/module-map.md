@@ -42,8 +42,9 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         NS.MakeCloseButton, and NS.LIBKA0S_MISSING
 │   ├── PerfSetup.lua   — LibKa0s-Perf-1.0 seam: NS.Perf, the 7 buckets, and the
 │                         suspend/resume that makes the addon inert without a reload
-│   ├── DebugLogSetup.lua — LibKa0s-DebugLog-1.0 seam: NS.DebugLog and the bare
-│                         NS.Debug(tag, fmt, …) sink
+│   ├── DebugLogSetup.lua — LibKa0s-DebugLog-1.0 seam: NS.DebugLog, the bare
+│                         NS.Debug(tag, fmt, …) sink, and NS.DebugSteady — the
+│                         same sink for a pass that repeats on a timer
 │   ├── LSMPatch.lua    — registers the shipped JetBrains Mono face with LSM at file
 │                         load, and the PLAYER_LOGIN fixup that hides the vendored
 │                         LSM30_Border widget's 42×42 preview tile
@@ -125,7 +126,7 @@ own strings entirely.
 | `Secrets.lua` | Restriction state, per-value and per-table inspection, and the two bounded walks. Correct when the whole secrets system is absent | `NS.Secrets` | `_G.C_RestrictedActions`, `_G.issecretvalue` and friends |
 | `CoreSetup.lua` | The LibKa0s-Core seam and the shared "library missing" cause clause | `NS.Util.print` / `NS.Print`, `NS.Format` (printer, later rebound), `NS.IsConcatSafe`, `NS.SafeToString`, `NS.RGBA`, `NS.SKIN`, `NS.ApplySkin`, `NS.MakeCloseButton`, `NS.LIBKA0S_MISSING` | `NS.PREFIX` |
 | `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.version`, `NS.Compat`, and `Provider` / `WindowManager` / `Visibility` at call time |
-| `DebugLogSetup.lua` | The console descriptor and the debug sink | `NS.DebugLog`, `NS.Debug` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
+| `DebugLogSetup.lua` | The console descriptor, the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
 | `LSMPatch.lua` | Shipped-media registration and the `LSM30_Border` widget fixup | nothing — side effects only | `NS.Constants.FONT_MONO*`, LibSharedMedia, AceGUI |
 | `MythicMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |

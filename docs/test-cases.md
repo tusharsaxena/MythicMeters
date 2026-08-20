@@ -182,7 +182,7 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
 
-### test_diagnostics.lua (13)
+### test_diagnostics.lua (18)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -197,6 +197,11 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: with no console the report falls back to chat
 - Diagnostics: a font size read back as 10.000000953674 is not called a failure
 - Diagnostics: a font the layout reverted is named as such
+- Diagnostics: a walk that never reached a spell does not blame the build
+- Diagnostics: the number probes expect what the SHIPPING ladder renders
+- Diagnostics: the enemy column's display types are printed, not assumed
+- Diagnostics: an enemy flagged None is called out, because it defeats the class gate
+- Diagnostics: a display-type check that could not run says so
 
 ### test_defaults.lua (24)
 
@@ -272,7 +277,7 @@ badge and any count quoted in the docs must agree with it.
 - PerfSetup: with LibKa0s absent the stub answers every member the addon reaches
 - PerfSetup: the degraded `/mm perf` answers with the shared cause and its own consequence
 
-### test_debuglogsetup.lua (18)
+### test_debuglogsetup.lua (29)
 
 - DebugLogSetup: NS.DebugLog is the library instance and NS.Debug is its bare sink
 - DebugLogSetup: the sink is gated on the flag and costs nothing when it is off
@@ -292,6 +297,17 @@ badge and any count quoted in the docs must agree with it.
 - DebugLogSetup degraded: the stub reproduces NO part of the library's line format
 - DebugLogSetup degraded: the console checkbox answers a usable data contract
 - DebugLogSetup degraded: the buffer introspection answers rather than erroring
+- DebugSteady: an unchanged pass emits once, not once per pass
+- DebugSteady: a CHANGE emits on the pass it happens, never delayed
+- DebugSteady: the run's count lands on the line it describes
+- DebugSteady: the (xN) line keeps EVERY field, not just the first
+- DebugSteady: two windows sharing a tag do not defeat each other
+- DebugSteady: an unchanged run re-announces itself, so silence still means something
+- DebugSteady: a SECRET argument is emitted at once and never replayed
+- DebugSteady: it exists without the library, because the render path calls it
+- DebugSteady: a reset makes the next pass speak again
+- DebugSteady: toggling the flag forgets every run
+- DebugSteady: two call sites under ONE tag do not defeat each other
 
 ### test_lifecycle.lua (23)
 
@@ -415,7 +431,7 @@ badge and any count quoted in the docs must agree with it.
 - A complete build IS cached
 - Solo is complete, not partial
 
-### test_aggregator.lua (52)
+### test_aggregator.lua (55)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -468,6 +484,9 @@ badge and any count quoted in the docs must agree with it.
 - An ALLY nobody owns gets its own row, under its own name
 - The owner is still not credited for an unowned ally's damage
 - An ENEMY nobody owns is still refused
+- A DELVE COMPANION, filed under None with a real class, gets a row
+- A None source with a class the CLIENT does not know is still refused
+- An ENEMY with a real player class is refused, class or no class
 - A source with NO display type is refused, not assumed friendly
 
 ### test_aggregator_sort.lua (16)
@@ -1012,17 +1031,17 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
-| test_diagnostics.lua | 13 |
+| test_diagnostics.lua | 18 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
-| test_debuglogsetup.lua | 18 |
+| test_debuglogsetup.lua | 29 |
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 25 |
 | test_provider.lua | 35 |
 | test_roster.lua | 22 |
-| test_aggregator.lua | 52 |
+| test_aggregator.lua | 55 |
 | test_aggregator_sort.lua | 16 |
 | test_window.lua | 82 |
 | test_row.lua | 60 |
@@ -1038,4 +1057,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **896** |
+| **Total** | **915** |

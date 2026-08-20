@@ -329,9 +329,18 @@ and a fallback nobody can run is a fallback nobody has tested.
   source now gets **its own row, under its own name**, rather than vanishing off the grid. That is
   not the mislabeling the drop rule guards against: the rule is about putting one player's numbers
   under another player's *name*, and this row claims no owner at all. The gate that keeps it safe is
-  `sourceDisplayType`, and it asks for **Ally explicitly** rather than for "not Enemy" — read the
-  loose way, a source whose display type is absent becomes a row and the whole trash pack lands on
-  the grid.
+  `sourceDisplayType`, and it never reads "not Enemy" as "one of ours" — read that loose way, a
+  source whose display type is absent becomes a row and the whole trash pack lands on the grid.
+- **A delve companion is admitted, because the client files one under `None`.** The gate above was
+  `Ally` and nothing else until a live delve showed Valeera Sanguinar doing 24.98M of a run's 61.31M
+  and never reaching the grid, while the header total counted her — a session total is the client's
+  own sum and never consults the row gate. `display=0` is `None`: neither `Ally` nor `Enemy`. So a
+  `None` source is now admitted **only when its `classFilename` is a class `RAID_CLASS_COLORS`
+  recognizes**. That table is the oracle rather than a list of our own because `modules/Row.lua`
+  already looks a row up in it to color the bar and pick the class icon — what this refuses could
+  only ever have drawn as an uncolored, iconless row. A mob would have to report `None` *and* carry
+  a genuine class filename to slip through, and `/mm debug diag` prints the enemy column's display
+  types so that a `None` there is reported rather than inferred from a wrong row.
 - **`data.mergePets` is off by default, and has no effect during a pull.** A pet gets its own row,
   which needs no arithmetic and is exact in both states. Merging is addition and needs the owner
   link, so it runs only where GUIDs are plain — out of combat.
@@ -381,6 +390,12 @@ and a fallback nobody can run is a fallback nobody has tested.
   there is no widget to size and nothing measured. The cost is that a player cannot see there are
   rows above or below without trying the wheel.
 - Debug logging is session-only (`NS.State.debug`) and resets on every `/reload`.
+- **A refresh pass logs on change, not on every pass.** The `[Aggregator]` and `[Render]` summary
+  lines go through `NS.DebugSteady`, which emits a change immediately and otherwise re-announces an
+  unchanged run at most every 10 seconds as `… (xN)`. It is what keeps a 500-line buffer holding
+  hours rather than forty seconds. Ratified as a deviation from debug-logging §8 — see the register
+  below. Note the console's **Clear** button does not reset the comparison (the library offers the
+  host no hook), so a freshly cleared console can sit silent until the next change or heartbeat.
 - No automated in-client tests: headless suites plus manual in-game smoke tests.
 - Not published — `X-Curse-Project-ID` and `X-Wago-ID` are deliberately absent from the TOC.
 
@@ -456,8 +471,9 @@ Rows are shaped `| Rule | What differs | Why | Decided | Re-check trigger |`.
 
 | Rule | What differs | Why | Decided | Re-check trigger |
 |---|---|---|---|---|
+| debug-logging §8 — each recompute logged "as a single summary line" | A refresh pass whose summary line is **unchanged** from the previous pass is not logged. The line is emitted on every *change*, plus a heartbeat at most every 10s carrying `(xN)` for the passes it stood for. | `throttle = 0.25` is four passes a second, each emitting an `[Aggregator]` and a `[Render]` line (three while restricted) into a buffer capped at 500 lines (§1) — **the console holds 40 seconds**. A live capture showed one identity line repeating byte-identically for 41 seconds: ~160 passes, ~480 lines, one string, evicting every other line in the buffer. That is the harm §9 names ("it **evicts** it") arriving by a route §9 does not cover: §9 bounds *per-item* emission and says nothing about a pass repeating unchanged on a timer. A change is never delayed and never dropped, so nothing a reader wants is what goes missing. Implementation and reasoning: `core/DebugLogSetup.lua` → the steady-state sink. | 2026-08-21 | debug-logging gains a rule for repeating timer-driven passes — the gap is general to any Ka0s addon with a refresh timer, so the standard is the right long-term home and this row retires the day it lands. |
 
-**The register is currently empty — nothing is ratified.** It carried one row, for a root `TODO.md`
+**One row is ratified.** The register also carried a row for a root `TODO.md`
 holding work that was decided but unscheduled, adopted as a stopgap until the repo had an issue store.
 That row was retired on 2026-08-11 when the backlog moved to
 [GitHub issues](https://github.com/tusharsaxena/MythicMeters/issues), which is precisely the re-check

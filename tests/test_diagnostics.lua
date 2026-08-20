@@ -274,3 +274,66 @@ test("Diagnostics: the number probes expect what the SHIPPING ladder renders", f
     assertFalse(section:find("<%-%- expected") ~= nil,
         "the shipping ladder's own output is flagged as unexpected:\n" .. section)
 end)
+
+
+--- An enemy column holding one source with the given display type.
+local function enemyColumn(inst, displayType)
+    local mocks = inst.mocks
+    mocks.setSession(1, mocks.Enum.DamageMeterType.EnemyDamageTaken, {
+        combatSources = { {
+            sourceGUID        = "Creature-0-0000-0-0-0001",
+            guid              = "Creature-0-0000-0-0-0001",
+            sourceCreatureID  = 6001,
+            creatureID        = 6001,
+            name              = "Cleave Training Dummy",
+            totalAmount       = 1,
+            sourceDisplayType = displayType,
+        } },
+        maxAmount = 1, totalAmount = 1, durationSeconds = 60,
+    })
+    inst.NS.Database.GetWindows()[1].data.sessionType = 1
+end
+
+test("Diagnostics: the enemy column's display types are printed, not assumed", function()
+    -- THE BELT ON A LOOSENED GATE. modules/Aggregator.lua now admits a source
+    -- flagged None when it carries a real player class, which is safe exactly as
+    -- long as enemies keep reporting Enemy — an assumption about a live client,
+    -- not a fact about the code. So the client is asked and the answer printed.
+    -- red under: no display-type line in the targets section.
+    local inst = T.load{ enable = true }
+    enemyColumn(inst, inst.mocks.Enum.DamageMeterSourceDisplayType.Enemy)
+
+    local text = report(inst)
+    assertTrue(text:find("display types: 2 x1", 1, true) ~= nil,
+        "the enemy column's display types are missing from the report")
+end)
+
+test("Diagnostics: an enemy flagged None is called out, because it defeats the class gate", function()
+    -- The one reading that turns the aggregator's new branch from narrow into
+    -- dangerous. If a mob is ever filed under None, the class filename is the
+    -- only thing between a trash pack and the grid — and that is a sentence a
+    -- player should read in a report rather than infer from a wrong row.
+    -- red under: printing the tally without checking it.
+    local inst = T.load{ enable = true }
+    enemyColumn(inst, inst.mocks.Enum.DamageMeterSourceDisplayType.None)
+
+    local text = report(inst)
+    assertTrue(text:find("flagged None", 1, true) ~= nil,
+        "a None-flagged enemy passed without comment")
+end)
+
+test("Diagnostics: a display-type check that could not run says so", function()
+    -- `sourceDisplayType` is secret for the whole of a pull — measured on a live
+    -- client, which printed `display types: <secret> x5` across a five-enemy
+    -- column. With every entry unreadable the None check finds nothing and
+    -- prints nothing, which reads exactly like "checked, all clear". A belt that
+    -- silently did not run is worse than no belt.
+    -- red under: printing the tally and falling through to the None check.
+    local inst = T.load{ enable = true }
+    enemyColumn(inst, inst.mocks.secret(2))
+    inst.mocks.setRestricted(true)
+
+    local text = report(inst)
+    assertTrue(text:find("every display type is secret", 1, true) ~= nil,
+        "a check that could not run passed itself off as a clean one")
+end)

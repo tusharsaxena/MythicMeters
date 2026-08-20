@@ -663,6 +663,46 @@ local function isEnemySource(src)
     return kind == Const.SOURCE_DISPLAY_TYPE.Enemy
 end
 
+--- The class filename of a source the client filed under `None`, or nil.
+---
+--- TWO CONDITIONS, and neither is sufficient alone. The display type must be
+--- exactly `None` — an absent or secret one is not "probably a companion", it is
+--- an unknown, and unknowns keep being dropped. And the class must be one the
+--- client itself recognizes, which is what separates a delve companion from a
+--- humanoid mob that happens to reach this function.
+---
+--- THE SECRECY GUARD IS NOT DEFENSIVE PADDING. `sourceDisplayType` is SECRET for
+--- the whole of a pull — a live `/mm debug diag` mid-pull printed `display types:
+--- <secret> x5` across a five-enemy column — which nothing in this file or its
+--- docs had recorded until it was measured. `==` against a secret is permitted
+--- and simply answers false, so the comparison below would refuse a companion
+--- rather than raise, and the refusal would be correct: mid-pull the GUID join
+--- is not running at all and identity mode builds the grid instead. The guard is
+--- here so that the reason is a stated one rather than a lucky one.
+---
+--- The lookup is `rawget`-free and deliberately so: RAID_CLASS_COLORS is a plain
+--- global table on every client this addon runs on, and a metatable on it would
+--- be Blizzard's own answer about what a class is, which is the answer wanted.
+---
+--- @param src table
+--- @return string|nil  the class filename, when it identifies a real class
+local function companionClass(src)
+    local kind = src.sourceDisplayType
+    if kind == nil or Secrets.IsSecret(kind) then return nil end
+    if kind ~= Const.SOURCE_DISPLAY_TYPE.None then return nil end
+
+    local class = src.classFilename
+    -- NeverSecret per Blizzard's annotations, and asked anyway: an annotation is
+    -- a promise about the live client, and this file does not stake a raise on
+    -- one it can cheaply check.
+    if class == nil or Secrets.IsSecret(class) then return nil end
+    if type(class) ~= "string" or class == "" then return nil end
+
+    local classes = _G.RAID_CLASS_COLORS
+    if type(classes) ~= "table" or classes[class] == nil then return nil end
+    return class
+end
+
 --- A row for an ALLY nobody in the group owns.
 ---
 --- ---------------------------------------------------------------------------
@@ -688,16 +728,43 @@ end
 --- is addition into an OWNER's row and there is no owner to add into — the whole
 --- reason we are here.
 ---
+--- ---------------------------------------------------------------------------
+--- AND A THIRD KIND: A COMPANION THE CLIENT FILES UNDER `None`
+--- ---------------------------------------------------------------------------
+---
+--- This gate was written to admit ONLY an explicit `Ally`, on the belief that
+--- anything of ours carries that flag. A delve says otherwise. Valeera
+--- Sanguinar fought a nine-and-a-half minute delve, did 24.98M of the run's
+--- 61.31M, and never reached the grid — while the header total counted her,
+--- because a session total is the client's own sum and does not consult this
+--- function. Measured on the live client:
+---
+---     dropped guid=Creature-0-3748-2933-99554-248567-… member=false owner=nil
+---             class=ROGUE/false display=0 lookup=resolved
+---
+--- `display=0` is `None`: the client files a delve companion as neither `Ally`
+--- nor `Enemy`. The old comment here predicted this exact failure — "the failure
+--- mode is this fix doing nothing" — and this is it, four columns wide.
+---
+--- SO `None` IS ADMITTED, BUT ONLY WITH A REAL PLAYER CLASS ON IT, and the
+--- narrowness is the point. `classFilename` is NeverSecret, so the test is legal
+--- in a pull as well as out of it, and a mob would have to report `None` AND
+--- carry a genuine class filename to slip through.
+---
+--- RAID_CLASS_COLORS is the oracle rather than a list of our own, because
+--- modules/Row.lua ALREADY looks a row up in that same table to color its bar
+--- and pick its class icon. A source that fails this test would draw as an
+--- uncolored, iconless row — so the gate admits precisely the set that can be
+--- rendered honestly and refuses the rest. One table, one answer, and a client
+--- that gains a class gains it in both places at once.
+---
 --- @return table|nil row, boolean isOwn
 local function unownedAllyRow(pass, src, index, isSortColumn, guid)
-    -- EXPLICITLY Ally, not merely "not Enemy". The difference matters on a
-    -- source whose displayType is absent or None: read as "not an enemy" it
-    -- becomes a row, and the failure mode is the whole trash pack appearing on
-    -- the grid. Read as "not an ally" it stays dropped, and the failure mode is
-    -- this fix doing nothing — visible, and far cheaper to diagnose.
     local kind = src.sourceDisplayType
     if kind == nil or Secrets.IsSecret(kind) then return dropSource(pass, src, guid) end
-    if kind ~= Const.SOURCE_DISPLAY_TYPE.Ally then return dropSource(pass, src, guid) end
+    if kind ~= Const.SOURCE_DISPLAY_TYPE.Ally and not companionClass(src) then
+        return dropSource(pass, src, guid)
+    end
     -- Keyed on its own GUID, so it needs to BE a legal key. Mid-pull it is not,
     -- and identity mode is running instead anyway.
     if not Secrets.IsSafeKey(guid) then return dropSource(pass, src, guid) end
@@ -1005,7 +1072,8 @@ local function buildByIdentity(pass)
     if State.debug then
         local collided = 0
         for _ in pairs(collisions) do collided = collided + 1 end
-        NS.Debug("Aggregator", "identity rows=%d keys=%d collisions=%d filled=%d/%d",
+        NS.DebugSteady(pass.windowId, "Aggregator",
+            "identity rows=%d keys=%d collisions=%d filled=%d/%d",
             #pass.rows, pass.corrKeys, collided, pass.corrFilled, pass.corrPossible)
     end
 end
@@ -1146,9 +1214,14 @@ end
 
 --- ONE line per pass, arguments only — the format string is never built at the
 --- call site and nothing here concatenates (debug-logging-§3).
+---
+--- Through DebugSteady rather than Debug, because a pass on a 0.25s timer reports
+--- the same eight fields four times a second and evicts the buffer with them. A
+--- CHANGE still emits on the pass it happens; see core/DebugLogSetup.lua.
 local function logPass(pass, keptCount)
     if not State.debug then return end
-    NS.Debug("Aggregator", "window=%s cols=%d rows=%d dropped=%d unfolded=%d sort=%s/%s reason=%s",
+    NS.DebugSteady(pass.windowId, "Aggregator",
+        "window=%s cols=%d rows=%d dropped=%d unfolded=%d sort=%s/%s reason=%s",
         tostring(pass.windowId), #pass.keys, keptCount, pass.dropped, pass.unfolded,
         pass.mode, pass.applied, pass.reason or "ok")
 end

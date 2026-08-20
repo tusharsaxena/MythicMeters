@@ -938,6 +938,79 @@ test("An ENEMY nobody owns is still refused", function()
     assertEqual(result[1].guid, ALPHA)
 end)
 
+test("A DELVE COMPANION, filed under None with a real class, gets a row", function()
+    -- THE BUG THIS EXISTS FOR, measured on a live client. Valeera Sanguinar
+    -- fought a nine-and-a-half minute delve, did 24.98M of the run's 61.31M, and
+    -- never reached the grid — while the header total counted her, because a
+    -- session total is the client's own sum and never consults the row gate. The
+    -- drop log named it exactly:
+    --
+    --     display=0 class=ROGUE/false member=false owner=nil lookup=resolved
+    --
+    -- `None`, not `Ally`. The gate was written on the belief that anything of
+    -- ours carries the Ally flag, and a delve companion does not.
+    -- red under: `kind ~= Ally` as the only admission test.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 100),
+        src("Creature-0-3748-2933-99554-248567-0000075FD2", 80,
+            { name = "Valeera Sanguinar", class = "ROGUE",
+              displayType = inst.mocks.Enum.DamageMeterSourceDisplayType.None }),
+    }, { maxAmount = 100, totalAmount = 180 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 2, "the delve companion was dropped")
+
+    local companion
+    for _, row in ipairs(result) do
+        if row.name == "Valeera Sanguinar" then companion = row end
+    end
+    assertTrue(companion ~= nil, "no row carries the companion's own name")
+    assertEqual(companion.values.DamageDone.total, 80, "the row lost its own figures")
+    assertEqual(companion.classFilename, "ROGUE", "the class the admission turned on is gone")
+    assertEqual(companion.ownerGuid, nil, "an owner was invented for a source that has none")
+end)
+
+test("A None source with a class the CLIENT does not know is still refused", function()
+    -- The narrowness is the whole safety argument. Admitting `None` outright
+    -- would put a trash pack on the grid the moment one mob is flagged that way;
+    -- admitting it only with a class RAID_CLASS_COLORS recognizes means a mob
+    -- would have to carry a genuine class filename to slip through.
+    --
+    -- That table is the oracle rather than a list of our own because
+    -- modules/Row.lua already looks a row up in it to color the bar and pick the
+    -- class icon — so anything this refuses is something that could only draw as
+    -- an uncolored, iconless row anyway.
+    -- red under: admitting any non-nil classFilename.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 100),
+        src("Creature-0-1234", 90, { name = "Cave Lurker", class = "BEAST",
+            displayType = inst.mocks.Enum.DamageMeterSourceDisplayType.None }),
+    }, { maxAmount = 100, totalAmount = 190 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 1, "a mob with an unrecognized class reached the grid")
+    assertEqual(result[1].guid, ALPHA)
+end)
+
+test("An ENEMY with a real player class is refused, class or no class", function()
+    -- The class test WIDENS the None branch and must not widen the Enemy one. A
+    -- humanoid mob carrying a genuine class filename is exactly the case that
+    -- would make an over-eager reading of this change dangerous.
+    -- red under: testing the class before the display type.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 100),
+        src("Creature-0-5678", 90, { name = "Rogue Trainer", class = "ROGUE",
+            displayType = inst.mocks.Enum.DamageMeterSourceDisplayType.Enemy }),
+    }, { maxAmount = 100, totalAmount = 190 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow())
+    assertEqual(#result, 1, "an enemy was promoted to a grid row on the strength of its class")
+    assertEqual(result[1].guid, ALPHA)
+end)
+
 test("A source with NO display type is refused, not assumed friendly", function()
     -- The gate asks for Ally explicitly rather than for "not Enemy". Read as
     -- "not an enemy", a source with an absent or None display type becomes a

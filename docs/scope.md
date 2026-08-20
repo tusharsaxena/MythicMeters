@@ -145,8 +145,10 @@ else: guardians, totems, temporary summons, a second pet, or a pet whose owner i
 range at build time. An unattributable ally — a guardian, a totem, a second pet — is shown as **its own row under its own
 name** rather than dropped or folded into a guessed owner. A row that names itself is not the failure
 the drop rule was written for: that rule is about one player's numbers appearing under another
-player's *name*, and this row makes no claim about an owner. Enemies are still refused, on an
-explicit `sourceDisplayType == Ally` test.
+player's *name*, and this row makes no claim about an owner. Enemies are still refused on
+`sourceDisplayType`, which is never read as "anything that is not an enemy". A **delve companion** is
+admitted alongside the explicit allies: the client files one under `None`, so a `None` source is kept
+when its `classFilename` is a class `RAID_CLASS_COLORS` recognizes, and dropped otherwise.
 
 **Percentage text slots go quiet in combat.** A percentage is a division. `modules/Aggregator.lua`
 computes it once per cell when the operands are accessible and answers `nil` when they are not —

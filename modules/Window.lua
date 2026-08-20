@@ -1502,8 +1502,11 @@ function WindowProto:Render(entries, preview, isDrill, drillTitle)
     -- forty allocations a quarter second on a raid, all of them discarded by a
     -- disabled sink (debug-logging-§4).
     if NS.State and NS.State.debug then
-        NS.Debug("Render", "window %d drew %d/%d rows%s", self.id, drawn, #entries,
-            preview and " (preview)" or "")
+        -- Keyed on the window id: two windows sharing the `Render` tag would
+        -- otherwise alternate and defeat each other's comparison, so neither
+        -- would ever be suppressed and the fix would silently do nothing.
+        NS.DebugSteady(self.id, "Render", "window %d drew %d/%d rows%s",
+            self.id, drawn, #entries, preview and " (preview)" or "")
     end
 
     if t0 then Perf.Note("render", debugprofilestop() - t0) end

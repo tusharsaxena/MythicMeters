@@ -413,9 +413,14 @@ elemental and a shaman's elementals are also good, and are the cases the unit-fr
 - **An unowned ally has its own row, under its own name.** A guardian, a totem or a pet whose owner
   the unit API never saw is shown rather than dropped — it names itself, so nothing is being
   attributed to the wrong player.
-- **No ENEMY ever gets a row.** This is the half that can go badly wrong: the gate is an explicit
-  `sourceDisplayType == Ally` test, and read loosely it would put the whole trash pack on the grid.
-  If a mob's name appears as a row, stop and report it.
+- **A delve companion has a row.** Run a delve and check the grid afterwards: Valeera (or whichever
+  companion came along) must appear with her own name, class color and figures. She is filed under
+  `None` rather than `Ally`, and is admitted on her class filename. Cross-check the total against
+  another meter — the row's figure plus yours should equal the header total.
+- **No ENEMY ever gets a row.** This is the half that can go badly wrong: `None` is admitted when the
+  source carries a real player class, so a mob flagged `None` with a class filename is the one thing
+  that could put trash on the grid. If a mob's name appears as a row, stop and report it — and run
+  `/mm debug diag`, whose targets section prints the enemy column's display types for exactly this.
 - **Out of combat, pet damage folds into the owner.** Compare the hunter's Damage figure against
   Blizzard's own meter, which also attributes pet damage to the owner. They should agree.
 - **In combat the owner's number is low by whatever the pet contributed**, and that is correct
