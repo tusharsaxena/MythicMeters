@@ -216,3 +216,61 @@ test("Diagnostics: a font the layout reverted is named as such", function()
     assertTrue(text:find("the layout reverted it") ~= nil,
         "a reverted font was not reported as a revert")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The targets cross-reference verdict
+-- ---------------------------------------------------------------------------
+
+test("Diagnostics: a walk that never reached a spell does not blame the build", function()
+    -- THE BUG THIS EXISTS FOR, and it is a diagnostic telling a lie rather than
+    -- a display drawing one. In a pull an enemy's GUID and its creature ID are
+    -- both secret, so `GetSourceDetail` is never called, so no spell is ever
+    -- seen — and the verdict read that silence as "this build does not carry the
+    -- caster". The same client answered with the caster name immediately once
+    -- combat ended. A report that confidently names the wrong cause sends the
+    -- fix to the wrong place, which is the one thing this file must not do.
+    -- red under: `if withDetails == 0 then` as the only branch.
+    local inst = T.load{ enable = true }
+    local mocks = inst.mocks
+
+    -- One enemy in the column, reachable by neither identifier — which is every
+    -- enemy for the whole of a pull.
+    mocks.setSession(1, mocks.Enum.DamageMeterType.EnemyDamageTaken, {
+        combatSources = { {
+            sourceGUID       = mocks.secret("Creature-0-0000-0-0-0001"),
+            guid             = mocks.secret("Creature-0-0000-0-0-0001"),
+            sourceCreatureID = mocks.secret(6001),
+            creatureID       = mocks.secret(6001),
+            name             = mocks.secret("Cleave Training Dummy"),
+            totalAmount      = 1,
+            sourceDisplayType = mocks.Enum.DamageMeterSourceDisplayType.Enemy,
+        } },
+        maxAmount = 1, totalAmount = 1, durationSeconds = 60,
+    })
+    inst.NS.Database.GetWindows()[1].data.sessionType = 1
+    mocks.setRestricted(true)
+
+    local text = report(inst)
+    assertTrue(text:find("enemy column: 1 sources", 1, true) ~= nil,
+        "the fixture never reached the targets section")
+    assertFalse(text:find("this build does not", 1, true) ~= nil,
+        "the report blamed the client for a field the restriction merely hid")
+    assertTrue(text:find("re%-run out of combat") ~= nil,
+        "and it must say what to do instead of stopping at the accusation")
+end)
+
+test("Diagnostics: the number probes expect what the SHIPPING ladder renders", function()
+    -- These wants were written against a three-significant-figure ladder that
+    -- modules/Format.lua has since retired on purpose, and they outlived it — so
+    -- a live report flagged three correct figures as wrong. A column of
+    -- expectations nobody maintains is worse than no column, because it trains
+    -- the reader to ignore the marks that matter.
+    -- red under: want = "4.75K" / "475.0K" / "1.41M".
+    local inst = T.load{ enable = true }
+    local text = report(inst)
+
+    local section = text:match("%-%- number formatting %-%-(.-)\n[^\n]*%-%- visibility")
+    assertTrue(section ~= nil, "the number formatting section is missing")
+    assertFalse(section:find("<%-%- expected") ~= nil,
+        "the shipping ladder's own output is flagged as unexpected:\n" .. section)
+end)

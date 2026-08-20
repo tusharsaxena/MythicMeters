@@ -57,13 +57,27 @@ local ATLAS_PROBES = {
 -- Values chosen so each one lands on a different rung of the breakpoint ladder in
 -- modules/Format.lua. What they SHOULD render as is printed beside what they DO,
 -- so a mismatch is visible without anybody having to remember the ladder.
+-- WHAT THE CURRENT LADDER RENDERS, not what an earlier one did.
+--
+-- These wants were written against the three-significant-figure ladder that
+-- modules/Format.lua has since retired on purpose — two rungs per suffix made a
+-- column change shape partway down itself ("4.75K" above "10.2K"), so the ladder
+-- is now ONE DECIMAL AT EVERY MAGNITUDE and 1410000 is meant to read "1.4M".
+-- The stale wants outlived it, and a live report duly flagged three correct
+-- figures as wrong — a diagnostic accusing the code of matching its own design.
+--
+-- 475000 is the one that looks off and is not: the ladder asks for a decimal, the
+-- live client trims a trailing ".0" and renders "475K", and the offline formatter
+-- keeps it. Neither is a ladder failure, so the comparison below normalizes that
+-- one difference away rather than reporting a mark a reader can do nothing with.
+-- Anything that changes BREAKPOINTS changes this table with it.
 local NUMBER_PROBES = {
-    { value = 470.66666666667, want = "470"    },
-    { value = 4750,            want = "4.75K"  },
-    { value = 47500,           want = "47.5K"  },
+    { value = 470.66666666667, want = "470"   },
+    { value = 4750,            want = "4.7K"  },
+    { value = 47500,           want = "47.5K" },
     { value = 475000,          want = "475.0K" },
-    { value = 1410000,         want = "1.41M"  },
-    { value = 12400000,        want = "12.4M"  },
+    { value = 1410000,         want = "1.4M"  },
+    { value = 12400000,        want = "12.4M" },
 }
 
 --- Where this run's report goes. Set by Report(), cleared when it finishes.
@@ -86,6 +100,33 @@ local function out(line)
     if NS.Print then NS.Print(line) else print(line) end
 end
 
+local SECRET = "<secret>"
+
+--- Whether a value can be put in a line at all.
+---
+--- Defers to the namespace's own concat probe where it exists (core/CoreSetup.lua)
+--- so this file inherits one definition of "safe to print" rather than growing a
+--- second. Rule R2 is intact: nothing here asks what the value IS.
+---
+--- @param v any
+--- @return boolean
+local function safe(v)
+    local probeFn = NS.IsConcatSafe
+    if probeFn then return probeFn(v) end
+    return (pcall(table.concat, { v }))
+end
+
+--- A value rendered for a diagnostic line, or the sentinel when it may not be.
+---
+--- @param v any
+--- @return string
+local function shown(v)
+    if v == nil then return "nil" end
+    if type(v) == "boolean" then return tostring(v) end
+    if not safe(v) then return SECRET end
+    return tostring(v)
+end
+
 --- `pcall` a getter and describe the outcome rather than returning it.
 ---
 --- A refusal is the interesting answer: geometry read off a frame that has held a
@@ -95,6 +136,14 @@ local function probe(fn, ...)
     local ok, value = pcall(fn, ...)
     if not ok then return "<refused>" end
     if value == nil then return "nil" end
+    -- A SECRET RESULT IS DESCRIBED, NEVER FORMATTED. string.format does not
+    -- raise on one, it propagates — the whole formatted line comes back secret,
+    -- and the console renders the ENTIRE row as `<secret>`. That is how the
+    -- three most informative lines in this report (the header's session line,
+    -- the sort column's cell, the first enemy) came back carrying nothing at all
+    -- in a pull, which is the one moment the report exists for. One field goes
+    -- dark now, and the plain fields beside it survive.
+    if not safe(value) then return SECRET end
     if type(value) == "number" then return string.format("%.1f", value) end
     return tostring(value)
 end
@@ -135,9 +184,18 @@ local function reportFormatter()
     end
 
     -- Through the addon's own path, so what is printed is what a cell would draw.
+    -- "475.0K" and "475K" are the same ladder rendered by two formatters that
+    -- disagree about a trailing zero — the live client drops it, the offline one
+    -- keeps it. Only the digits that carry magnitude are compared, so a mark in
+    -- this column always means something the reader can act on.
+    local function trimmed(text)
+        return (text:gsub("%.0(%a*)$", "%1"))
+    end
+
     for _, p in ipairs(NUMBER_PROBES) do
         local got = tostring(F.Number(p.value))
-        local mark = (got == p.want) and "" or "   <-- expected " .. p.want
+        local mark = (trimmed(got) == trimmed(p.want)) and ""
+            or "   <-- expected " .. p.want
         out(string.format("  %-16s -> %-10s%s", tostring(p.value), got, mark))
     end
 end
@@ -171,7 +229,7 @@ local function reportCells()
                 probe(cell.frame.GetValue, cell.frame),
                 tostring(mn), tostring(mx),
                 probe(cell.frame.HasSecretValues, cell.frame),
-                tostring(cell.left:GetText())))
+                shown(cell.left:GetText())))
         end
     end
 end
@@ -191,7 +249,7 @@ local function reportNameColumn()
     if row and row.nameCell then
         out(string.format("  text inset=%s  text=%q",
             probe(row.nameCell.left.GetLeft, row.nameCell.left),
-            tostring(row.nameCell.left:GetText())))
+            shown(row.nameCell.left:GetText())))
     end
 end
 
@@ -237,8 +295,11 @@ local function reportHeader()
     out(string.format("  showSessionName=%s showDuration=%s showTotals=%s align=%s",
         tostring(header.showSessionName), tostring(header.showDuration),
         tostring(header.showTotals), tostring(header.align)))
-    out(string.format("  title=%q", tostring(inst.frame.title:GetText())))
-    out(string.format("  session line=%q", tostring(inst.sessionText:GetText())))
+    out(string.format("  title=%q", shown(inst.frame.title:GetText())))
+    -- The session line carries the header TOTALS, which are secret for the
+    -- whole of a pull. Printed through `shown` the line still says so; printed
+    -- through tostring it took the title above it down with it.
+    out(string.format("  session line=%q", shown(inst.sessionText:GetText())))
 
     for label, button in pairs({ gear = inst.configButton, lock = inst.lockButton }) do
         if button then
@@ -392,11 +453,17 @@ local function reportTargets()
 
     local Secrets = NS.Secrets
     local withDetail, withSpells, withDetails, sampleNames = 0, 0, 0, {}
+    -- How many enemies could be ASKED about at all. Without this the walk's
+    -- first failure and its last were reported as the same thing.
+    local identified = 0
 
     for i = 1, math.min(#column.sources, 8) do
         local enemy = column.sources[i]
         local guid = enemy.guid
-        local safe = Secrets and Secrets.IsSafeKey(guid)
+        -- Named for what it answers, and not `safe`: this file now has a
+        -- module-level `safe` for "printable", and a local shadowing it made two
+        -- different questions share one word.
+        local plainGUID = Secrets and Secrets.IsSafeKey(guid)
         -- The creature ID gets the same gate as the GUID. It is plain out of
         -- combat and SECRET in a pull, and forwarding a secret one is what
         -- raised `bad argument #4` here and, more seriously, on the tooltip's
@@ -404,13 +471,14 @@ local function reportTargets()
         local creatureID = enemy.creatureID
         local safeID = Secrets and Secrets.IsSafeKey(creatureID)
         out(string.format("  [%d] name=%s guid=%s creatureID=%s",
-            i, tostring(enemy.name), safe and "plain" or "secret/absent",
+            i, shown(enemy.name), plainGUID and "plain" or "secret/absent",
             safeID and tostring(creatureID) or "secret/absent"))
 
-        local source = (safe or safeID)
+        local source = (plainGUID or safeID)
             and P:GetSourceDetail(sessionType, "EnemyDamageTaken",
-                safe and guid or nil, safeID and creatureID or nil, sessionID)
+                plainGUID and guid or nil, safeID and creatureID or nil, sessionID)
             or nil
+        if plainGUID or safeID then identified = identified + 1 end
         if type(source) ~= "table" then
             out("        detail: nil")
         else
@@ -437,7 +505,22 @@ local function reportTargets()
     out(string.format("  enemies with a detail: %d · with spells: %d · spells carrying combatSpellDetails: %d",
         withDetail, withSpells, withDetails))
 
-    if withDetails == 0 then
+    -- WHERE THE WALK DIED DECIDES WHAT THIS MEANS, and conflating the two
+    -- readings is how a live report came back accusing the client of a missing
+    -- field it in fact carries. In a pull BOTH identifiers on every enemy are
+    -- secret, so `GetSourceDetail` is never called, so no spell is ever seen —
+    -- and the old verdict read that silence as "this build does not carry the
+    -- caster". The same client, out of combat, hands over the caster name
+    -- immediately. Only a walk that actually REACHED spells can say anything
+    -- about the field.
+    if identified == 0 then
+        out("  |cffffd100no enemy had a readable GUID or creature ID|r — both are")
+        out("  secret for the whole of a pull, so the walk stops before it reaches")
+        out("  a spell. This says nothing about the build; re-run out of combat.")
+    elseif withDetail == 0 then
+        out("  |cffff2020every source detail came back nil|r — the identifiers were")
+        out("  readable but resolved to nothing.")
+    elseif withDetails == 0 then
         out("  |cffff2020no combatSpellDetails on any spell|r — this build does not")
         out("  carry the caster, and the cross-reference cannot work at all.")
     end
