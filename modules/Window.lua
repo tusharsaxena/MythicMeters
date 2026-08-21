@@ -585,12 +585,6 @@ function WindowProto:BuildFrame()
         self.body:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     end
     self.body:EnableMouse(false)
-    -- CLICKS ONLY, never motion. The body's mouse goes on while a breakdown is
-    -- open (see Render) purely so a right-click on empty space can leave one, and
-    -- a mouse-enabled frame that consumes motion is precisely what the comment on
-    -- `frame` above records as having "stole every hover from the cells". Passing
-    -- motion straight through means the body cannot repeat it.
-    if self.body.SetPropagateMouseMotion then self.body:SetPropagateMouseMotion(true) end
     self.body:SetScript("OnMouseWheel", function(_, delta)
         -- Up scrolls toward the top, which is `delta > 0` and a SMALLER offset.
         self:ScrollBy(delta > 0 and -1 or 1)
@@ -1148,7 +1142,7 @@ function WindowProto:ApplyLock()
     if self.grip then self.grip:SetShown(not locked) end
 
     for _, row in ipairs(self.pool.all) do
-        row:EnableCellMouse(true)
+        row:EnableCellMouse()
     end
 
     -- Written as a branch, not as `locked and nil or "LeftButton"`: that
@@ -1179,7 +1173,7 @@ function WindowProto:Acquire()
         for _ = 1, Const.POOL_GROW_STEP do
             local fresh = NS.Row.New(self)
             fresh:ApplyLayout(self.layout)
-            fresh:EnableCellMouse(true)
+            fresh:EnableCellMouse()
             pool.all[#pool.all + 1] = fresh
             pool.free[#pool.free + 1] = fresh
         end

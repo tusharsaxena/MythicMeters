@@ -383,6 +383,10 @@ local function rowOnEnter(frame)
     local row = frame.mmRow
     local entry = row and row.entry
     if not (entry and entry.isDrillDown) then return end
+    -- The HIGHLIGHT as well as the tooltip. It is driven from the cells on the
+    -- grid, and the cells have no mouse here (see ApplyMouse), so a breakdown row
+    -- would light up nowhere if the row did not do it itself.
+    row:SetMouseOver(true)
     local T = NS.Tooltip
     -- The probe that would have caught this handler never running at all: the
     -- cells above it consumed the motion, and from the outside "no tooltip" and
@@ -398,6 +402,7 @@ local function rowOnLeave(frame)
     local row = frame.mmRow
     local entry = row and row.entry
     if not (entry and entry.isDrillDown) then return end
+    row:SetMouseOver(false)
     local T = NS.Tooltip
     if T and T.Hide then T:Hide() end
 end
@@ -503,16 +508,6 @@ local function newCell(row, key)
     -- Both buttons, or the OnMouseUp above never sees a right-click at all.
     if bar.RegisterForClicks then bar:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     bar:EnableMouse(false)
-    -- LET MOTION THROUGH TO THE ROW UNDERNEATH. A cell is a child of the row
-    -- frame and therefore sits ON TOP of it, and a mouse-enabled frame consumes
-    -- motion by default — so the row's OnEnter fired only in the seams between
-    -- cells and in the margin past the last column. That is what left the
-    -- breakdown's spell tooltip, which the ROW owns (see rowOnEnter), never
-    -- showing for a cursor that lands on a cell, which is nearly every cursor.
-    --
-    -- Motion only. Clicks stay the cell's, so cellOnMouseUp keeps its drill-down
-    -- and its right-click-to-leave exactly as they were.
-    if bar.SetPropagateMouseMotion then bar:SetPropagateMouseMotion(true) end
 
     return cell
 end
@@ -1273,33 +1268,58 @@ function RowProto:Update(entry, index)
         cell:SetValue(entry)
     end
 
+    -- After the entry is set, because who takes the mouse depends on what kind
+    -- of row this now is.
+    self:ApplyMouse()
+
     self.frame:Show()
 
     if t0 then Perf.Note("renderRow", debugprofilestop() - t0) end
 end
 
---- Toggle the mouseover overlay. Driven from the CELLS rather than from the row
---- frame: while a window is locked the cells own the mouse (so tooltips work)
---- and the row frame never sees an OnEnter of its own.
+--- Toggle the mouseover overlay. Driven from the CELLS on the grid, and from the
+--- ROW in a breakdown, because that is where the mouse is in each case — see
+--- ApplyMouse.
 function RowProto:SetMouseOver(on)
     local rows = self.window.config.rows or {}
     self.mouseHighlight:SetShown((on and rows.mouseoverHighlight) and true or false)
 end
 
---- Whether the cells claim the mouse. Locked windows hand it to the cells so
---- tooltips and drill-down work; an unlocked window keeps it on the frame so the
---- whole window drags as one object.
-function RowProto:EnableCellMouse(enabled)
-    enabled = enabled and true or false
-    -- The ROW takes it on the same condition as the cells. An unlocked window
-    -- hands the mouse back to the frame so the whole thing drags as one object,
-    -- and a row still eating clicks there would be the drag bug this rule exists
-    -- to prevent.
-    self.frame:EnableMouse(enabled)
-    self.nameCell.frame:EnableMouse(enabled)
+--- Hand the mouse to whichever frame is supposed to have it.
+---
+--- ON THE GRID it is the CELLS. Each column asks a different question, so each
+--- cell owns its own tooltip and its own click into a breakdown.
+---
+--- IN A BREAKDOWN it is the ROW, ALONE — and the cells give theirs up, which is
+--- the whole mechanism rather than a tidy-up. A cell is a CHILD of the row frame
+--- and therefore sits on top of it, and a mouse-enabled frame consumes mouse
+--- motion, so while the cells kept their mouse the row's OnEnter fired only in
+--- the seams between columns and in the margin past the last one — which is to
+--- say almost never, and the breakdown's spell tooltip never appeared.
+---
+--- Letting the motion through instead is not available to us: the API for it,
+--- `SetPropagateMouseMotion`, is PROTECTED, and an addon that calls it gets
+--- ADDON_ACTION_BLOCKED rather than a tooltip. Giving the mouse up is the only
+--- route, and it costs nothing, because a breakdown cell has no job left: a
+--- left-click there does nothing by design, all its cells describe ONE spell so
+--- there is no per-column question to ask, and right-click-to-leave and the
+--- mouseover highlight are both already on the row.
+---
+--- Called from Update, so it follows the entry rather than the lock.
+function RowProto:ApplyMouse()
+    local drilled = (self.entry and self.entry.isDrillDown) and true or false
+    self.frame:EnableMouse(true)
+    self.nameCell.frame:EnableMouse(not drilled)
     for _, cell in pairs(self.cells) do
-        cell.frame:EnableMouse(enabled)
+        cell.frame:EnableMouse(not drilled)
     end
+end
+
+--- Kept as the name modules/Window.lua calls on a lock change and on a freshly
+--- grown row. The lock no longer governs this — dragging moved to the title bar
+--- (see WindowProto:ApplyLock) — so the answer is ApplyMouse's either way.
+function RowProto:EnableCellMouse()
+    self:ApplyMouse()
 end
 
 --- Return the row to the pool: hidden, blank, and holding no reference to the

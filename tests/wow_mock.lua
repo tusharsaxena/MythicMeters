@@ -393,16 +393,6 @@ function FRAME.SetResizable(self, v) self.__resizable = v and true or false; ret
 function FRAME.SetClampedToScreen(self, v) self.__clamped = v and true or false; return self end
 function FRAME.EnableMouse(self, v) self.__mouseEnabled = v and true or false; return self end
 function FRAME.IsMouseEnabled(self) return self.__mouseEnabled and true or false end
---- Whether a mouse-enabled frame lets motion reach the frames beneath it.
----
---- Recorded rather than no-op'd for the same reason as RegisterForClicks: a
---- frame that owns an OnEnter under a mouse-enabled frame that did NOT propagate
---- is a handler the client will never call, and the harness would run it happily.
-function FRAME.SetPropagateMouseMotion(self, v)
-    self.__propagateMotion = v and true or false
-    return self
-end
-function FRAME.GetPropagateMouseMotion(self) return self.__propagateMotion and true or false end
 function FRAME.RegisterForDrag(self, ...) self.__dragButtons = { ... }; return self end
 function FRAME.StartMoving(self) self.__moves = (self.__moves or 0) + 1; return self end
 function FRAME.StartSizing(self, point)

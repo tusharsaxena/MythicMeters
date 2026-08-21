@@ -758,17 +758,15 @@ test("The mouseover overlay is driven from the CELLS, and honors the setting", f
     assertEqual(row.mouseHighlight:IsShown(), false)
 end)
 
-test("EnableCellMouse hands the mouse to every cell, including the name cell", function()
+test("On the grid the mouse goes to every cell, including the name cell", function()
     local _, _, row = bench()
 
-    row:EnableCellMouse(true)
+    row:EnableCellMouse()
     assertEqual(row.nameCell.frame:IsMouseEnabled(), true)
     for _, cell in pairs(row.cells) do
         assertEqual(cell.frame:IsMouseEnabled(), true)
     end
-
-    row:EnableCellMouse(false)
-    assertEqual(row.nameCell.frame:IsMouseEnabled(), false)
+    assertEqual(row.frame:IsMouseEnabled(), true, "the row wants the seams either way")
 end)
 
 test("Release blanks the row without destroying a widget", function()
@@ -874,23 +872,49 @@ test("Hovering a breakdown ROW shows the client's spell tooltip", function()
         "the row did not hand the client a spell id")
 end)
 
-test("A cell lets mouse motion through to the row underneath it", function()
+test("A breakdown row takes the mouse, and its cells give theirs up", function()
     -- WHY THE ROW TOOLTIP SHIPPED DEAD. A cell is a child of the row frame and
-    -- so sits ON TOP of it, and a mouse-enabled frame consumes motion by
-    -- default — so rowOnEnter fired only in the seams between cells and in the
-    -- margin past the last column. The harness calls `_run("OnEnter")` directly
-    -- and never hit-tests, which is exactly why every test above stayed green
-    -- while the client showed nothing.
-    -- red under: dropping the SetPropagateMouseMotion call from newCell.
+    -- so sits ON TOP of it, and a mouse-enabled frame consumes motion — so
+    -- rowOnEnter fired only in the seams between cells and in the margin past
+    -- the last column. Letting the motion through is not an option: the API for
+    -- it is protected and the client answers ADDON_ACTION_BLOCKED. So the cells
+    -- give the mouse up, which costs nothing because a breakdown cell has no job
+    -- left. The harness calls `_run("OnEnter")` directly and never hit-tests,
+    -- which is why every tooltip case here stayed green while the client showed
+    -- nothing.
+    -- red under: dropping the drill branch from RowProto:ApplyMouse.
     local _, _, row = bench()
     row:Update(spellEntry(), 1)
 
-    assertEqual(row.nameCell.frame:GetPropagateMouseMotion(), true,
-        "the name cell swallowed the motion the row needs")
+    assertEqual(row.frame:IsMouseEnabled(), true, "the row did not take the mouse")
+    assertEqual(row.nameCell.frame:IsMouseEnabled(), false,
+        "the name cell kept the mouse and shadows the row")
     for key, cell in pairs(row.cells) do
-        assertEqual(cell.frame:GetPropagateMouseMotion(), true,
-            "cell " .. key .. " swallowed the motion the row needs")
+        assertEqual(cell.frame:IsMouseEnabled(), false,
+            "cell " .. key .. " kept the mouse and shadows the row")
     end
+
+    -- And back again: a pooled row re-pointed at a player is a grid row.
+    row:Update(entry{ DamageDone = { total = 10 } }, 1)
+    assertEqual(row.nameCell.frame:IsMouseEnabled(), true,
+        "the cells never got the mouse back on the way out of a breakdown")
+end)
+
+test("Hovering a breakdown row lights its highlight, since no cell can", function()
+    -- red under: dropping SetMouseOver from rowOnEnter/rowOnLeave.
+    local _, _, row = bench()
+    row:Update(spellEntry(), 1)
+
+    -- Explicitly down first. The overlay's resting state is already hidden, so
+    -- an OnEnter that does nothing at all looks exactly like a pass otherwise —
+    -- which is how the first draft of this case went green against the bug.
+    row:SetMouseOver(false)
+    assertEqual(row.mouseHighlight:IsShown(), false, "the bench did not start dark")
+
+    row.frame:_run("OnEnter")
+    assertEqual(row.mouseHighlight:IsShown(), true)
+    row.frame:_run("OnLeave")
+    assertEqual(row.mouseHighlight:IsShown(), false)
 end)
 
 test("Crossing a cell boundary does NOT blink the breakdown tooltip", function()

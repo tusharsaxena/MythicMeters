@@ -502,11 +502,15 @@ replaced a Back button that cost a row of height and pushed the last row out thr
 the frame.
 
 The tooltip is owned by the **row frame**, not by the cells, so crossing a seam between cells cannot
-blink it — and that only works because every cell calls `SetPropagateMouseMotion(true)`. A cell is a
-child of the row and therefore sits on top of it, and a mouse-enabled frame consumes motion by
-default, so without that call `rowOnEnter` fires only in the seams and in the margin past the last
-column — which is to say, almost never. The window body propagates motion for the same reason: its
-mouse goes on while a breakdown is open purely to catch a right-click on empty space.
+blink it — and that only works because in a breakdown **the cells give the mouse up entirely**
+(`RowProto:ApplyMouse`). A cell is a child of the row and therefore sits on top of it, and a
+mouse-enabled frame consumes mouse motion, so while the cells kept theirs `rowOnEnter` fired only in
+the seams between columns and in the margin past the last one — almost never. Letting the motion
+through instead is not available to an addon: `SetPropagateMouseMotion` is **protected** and calling
+it earns `ADDON_ACTION_BLOCKED`, not a tooltip. Giving the mouse up costs nothing, because a
+breakdown cell has no job left — a left-click does nothing by design, every cell describes one spell
+so there is no per-column question, and both right-click-to-leave and the mouseover highlight are the
+row's there.
 
 Its title is the trap worth knowing about. `DrillDown.Title` builds its string with `string.format`
 from `view.name`, which is `ConditionalSecret` — and `string.format` on a secret returns a **secret

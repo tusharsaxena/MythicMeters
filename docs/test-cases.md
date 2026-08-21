@@ -593,7 +593,7 @@ badge and any count quoted in the docs must agree with it.
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
 
-### test_row.lua (61)
+### test_row.lua (62)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -640,13 +640,14 @@ badge and any count quoted in the docs must agree with it.
 - A row with no class falls back to the alternating stripe
 - The class tint can be switched off
 - The mouseover overlay is driven from the CELLS, and honors the setting
-- EnableCellMouse hands the mouse to every cell, including the name cell
+- On the grid the mouse goes to every cell, including the name cell
 - Release blanks the row without destroying a widget
 - Hovering a stat cell asks the tooltip the narrow question
 - Clicking a stat cell routes to the drill-down; the name cell does not
 - A cell with no entry does nothing under the cursor
 - Hovering a breakdown ROW shows the client's spell tooltip
-- A cell lets mouse motion through to the row underneath it
+- A breakdown row takes the mouse, and its cells give theirs up
+- Hovering a breakdown row lights its highlight, since no cell can
 - Crossing a cell boundary does NOT blink the breakdown tooltip
 - Leaving the row hides the breakdown tooltip
 - On the GRID a cell still owns its own tooltip
@@ -1045,7 +1046,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator.lua | 55 |
 | test_aggregator_sort.lua | 16 |
 | test_window.lua | 82 |
-| test_row.lua | 61 |
+| test_row.lua | 62 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 61 |
 | test_drilldown.lua | 31 |
@@ -1058,4 +1059,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **916** |
+| **Total** | **917** |
