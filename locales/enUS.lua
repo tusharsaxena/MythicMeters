@@ -530,8 +530,10 @@ L["Waiting for combat data..."] = "Waiting for combat data..."
 -- different way while the game restricts combat data — rows come from the
 -- engine's own ranking and are matched across columns by class and spec rather
 -- than by GUID — and the player is owed the reason a cell can be blank.
--- Printed when a sort is refused: ordering by value compares meter values and
--- ordering by name compares a ConditionalSecret, and both raise mid-pull.
+-- Printed for the ONE header still refused mid-pull: the Player column. Ordering
+-- by name compares a ConditionalSecret, which raises, and unlike a stat column
+-- there is no engine ranking behind it to fall back on. Picking a stat column
+-- and reversing the grid are both honoured during a pull and print nothing.
 L["Sorting is not possible while the game restricts combat data."] =
     "Sorting is not possible while the game restricts combat data."
 L["restricted"] = "restricted"

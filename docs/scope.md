@@ -163,3 +163,10 @@ statistic, descending". **Nothing in Blizzard's documentation states that.** It 
 from how the built-in meter displays, and it is isolated in `modules/Provider.lua`'s header because
 that file is the only place a correction would land — `value` and `roster` modes do not depend on it.
 If it proves false in-game, the fix is a sort inside `GetColumn` and no other file changes.
+
+It is now **measured rather than left standing**: `/mm debug diag`'s **provider order** section walks
+each column out of combat, where the amounts are plain, and reports `ranked, descending` or
+`NOT ranked` with the index where the order broke. Inside a pull it refuses with `cannot be checked`
+rather than reporting an all-clear it could not earn. Identity mode takes row *identity* from
+position, so a wrong order here is a wrong grid rather than only a wrong order — which is why the
+assumption is worth a probe instead of a comment.

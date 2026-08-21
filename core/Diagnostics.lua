@@ -461,6 +461,115 @@ local function reportEnemyDisplayTypes(column)
     end
 end
 
+-- ---------------------------------------------------------------------------
+-- The provider-order probe
+-- ---------------------------------------------------------------------------
+--
+-- modules/Provider.lua rests on ONE assumption that nothing in Blizzard's
+-- documentation supports: that `combatSources` arrives already ranked by the
+-- stat that was asked for, descending. Everything the addon draws in a pull
+-- stands on it. Identity mode takes row IDENTITY from position, so if the order
+-- is not the ranking then the mid-pull grid is wrong rather than merely
+-- misordered — and no amount of reading the source can settle it.
+--
+-- It is settleable HERE. Out of combat the amounts are plain and `<` is legal,
+-- so walking each column in the order the API returned it and asking whether the
+-- totals descend is a direct measurement of the assumption. A break disproves it
+-- outright; a clean walk is strong evidence for it, short of proof only because
+-- the API could in principle build the array differently under the restriction.
+--
+-- The probe therefore prints a DECISION rather than a dump: ranked, NOT ranked
+-- with the index where it broke, or an explicit admission that it could not run.
+
+--- Where the sources stop descending, or nil if they never do.
+---
+--- Comparability is proved for BOTH operands before `<` is reached, exactly as
+--- modules/Aggregator.lua's sort ladder does it: a comparison that discovers a
+--- secret has already raised. A single unreadable pair abandons the whole walk
+--- rather than skipping past it, because a probe that silently steps over the
+--- values it cannot see reports a clean column it never actually checked.
+---
+--- @param column table  a provider column
+--- @return number|nil breakIndex, boolean checked
+local function firstOrderBreak(column)
+    local Secrets = NS.Secrets
+    local previous = nil
+
+    for index, src in ipairs(column.sources) do
+        local total = src.totalAmount
+        if total == nil then return nil, false end
+        if previous ~= nil then
+            if not (Secrets and Secrets.CanCompare2(previous, total)) then
+                return nil, false
+            end
+            if previous < total then return index, true end
+        end
+        previous = total
+    end
+
+    return nil, true
+end
+
+--- One column's verdict, as the line it prints.
+---
+--- Split from the section below so each of them says one thing: this decides,
+--- that walks the catalog. It also keeps both under the complexity ceiling the
+--- release gate enforces, which a single nested ladder was over.
+---
+--- @return string line, boolean isBroken
+local function orderVerdict(statKey, column)
+    local count = (type(column) == "table" and #column.sources) or 0
+
+    -- One source cannot be out of order with itself, and a verdict on it would
+    -- pad the section with lines that carry nothing.
+    if count < 2 then
+        return string.format("  %-22s %d sources — nothing to check", statKey, count), false
+    end
+
+    local breakIndex, checked = firstOrderBreak(column)
+    if not checked then
+        return string.format("  %-22s %d sources — |cffffd100cannot be checked|r",
+            statKey, count), false
+    end
+    if breakIndex then
+        return string.format("  %-22s %d sources — |cffff2020NOT ranked|r, breaks at index %d",
+            statKey, count, breakIndex), true
+    end
+    return string.format("  %-22s %d sources — ranked, descending", statKey, count), false
+end
+
+--- Measure the one assumption modules/Provider.lua admits it cannot verify.
+local function reportProviderOrder()
+    out("|cff00ff00-- provider order --|r")
+
+    local P = NS.Provider
+    if not (P and P.GetColumn) then
+        out("  provider unavailable")
+        return
+    end
+
+    local windows = NS.Database and NS.Database.GetWindows and NS.Database.GetWindows()
+    local data = windows and windows[1] and windows[1].data or {}
+    local sessionType = data.sessionType or 1
+
+    local broken = false
+    for _, stat in ipairs(NS.Constants.STATS) do
+        local line, isBroken = orderVerdict(stat.key,
+            P:GetColumn(sessionType, stat.key, data.sessionID))
+        if isBroken then broken = true end
+        out(line)
+    end
+
+    if broken then
+        out("  |cffff2020the provider-order assumption is FALSE on this client|r —")
+        out("  modules/Provider.lua names the fix: a sort inside GetColumn, which is")
+        out("  legal out of combat. Paste this section into issue #14.")
+    else
+        out("  Values are secret for the whole of a pull, so a `cannot be checked`")
+        out("  line means only that: re-run this out of combat for a verdict.")
+    end
+end
+
 --- Walk the enemy column the way modules/Targets.lua does, and say where it dies.
 ---
 --- The section has five places it can silently produce nothing, and they are
@@ -611,7 +720,7 @@ function Diagnostics.Report()
     for _, section in ipairs({
         reportAtlases, reportFormatter, reportVisibility, reportHeader,
         reportNameColumn, reportCells, reportTooltipFont, reportTooltipWidth,
-        reportTargets,
+        reportTargets, reportProviderOrder,
     }) do
         local ok, err = pcall(section)
         if not ok then out("  |cffff2020section failed:|r " .. tostring(err)) end

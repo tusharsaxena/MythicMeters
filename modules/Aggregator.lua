@@ -281,14 +281,30 @@ local UNRANKED = 100000
 -- Ordering
 -- ---------------------------------------------------------------------------
 
+--- Turn an ordered array back to front, in place.
+---
+--- THE ONE REORDERING THAT IS ALWAYS LEGAL. It is a permutation: no element is
+--- compared with another, added to another, used as a table key, or measured
+--- with `#` beyond the array this file built itself. So it works on a list of
+--- rows carrying secret values at exactly the moment `orderByValue` has to
+--- refuse, which is what makes an ascending grid available mid-pull at all.
+local function reverseRows(rows)
+    local i, j = 1, #rows
+    while i < j do
+        rows[i], rows[j] = rows[j], rows[i]
+        i, j = i + 1, j - 1
+    end
+end
+
 --- Order by the position modules/Provider.lua returned for the sort column.
 ---
 --- Needs no comparison of any meter value — `providerIndex` is a plain integer
 --- this file assigned during the scan — so it is legal at any point in a pull.
 --- It is also the fallback every other mode degrades TO, which is why it is the
 --- simplest thing here.
-local function orderByProvider(rows)
+local function orderByProvider(rows, ascending)
     table.sort(rows, function(a, b) return a.providerIndex < b.providerIndex end)
+    if ascending then reverseRows(rows) end
 end
 
 --- Order by the sort column's values — or refuse.
@@ -1165,18 +1181,22 @@ local function applySortMode(pass)
 
     if mode == "name" then
         if orderByName(rows, pass.sortAscending) then return mode end
-        orderByProvider(rows)
+        orderByProvider(rows, pass.sortAscending)
         return "provider"
     end
 
+    -- THE DIRECTION SURVIVES THE FALLBACK, and it applies to `provider` mode
+    -- chosen outright as well. It used to be dropped on both counts, so a window
+    -- on `provider` mode had a header arrow that flipped over rows which never
+    -- moved — the same defect the restricted build had, one rung up the ladder.
     if mode ~= "value" then
-        orderByProvider(rows)
+        orderByProvider(rows, pass.sortAscending)
         return "provider"
     end
 
     if orderByValue(rows, pass.sortColumn, pass.sortAscending) then return mode end
 
-    orderByProvider(rows)
+    orderByProvider(rows, pass.sortAscending)
     return "provider"
 end
 
@@ -1242,6 +1262,11 @@ local function assembleResult(kept, pass)
     -- rows came from identity correlation rather than the GUID join, and
     -- `ambiguous` means at least one class+spec pair could not be told apart and
     -- had its secondary cells left empty on purpose.
+    -- WHICH ORDER ACTUALLY TOOK EFFECT, as opposed to the one the window asked
+    -- for. Mid-pull every mode degrades to `provider`, and modules/Window.lua has
+    -- no other way to tell the player that the arrow on the header is describing
+    -- a request rather than the grid under it.
+    kept.applied         = pass.applied
     kept.identityMode    = pass.identityMode
     kept.ambiguous       = pass.ambiguous
     kept.reason          = pass.reason
@@ -1280,7 +1305,14 @@ function Aggregator.Build(a, b)
         -- Engine order IS the ranking, and it is the only order available: value
         -- sorting needs comparisons, and the frozen order is keyed on GUIDs that
         -- no longer resolve. `applied` reports what actually happened.
-        orderByProvider(pass.rows)
+        --
+        -- THE DIRECTION STILL APPLIES. It used to be discarded here, which is why
+        -- clicking a header to flip the grid did nothing for the whole of a pull.
+        -- Reversing is a permutation rather than a comparison (see reverseRows),
+        -- so it is legal on secrets — and it puts the rows the sort column never
+        -- named first, which is the same answer `value` mode gives out of combat
+        -- for a missing cell.
+        orderByProvider(pass.rows, pass.sortAscending)
         pass.applied = "provider"
     else
         for _, statKey in ipairs(pass.keys) do scanColumn(pass, statKey) end

@@ -955,6 +955,17 @@ function WindowProto:ApplyColumnHeaders()
     -- so.
     local sortKey = (data.sortMode == "name") and "name" or data.sortColumn
 
+    -- MID-PULL THE ARROW FOLLOWS THE GRID, NOT THE REQUEST. Under the Combat
+    -- restriction every mode degrades to the engine's ranking of the sort COLUMN
+    -- (`aggregate.applied == "provider"`), so a `name` window drawn there was
+    -- putting the arrow on the Player header over rows ordered by damage — the
+    -- grid state stating something untrue rather than admitting a limitation.
+    -- Read off the aggregate the render pass parked here, for the same reason
+    -- RestrictedNotice does: it describes the grid on screen rather than the
+    -- restriction state at the moment the header was drawn.
+    local aggregate = self.aggregate
+    if aggregate and aggregate.identityMode then sortKey = data.sortColumn end
+
     -- EVERY HEADER IS A BUTTON, including the name column's — clicking it sorts
     -- by that column, clicking it again reverses. The widget is created once per
     -- index and re-pointed, never rebuilt, so a settings change costs no frames.
@@ -1537,13 +1548,26 @@ function WindowProto:SortByColumn(key)
     local data = self.config.data
     if not data then return false end
 
-    -- SORTING IS REFUSED WHILE THE RESTRICTION IS ACTIVE, whichever header was
-    -- clicked. Ordering by value means comparing meter values and ordering by
-    -- name means comparing a ConditionalSecret; both raise mid-pull, and the
-    -- aggregator is drawing the engine's own ranking there anyway (rule R2).
-    -- Without a message the click would simply do nothing, which reads as a
-    -- broken button rather than as a rule.
-    if NS.Secrets and NS.Secrets.IsRestricted() then
+    -- ONE HEADER IS REFUSED WHILE THE RESTRICTION IS ACTIVE, AND ONLY ONE.
+    --
+    -- This used to refuse EVERY header, which is where "sorting does nothing in
+    -- combat" came from. It was too wide by two whole operations:
+    --
+    --   * Picking a different STAT column compares nothing. modules/Aggregator.lua
+    --     builds the entire mid-pull row list out of `sortColumn`'s own
+    --     combatSources, so changing which column that is re-ranks the grid by
+    --     the engine's own ordering for the new stat.
+    --   * Reversing compares nothing either — it is a permutation of an array
+    --     this addon built, and the aggregator applies it without touching a
+    --     value (see reverseRows there).
+    --
+    -- The Player column is the genuine refusal. Ordering by name compares a
+    -- ConditionalSecret, which raises, and unlike a stat column there is no
+    -- engine ranking standing behind it — `name` mode mid-pull would draw the
+    -- damage order under an arrow pointing at the Player header. Without a
+    -- message the click would simply do nothing, which reads as a broken button
+    -- rather than as a rule.
+    if key == "name" and NS.Secrets and NS.Secrets.IsRestricted() then
         if NS.Print then
             NS.Print(L["Sorting is not possible while the game restricts combat data."])
         end

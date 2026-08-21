@@ -1052,19 +1052,34 @@ test("Clicking a header drops the frozen sort order", function()
     assertNil(inst.NS.State.Cache("Aggregator")[window.id])
 end)
 
-test("Sorting is REFUSED in combat, and says so rather than going quiet", function()
-    -- Ordering by value means comparing meter values, which raises while they are
-    -- secret. A click that silently did nothing would read as a broken button.
-    -- red under: dropping the IsRestricted guard from SortByColumn.
+test("A STAT header is honoured in combat: the column it ranks by is a choice", function()
+    -- The refusal used to cover every header, and it was too wide. Picking a
+    -- different stat mid-pull compares NOTHING: modules/Aggregator.lua builds the
+    -- whole mid-pull row list out of `sortColumn`'s own combatSources, so
+    -- changing which column that is re-ranks the grid by the engine's own
+    -- ordering for the new stat. Refusing it was the whole of "sorting does
+    -- nothing in combat" (issue #14).
+    -- red under: reinstating the blanket IsRestricted guard in SortByColumn.
     local inst, window, cfg = scene{ sortMode = "value", restricted = true }
     cfg.data.sortColumn = "DamageDone"
 
     local said = {}
     inst.NS.Print = function(msg) said[#said + 1] = msg end
 
-    assertFalse(window:SortByColumn("Interrupts"))
-    assertEqual(cfg.data.sortColumn, "DamageDone", "the order must not have moved")
-    assertEqual(#said, 1, "the player is owed the reason")
+    assertTrue(window:SortByColumn("Interrupts"))
+    assertEqual(cfg.data.sortColumn, "Interrupts", "the grid re-ranks by the new column")
+    assertEqual(#said, 0, "nothing was refused, so there is nothing to explain")
+end)
+
+test("A stat header REVERSES in combat too, because reversing compares nothing", function()
+    -- The direction reaches modules/Aggregator.lua, which applies it by turning
+    -- the engine's order back to front — a permutation, legal on secrets.
+    local _, window, cfg = scene{ sortMode = "value", restricted = true }
+    cfg.data.sortColumn    = "DamageDone"
+    cfg.data.sortAscending = false
+
+    assertTrue(window:SortByColumn("DamageDone"))
+    assertEqual(cfg.data.sortAscending, true, "the second click reverses, pull or no pull")
 end)
 
 test("The Player header sorts by PLAYER, ascending first", function()
@@ -1084,13 +1099,45 @@ test("The Player header sorts by PLAYER, ascending first", function()
     assertEqual(cfg.data.sortAscending, false, "and the second click reverses it")
 end)
 
-test("The Player header REFUSES while restricted, like every other header", function()
-    -- Ordering by name compares a ConditionalSecret, which raises mid-pull —
-    -- the same reason ordering by value is refused there. The aggregator is
-    -- drawing the engine's own ranking anyway.
-    local _, window, cfg = scene{ sortMode = "value", restricted = true }
+test("The Player header is the ONE that still refuses while restricted", function()
+    -- Ordering by name compares a ConditionalSecret, which raises mid-pull, and
+    -- unlike a stat column there is no engine ranking to fall back on: `name`
+    -- mode mid-pull would silently draw the damage order under an arrow pointing
+    -- at the Player column. Refusing with a message beats that.
+    local inst, window, cfg = scene{ sortMode = "value", restricted = true }
+    local said = {}
+    inst.NS.Print = function(msg) said[#said + 1] = msg end
+
     assertFalse(window:SortByColumn("name"))
     assertEqual(cfg.data.sortMode, "value", "the click changed nothing")
+    assertEqual(#said, 1, "the player is owed the reason")
+end)
+
+test("Mid-pull the arrow sits on the column the rows are ACTUALLY ordered by", function()
+    -- `name` mode survives into a pull when the restriction starts after the
+    -- click. The order then comes from the sort COLUMN, and leaving the arrow on
+    -- the Player header makes the grid state a lie rather than a limitation
+    -- (issue #14).
+    -- red under: `sortKey = (data.sortMode == "name") and "name" or data.sortColumn`
+    -- with no identity-mode branch.
+    local inst, window, cfg = scene{ sortMode = "value" }
+    window:SortByColumn("name")
+    cfg.data.sortColumn = "DamageDone"
+
+    inst.mocks.setRestricted(true)
+    window:Refresh()
+    window:ApplyColumnHeaders()
+
+    local byKey = {}
+    for _, button in ipairs(window.columnHeaders or {}) do byKey[button.mmKey] = button end
+    local function marked(button)
+        return button ~= nil and (button.arrow:IsShown() or button.arrowTex:IsShown())
+    end
+
+    assertFalse(marked(byKey["name"]),
+        "nothing is ordered by name mid-pull, so the Player header must not claim it is")
+    assertTrue(marked(byKey["DamageDone"]),
+        "the engine ranked these rows by Damage, and the header has to say so")
 end)
 
 test("The sort arrow moves to the Player header in name mode", function()

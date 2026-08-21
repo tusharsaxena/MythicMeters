@@ -331,6 +331,9 @@ the same source row as `totalAmount`, so one `DamageDone` read fills both halves
 sorts by — and it governs the **unrestricted** build only. While
 the Combat restriction is active the rows are the engine's own ranking of the sort column, because
 `sourceGUID` is secret and there is nothing of ours left to sort; see `docs/data-flow.md`.
+`sortColumn` and `sortAscending` **do** still reach a restricted grid — picking a stat re-ranks it to
+the engine's ordering for that stat, and the direction is applied as a reversal — so the two of them
+are live in both states while `sortMode` is not.
 
 **`sessionID` has no schema row and no default**, and both absences are deliberate. It is set by the
 header's segment dropdown rather than by the settings panel, and its "unset" state is `nil` —

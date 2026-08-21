@@ -182,7 +182,7 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
 
-### test_diagnostics.lua (18)
+### test_diagnostics.lua (21)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -202,6 +202,9 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: the enemy column's display types are printed, not assumed
 - Diagnostics: an enemy flagged None is called out, because it defeats the class gate
 - Diagnostics: a display-type check that could not run says so
+- Diagnostics: the provider-order probe reports a RANKED column as ranked
+- Diagnostics: the probe NAMES the position where the order breaks
+- Diagnostics: the probe REFUSES mid-pull rather than reporting a false all-clear
 
 ### test_defaults.lua (24)
 
@@ -489,7 +492,7 @@ badge and any count quoted in the docs must agree with it.
 - An ENEMY with a real player class is refused, class or no class
 - A source with NO display type is refused, not assumed friendly
 
-### test_aggregator_sort.lua (16)
+### test_aggregator_sort.lua (20)
 
 - value mode orders by the sort column's numbers, descending
 - value mode breaks a tie on providerIndex, so the order is deterministic
@@ -507,8 +510,12 @@ badge and any count quoted in the docs must agree with it.
 - roster mode ranks role before name within one group position
 - roster mode's NAME TIEBREAK refuses to compare two secret names
 - roster mode compares names when they are plain
+- while restricted an ASCENDING sort reverses the engine's order
+- an ascending mid-pull reverse leads with the rows the sort column never named
+- the build PUBLISHES which order actually took effect
+- `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (82)
+### test_window.lua (84)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -566,9 +573,11 @@ badge and any count quoted in the docs must agree with it.
 - The arrow flips with the direction
 - Clicking a header sorts by it; clicking again reverses
 - Clicking a header drops the frozen sort order
-- Sorting is REFUSED in combat, and says so rather than going quiet
+- A STAT header is honoured in combat: the column it ranks by is a choice
+- A stat header REVERSES in combat too, because reversing compares nothing
 - The Player header sorts by PLAYER, ascending first
-- The Player header REFUSES while restricted, like every other header
+- The Player header is the ONE that still refuses while restricted
+- Mid-pull the arrow sits on the column the rows are ACTUALLY ordered by
 - The sort arrow moves to the Player header in name mode
 - Test mode is marked in RED in the title, and clears when it is off
 - Leaving test mode does not close the window
@@ -1033,7 +1042,7 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
-| test_diagnostics.lua | 18 |
+| test_diagnostics.lua | 21 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
@@ -1044,8 +1053,8 @@ badge and any count quoted in the docs must agree with it.
 | test_provider.lua | 35 |
 | test_roster.lua | 22 |
 | test_aggregator.lua | 55 |
-| test_aggregator_sort.lua | 16 |
-| test_window.lua | 82 |
+| test_aggregator_sort.lua | 20 |
+| test_window.lua | 84 |
 | test_row.lua | 62 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 61 |
@@ -1059,4 +1068,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **917** |
+| **Total** | **926** |

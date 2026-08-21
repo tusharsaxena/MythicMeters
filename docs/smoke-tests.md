@@ -302,6 +302,15 @@ class AND spec** — that second run is the whole point of this case.
   to place a row and cannot run while they are secret.
 - Switch to **`provider`** and repeat: out of combat the order follows the game's own, which is what
   identity mode uses in combat too, so this mode looks the same on both sides of a pull.
+- **Click a stat header mid-pull.** The grid re-ranks to the engine's ordering for *that* stat, and
+  the arrow moves with it. Clicking the same header again **reverses** the grid. Neither prints
+  anything — nothing was refused.
+- **Click the Player header mid-pull.** This is the one refusal left: nothing moves, and
+  *"Sorting is not possible while the game restricts combat data."* is printed. A click that went
+  quiet would read as a broken button.
+- **With `sortMode = "name"` when a pull starts**, the arrow leaves the Player header and appears on
+  the sort column, because that is the order the rows are actually in. An arrow left on Player would
+  be the grid stating something untrue.
 
 ### 10. Tooltips, drill-down and death recap mid-pull
 
@@ -372,8 +381,26 @@ is legal, and `roster` mode orders by group position — neither cares. And **if
 false, the correction is confined to `modules/Provider.lua`**: a sort inside `GetColumn`, legal out
 of combat, which is the only time `value` mode would have needed it anyway. No other file changes.
 
+**The addon now measures it for you.** Out of combat the amounts are plain and `<` is legal, so
+`/mm debug diag` walks each column in the order the API returned it and prints a verdict per stat:
+
+```
+-- provider order --
+  DamageDone             5 sources - ranked, descending
+  HealingDone            5 sources - NOT ranked, breaks at index 3
+  Interrupts             1 sources - nothing to check
+```
+
+`NOT ranked` disproves the assumption outright and names the position where the order broke. Inside a
+pull every line reads `cannot be checked` — the values are secret and the probe refuses rather than
+finding no break it was never able to look for. **Run the probe first; the manual comparison below is
+what confirms its verdict against a second meter.**
+
 **Procedure.**
 
+0. Out of combat, after at least one pull: `/mm debug diag`, and read the **provider order** section.
+   If any stat says `NOT ranked`, paste that section into issue #14 — that is the deliverable, and
+   the steps below are then confirmation rather than discovery.
 1. In a Mythic+ dungeon or a raid, with a full group and at least one completed pull, stand **out of
    combat**.
 2. Set the window to `sortMode = "provider"` and `sortColumn = "DamageDone"`:

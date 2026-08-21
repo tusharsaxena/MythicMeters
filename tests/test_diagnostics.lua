@@ -337,3 +337,88 @@ test("Diagnostics: a display-type check that could not run says so", function()
     assertTrue(text:find("every display type is secret", 1, true) ~= nil,
         "a check that could not run passed itself off as a clean one")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The provider-order probe (issue #14)
+-- ---------------------------------------------------------------------------
+--
+-- modules/Provider.lua rests on ONE unverified assumption: that `combatSources`
+-- arrives already ranked by the stat that was asked for, descending. The whole
+-- mid-pull grid is built on it — identity mode takes row identity from POSITION,
+-- so if the order is wrong the grid is wrong, not merely the sort. Nothing in
+-- Blizzard's documentation says it, and it has never been measured.
+--
+-- It is measurable HERE, out of combat, where the amounts are plain and `<` is
+-- legal: walk each column in the order the API returned it and ask whether the
+-- totals descend. The check cannot run mid-pull and says so rather than looking
+-- calm, exactly like the display-type belt above it.
+
+test("Diagnostics: the provider-order probe reports a RANKED column as ranked", function()
+    local inst = T.load{ enable = true }
+    -- The shipped default is Overall; the fixture seeds Current, and the probe
+    -- reads whichever session the first window is pointed at.
+    inst.NS.Database.GetWindows()[1].data.sessionType = 1
+    inst.mocks.setSession(1, "*", {
+        combatSources = {
+            { sourceGUID = "Player-1-0000000A", name = "Alpha", totalAmount = 300 },
+            { sourceGUID = "Player-1-0000000B", name = "Beta",  totalAmount = 200 },
+            { sourceGUID = "Player-1-0000000C", name = "Gamma", totalAmount = 100 },
+        },
+        maxAmount = 300, totalAmount = 600,
+    })
+
+    local text = report(inst)
+    assertTrue(text:find("provider order", 1, true) ~= nil, "the section must appear")
+    assertTrue(text:find("ranked", 1, true) ~= nil,
+        "a descending column is the assumption holding, and the probe must say so")
+end)
+
+test("Diagnostics: the probe NAMES the position where the order breaks", function()
+    -- The decision this probe exists to print. An out-of-order column disproves
+    -- the assumption outright, and the index is what turns "it is wrong" into
+    -- something the fix can be written against.
+    -- red under: reporting a bare yes/no with no index.
+    local inst = T.load{ enable = true }
+    -- The shipped default is Overall; the fixture seeds Current, and the probe
+    -- reads whichever session the first window is pointed at.
+    inst.NS.Database.GetWindows()[1].data.sessionType = 1
+    inst.mocks.setSession(1, "*", {
+        combatSources = {
+            { sourceGUID = "Player-1-0000000A", name = "Alpha", totalAmount = 100 },
+            { sourceGUID = "Player-1-0000000B", name = "Beta",  totalAmount = 900 },
+        },
+        maxAmount = 900, totalAmount = 1000,
+    })
+
+    local text = report(inst)
+    assertTrue(text:find("NOT ranked", 1, true) ~= nil,
+        "an ascending column disproves the assumption and must say so loudly")
+    assertTrue(text:find("index 2", 1, true) ~= nil, "and name where it broke")
+end)
+
+test("Diagnostics: the probe REFUSES mid-pull rather than reporting a false all-clear", function()
+    -- Comparing two secrets raises. A probe that quietly found no break while
+    -- unable to compare anything would print exactly what a healthy column
+    -- prints, which is the failure mode the display-type belt was written for.
+    -- red under: dropping the CanCompare2 gate.
+    local inst = T.load{ enable = true }
+    -- The shipped default is Overall; the fixture seeds Current, and the probe
+    -- reads whichever session the first window is pointed at.
+    inst.NS.Database.GetWindows()[1].data.sessionType = 1
+    inst.mocks.setSession(1, "*", {
+        combatSources = {
+            { sourceGUID = "Player-1-0000000A", name = "Alpha",
+              totalAmount = inst.mocks.secret(100) },
+            { sourceGUID = "Player-1-0000000B", name = "Beta",
+              totalAmount = inst.mocks.secret(900) },
+        },
+        maxAmount = 900, totalAmount = 1000,
+    })
+    inst.mocks.setSecretsAccessible(false)
+
+    local text = report(inst)
+    assertTrue(text:find("cannot be checked", 1, true) ~= nil,
+        "the probe has to admit it did not run")
+    assertTrue(text:find("NOT ranked", 1, true) == nil,
+        "and must not accuse the API on evidence it never gathered")
+end)

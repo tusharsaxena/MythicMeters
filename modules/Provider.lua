@@ -49,6 +49,13 @@
 -- combat, and out of combat is the only time `value` mode would have needed it
 -- anyway), and no other file changes. Design §5 records the same thing.
 --
+-- IT IS NOW MEASURABLE RATHER THAN ONLY ASSERTED. core/Diagnostics.lua's
+-- `provider order` section walks each column in the order returned here and
+-- reports whether the totals descend — legal out of combat, where the amounts
+-- are plain, and refused with `cannot be checked` rather than a false all-clear
+-- inside a pull. It disproves the assumption outright or leaves it standing on
+-- evidence, which is what this comment could not do on its own.
+--
 -- ---------------------------------------------------------------------------
 -- WHAT IS NOT HERE
 -- ---------------------------------------------------------------------------

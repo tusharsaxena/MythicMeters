@@ -358,6 +358,16 @@ and a fallback nobody can run is a fallback nobody has tested.
   full grid returns on the first refresh after combat.
 - **Pets are separate rows for the whole of a pull, whatever `data.mergePets` says.** Folding needs
   the owner link, the owner link needs a GUID, and there is none while restricted.
+- **Mid-pull the grid can be re-ranked and reversed, but not sorted.** Picking a different stat
+  column and flipping the direction both reach the grid during a pull — neither compares anything,
+  the first because identity mode builds its rows out of the chosen column's own `combatSources` and
+  the second because reversing is a permutation. Ordering by **name** is still refused with a
+  message: it compares a `ConditionalSecret` and has no engine ranking behind it. The sort arrow
+  follows `applied` rather than the request, so it never marks a column the rows are not in.
+- **The provider-order assumption is measured, not proven.** The engine's ranking is what identity
+  mode calls "the order", and nothing in Blizzard's documentation says `combatSources` arrives
+  ranked. `/mm debug diag`'s **provider order** section checks it out of combat, where comparison is
+  legal, and refuses inside a pull rather than reporting an all-clear it did not earn.
 - **Percentage text slots render empty in combat.** By design; the slots default to total and rate.
 - **The tooltip's Targets section is absent for the whole of a pull, not degraded.** It is the one
   place in the addon where restriction costs *information* rather than decoration, and it is
@@ -450,10 +460,10 @@ registered above.
 |---|---|---|
 | `slash-dispatch.md` | Not applicable | **15 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 5 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 3 words and `perf` delegates its whole sub-surface to the library. The [Slash commands](#slash-commands) section carries all of it in 26 lines. |
 | `message-bus.md` | Not applicable | **12 distinct messages**, all declared in one catalog (`core/Constants.lua` `MSG`) with the owning sender named beside each. Every payload is a flat table of one to two plain fields; none carries a handle, a curve object or a per-unit filter needing prose. The [Message bus](#message-bus) section carries sender, consumers and payload for all twelve in 22 lines. |
-| `compat-layer.md` | Not applicable | **`core/Compat.lua` is 316 lines and 15 shims**, each a guarded namespace check around one passthrough, with no feature decisions and no state. Nothing there inspects a meter value. The comparison point is KickCD's 490-line Compat, which ships the doc. |
+| `compat-layer.md` | Not applicable | **`core/Compat.lua` is 389 lines and 18 shims**, each a guarded namespace check around one passthrough, with no feature decisions and no state. Nothing there inspects a meter value. The comparison point is KickCD's 490-line Compat, which ships the doc. |
 | `midnight-quirks.md` (secret values) | Not applicable | The 12.0 secret-value model is this addon's **defining** constraint, not a quirk beside its main subject — so it is carried by [Taint notes](#taint-notes) (the operation lists, R1/R3, the `Combat`-not-`ChallengeMode` fact) and by [data-flow.md](data-flow.md), which is Tier 1 and mandatory here regardless. A third copy would be the one that drifts. |
 | `profiles.md` | Not applicable | `settings/Profiles.lua` is 113 lines hosting **AceDBOptions-3.0's own tree** unchanged. The addon adds no profile semantics beyond the `PROFILE_CHANGED` fan-out already tabulated above and the reset-all veto already stated under [Settings schema](#settings-schema); the persisted shape is [schema.md](schema.md)'s. |
-| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. The one surface of this addon's own is `/mm debug diag` — `core/Diagnostics.lua`, ~200 lines of print statements whose header explains itself, with no state and no options for a doc to describe. |
+| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. The one surface of this addon's own is `/mm debug diag` — `core/Diagnostics.lua`, ~740 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the provider-order probe is the newest section — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
 
 ## Documented deviations
 

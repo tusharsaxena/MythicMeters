@@ -202,6 +202,15 @@ only place a correction would land: `value` mode orders by the values themselves
 group position, and neither depends on it. If it proves false in-game the fix is a sort inside
 `GetColumn` — legal out of combat, which is the only time `value` mode would have needed it anyway.
 
+**It is now measured rather than assumed.** `/mm debug diag` carries a **provider order** section:
+out of combat the amounts are plain and `<` is legal, so the probe walks each column in the order the
+API returned it and reports `ranked, descending`, or `NOT ranked` with the index where the order
+broke. A break disproves the assumption outright. A clean walk is strong evidence for it and not
+proof, because the API could in principle build the array differently under the restriction — so the
+probe refuses with `cannot be checked` rather than reporting a false all-clear when it is run
+mid-pull. The stakes are higher than a sort: identity mode takes row **identity** from position
+(§3), so a wrong order here is a wrong grid, not only a wrong order.
+
 ## 3. The GUID join
 
 `modules/Aggregator.lua` runs the algorithm in this order:
@@ -275,6 +284,15 @@ Deferring the scoring feature rests on exactly this fact — see [scope.md](scop
 | `provider` | Follow the order the API returned `combatSources` in | Yes — iteration needs no comparison |
 | `roster` | Group position, then role rank (tank/healer/damager), then name | Yes — every input is plain |
 
+**Direction is separate from mode, and it is legal in every state.** Reversing an array is a
+*permutation*: nothing is compared, added, keyed on, or measured with `#`. So `orderByProvider` takes
+the direction and applies it with `reverseRows` — in `provider` mode chosen outright, in every
+fallback the ladder degrades through, and while the restriction is active. That is why an ascending
+grid is available mid-pull when an ascending *sort* is not, and why a `provider`-mode window's arrow
+now flips rows that actually move. The reversal puts rows the sort
+column never named first, which is the same answer `value` mode gives out of combat for a missing
+cell — an absence is a zero, and zero leads ascending.
+
 `orderByValue` checks comparability in a **separate pass before `table.sort` runs**, not inside the
 comparator. That is the whole trick of the function: a comparator that discovers an illegal
 comparison halfway through has already raised, and there is no way to unwind a partially sorted
@@ -341,6 +359,22 @@ Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
 - **Pets are rows**, not folded contributions. The fold needs the owner link, the owner link needs a
   GUID, and there is none — so a pet appears as the source Blizzard reports, with its own name and
   numbers, and nothing is summed.
+
+**What a header click can still do mid-pull.** `WindowProto:SortByColumn` used to refuse *every*
+header while restricted, which is where "sorting does nothing in combat" came from. Two of the three
+operations behind a click need no comparison at all:
+
+| Click | Mid-pull | Why |
+|---|---|---|
+| A different **stat** column | Honoured | Identity mode builds the whole row list out of `sortColumn`'s own `combatSources`, so changing which column that is re-ranks the grid by the engine's ordering for the new stat |
+| The **same** stat column again | Honoured | It only flips `sortAscending`, which the aggregator applies as a reversal |
+| The **Player** column | Refused, with a message | `name` is `ConditionalSecret` and there is no engine ranking standing behind it — `name` mode mid-pull would draw the damage order under an arrow pointing at the Player header |
+
+**And the arrow follows the grid, not the request.** `Aggregator.Build` publishes `applied` — the
+mode that actually took effect, which mid-pull is always `provider`. `ApplyColumnHeaders` reads
+`aggregate.identityMode` and puts the arrow on `data.sortColumn` regardless of mode, so a `name`
+window that runs into a pull no longer marks the Player header over rows ordered by damage. A grid
+that states something untrue is worse than one that admits a limitation.
 
 **The sort freeze is retired.** It cached each successful value-sort as a `guid → position` map and
 reapplied it for the duration of a pull, so rows would not jump — keyed, that is, on the one field

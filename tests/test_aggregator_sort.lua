@@ -437,3 +437,82 @@ test("roster mode compares names when they are plain", function()
     assertEqual(result[1].providerIndex, result[2].providerIndex)
     assertOrder(result, { BETA, ALPHA }, "\"Alfa\" before \"Zeta\"")
 end)
+
+-- ---------------------------------------------------------------------------
+-- Direction, while restricted (issue #14)
+-- ---------------------------------------------------------------------------
+
+test("while restricted an ASCENDING sort reverses the engine's order", function()
+    -- Reversing an array is a PERMUTATION, not a comparison: nothing is
+    -- compared, added, or keyed on, so it is legal on a list of secrets. The
+    -- direction was simply discarded mid-pull, which is why clicking a header to
+    -- flip the grid appeared to do nothing for the whole of a pull.
+    -- red under: `orderByProvider(pass.rows)` with no direction in Build.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100), src(BETA, 50), src(GAMMA, 10) },
+        { maxAmount = 100, totalAmount = 160 })
+
+    local window = makeWindow{ sortMode = "value" }
+    assertOrder(inst.NS.Aggregator.Build(window), { "rank_1", "rank_2", "rank_3" },
+        "descending is the engine's own order, untouched")
+
+    window.data.sortAscending = true
+    assertOrder(inst.NS.Aggregator.Build(window), { "rank_3", "rank_2", "rank_1" },
+        "ascending is that order read from the other end")
+end)
+
+test("an ascending mid-pull reverse leads with the rows the sort column never named", function()
+    -- Consistent with the unrestricted rule one section up: a missing cell counts
+    -- as ZERO, so it leads an ascending sort. Those rows sit past every ranked
+    -- one at UNRANKED + index, so a whole-array reverse puts them first — which
+    -- is the same answer `value` mode gives out of combat.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100), src(BETA, 50) },
+        { statKey = "DamageDone", maxAmount = 100, totalAmount = 150 })
+    install(inst, { src(GAMMA, 4, { class = "ROGUE" }) },
+        { statKey = "Interrupts", maxAmount = 4 })
+
+    local window = makeWindow{ sortMode = "value",
+        columns = { "DamageDone", "Interrupts" }, sortColumn = "DamageDone" }
+    window.data.sortAscending = true
+
+    local result = inst.NS.Aggregator.Build(window)
+    assertEqual(#result, 3)
+    assertEqual(result[1].guid:sub(1, 6), "ident:",
+        "the row no ranked column named is the zero, and zero leads ascending")
+end)
+
+test("the build PUBLISHES which order actually took effect", function()
+    -- `applied` was computed on the pass and thrown away. modules/Window.lua has
+    -- no other way to know that the grid in front of the player is the engine's
+    -- ranking rather than the sort they asked for, which is the difference
+    -- between a limitation and a lie.
+    -- red under: dropping `kept.applied` from assembleResult.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 100), src(BETA, 10) }, { maxAmount = 100, totalAmount = 110 })
+    assertEqual(inst.NS.Aggregator.Build(makeWindow{ sortMode = "value" }).applied, "value")
+
+    inst.mocks.setRestricted(true)
+    assertEqual(inst.NS.Aggregator.Build(makeWindow{ id = 9, sortMode = "value" }).applied,
+        "provider", "mid-pull the engine's order is what took effect, whatever was asked for")
+end)
+
+test("`provider` mode honours the direction OUT of combat too", function()
+    -- The same defect one rung up. `orderByProvider` is the fallback every mode
+    -- degrades to AND a mode a player can select outright, and it discarded
+    -- `sortAscending` in both roles — so a window on `provider` mode had a
+    -- header arrow that flipped over rows that never moved.
+    -- red under: `orderByProvider(rows)` in applySortMode.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 100), src(BETA, 50), src(GAMMA, 10) },
+        { maxAmount = 100, totalAmount = 160 })
+
+    local window = makeWindow{ sortMode = "provider" }
+    assertOrder(inst.NS.Aggregator.Build(window), { ALPHA, BETA, GAMMA }, "descending")
+
+    window.data.sortAscending = true
+    assertOrder(inst.NS.Aggregator.Build(window), { GAMMA, BETA, ALPHA },
+        "the same order read from the other end")
+end)
