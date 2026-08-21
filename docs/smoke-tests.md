@@ -61,6 +61,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 | 22 | Migration | [v1 → v2 uniform column widths](#22-v1--v2-uniform-column-widths) |
 | 23 | Tooltip styling | [Tooltip appearance, anchor and offsets](#23-tooltip-appearance-anchor-and-offsets) |
 | 24 | **Targets** | [**The Targets section, and its absence mid-pull**](#24-the-targets-section-and-its-absence-mid-pull) |
+| 25 | **Export** | [**The export modal, the CSV and the chat dump**](#25-the-export-modal-the-csv-and-the-chat-dump) |
 
 ---
 
@@ -767,6 +768,287 @@ the **correct** behavior, not the bug.
 - With the setting off, no Targets header and — check with `/mm perf` — **no `targets` bucket
   activity at all**. The section costs one provider call per enemy, and an off switch that still
   pays for the walk is a bug.
+
+### 25. The export modal, the CSV and the chat dump
+
+Two frames, two destinations and one hard refusal. Most of this is checkable at a target dummy —
+**except the last block, which needs a real pull**, because the refusal keys off the `Combat` addon
+restriction and a dummy does not activate it.
+
+Read [data-flow.md §6](data-flow.md) first if a failure looks like a formatting problem. A CSV cell
+is `tostring(value)`, and `tostring` is not on the list of operations permitted on a secret — it
+answers a *secret string* rather than raising, which then poisons the quoting logic downstream. That
+is why the whole serializer refuses in combat instead of degrading, and why "it produced a file with
+odd-looking cells mid-pull" would be a much worse outcome than "it said no".
+
+#### The glyph in the title bar
+
+**Steps.** Look at any window's title bar, right to left.
+
+**Pass.**
+- **Four buttons, in this order right to left: close · gear · lock · export.** The export button sits
+  one slot left of the padlock, at the same size and the same vertical line as the other three.
+- **What it draws is almost certainly `>`.** The three atlas names in `modules/Window.lua`
+  (`poi-scrollofresonance`, `communities-icon-chat`, `UI-HUD-MicroMenu-Questlog-Up`) are
+  **candidates and have never been confirmed on a live client** — which is exactly the mistake the
+  header-art note in that file records happening twice before. `Compat.FirstAtlas` walks them in
+  order and takes the first the client admits to; when none resolves, the ASCII fallback `>` is drawn
+  in the header font and header color. **That is the shipped appearance, not a failure.**
+- **A replacement box, an empty slot or a stretched icon is the failure.** Any of those means an
+  atlas resolved and is the wrong shape for a 14px header button.
+- **`/mm debug diag` answers this for you.** All three candidates are in its atlas probe list and the
+  export button is in its header dump, so one command reports both what the client has and what the
+  button actually drew. **A confirmed `yes` for one of them is a deliverable** — it is what lets the
+  ASCII fallback stop being what ships.
+- **Hovering it shows a tooltip** reading *Export a segment to CSV or to chat*. It is the only header
+  button with one, and deliberately: a gear and a padlock say what they are, and a bare `>` does not.
+- **Turn the title bar off** (Frame → Title bar). The export button disappears with the gear and the
+  lock — there is nothing to hang it on. Turn it back on and all three return.
+- Turn the **close button** off and confirm the remaining three slide right by one slot together. The
+  gap between gear, lock and export must stay even; a widened seam means the header's offsets were
+  turned into an accumulator.
+- **Clicking it opens the modal centered over that window** — see below.
+
+#### The modal
+
+**Steps.** Out of combat, after at least one pull, drag a window to a corner of the screen and click
+its export glyph.
+
+**Pass.**
+- The modal opens **centered on the window it was clicked from**, wherever that window has been
+  dragged to. It is anchored to the window's invisible anchor frame rather than to the visible frame
+  (rule R3), so this must hold for a window that has been showing live numbers all fight.
+- Its title bar reads **Export**, drags the modal, and carries the addon's usual close button.
+- Three selector buttons stacked top to bottom — **Metric**, **Channel**, **Lines** — each reading
+  `Label: value`, and two action buttons across the bottom: **Export to CSV** and **Print to Chat**.
+- **The modal is one frame, reused.** Open it from window 1, close it, open it from window 2: it
+  re-centers on window 2 and exports window 2's segment. A modal that exported the *first* window's
+  segment from then on is the invoker not being re-stamped.
+- **Esc closes it** (it is registered in `UISpecialFrames`), and so does the close button.
+- **Each selector opens a context menu** — the same `MenuUtil` mechanism the header's segment
+  selector uses. Metric lists **Match the window**, a divider, then all **nine** catalog stats;
+  Channel lists the **eight** entries of `Constants.EXPORT_CHANNELS` (Auto · Say · Party · Raid ·
+  Instance · Guild · Whisper · Self only); Lines offers **3 / 5 / 10 / 20 / 40**, the last being
+  `Constants.MAX_ROWS` rather than a literal.
+- **A click outside an open menu closes the menu, not the modal.** The modal sits at `DIALOG` strata,
+  below the menu's own click-catcher, which is what makes that work.
+- **Picking anything repaints the modal immediately** — the button's label changes to what you picked
+  before the menu has finished closing.
+- **On a fresh profile the Metric follows the window it was opened from.** `defaults/Profile.lua`
+  ships `export.metric = ""`, which is the choice *Match the window* rather than an absent value, and
+  `Export.ResolveMetric` answers it against the invoking window at every use. Sort a window by
+  **Healing**, export from it, and the Metric button must read **Healing**; sort another by
+  **Interrupts**, export from that one, and the same modal must now read **Interrupts**.
+- **Pinning beats the window, and is reversible.** Pick **Deaths** from the Metric menu, then export
+  from a window sorted by Healing: it must stay on Deaths, and survive a `/reload`. Re-pick **Match
+  the window** (the first entry, above the divider) and the following behavior must come back. A
+  Metric that will not go back to following is the sentinel being written over.
+
+#### The whisper name box
+
+**Steps.** Walk the Channel selector through every entry, watching the space under the Lines button.
+
+**Pass.**
+- **The name box exists only while Channel is Whisper.** Every other channel hides it outright — it
+  is hidden rather than greyed, because a disabled name box on a Raid export is a control asking to
+  be filled in for no reason.
+- Type a name and press **Enter**: it is stored, and the box loses focus.
+- Type a name and **click away without pressing Enter**: it is stored anyway (`OnEditFocusLost`).
+  This is the one that catches people — nobody expects to have to press Enter in a box directly above
+  the button they are about to click.
+- **Esc in the box clears focus** and leaves the modal open. A second Esc closes the modal.
+- Switch to another channel and back to Whisper: the name you typed is still there.
+- **Whisper with the box empty prints to your own chat frame and sends nothing.** That is deliberate
+  — a whisper with nobody to whisper to means the same thing "Print to myself" means. Confirm no
+  error and no stray `SendChatMessage` failure in the error frame.
+- A cross-realm target needs `Name-Realm`, exactly as the client's own `/w` does.
+
+#### The CSV copy window
+
+**Steps.** With a segment holding several players, click **Export to CSV**.
+
+**Pass.**
+- A second, wider window opens **above** the modal — it sits at `FULLSCREEN` strata deliberately, so
+  the modal stays visible underneath and "copy this, now try a different metric" is one trip. Its
+  title reads **Export — Ctrl+C, then Esc**, and it too centers on the meter window.
+- **There is text in it**, in the bundled JetBrains Mono, and the columns of digits line up. A
+  proportional font here means `Constants.FONT_MONO` was passed by LibSharedMedia *name* rather than
+  by path — `SetFont` does not accept the name.
+- **The whole text is pre-selected** — highlighted the moment the window appears, with the view at
+  the **top** of the file rather than at the bottom. Cursor position, show, focus and highlight
+  happen in a load-bearing order; a window that opens scrolled to the end, or with nothing
+  highlighted, means that order broke.
+- **Ctrl+C copies.** Paste into a text editor and confirm you got the whole thing, not one line.
+- **Esc closes the copy window and leaves the modal open.**
+- Open it a second time without closing the first: it re-fills rather than stacking a second frame.
+- Widen nothing and check the **first open specifically** — the EditBox falls back to a 590px width
+  when the scroll frame has not been laid out yet, so a first export whose lines wrap oddly and a
+  second that does not is that fallback doing its job (report it, but it is cosmetic).
+
+**Now check the file itself**, in a text editor or by pasting into a spreadsheet:
+
+- **The header line is exactly 26 columns**, and it is:
+  ```
+  session,duration,name,class,spec,role,damage_done,damage_done_ps,damage_done_pct,healing_done,healing_done_ps,healing_done_pct,absorbs,absorbs_pct,interrupts,interrupts_pct,dispels,dispels_pct,damage_taken,damage_taken_pct,avoidable_damage_taken,avoidable_damage_taken_pct,deaths,deaths_pct,enemy_damage_taken,enemy_damage_taken_pct
+  ```
+  Names are `snake_case`, **derived from the stat keys and never localized** — a German client must
+  produce a file a colleague on an English client can open with the same formulas. Run one export on
+  a non-English locale if you can and diff the header line against the one above: it must be
+  byte-identical.
+- **`_ps` appears twice and only twice**, on Damage and Healing — the two `isRate` stats. `_pct`
+  appears once per stat, nine times.
+- **Every stat in the catalog is present, not the window's columns.** Export from a window showing
+  only Damage and confirm the CSV still carries all nine — the export is "the data", not "what is on
+  screen".
+- **Values are raw integers.** `4821993`, never `4.8M`. A spreadsheet wants the number; the
+  abbreviation belongs to the chat dump. `_pct` is a bare two-decimal number with no `%` sign.
+- **`session` and `duration` repeat on every row** rather than sitting in a preamble, so two exports
+  pasted into one sheet still mean something and a pivot can group by fight. `session` is what the
+  window's own header says — a stored fight's name if the window is pinned to one, otherwise
+  `Current` or `Overall`.
+- **Empty cells are empty, never the string `nil`.** Most players have no row in Dispels, Interrupts
+  or Deaths, and that is the common case rather than an error.
+- **Line endings are CRLF, and the file ends with one.** Paste into a spreadsheet and confirm no
+  trailing blank row appears where a stray newline would put one.
+- **The 40-row ceiling.** In a raid of more than 40, the CSV stops at 40 data rows —
+  `Constants.MAX_ROWS`, inherited from the aggregator and documented rather than worked around.
+
+**The name test, which is the one worth doing carefully.** Run a **follower dungeon** or a **delve**
+and export afterwards, so the grid holds an NPC ally whose name has both a space and a hyphen —
+`Crenna Earth-Daughter` is the canonical one.
+
+- **The name survives intact and lands in ONE spreadsheet cell**: `Crenna Earth-Daughter`.
+- It is **unquoted**, and that is correct: `Export.CsvField` quotes only on a comma, a double quote,
+  a CR or an LF, and a hyphen and a space are none of those. A name split across two cells, or one
+  that arrives as `Crenna` alone, means either the quoting rule or the realm strip has reached the
+  serializer — the realm strip belongs to `modules/Row.lua`'s *display* path and must never run here.
+- **Group with someone from another realm** and export: their `name` field keeps `-Realm`. The CSV is
+  data interchange, so the realm-qualified form is the right answer even though the grid strips it.
+- If any name in your group contains a comma or a quote (an NPC ally can), that field **is** wrapped
+  in double quotes with embedded quotes doubled, and a spreadsheet still reads it as one cell.
+
+#### Print to Chat — Self only first
+
+**Do the Self run before any other channel.** `SELF` is the shipped default precisely so a misclick
+cannot reach a raid, and the first time anyone runs this feature is the most likely time for a
+misclick.
+
+**Steps.**
+1. Channel = **Print to myself**. Metric = **Damage**. Lines = **5**. Click **Print to Chat**.
+2. Read your own chat frame. Ask someone in the group whether they saw anything.
+3. Only once that is clean, work outward: Say · Party · Raid · Instance · Guild · Whisper · Automatic.
+
+**Pass.**
+- **Self prints to your own frame and reaches nobody.** Every line carries the cyan `[MM]` banner,
+  because Self goes through `NS.Print` and not `SendChatMessage`. **A group member seeing anything on
+  a Self export is a hard fail** and worth stopping on.
+- **The shape is a header line then ranked lines:**
+  ```
+  Mythic Meters — Damage — Current (2:14)
+  1. Kaosz 4.8M (84.2K, 31.2%)
+  2. Brewz 4.1M (71.9K, 26.6%)
+  ```
+  Numbers are **abbreviated** here, unlike the CSV — chat wants `4.8M`.
+- **The parenthetical carries only what is meaningful.** Switch Metric to **Deaths** or
+  **Interrupts** and re-send: the per-second figure disappears (they are not `isRate` stats) and the
+  lines read `1. Kaosz 3 (12.5%)`. An empty `( )` on any line is a bug.
+- **The ranking follows the metric.** Set Metric = **Healing** and confirm the list is the top
+  healers, not the top damage dealers with their healing beside them. This is the check that catches
+  the export being built with the window's sort column instead of the chosen one.
+- **The line cap holds.** Lines = 3 → four lines total (header plus three). Lines = 40 in a
+  five-player group → six lines, not forty: the cap is a ceiling, not a pad. Walk all five choices.
+- **Say** reaches only people nearby; **Party** and **Raid** reach the group; **Instance** works
+  inside a dungeon or LFR group; **Guild** reaches the guild. Each sends the same lines, **without**
+  the `[MM]` banner (that belongs to `NS.Print`).
+- **Automatic** resolves to the widest channel you are actually in, most specific first: instance
+  chat inside a dungeon or raid-finder group → Raid → Party → **Say** standing alone. Check at least
+  the solo case and the dungeon case — a solo Automatic must go to Say rather than silently nowhere.
+- **Whisper** with a name in the box reaches that character and nobody else.
+- **No line is truncated.** `SendChatMessage` cuts at 255 bytes; these are far under, but a very long
+  NPC ally name on a percent-bearing line is the closest this ever gets.
+- Send with a segment that has **no rows at all** (a fresh login, before any pull): nothing is sent
+  and nothing errors.
+
+#### What is remembered
+
+**Steps.** Set Metric = Healing, Channel = Party, Lines = 20, and a whisper name. Close the modal.
+`/reload`. Re-open it. Then open **Settings → General**.
+
+**Pass.**
+- All four choices come back exactly as you left them. They live at `export.*` in the **profile** and
+  are **addon-wide**, not per window — "I print the top five to party" is a habit rather than a
+  window's appearance.
+- **The General page shows the same four values** under an **Export** group: Default metric, Default
+  channel, Whisper target, Chat lines. The panel and the modal are two views of one preference, so
+  changing one must move the other — change Chat lines to 10 on the panel with the modal closed, then
+  re-open the modal and confirm it reads `Lines: 10`.
+- `/mm get export.channel` and `/mm set export.lines 10` work on the same rows, as they do for any
+  schema path.
+- Switch **profiles** and confirm the export choices switch with them.
+
+#### `/mm export`
+
+**Steps.**
+```
+/mm export
+/mm export Meter
+/mm export Nosuchwindow
+```
+
+**Pass.**
+- `/mm export` with no name opens the modal for **the window the settings picker is on**
+  (`State.activeWindowId`), falling back to the first window when nothing has ever selected one. With
+  two windows, select the second in the panel, pin it to a *different* segment from the first, then
+  `/mm export` and confirm the `session` column of the CSV names the second window's segment.
+- `/mm export <name>` opens it for the named window; the name keeps its case and its internal
+  spacing, exactly as `/mm toggle` does.
+- `/mm export Nosuchwindow` prints `no window named Nosuchwindow` and opens nothing.
+- The verb appears in `/mm` help **and** on the settings landing page, with the same description
+  string — both read `NS.COMMANDS` and nothing else.
+- A window that exists in the registry but has **never been drawn** is still exportable — the verb
+  hands over the config, not the live instance.
+
+#### The combat refusal — the case this section exists for
+
+**This one needs a real pull.** A target dummy will not do: dummies do not activate the `Combat`
+addon restriction, and the restriction is the entire subject.
+
+**Setup.** A Mythic+ dungeon or a raid, a real group, BugSack cleared.
+
+**Steps.**
+1. **Between packs**, click the export glyph. The modal opens normally. **Leave it open.**
+2. **Pull.** Watch the modal for the whole fight without touching it.
+3. **Mid-pull, click Export to CSV.** Then click **Print to Chat**.
+4. Finish the pull.
+5. Separately, mid-pull: click a window's **export glyph**, and run `/mm export`.
+
+**Pass.**
+- **Nothing is exported.** No copy window opens, no chat line is sent, nothing reaches the group.
+- **One line is printed, and it is the sentence itself:** *"Export is not available while the game
+  restricts combat data."* — banner and all. A click that went silently nowhere would read as a
+  broken button.
+- **The modal repaints on that click**: both action buttons grey out, and the same sentence appears
+  in red across the middle of the modal. This is the visible half of the refusal, and it is why the
+  check is repeated **inside** each click handler rather than only at open — the modal was opened out
+  of combat, when the answer was yes.
+- **The glyph does not grey and ungrey through the fight.** It is deliberately not wired to the
+  restriction: a header icon flickering four times a second is worse to look at than a modal that
+  opens and says plainly why it cannot export.
+- **The export glyph mid-pull opens nothing** and prints the same sentence. So does `/mm export`.
+- **NO LUA ERROR OF ANY KIND**, and the specific ones to watch for read like *"attempt to compare two
+  secret values"* or a `table.concat` error. One of those here means a serializer ran on secret input
+  — the whole point of the refusal is that it cannot.
+- **After the pull, both action buttons come back live on their own, with no interaction** — the
+  warning line clears at the same moment. The modal takes a private bus target when it is built and
+  repaints on `RESTRICTION_CHANGED`, so this is the case to watch: buttons that stay grey until you
+  click something mean that subscription is not landing. Confirm the export then works normally.
+  (On a degraded load with no AceEvent there is no bus target and no repaint; closing and re-opening
+  the modal is the fallback there.)
+- Repeat once with the modal **closed** through the pull and opened afterwards: it opens with both
+  buttons live, as though the pull had not happened.
+
+**Record for the report:** which of the three atlas candidates resolved (or that `>` was drawn),
+dungeon and key level, whether the error frame stayed empty, and the exact header line of one CSV.
 
 ## What to report
 

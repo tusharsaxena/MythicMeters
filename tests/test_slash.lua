@@ -221,6 +221,69 @@ test("Slash: `perf` is declared in NS.COMMANDS and routed to NS.Perf.OnCommand",
         "the handler must print what the library's run answers")
 end)
 
+-- ---------------------------------------------------------------------------
+-- export: the verb, and the two ways it refuses
+-- ---------------------------------------------------------------------------
+
+--- Replace NS.Export.Open with a spy and hand back the call log.
+---
+--- @param inst table
+--- @return table  array of the windows Open was called with
+local function spyOnExport(inst)
+    local opened = {}
+    inst.NS.Export.Open = function(a, b)
+        opened[#opened + 1] = (a == inst.NS.Export) and b or a
+    end
+    return opened
+end
+
+test("Slash: `export` opens the modal on the window the player named", function()
+    local inst = T.load()
+    assertTrue(findVerb(inst.NS.COMMANDS, "export") ~= nil,
+        "the verb table is the ONE place every command is declared")
+
+    assertTrue(inst.NS.WindowManager:Create("Cleave"))
+    local opened = spyOnExport(inst)
+
+    say(inst, "export Cleave")
+    assertEqual(#opened, 1, "one window named, one modal opened")
+    assertEqual(opened[1].name, "Cleave", "the CONFIG of the named window, not another")
+end)
+
+test("Slash: `export` with no name falls back to a window rather than to nothing", function()
+    -- `/mm export` typed on a fresh login, where nothing has ever set
+    -- activeWindowId, has to mean something: the CLI has no picker.
+    local inst = T.load()
+    local opened = spyOnExport(inst)
+
+    say(inst, "export")
+    assertEqual(#opened, 1)
+    assertTrue(opened[1] ~= nil, "a window, not nil")
+end)
+
+test("Slash: `export` names a window it cannot find rather than opening another", function()
+    local inst = T.load()
+    local opened = spyOnExport(inst)
+
+    local lines = say(inst, "export NoSuchWindow")
+    assertEqual(#opened, 0, "a typo must never export somebody else's window")
+    assertTrue(joined(lines):find("NoSuchWindow", 1, true) ~= nil,
+        "the message has to name what was typed")
+end)
+
+test("Slash: `export` refuses while the game restricts combat data", function()
+    -- red under: dropping the Available() call, which would open a modal with two
+    -- dead buttons instead of saying why.
+    local inst = T.load()
+    inst.mocks.setRestricted(true)
+    local opened = spyOnExport(inst)
+
+    local lines = say(inst, "export")
+    assertEqual(#opened, 0, "no modal opens mid-pull")
+    assertTrue(joined(lines):lower():find("restrict", 1, true) ~= nil,
+        "the refusal must say why: " .. joined(lines))
+end)
+
 test("Slash: the library did not register `perf` behind the addon's back", function()
     -- A verb registered outside NS.COMMANDS is a verb the help index, the settings
     -- landing page and the README all miss. LandingRows is generated FROM

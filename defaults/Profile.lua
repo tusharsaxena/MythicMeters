@@ -19,8 +19,13 @@
 -- `tooltip`, `visibility`, `columns` and `data` all live inside one window's
 -- config table. That is what makes multi-window and copy-settings-from cheap —
 -- a copy is a deep table copy, optionally filtered to one group — and it is why
--- the profile itself is nearly empty: an array of windows, a counter, and the
--- two genuinely addon-wide toggles.
+-- the profile itself is nearly empty: an array of windows, a counter, the two
+-- genuinely addon-wide toggles, and the export group.
+--
+-- The export group is the exception that proves the rule rather than a crack in
+-- it. It remembers how the player last exported — which statistic, to which
+-- channel, how many lines — and an export is a one-shot ACTION rather than a
+-- window's appearance, so there is no instance for it to belong to.
 --
 -- The debug flag is NOT here. It is session-only, in core/State.lua, and is
 -- never persisted (debug-logging-§5).
@@ -436,6 +441,27 @@ NS.defaults = {
         -- Minimap / DataBroker button (LibDBIcon-1.0 owns the shape of this
         -- table — `hide` is its key, not ours).
         minimap      = { hide = false },
+
+        -- What the export surface remembers between uses. ADDON-WIDE rather
+        -- than per-window, and that is the one deliberate exception to the rule
+        -- the header above states: these four describe an ACTION the player
+        -- takes, not how a window looks. "I print the top five to party" is a
+        -- habit, and making them re-state it for every window they own would be
+        -- the settings tree being tidy at the player's expense.
+        --
+        -- `channel` ships as SELF — printed to nobody but the player — because
+        -- the export surface is a glyph in a title bar and a misclick must not
+        -- be able to put someone's numbers in front of a raid.
+        export       = {
+            -- "" is a CHOICE, not an absent value: it means "whichever column the
+            -- window I was opened from is sorted by". A fixed Constants.STATS key
+            -- here pins every export to one stat instead, and the Metric menu
+            -- offers both.
+            metric    = "",
+            channel   = "SELF",        -- a Constants.EXPORT_CHANNELS key
+            whisperTo = "",            -- meaningful only while channel is WHISPER
+            lines     = 5,             -- ranked lines per chat export, 1..MAX_ROWS
+        },
     },
     global = {
         schemaVersion = 1,

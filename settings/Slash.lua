@@ -63,7 +63,7 @@ Sl.Version = addonVersion
 -- Forward declarations. See "WHY THE HANDLERS RESOLVE LATE" above — every one of
 -- these is assigned below the verb table that references it.
 local cli
-local doLock, doTest, doToggle, doWindow, doResetPositions, doDebug, doPerf
+local doLock, doTest, doToggle, doWindow, doResetPositions, doExport, doDebug, doPerf
 
 -- ---------------------------------------------------------------------
 -- The verb table
@@ -95,6 +95,8 @@ NS.COMMANDS = {
                                                                      function(a) doWindow(a) end },
     { "reset-positions", "Move every window back to the center of the screen",
                                                                      function(a) doResetPositions(a) end },
+    { "export",   "Export a window's segment \226\128\148 /mm export [window]",
+                                                                     function(a) doExport(a) end },
 }
 
 -- ---------------------------------------------------------------------
@@ -348,6 +350,79 @@ function doWindow(rest)
 
     local ok, err = handler(M, tail)
     if not ok and err then out(err) end
+end
+
+--- The window `/mm export` means when the player named none.
+---
+--- The same three-step ladder settings/Schema.lua walks for a window-relative
+--- path, and it falls back to the first window rather than to nil for the same
+--- reason: the CLI has no picker, and `/mm export` typed on a fresh login —
+--- where nothing has ever set `activeWindowId` — has to mean something rather
+--- than fail with a message about an internal pointer the player has never
+--- heard of.
+---
+--- @param M table the window registry
+--- @return table|nil config
+local function defaultWindow(M)
+    local id = NS.State and NS.State.activeWindowId
+    if id ~= nil then
+        local cfg = M.Resolve(id)
+        if cfg then return cfg end
+    end
+
+    local Database = NS.Database
+    local list = Database and Database.GetWindows and Database.GetWindows()
+    return list and list[1] or nil
+end
+
+--- `/mm export` exports the window being edited; `/mm export <name>` exports the
+--- one named. The name keeps its case and its internal spacing for the reason
+--- `/mm toggle` does — a window name is user data, and folding it would resolve
+--- something the player did not name.
+---
+--- The CONFIG is handed over rather than the live instance: a window in the
+--- registry that has never been built still points at a segment, and its numbers
+--- are as exportable as a drawn one's.
+---
+--- The restriction is asked about through `NS.Export.Available()` and nowhere
+--- else here. Whether an export may run is the export module's answer to give,
+--- and a second copy of the question in this file would be the copy that keeps
+--- saying yes after the rule changes.
+---
+--- @param rest string|nil the raw remainder of the command line
+function doExport(rest)
+    local E = NS.Export
+    if not (E and E.Open) then
+        out("export is unavailable \226\128\148 modules/Export.lua did not load.")
+        return
+    end
+
+    local ok, reason = E.Available()
+    if not ok then
+        out(reason or "export is not available right now.")
+        return
+    end
+
+    local M = wm()
+    if not (M and M.Resolve) then return end
+
+    local name = tostring(rest or ""):match("^%s*(.-)%s*$")
+    local cfg
+    if name ~= "" then
+        cfg = M.Resolve(name)
+        if not cfg then
+            out(NS.L["No window named '%s'."]:format(name))
+            return
+        end
+    else
+        cfg = defaultWindow(M)
+        if not cfg then
+            out("there is no window to export.")
+            return
+        end
+    end
+
+    E:Open(cfg)
 end
 
 -- ---------------------------------------------------------------------

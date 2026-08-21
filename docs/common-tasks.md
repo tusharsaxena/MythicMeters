@@ -135,6 +135,146 @@ rather than broken, but it means two columns read alike.
 
 ---
 
+## Export a segment
+
+Two destinations, one modal, and a hard refusal in combat.
+
+**In the client.** Click the **export glyph** in any window's title bar — the fourth button, one slot
+left of the padlock — or type `/mm export` (`/mm export <window>` for a window that is not the one
+the settings picker is on). The modal that opens offers **Metric**, **Channel** and **Lines**, plus a
+whisper-name box that appears only while the channel is Whisper, and two actions:
+
+| Action | Where it goes |
+|---|---|
+| **Export to CSV** | A copy-paste window: monospace, whole text pre-selected, Ctrl+C then Esc. There is no file I/O in WoW, so this is the only way a file can leave the client. |
+| **Print to Chat** | One metric, ranked and capped, as a header line plus N ranked lines, sent on the chosen channel. |
+
+What comes out is **the whole segment and every stat in the catalog**, not the invoking window's
+column set, sort or row cap: what is on screen is a display choice, and "export this" means the data.
+The one thing that *is* inherited is the **segment** — exporting from a window pinned to a stored
+fight exports that fight, not the live pull. The four choices are remembered addon-wide at `export.*`
+in the profile, and the General settings page edits the same four rows.
+
+**In code**, the entry points are all on `NS.Export` (`modules/Export.lua`), a plain table on `NS`
+like `NS.Slash` rather than an AceAddon module:
+
+```lua
+local result = NS.Export.Build(win, "HealingDone")        -- an Aggregator.Build result
+local csv    = NS.Export.CSV(result, NS.Export.SessionLabel(win))
+local lines  = NS.Export.ChatLines(result, "HealingDone", 5, label)
+NS.Export.Send(lines, "PARTY")
+NS.Export:Open(win)                                       -- the modal
+```
+
+Every one of them takes **either a Window instance or a bare config table** — the glyph has only the
+instance, the slash verb has only the config, and each unwraps with `(win and win.config) or win`.
+
+**Four things about that file are load-bearing.**
+
+- **It has no data path of its own.** `Export.SessionConfig` builds a *synthetic* window config —
+  every catalog stat enabled, the invoking window's segment, `rows.maxRows = Const.MAX_ROWS` — and
+  hands it to `Aggregator.Build`. Nothing here touches `Provider`, `core/Compat.lua`'s meter shims or
+  `C_DamageMeter`; an export is a **consumer** of the grid's data, never a second producer, and R1
+  allows exactly one producer.
+- **The whole thing refuses while the Combat restriction is active.** A CSV cell is
+  `tostring(value)`, and `tostring` is not on R1's permitted list — it neither raises nor launders,
+  it answers a *secret string*, which then poisons the `find`, the `gsub` and the `..` that RFC-4180
+  quoting is made of. So `Export.Available()` is asked at the top of the serializers, when the modal
+  opens, **and again inside each click handler**, because the restriction can activate while the
+  modal sits open. Underneath that, every field passes `Secrets.CanAccess` on its way in and yields
+  `""` when it fails: a race can produce a blank cell, never an error.
+- **Nothing in it sorts.** Ranking is a comparison, and the aggregator has already done it under its
+  own guards. To rank by a different stat, pass that stat as `Export.Build`'s `sortColumn` — which is
+  exactly what Print to Chat does, so "top 5 healing" is the top five healers rather than the top
+  five damage dealers with their healing beside them.
+- **Everything above the `Export modal` divider is pure and unit-tested** (`tests/test_export.lua`);
+  everything below it is UI, built lazily on the first `Open` and guarded on `CreateFrame` so the file
+  loads in a harness with no client at all. Keep new serialization above the line.
+
+**Gotchas.**
+- **The 40-row ceiling** is `Constants.MAX_ROWS`, inherited from `Aggregator.ApplyRowLimit`. A raid of
+  more than 40 exports 40 rows. Documented rather than worked around.
+- **`SELF` is the default channel and must stay so.** The trigger is a glyph in a title bar, and a
+  misclick that reaches a raid is a wipe-night apology where a misclick that prints to your own frame
+  is three lines nobody else sees.
+- The copy window is a **deliberate local copy** of the ones in `LibKa0s/DebugLog.lua` and
+  LootHistory. It is the third in the collection and a harvest candidate for `lib.MakeCopyWindow`, not
+  something to unify from inside this addon.
+- The header glyph is **not** wired to the restriction, on purpose: an icon that greys and ungreys
+  four times a second through a pull is worse than a modal that opens and says why.
+
+---
+
+## Add a CSV column
+
+Most of the time the answer is **do nothing**. The stat half of the column set is derived, so a new
+row in `Constants.STATS` brings its own CSV columns with it — see
+[Add a new statistic column](#add-a-new-statistic-column). `Export.Columns()` emits, per catalog stat
+and in catalog order:
+
+| Kind | Header | When |
+|---|---|---|
+| `total` | `damage_done` | every stat |
+| `rate` | `damage_done_ps` | `isRate` stats only — "0.42 interrupts per second" is noise, and an always-blank column is worse than an absent one |
+| `pct` | `damage_done_pct` | every stat, blank when the share cannot be computed |
+
+Header names come from `Export.HeaderName`, which lowercases and underscores the stat key
+(`AvoidableDamageTaken` → `avoidable_damage_taken`). It is a **rule rather than a table** on purpose:
+a hand-written list of nine names goes stale the first time the catalog grows a tenth stat, and it
+goes stale silently. It is also emphatically **not** `L[stat.label]` — a CSV is a data interchange,
+and a German client must produce a file a colleague on an English client can open with the same
+formulas.
+
+**A genuinely new column** — one that is not a stat — is two edits.
+
+**1. An identity column** (something the row already knows: guild, realm, item level) goes in
+`LEAD_HEADERS` and in the matching `cells` literal inside `Export.CSV`. The two are positional and
+must stay in step; add to the same index in both.
+
+```lua
+local LEAD_HEADERS = { "session", "duration", "name", "class", "spec", "role", "realm" }
+```
+
+```lua
+local cells = {
+    session_, duration,
+    Export.CsvField(row.name),
+    Export.CsvField(row.classFilename),
+    Export.CsvField(row.specIconID),
+    Export.CsvField(row.role),
+    Export.CsvField(row.realm),
+}
+```
+
+**2. A fourth *kind* of stat column** (a per-stat maximum, say) is a case in `Export.Columns`'s `add`
+loop and a matching branch in `Export.CSV`'s per-column `if`. Both are three lines, and both must be
+touched — a kind emitted by one and unknown to the other produces a header with no data under it.
+
+**Everything goes through `Export.CsvField` and nothing goes around it.** That function is the
+laundering point of the whole file: upstream of it a value may be an opaque meter handle, downstream
+of it everything is a plain Lua string, which is the *only* reason the row assembly below is allowed
+to use `table.concat` at all. Skip it for one field and that row's `concat` raises the moment
+somebody exports during a pull.
+
+**Gotchas.**
+- **Raw values, never formatted ones.** `4821993`, not `Format.Number`'s `4.8M`. A spreadsheet wants
+  the integer; the abbreviated form belongs to `Export.ChatLines`.
+- **A percentage is a bare two-decimal number, not `Format.Percent`'s string** — the `%` sign makes
+  the column unaverageable. `percentField` does that formatting, and `cell.percent` is already scaled
+  0..100 and is a plain number or nil, because the aggregator computes it only when the division
+  behind it was legal.
+- **A nil field is `""`, never `"nil"`.** `CsvField` answers the empty string for nil and for an
+  inaccessible value alike, and an absent cell is the common case rather than an error — most players
+  have no row in Dispels, Interrupts or Deaths.
+- **Do not strip the realm.** `modules/Row.lua` gates its realm strip on the GUID for display; a CSV
+  is interchange and `Name-Realm` is the more useful answer. It needs no quoting either — `CsvField`
+  quotes only on `[,"\r\n]`, so `Crenna Earth-Daughter` travels unquoted and intact.
+- **Add the case to `tests/test_export.lua`.** The pure half of that file is reachable from the
+  headless harness, so a new column is one assertion on the header line and one on a row, and the
+  suite already asserts the `_ps`/`_pct` invariants that a careless `add` breaks.
+
+---
+
 ## Add a new setting
 
 One row, one default, one locale entry. A schema row automatically gains `/mm get`, `/mm set`,

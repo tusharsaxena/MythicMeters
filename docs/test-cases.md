@@ -792,6 +792,77 @@ badge and any count quoted in the docs must agree with it.
 - Deleting a window leaves the drill-down that belonged to it
 - A bulk registry change sweeps views whose window is gone
 
+### test_export.lua (68)
+
+- Export is a plain table on NS, not an AceAddon module
+- Export.Open refuses to open at all while restricted
+- Export.Available says yes out of combat, with nothing to explain
+- Export.Available refuses while the Combat restriction is active
+- Export.Available resolves Secrets at CALL time, not at load
+- Export.HeaderName turns a catalog key into snake_case
+- Export.HeaderName covers every key in the catalog and invents no gaps
+- Export.CsvField leaves an ordinary field alone
+- Export.CsvField quotes a field carrying a comma
+- Export.CsvField doubles an embedded double quote and wraps the field
+- Export.CsvField quotes a field carrying a CR or an LF
+- Export.CsvField leaves the two names from the issue unquoted
+- Export.CsvField answers empty for nil, never the string 'nil'
+- Export.CsvField answers empty for a value it may not look at
+- Export.Columns carries _ps for exactly the rate stats and no others
+- Export.Columns carries a total and a _pct for every stat in the catalog
+- Export.Columns follows catalog order and states each fact twice
+- Export.ResolveMetric follows the window's sort column when nothing is pinned
+- Export.ResolveMetric ships following the window, not pinned to damage
+- Export.ResolveMetric lets a pinned stat beat the window
+- Export.ResolveMetric falls back to the first catalog stat
+- Export.ResolveMetric treats a stat this build does not offer as unpinned
+- Export.ResolveMetric is callable through the colon form
+- Export.SessionConfig names every catalog stat, enabled
+- Export.SessionConfig caps at the aggregator's own ceiling
+- Export.SessionConfig inherits the invoking window's segment
+- Export.SessionConfig falls back to the Current session with no window
+- Export.SessionConfig takes a Window INSTANCE as well as a bare config
+- Export.SessionConfig ranks by the requested column, then the window's
+- Export.CSV leads with the identity headers, then the derived stat columns
+- Export.CSV writes one row per entry and terminates with a CRLF
+- Export.CSV puts the session and duration on EVERY row
+- Export.CSV rounds a fractional duration to whole seconds
+- Export.CSV leaves the duration blank rather than reading a secret one
+- Export.CSV writes raw values and a two-decimal share
+- Export.CSV writes an absent cell as blank, never as a zero or a 'nil'
+- Export.CSV quotes a session name that would otherwise split the row
+- Export.CSV writes a header and nothing else for an empty result
+- Export.CSV reads the degenerate build's separate rows array
+- Export.CSV answers nothing at all for something that is not a result
+- Export.CSV refuses while the Combat restriction is active
+- Export.ChatLines heads the dump with the addon, the metric and the segment
+- Export.ChatLines omits the segment from the header when there is none
+- Export.ChatLines numbers the rows and never reorders them
+- Export.ChatLines abbreviates the amount and carries rate then share
+- Export.ChatLines drops the rate parenthetical for a counted stat
+- Export.ChatLines drops the share when the aggregator could not compute one
+- Export.ChatLines names an unreadable row rather than dropping it
+- Export.ChatLines prints five ranked lines by default
+- Export.ChatLines clamps the cap to 1..MAX_ROWS
+- Export.ChatLines falls back to the first catalog stat for an unknown key
+- Export.ChatLines answers nothing rather than raising with no formatter
+- Export.ChatLines refuses to the empty array while restricted
+- Export.ResolveChannel answers nothing for SELF, which is the default
+- Export.ResolveChannel walks AUTO's instance -> raid -> party -> say ladder
+- Export.ResolveChannel trims a whisper target and refuses an empty one
+- Export.ResolveChannel takes every other key from the catalog
+- Export.ResolveChannel treats an unknown key as its own chat type
+- Export.Send prints to the player alone for SELF
+- Export.Send hands one message per line to the client
+- Export.Send sends every line at once on a client with no C_Timer
+- Export.Send prints locally for SELF and sends nothing to any channel
+- Export.Send does nothing with nothing to send
+- Export.SessionLabel asks the window, never the provider
+- Export.SessionLabel survives a window whose label raises
+- Export.SessionLabel names what a bare config can name on its own
+- Export.Build goes through the aggregator and nowhere near the meter API
+- Export.Build answers nil when there is no aggregator to ask
+
 ### test_visibility.lua (22)
 
 - GetContext translates Blizzard's instance token to the setting's name
@@ -919,7 +990,7 @@ badge and any count quoted in the docs must agree with it.
 - ValidateSchema: counts a row whose path does not resolve
 - ValidateSchema: compares a color CHANNEL, not just the presence of a table
 
-### test_slash.lua (29)
+### test_slash.lua (33)
 
 - Slash: NS.COMMANDS entries are positional triples, not named fields
 - Slash: no verb is declared twice
@@ -936,6 +1007,10 @@ badge and any count quoted in the docs must agree with it.
 - Slash: `resetall` restores every row
 - Slash: `list` groups by the row's PAGE, the same key the panel pages use
 - Slash: `perf` is declared in NS.COMMANDS and routed to NS.Perf.OnCommand
+- Slash: `export` opens the modal on the window the player named
+- Slash: `export` with no name falls back to a window rather than to nothing
+- Slash: `export` names a window it cannot find rather than opening another
+- Slash: `export` refuses while the game restricts combat data
 - Slash: the library did not register `perf` behind the addon's back
 - Slash: `lock` sets, and a bare `lock` toggles
 - Slash: `test` sets and toggles through the registry
@@ -1059,13 +1134,14 @@ badge and any count quoted in the docs must agree with it.
 | test_targets.lua | 24 |
 | test_tooltip.lua | 61 |
 | test_drilldown.lua | 31 |
+| test_export.lua | 68 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
 | test_minimap.lua | 17 |
 | test_schema.lua | 32 |
 | test_schema_defaults.lua | 10 |
-| test_slash.lua | 29 |
+| test_slash.lua | 33 |
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **926** |
+| **Total** | **998** |

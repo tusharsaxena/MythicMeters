@@ -908,6 +908,11 @@ local function build()
         Interrupts = 5, Dispels = 6, DamageTaken = 7, AvoidableDamageTaken = 8,
         Deaths = 9, EnemyDamageTaken = 10,
     }
+    -- Which of the two groups a unit is in. `IsInGroup` takes one of these, and
+    -- the distinction is load-bearing for the export module's AUTO channel: a
+    -- premade raid standing inside a raid instance is in the HOME group, and
+    -- INSTANCE_CHAT for such a group is a silent no-op on a live client.
+    M.Enum.PartyCategory = { Home = 1, Instance = 2 }
     M.Enum.DamageMeterSessionType       = { Overall = 0, Current = 1, Expired = 2 }
     M.Enum.DamageMeterSourceDisplayType = { None = 0, Ally = 1, Enemy = 2 }
 
@@ -1319,6 +1324,9 @@ local function build()
         group.inRaid = opts.raid and true or false
         group.size   = #spec
         group.inGroup = #spec > 1
+        -- A group is a HOME group unless a test says otherwise. Queued content is
+        -- the exception, so it is the flag that has to be set rather than unset.
+        group.instanceGroup = false
 
         for i, member in ipairs(spec) do
             local guid = member.guid or string.format("Player-1-%08X", i)
@@ -1353,9 +1361,19 @@ local function build()
         return token
     end
 
+    --- Put the player INSIDE an instance. Says nothing about which group they are
+    --- in: a premade raid walking into a raid is in an instance and is not an
+    --- instance group. `setInstanceGroup` is the other half.
     function M.setInstance(instanceType)
         group.inInstance   = (instanceType ~= nil and instanceType ~= "none")
         group.instanceType = instanceType or "none"
+    end
+
+    --- Make the current group a QUEUED (instance) group — a dungeon finder party,
+    --- a raid finder raid, a battleground. This is what `IsInGroup(Instance)` and
+    --- `IsPartyLFG` answer, and the only state INSTANCE_CHAT actually reaches.
+    function M.setInstanceGroup(v)
+        group.instanceGroup = v and true or false
     end
 
     function M.setInCombat(v)
@@ -1395,7 +1413,15 @@ local function build()
     end
     M.UnitIsPlayer = function(token) return unit(token) ~= nil end
     M.UnitIsDead   = function() return false end
-    M.IsInGroup           = function() return group.inGroup end
+    -- Category-aware, like the real one. No argument means "either group", which
+    -- is what every caller that does not care asks.
+    M.IsInGroup           = function(category)
+        if category ~= nil and category == M.Enum.PartyCategory.Instance then
+            return group.instanceGroup and group.inGroup
+        end
+        return group.inGroup
+    end
+    M.IsPartyLFG          = function() return group.instanceGroup and group.inGroup end
     M.IsInRaid            = function() return group.inRaid end
     M.GetNumGroupMembers  = function() return group.size end
     M.IsInInstance        = function() return group.inInstance, group.instanceType end

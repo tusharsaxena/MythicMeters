@@ -516,6 +516,27 @@ L["Reset every window and every setting to the addon defaults? The active profil
     "Reset every window and every setting to the addon defaults? The active profile is the only one affected."
 L["Defaults"] = "Defaults"
 
+-- Export defaults. These four are what the export modal opens showing; every
+-- choice made in the modal writes straight back here, so the panel and the modal
+-- are two views of one setting rather than two settings that drift apart.
+L["Export"] = "Export"
+L["Default metric"] = "Default metric"
+-- Also the Metric menu's first entry. "" is a choice rather than an absent value:
+-- it ranks by whichever column the exporting window is sorted by, which is what a
+-- fresh profile ships with.
+L["Match the window"] = "Match the window"
+L["Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."] =
+    "Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."
+L["Default channel"] = "Default channel"
+L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."] =
+    "Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."
+L["Whisper target"] = "Whisper target"
+L["Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."] =
+    "Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."
+L["Chat lines"] = "Chat lines"
+L["How many ranked lines 'Print to Chat' sends, after the header line. The meter never holds more than %d rows, so that is the ceiling."] =
+    "How many ranked lines 'Print to Chat' sends, after the header line. The meter never holds more than %d rows, so that is the ceiling."
+
 -- ---------------------------------------------------------------------------
 -- The meter itself — availability and status
 -- ---------------------------------------------------------------------------
@@ -546,6 +567,61 @@ L["Test"] = "Test"
 -- The red marker in a window's title bar while test mode is on. Upper case in
 -- English on purpose; a translator may lower it.
 L["TEST MODE"] = "TEST MODE"
+
+-- ---------------------------------------------------------------------------
+-- Export window
+-- ---------------------------------------------------------------------------
+--
+-- The modal behind a window's export glyph, and the copy-paste window it opens
+-- on top of itself. "Export" itself is declared with the settings rows above;
+-- the modal reuses it as its title, because it is the same word for the same
+-- feature.
+
+-- The tooltip on the header glyph that opens the modal, left of the lock.
+L["Export a segment to CSV or to chat"] = "Export a segment to CSV or to chat"
+
+-- The three selector buttons render "Label: value", composed here rather than in
+-- the module so a translation can move the colon or drop it entirely.
+L["Metric: %s"] = "Metric: %s"
+L["Channel: %s"] = "Channel: %s"
+L["Lines: %s"] = "Lines: %s"
+
+L["Export to CSV"] = "Export to CSV"
+L["Print to Chat"] = "Print to Chat"
+L["Metric"] = "Metric"
+L["Channel"] = "Channel"
+L["Lines"] = "Lines"
+L["Whisper to"] = "Whisper to"
+
+-- The copy window's title IS its instructions: there is no file I/O in WoW, so
+-- the only way out of the addon is the player's own clipboard. Em dash written
+-- as a decimal escape, as everywhere else in this file.
+L["Ctrl+C, then Esc"] = "Ctrl+C, then Esc"
+
+-- Channel names. Auto picks the widest channel the player is actually in
+-- (instance, then raid, then party, then say); Self only sends nothing at all.
+L["Auto"] = "Auto"
+L["Say"] = "Say"
+L["Party"] = "Party"
+L["Raid"] = "Raid"
+L["Instance"] = "Instance"
+L["Guild"] = "Guild"
+L["Whisper"] = "Whisper"
+L["Self only"] = "Self only"
+
+-- The refusal, shown in red in the modal and printed by the slash verb. Both
+-- buttons are asked again on click, because the restriction can switch on while
+-- the modal sits open: a CSV cell is a tostring, and tostring is not one of the
+-- operations permitted on a value the game is hiding.
+L["Export is not available while the game restricts combat data."] =
+    "Export is not available while the game restricts combat data."
+
+-- Status lines. Every one of these is a reason nothing happened, so each says
+-- which of the several possible nothings it was.
+L["There is nothing to export."] = "There is nothing to export."
+L["Enter a name to whisper to."] = "Enter a name to whisper to."
+L["No window named '%s'."] = "No window named '%s'."
+L["Exported %d rows to chat."] = "Exported %d rows to chat."
 
 -- ---------------------------------------------------------------------------
 -- Slash commands (/mm, /mythicmeters)

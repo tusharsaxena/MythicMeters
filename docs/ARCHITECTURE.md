@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-one non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 11 `modules/`, 16 `settings/`.
+Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MythicMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -30,7 +30,8 @@ Three things define the shape of everything else:
   `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
   inside one window's own config. That is what makes multi-window and copy-settings-from cheap — a
   copy is a deep table copy, optionally filtered to one group — and it is why the profile itself is
-  nearly empty: an array of windows, an id counter, and two addon-wide toggles.
+  nearly empty: an array of windows, an id counter, two addon-wide toggles, and the `export` group,
+  which remembers an **action** the player takes rather than how any one window looks.
 
 Nine statistics are catalogued in `core/Constants.lua`; six ship enabled on a new window (Damage,
 Healing, Interrupts, Dispels, Avoidable Damage, Deaths). Adding a tenth is one row in that catalog —
@@ -62,6 +63,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Aggregator`, `Format` | Read → join → order → render as text. |
 | `modules/` display | `WindowManager`, `Window`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
+| `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
@@ -70,7 +72,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **99 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **103 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -84,8 +86,8 @@ have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpres
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
 settings panel's window picker (`settings/Windows.lua`, its only writer) moves. Global rows keep
-absolute paths (`enabled`, `minimap.hide`) and resolve against `db.profile`. Moving one integer of
-session state retargets seventy-odd rows.
+absolute paths (`enabled`, `minimap.hide` and the four `export.*` preferences) and resolve against
+`db.profile`. Moving one integer of session state retargets seventy-odd rows.
 
 Two pages carry **zero** schema rows, both by necessity. `settings/Columns.lua` edits an ordered
 array whose length is the user's, which a path model has no vocabulary for — so `window.columns` is a
@@ -115,7 +117,7 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 | `ROSTER_CHANGED` | `core/MythicMeters.lua` | `Roster`, `Visibility`, every `Window` | — |
 | `ZONE_CHANGED` | `core/MythicMeters.lua` | `Visibility`, every `Window` | — |
 | `ENTERING_WORLD` | `core/MythicMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
-| `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | every `Window` | `{ type, state }` |
+| `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | every `Window`, the export modal (`modules/Export.lua`) | `{ type, state }` |
 | `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `Targets`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
@@ -135,14 +137,15 @@ profile does not re-apply nineteen windows for one edit.
 **Bus-target discipline.** CallbackHandler keys callbacks by `(message, target)`, so two receivers of
 one message on the same object silently clobber each other and only the last registrant fires. This
 addon is unusually exposed — every window subscribes to the same refresh messages and there can be
-many windows. AceAddon modules are their own targets; each `Window` instance and `modules/Format.lua`
-own a private target from `NS.NewBusTarget()`. Nothing registers on the shared addon object.
+many windows. AceAddon modules are their own targets; each `Window` instance, `modules/Format.lua`
+and the export modal own a private target from `NS.NewBusTarget()`. Nothing registers on the shared
+addon object.
 
 ## Slash commands
 
 `/mm` and `/mythicmeters` are aliases, registered through AceConsole (never a raw `SLASH_*` global).
-`NS.COMMANDS` in `settings/Slash.lua` is the sender-authoritative dispatch table: **15 verbs**, the
-ten reserved ones first in the order the standard fixes, then this addon's five. The dispatcher, the
+`NS.COMMANDS` in `settings/Slash.lua` is the sender-authoritative dispatch table: **16 verbs**, the
+ten reserved ones first in the order the standard fixes, then this addon's six. The dispatcher, the
 help renderer and the schema CLI are LibKa0s-Slash-1.0's; the verb table stays this addon's and is
 passed *in*, because the settings landing page renders the same rows and library ownership would make
 that a load-time cycle between two majors.
@@ -160,15 +163,23 @@ that a load-time cycle between two majors.
 | `perf` | Performance capture — `/mm perf help` for the run's own verbs |
 | `version` | Print the addon version, read from the TOC manifest |
 | `lock` | Lock or unlock every window for dragging (unlocking implies preview) |
-| `preview` | Toggle placeholder rows, for positioning |
+| `test` | Toggle test mode — placeholder rows, for positioning |
 | `toggle` | Show or hide one window by name, or all of them |
 | `window` | `list` · `new <name>` · `delete <name>` · `copy <source> <target>` |
 | `reset-positions` | Move every window back to the center of the screen |
+| `export` | Open the export modal for one window's segment: `/mm export [window]` |
 
-The five host verbs act on **windows** — instances the registry owns — rather than on schema rows, so
+The six host verbs act on **windows** — instances the registry owns — rather than on schema rows, so
 they are untouched by the library's absence and route straight into `modules/WindowManager.lua`
 rather than duplicating its rules. Window keys accept either an id or a name: a number is an id, a
 string is a name, matched case-insensitively but stored exactly as typed.
+
+`export` is the one of the six that ends somewhere other than the registry: it resolves a window the
+same way `/mm toggle` does, then hands the **config** — not the live instance — to `NS.Export:Open`. A window in the registry that has never been built still points at a segment, and
+its numbers are as exportable as a drawn one's. Named with no argument it means the window the
+settings panel is pointed at, falling back to the first in the registry, because the CLI has no
+picker and `/mm export` on a fresh login has to mean something. Whether an export may run at all is
+asked once, of `NS.Export.Available()`, and is never re-decided here — see [Taint notes](#taint-notes).
 
 ## Event subscriptions
 
@@ -273,6 +284,30 @@ on a secret — so both are gated on the concat probe, and a `ConditionalSecret`
 untouched and uncapped. The cap counts UTF-8 characters rather than bytes; a byte slice can emit half
 a code point, and accented names are exactly the ones most likely to need truncating.
 
+**`tostring` is not on the permitted list, and that is why an export is a refusal rather than a
+degradation.** A CSV cell is `tostring(value)` and a chat line splices a formatted number into a
+sentence. `tostring` on a secret neither raises nor launders it: it answers a **secret string**,
+which then poisons the `find` and the `gsub` that RFC-4180 quoting is made of, and the `table.concat`
+that joins a row. Everywhere else in the addon a restricted value travels on as an opaque handle and
+the display loses a bar or a percentage; there is no equivalent escape for a serializer, because a
+serializer's whole job is to look at the characters of a value. A serializer that is subtly wrong
+mid-pull is worse than one that says no.
+
+So `modules/Export.lua` says no, at four points rather than one, because the restriction can activate
+between any two of them: `Export.Available()` answers false, `/mm export` prints the sentence and
+opens nothing, the modal refuses to open, and `Export.CSV` / `Export.ChatLines` refuse again at their
+own first line for a caller that reached them anyway. Underneath all four, and independent of them,
+every field passes `Secrets.CanAccess` on its way into a cell and yields `""` when it fails — so a
+race between the check and the walk can produce a blank cell, and can never raise.
+
+The other half of that file's discipline is what it does **not** do. An export wants every stat for
+every player, which is exactly the loop `modules/Provider.lua` already writes — so writing it again
+would put a second caller on `C_DamageMeter` and break R1. Instead `Export.SessionConfig` builds a
+synthetic window config naming every catalogued stat, pointed at the invoking window's segment, and
+hands it to `Aggregator.Build`. The aggregator neither knows nor cares that no frame will draw the
+result, and the ranking a chat dump needs happens there, under the aggregator's own guards, rather
+than in a sort of the exporter's own.
+
 **Secrecy keys off `Combat`, not `ChallengeMode`.** Between packs in a key the values and the GUIDs
 are fully readable, so the exact GUID join runs for most of a dungeon run and identity mode covers the
 pulls themselves. `ADDON_RESTRICTION_STATE_CHANGED` fires with `state = Activating` **before**
@@ -369,6 +404,25 @@ and a fallback nobody can run is a fallback nobody has tested.
   ranked. `/mm debug diag`'s **provider order** section checks it out of combat, where comparison is
   legal, and refuses inside a pull rather than reporting an all-clear it did not earn.
 - **Percentage text slots render empty in combat.** By design; the slots default to total and rate.
+- **Exporting is unavailable for the whole of a pull.** Both halves — the CSV and the chat dump —
+  refuse while the Combat restriction is active, and say so in a sentence rather than producing a
+  file of `<secret>`. The reason is `tostring`, which is not a permitted operation on a secret; the
+  full argument is in [Taint notes](#taint-notes).
+- **An export is capped at 40 rows**, inherited from `Constants.MAX_ROWS` by way of
+  `Aggregator.ApplyRowLimit`. A 40-player raid exports whole; a larger group is truncated at the
+  aggregator's own ceiling. Stated rather than worked around: raising it means raising the cap every
+  window draws against, which is a display decision and not an export one.
+- **An export carries the segment's ranking, not the invoking window's view.** It names every stat in
+  the catalog, not the window's enabled columns, and it ignores the window's row cap and sort — what
+  is on screen is a display choice, and "export this" means the data behind it. Only the *segment* is
+  inherited, because "export this" said while looking at last pull means last pull.
+- **The export copy window is the third copy-paste window in the collection**, after
+  `LibKa0s/DebugLog.lua`'s and `LootHistory/modules/Export.lua`'s. It is a deliberate local copy
+  rather than an oversight — the three want to evolve apart — but the shape is stable enough to
+  harvest, and the destination is `lib.MakeCopyWindow(name, title)` in LibKa0s Core. Recorded here
+  rather than in the deviations register below, because that register is for departures from a
+  numbered rule of the standard and this is a library-harvest candidate: no rule is being departed
+  from. Filed as a limitation so the issue sweep picks it up as a follow-up.
 - **The tooltip's Targets section is absent for the whole of a pull, not degraded.** It is the one
   place in the addon where restriction costs *information* rather than decoration, and it is
   deliberate, and there are now **two independent reasons**, either of which is sufficient:
@@ -448,6 +502,7 @@ committed file is the only way a screenshot reaches one); it carries no `.md` an
 | `superpowers/specs/2026-08-09-mythic-meters-design.md` | Tier 3 planning history — the approved v0.1.0 design |
 | `superpowers/plans/2026-08-09-mythic-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
+| `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 
@@ -458,7 +513,7 @@ registered above.
 
 | Doc | Status | Trigger, as measured |
 |---|---|---|
-| `slash-dispatch.md` | Not applicable | **15 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 5 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 3 words and `perf` delegates its whole sub-surface to the library. The [Slash commands](#slash-commands) section carries all of it in 26 lines. |
+| `slash-dispatch.md` | Not applicable | **16 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 6 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 3 words, `perf` delegates its whole sub-surface to the library, and `export` takes one optional window name. The [Slash commands](#slash-commands) section carries all of it in a screen. |
 | `message-bus.md` | Not applicable | **12 distinct messages**, all declared in one catalog (`core/Constants.lua` `MSG`) with the owning sender named beside each. Every payload is a flat table of one to two plain fields; none carries a handle, a curve object or a per-unit filter needing prose. The [Message bus](#message-bus) section carries sender, consumers and payload for all twelve in 22 lines. |
 | `compat-layer.md` | Not applicable | **`core/Compat.lua` is 389 lines and 18 shims**, each a guarded namespace check around one passthrough, with no feature decisions and no state. Nothing there inspects a meter value. The comparison point is KickCD's 490-line Compat, which ships the doc. |
 | `midnight-quirks.md` (secret values) | Not applicable | The 12.0 secret-value model is this addon's **defining** constraint, not a quirk beside its main subject — so it is carried by [Taint notes](#taint-notes) (the operation lists, R1/R3, the `Combat`-not-`ChallengeMode` fact) and by [data-flow.md](data-flow.md), which is Tier 1 and mandatory here regardless. A third copy would be the one that drifts. |
@@ -524,7 +579,10 @@ per-file reasoning in [module-map.md](module-map.md#load-order). The binding con
 6. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
 7. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
    `DrillDown` at *call* time because both load after it. `modules/Targets.lua` loads before
-   `modules/Tooltip.lua`, its only caller.
+   `modules/Tooltip.lua`, its only caller. `modules/Export.lua` sits after `modules/DrillDown.lua`
+   and is the one file in the block whose position carries no constraint at all: it captures no
+   sibling at load and resolves every one of them — `Aggregator`, `Format`, `Secrets` — at call
+   time, because `modules/Window.lua` loads *before* it and holds the button that calls it.
 8. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
    their seams at `NS.SetByPath` / `NS.GetSetting` at load — and `settings/OptionsSetup.lua` before
    every page file, which call `NS.Helpers` members inside schema-row literals at file load.

@@ -67,10 +67,17 @@ db.profile = {
     windows      = { },       -- an ARRAY of window config tables, in picker order
     nextWindowId = 1,         -- monotonic id source; ids are never reused
     minimap      = { hide = false },   -- LibDBIcon-1.0 owns this table's shape
+    export       = {                   -- how the player last exported a segment
+        metric    = "",                -- a Constants.STATS key, or "" for
+                                       -- "match the exporting window's sort column"
+        channel   = "SELF",            -- a Constants.EXPORT_CHANNELS key
+        whisperTo = "",                -- meaningful only while channel is WHISPER
+        lines     = 5,                 -- ranked lines per chat export, 1..MAX_ROWS
+    },
 }
 ```
 
-Four keys, and that is the design working rather than the profile being thin. A window is an
+Five keys, and that is the design working rather than the profile being thin. A window is an
 **instance, not a singleton** (design §6): there are no global display settings, so `frame`,
 `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
 inside one window's config. What is left at profile level is the handful of things that cannot
@@ -102,6 +109,50 @@ losing a configured window is worse than renumbering it.
 treats it as its own — it reads `hide` and **writes** `minimapPos` (and a lock / free-position pair
 if the player drags the button off the minimap). The addon must never enumerate the table or
 normalize keys out of it, or a dragged button snaps back on the next login.
+
+### `export` — the remembered export choices
+
+| Path | Type | Default | Control |
+|---|---|---|---|
+| `export.metric` | string | `""` | dropdown over `Constants.STATS`, led by `""` = *Match the window* |
+| `export.channel` | string | `"SELF"` | dropdown over `Constants.EXPORT_CHANNELS` |
+| `export.whisperTo` | string | `""` | `EditBox`, 48 letters |
+| `export.lines` | number | `5` | slider, 1..`Constants.MAX_ROWS` |
+
+All four sit on page `general`, in group **Export**, and all four are **absolute** paths — there is no
+`window.` prefix to resolve. They are the **one group in the profile that is not a property of
+anything on screen**: every other setting here answers "how should this look", and these four answer
+"how did you last export", which is an action rather than an appearance.
+
+That is why they are addon-wide despite an export always being started *from* a window. A player who
+prints the top five to party does it from whichever window is nearest, and making them restate the
+habit per window would be the settings tree being tidy at the player's expense. The segment is the
+one thing an export does inherit from its invoking window, and it is inherited live rather than
+stored — it is already `window.data`'s.
+
+`channel` ships as `SELF`, which prints through `NS.Print` and reaches nobody else, and that default
+is a safety property rather than a taste: the export surface is a glyph in a title bar, and a
+misclick must not be able to put someone's numbers in front of a raid.
+
+`metric` and `channel` are both dropdowns **derived from a catalog** rather than written out —
+`Constants.STATS` and `Constants.EXPORT_CHANNELS` — so the panel, the CLI's `values` constraint and
+the modal's own menu all offer exactly the keys that exist, and a stat or a channel removed from a
+catalog cannot linger as an option that resolves to nothing. Localization happens at the use site in
+`settings/Schema.lua` rather than in the catalog, because `core/Constants.lua` may load before
+`locales/enUS.lua`.
+
+`whisperTo` carries no non-empty check, unlike the window-name row it otherwise copies: `""` is both
+its shipped default and a legal value, because it is what every channel but Whisper means. Its
+validator refuses a table typed in from a hand-edited SavedVariables and nothing more — whether a
+name resolves to a character is the server's answer to give, not this seam's — and a whisper with
+nobody named falls back to printing to yourself rather than erroring at the send site.
+
+`lines` is clamped to `Constants.MAX_ROWS` rather than to a literal, because the aggregator truncates
+an export there anyway and a slider offering 60 would be offering a number the send could not honor.
+
+The modal writes every choice back through `NS.SetByPath`, so the panel's four widgets and the
+modal's own copies of the same controls are two views of one preference rather than two preferences
+that drift.
 
 ### What is deliberately *not* in the profile
 
