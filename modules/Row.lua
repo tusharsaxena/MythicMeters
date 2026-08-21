@@ -67,6 +67,11 @@ local Const = NS.Constants
 -- the unit API, and those can be (modules/Roster.lua's header).
 local Secrets = NS.Secrets
 
+-- The debug pass. Row.lua is a render path, so both are load-time upvalues and
+-- every call site stays behind `if State.debug`.
+local State = NS.State
+local Debug = NS.Debug
+
 local Row = {}
 NS.Row = Row
 
@@ -379,6 +384,13 @@ local function rowOnEnter(frame)
     local entry = row and row.entry
     if not (entry and entry.isDrillDown) then return end
     local T = NS.Tooltip
+    -- The probe that would have caught this handler never running at all: the
+    -- cells above it consumed the motion, and from the outside "no tooltip" and
+    -- "a tooltip that bailed" look identical. See the propagation note in
+    -- newCell.
+    if State.debug and Debug then
+        Debug("Tooltip", "row spell=%s", tostring(entry.spellID))
+    end
     if T and T.SpellTooltip then T:SpellTooltip(entry, frame, row.window.config) end
 end
 
@@ -491,6 +503,16 @@ local function newCell(row, key)
     -- Both buttons, or the OnMouseUp above never sees a right-click at all.
     if bar.RegisterForClicks then bar:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     bar:EnableMouse(false)
+    -- LET MOTION THROUGH TO THE ROW UNDERNEATH. A cell is a child of the row
+    -- frame and therefore sits ON TOP of it, and a mouse-enabled frame consumes
+    -- motion by default — so the row's OnEnter fired only in the seams between
+    -- cells and in the margin past the last column. That is what left the
+    -- breakdown's spell tooltip, which the ROW owns (see rowOnEnter), never
+    -- showing for a cursor that lands on a cell, which is nearly every cursor.
+    --
+    -- Motion only. Clicks stay the cell's, so cellOnMouseUp keeps its drill-down
+    -- and its right-click-to-leave exactly as they were.
+    if bar.SetPropagateMouseMotion then bar:SetPropagateMouseMotion(true) end
 
     return cell
 end

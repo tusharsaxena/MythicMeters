@@ -494,12 +494,19 @@ key on it). It does **not** sort: a live view that reshuffled under the cursor t
 restriction lifted is worse than an order the player can learn.
 
 Three things follow from a breakdown row being a **spell** rather than a player, and all three were
-wrong until they were stated: hovering any cell of it shows the *client's* spell tooltip rather than
+wrong until they were stated: hovering it anywhere shows the *client's* spell tooltip rather than
 either of this addon's, because a spell has no per-stat breakdown and no cross-column summary — both
 rendered honestly and uselessly; a left-click does nothing, because it used to ask the provider for a
 breakdown of a spell and render an empty window; and leaving is a **right-click on any row**, which
 replaced a Back button that cost a row of height and pushed the last row out through the bottom of
 the frame.
+
+The tooltip is owned by the **row frame**, not by the cells, so crossing a seam between cells cannot
+blink it — and that only works because every cell calls `SetPropagateMouseMotion(true)`. A cell is a
+child of the row and therefore sits on top of it, and a mouse-enabled frame consumes motion by
+default, so without that call `rowOnEnter` fires only in the seams and in the margin past the last
+column — which is to say, almost never. The window body propagates motion for the same reason: its
+mouse goes on while a breakdown is open purely to catch a right-click on empty space.
 
 Its title is the trap worth knowing about. `DrillDown.Title` builds its string with `string.format`
 from `view.name`, which is `ConditionalSecret` — and `string.format` on a secret returns a **secret

@@ -874,6 +874,25 @@ test("Hovering a breakdown ROW shows the client's spell tooltip", function()
         "the row did not hand the client a spell id")
 end)
 
+test("A cell lets mouse motion through to the row underneath it", function()
+    -- WHY THE ROW TOOLTIP SHIPPED DEAD. A cell is a child of the row frame and
+    -- so sits ON TOP of it, and a mouse-enabled frame consumes motion by
+    -- default — so rowOnEnter fired only in the seams between cells and in the
+    -- margin past the last column. The harness calls `_run("OnEnter")` directly
+    -- and never hit-tests, which is exactly why every test above stayed green
+    -- while the client showed nothing.
+    -- red under: dropping the SetPropagateMouseMotion call from newCell.
+    local _, _, row = bench()
+    row:Update(spellEntry(), 1)
+
+    assertEqual(row.nameCell.frame:GetPropagateMouseMotion(), true,
+        "the name cell swallowed the motion the row needs")
+    for key, cell in pairs(row.cells) do
+        assertEqual(cell.frame:GetPropagateMouseMotion(), true,
+            "cell " .. key .. " swallowed the motion the row needs")
+    end
+end)
+
 test("Crossing a cell boundary does NOT blink the breakdown tooltip", function()
     -- THE FLICKER. Each cell has its own OnEnter/OnLeave, so dragging the cursor
     -- sideways across a row fired hide-then-show at every seam — a tooltip

@@ -335,7 +335,10 @@ a raider most wants to know what killed them is the moment they are still fighti
   window and pushed the last row out through the bottom of the frame.
 - **Every row of a breakdown is a spell, so the whole row shows the SPELL's tooltip** — the client's
   own, not this addon's. Hovering the name cell must show it too. A tooltip reading "No data yet" or
-  a column of zeroed statistics means a drill row reached one of the player tooltips.
+  a column of zeroed statistics means a drill row reached one of the player tooltips. Hover the MIDDLE
+  of a cell, not a seam between two: the tooltip belongs to the row frame underneath the cells, and no
+  tooltip over a cell body but one over a seam means the cells have stopped propagating mouse motion.
+  With `/mm debug` on, one `[Tooltip] row spell=<id>` line per row entered says the handler ran at all.
 - **A left-click inside a breakdown does nothing at all.** It used to ask the provider for a
   breakdown of a spell and render an empty window.
 - **The mouse wheel scrolls both the grid and a breakdown** when there are more rows than fit. It
