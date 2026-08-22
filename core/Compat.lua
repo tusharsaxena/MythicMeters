@@ -252,6 +252,192 @@ function Compat.ResetAllCombatSessions()
 end
 
 -- ---------------------------------------------------------------------------
+-- Death-recap discovery (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- WHAT NOBODY KNOWS. `deathRecapID` arrives on every Deaths source row and this
+-- addon does nothing with it but hand it to Blizzard's frame
+-- (modules/DrillDown.lua), which answers "Death Recap unavailable" for the past
+-- deaths issue #1's window is entirely made of. Three questions have to be
+-- settled on a LIVE client before that window can be designed: does an id
+-- resolve for a non-local player, does it resolve for a death from earlier in
+-- the run, and is there a reader for the per-event breakdown at all.
+--
+-- The last one is why this lives in Compat rather than in the diagnostic. A
+-- reader could sit on C_DeathInfo or on the meter namespace itself, and this
+-- file is the only one permitted to name the latter. Half a search in a file
+-- that may not host it is not a search.
+--
+-- WHERE TO LOOK, AND WHY THE LIST GREW A THIRD ENTRY.
+--
+-- Rounds one and two of this probe both reported "no recap reader on this
+-- client" and both were WRONG. The reader is `C_DeathRecap.GetRecapEvents`, in a
+-- namespace neither round searched — EllesmereUIDamageMeters calls it on the
+-- same client that came back empty here.
+--
+-- How round two missed it is the lesson worth keeping. Round one's doubt was
+-- "the walk may not enumerate", so round two added a direct-index search and ran
+-- it over THE SAME TWO NAMESPACES. Widening the names while leaving the haystack
+-- alone re-asked a question that was already answered and left the one that
+-- mattered untouched. A search is only as wide as its narrowest axis, and the
+-- narrow axis here was never the one under suspicion.
+local RECAP_NAMESPACES = { "C_DeathRecap", "C_DeathInfo", "C_DamageMeter" }
+
+-- WHY THERE IS A NAME LIST AT ALL, having said a name list answers the question
+-- with our own opinion. Round one of this probe walked a live 12.x client with
+-- nine deaths in the session and came back with ONE function —
+-- `C_DeathInfo.GetDeathReleasePosition`, a corpse coordinate. `GetRecapEvent`
+-- and `GetDeathRecapLink` are the documented readers, both match the walk's own
+-- filter, and neither appeared. Meanwhile Blizzard's recap frame demonstrably
+-- opens on that client, so something reads recaps.
+--
+-- One hit where three were expected is the shape of a PARTIAL ENUMERATION, not
+-- of an empty client: some retail `C_*` namespaces answer through `__index` and
+-- their members never appear in `pairs`. So the walk is no longer the only
+-- search. These names are asked for BY DIRECT INDEX, which sees through a proxy
+-- that a walk cannot.
+--
+-- The distinction that keeps this honest: the walk asks "what is here" and this
+-- list asks "is THIS here". A candidate is a question, and only a name the
+-- client actually answers to is ever reported as a reader.
+local RECAP_CANDIDATES = {
+    -- THE ONES THAT ARE KNOWN TO WORK, from reading a working addon rather than
+    -- from guessing: `GetRecapEvents(recapID)` hands back the event array, and
+    -- `GetRecapMaxHealth(recapID)` the denominator the right pane's HP
+    -- percentage needs. Listed first because they are the answer.
+    { ns = "C_DeathRecap", name = "GetRecapEvents" },
+    { ns = "C_DeathRecap", name = "GetRecapMaxHealth" },
+    -- The documented pair, and the historical spelling of each.
+    { ns = "C_DeathInfo", name = "GetRecapEvent" },
+    { ns = "C_DeathInfo", name = "GetDeathRecapLink" },
+    { ns = "C_DeathInfo", name = "GetRecapEvents" },
+    { ns = "C_DeathInfo", name = "HasRecapData" },
+    -- `deathRecapID` arrives on a METER row, so the meter namespace is the other
+    -- place a 12.0 reader would plausibly live. Spellings we have never seen —
+    -- which is the point: a miss costs one printed line, and a hit is the whole
+    -- feature.
+    { ns = "C_DamageMeter", name = "GetDeathRecap" },
+    { ns = "C_DamageMeter", name = "GetDeathRecapEvent" },
+    { ns = "C_DamageMeter", name = "GetDeathRecapEvents" },
+    { ns = "C_DamageMeter", name = "GetRecapEvent" },
+    { ns = "C_DamageMeter", name = "GetCombatSessionDeathRecap" },
+}
+
+--- Whether a member name looks like it reads a death recap.
+---
+--- Deliberately loose. A false positive costs one printed line in a report a
+--- human reads; a false negative loses the finding the whole probe exists for.
+---
+--- @param name string
+--- @return boolean
+local function isRecapShaped(name)
+    local lower = name:lower()
+    return lower:find("recap", 1, true) ~= nil or lower:find("death", 1, true) ~= nil
+end
+
+--- Every member of every candidate namespace, UNFILTERED.
+---
+--- The filter is what made round one ambiguous, so the dump does not have one. A
+--- namespace with seven members and no recap function among them is a conclusive
+--- answer; a namespace with two is a proxy and the walk is the thing at fault.
+--- Nobody can tell those apart from a filtered list.
+---
+--- `present` is separate from an empty `names` on purpose: "this client has no
+--- C_DeathInfo" and "it has one and it enumerates as empty" are different
+--- findings, and collapsing them would hide a load-order problem behind a design
+--- conclusion.
+---
+--- @return table  { { ns = "C_DeathInfo", present = true, names = { ... } }, ... }
+function Compat.RecapMembers()
+    local dump = {}
+    for _, nsName in ipairs(RECAP_NAMESPACES) do
+        local namespace = _G[nsName]
+        local entry = { ns = nsName, present = type(namespace) == "table", names = {} }
+        if entry.present then
+            for key in pairs(namespace) do
+                if type(key) == "string" then entry.names[#entry.names + 1] = key end
+            end
+            table.sort(entry.names)
+        end
+        dump[#dump + 1] = entry
+    end
+    return dump
+end
+
+--- Every recap reader the CLIENT will answer to, from BOTH searches.
+---
+--- `how` is a finding rather than bookkeeping. A reader labelled `walk` means
+--- round one's empty result was the client speaking; one labelled `named` means
+--- it was the search, and that single word decides whether issue #1 is a reader
+--- over `deathRecapID` or a combat-log capture of its own.
+---
+--- Sorted, because this report is pasted into an issue and compared against
+--- another player's paste: `pairs` order would make two identical clients
+--- produce two different reports and no reader could tell which difference
+--- mattered.
+---
+--- @return table  { { ns = "C_DeathInfo", name = "GetRecapEvent", how = "walk" }, ... }
+function Compat.RecapAPIs()
+    local found, seen = {}, {}
+
+    local function keep(nsName, key, how)
+        local id = nsName .. "." .. key
+        if seen[id] then return end
+        seen[id] = true
+        found[#found + 1] = { ns = nsName, name = key, how = how }
+    end
+
+    -- The walk goes first so a member both searches can see is labelled `walk`.
+    for _, nsName in ipairs(RECAP_NAMESPACES) do
+        local namespace = _G[nsName]
+        if type(namespace) == "table" then
+            for key, value in pairs(namespace) do
+                if type(key) == "string" and type(value) == "function"
+                    and isRecapShaped(key) then
+                    keep(nsName, key, "walk")
+                end
+            end
+        end
+    end
+
+    -- Then the direct index, which sees through a proxy the walk cannot.
+    for _, candidate in ipairs(RECAP_CANDIDATES) do
+        local namespace = _G[candidate.ns]
+        if type(namespace) == "table"
+            and type(namespace[candidate.name]) == "function" then
+            keep(candidate.ns, candidate.name, "named")
+        end
+    end
+
+    table.sort(found, function(a, b)
+        if a.name == b.name then return a.ns < b.ns end
+        return a.name < b.name
+    end)
+    return found
+end
+
+--- Call one discovered reader and hand back the outcome, whatever it is.
+---
+--- `pcall` is the point, not a precaution. "This client refuses a past death" is
+--- the single most valuable thing the probe can find, and a probe that dies on a
+--- refusal prints nothing at all — which reads exactly like a session with no
+--- deaths in it, and would send issue #1 off on the opposite answer.
+---
+--- The result is NEVER examined here, not even for truthiness: a recap event
+--- carries an amount and an HP figure, and both are meter values.
+---
+--- @param nsName string  a namespace name from RecapAPIs()
+--- @param fnName string  a member name from RecapAPIs()
+--- @return boolean ok, any valueOrError
+function Compat.CallRecap(nsName, fnName, ...)
+    local namespace = _G[nsName]
+    if type(namespace) ~= "table" then return false, "no namespace " .. tostring(nsName) end
+    local fn = namespace[fnName]
+    if type(fn) ~= "function" then return false, "no function " .. tostring(fnName) end
+    return pcall(fn, ...)
+end
+
+-- ---------------------------------------------------------------------------
 -- Numeric rule formatter
 -- ---------------------------------------------------------------------------
 --

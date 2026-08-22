@@ -1546,6 +1546,31 @@ local function build()
         M.__lastRecapID = id
     end
 
+    -- ── C_DeathInfo ────────────────────────────────────────────────────────
+    --
+    -- The probe for issue #1 exists because NOBODY KNOWS what this namespace
+    -- answers on a live client for a past death or another player's. So the mock
+    -- does not pick an answer: it is a blank slate a test installs a client into,
+    -- and the DEFAULT is the namespace being absent entirely — which is itself
+    -- one of the four outcomes the probe has to survive.
+    --
+    -- `M.setDeathInfo(members)` installs a namespace; `nil` removes it. Each
+    -- member is a plain function, so a test models "answers for the local
+    -- player's newest death and nils everything else" by writing exactly that,
+    -- rather than by configuring a mock that has already guessed.
+    M.C_DeathInfo = nil
+    function M.setDeathInfo(members)
+        M.C_DeathInfo = members
+    end
+
+    -- C_DeathRecap is the namespace the probe's first two rounds never looked
+    -- at, and the one that actually carries `GetRecapEvents`. Same blank-slate
+    -- rule: absent by default, a test installs the client it wants to model.
+    M.C_DeathRecap = nil
+    function M.setDeathRecap(members)
+        M.C_DeathRecap = members
+    end
+
     -- ── frames ─────────────────────────────────────────────────────────────
     --
     -- Every frame this run creates, in creation order, plus a by-name index. The

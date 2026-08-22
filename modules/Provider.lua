@@ -545,6 +545,47 @@ function Provider.Reset(_)
 end
 
 -- ---------------------------------------------------------------------------
+-- The death-recap probe (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Issue #1 wants a two-pane Death Recap window and cannot be designed until
+-- three facts about the running client are in hand: whether a `deathRecapID`
+-- resolves for a NON-LOCAL player, whether it resolves for a death from EARLIER
+-- IN THE RUN, and whether any reader exists that hands back the per-event
+-- breakdown at all. This addon has never read a recap — modules/DrillDown.lua
+-- only hands an id off to Blizzard's own frame — so all three are guesses, and
+-- the issue says plainly that guessing wrong turns the feature into its own
+-- combat-log capture.
+--
+-- The two functions below are the provider's half of the answer, and they are
+-- pass-throughs on purpose: the search may have to look at the meter namespace
+-- itself, which only core/Compat.lua may name. They DISCOVER and CALL. They
+-- never conclude and they never inspect — a recap event's amount and its HP
+-- figure are meter values, so a result travels back as an opaque handle exactly
+-- like every other read above. core/Diagnostics.lua does the describing.
+
+--- Every member of every candidate namespace, unfiltered. See the shim.
+--- @return table  { { ns = "C_DeathInfo", present = true, names = { ... } }, ... }
+function Provider.RecapMembers()
+    return Compat.RecapMembers()
+end
+
+--- Every recap reader the client will answer to, from both searches. See the
+--- shim; `how` says which search found it, and that is the finding.
+--- @return table  { { ns = "C_DeathInfo", name = "GetRecapEvent", how = "walk" }, ... }
+function Provider.RecapAPIs()
+    return Compat.RecapAPIs()
+end
+
+--- Call one discovered reader and hand back the outcome, whatever it is.
+--- @param nsName string  a namespace name from RecapAPIs()
+--- @param fnName string  a member name from RecapAPIs()
+--- @return boolean ok, any valueOrError
+function Provider.CallRecap(nsName, fnName, ...)
+    return Compat.CallRecap(nsName, fnName, ...)
+end
+
+-- ---------------------------------------------------------------------------
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --

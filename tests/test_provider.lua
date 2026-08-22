@@ -630,3 +630,263 @@ test("Provider: a source with NEITHER identifier is still dropped", function()
     assertEqual(#col.sources, 1, "an unidentifiable source was kept")
     assertEqual(col.sources[1].name, "Somebody")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The death-recap probe (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Issue #1 wants a two-pane Death Recap window, and it cannot be designed until
+-- three things are known about the LIVE CLIENT: whether a `deathRecapID`
+-- resolves for a non-local player, whether it resolves for a death from earlier
+-- in the run, and whether any reader exists that hands back the per-event
+-- breakdown at all. Nothing in this addon reads a recap today — modules/
+-- DrillDown.lua only HANDS ONE OFF to Blizzard's frame — so all three are
+-- guesses, and the issue says outright that guessing wrong re-scopes the work
+-- into its own combat-log capture.
+--
+-- The two functions below are the client half of the answer. They discover and
+-- they call; they never conclude. core/Diagnostics.lua does the describing.
+
+--- A namespace installed on the fake client, with the members a test names.
+local function withRecapAPI(members)
+    local inst = T.load()
+    inst.mocks.setDeathInfo(members)
+    return inst
+end
+
+test("Provider: with no recap namespace the probe finds nothing, and says so", function()
+    -- A CLIENT THAT CARRIES NO READER IS ONE OF THE FOUR ANSWERS, and it is the
+    -- one that re-scopes issue #1 entirely. It must arrive as an empty list, not
+    -- as a raise and not as a stub that looks like a reader.
+    -- red under: indexing the namespace without checking it is there.
+    local inst = T.load()
+    assertEqual(type(inst.NS.Provider.RecapAPIs), "function")
+    assertEqual(#inst.NS.Provider.RecapAPIs(), 0)
+end)
+
+test("Provider: it reports the readers the CLIENT has, not a list we wrote", function()
+    -- The same principle core/Diagnostics.lua's atlas probe rests on: naming the
+    -- functions we expect would report our own opinion back to us, and our own
+    -- opinion is exactly what is in doubt here.
+    -- red under: a hardcoded candidate list.
+    local inst = withRecapAPI({
+        GetRecapEvent      = function() end,
+        SomethingUnrelated = function() end,
+    })
+
+    local found = {}
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do found[api.name] = api.ns end
+
+    assertEqual(found.GetRecapEvent, "C_DeathInfo")
+    assertNil(found.SomethingUnrelated,
+        "a member with nothing to do with a recap was reported as a reader")
+end)
+
+test("Provider: a non-function member is not a reader", function()
+    -- red under: keeping every recap-shaped key regardless of type.
+    local inst = withRecapAPI({ recapLimit = 3, GetRecapEvent = function() end })
+    assertEqual(#inst.NS.Provider.RecapAPIs(), 1)
+end)
+
+test("Provider: the reader list is in a stable order", function()
+    -- The output of this probe is pasted into an issue and compared against
+    -- another player's paste. `pairs` order would make two identical clients
+    -- produce two different reports.
+    -- red under: emitting in pairs order.
+    local inst = withRecapAPI({
+        GetRecapEvent = function() end, GetDeathRecapLink = function() end,
+        HasRecapData  = function() end,
+    })
+
+    local names = {}
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do names[#names + 1] = api.name end
+    assertEqual(table.concat(names, ","), "GetDeathRecapLink,GetRecapEvent,HasRecapData")
+end)
+
+test("Provider: a reader that raises comes back as a refusal", function()
+    -- THE INTERESTING ANSWER. "This client refuses a past death" is the finding
+    -- the whole probe exists for, and a probe that dies on it reports nothing at
+    -- all — which reads exactly like a client with no deaths in the session.
+    -- red under: calling the reader without pcall.
+    local inst = withRecapAPI({
+        GetRecapEvent = function() error("no recap for that id") end,
+    })
+
+    local ok, err = inst.NS.Provider.CallRecap("C_DeathInfo", "GetRecapEvent", 42, 1)
+    assertFalse(ok, "the raise escaped the probe")
+    assertTrue(tostring(err):find("no recap", 1, true) ~= nil, "the reason was lost")
+end)
+
+test("Provider: a reader that is not there comes back as a refusal too", function()
+    -- red under: `_G[ns][name](...)` on an absent namespace.
+    local inst = T.load()
+    assertFalse((inst.NS.Provider.CallRecap("C_DeathInfo", "GetRecapEvent", 42)))
+end)
+
+test("Provider: the value comes back unexamined", function()
+    -- Rule R1. An event's amount and its HP figure are meter values, so the
+    -- probe may pass one on and may not ask what it is — including not asking
+    -- whether it is truthy.
+    -- red under: `if value then`, `#value`, or any comparison on the result.
+    local inst = withRecapAPI({})
+    local payload = inst.mocks.secret(4200)
+    inst.mocks.setDeathInfo({ GetRecapEvent = function() return payload end })
+
+    local ok, value = inst.NS.Provider.CallRecap("C_DeathInfo", "GetRecapEvent", 42, 1)
+    assertTrue(ok, "reading a secret result raised")
+    assertEqual(inst.mocks.reveal(value), 4200, "the value did not survive the probe")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The death-recap probe, round two: the walk is not trusted (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- ROUND ONE CAME BACK WITH ONE FUNCTION, and it was the wrong one:
+-- `C_DeathInfo.GetDeathReleasePosition`, a corpse coordinate, on a live 12.x
+-- client with nine deaths in the session. `GetRecapEvent` and
+-- `GetDeathRecapLink` are the documented readers and both match the walk's own
+-- name filter, so their absence is either real or the walk cannot see them —
+-- some retail `C_*` namespaces are `__index` proxies whose members never appear
+-- in `pairs`. One hit where three were expected is exactly the shape a partial
+-- enumeration makes, and Blizzard's recap frame demonstrably opens on this
+-- client, so SOMETHING reads recaps.
+--
+-- Concluding "no reader exists" from a walk that may not enumerate would be the
+-- third guess. So the walk is now one of two searches, and the dump below is
+-- unfiltered so the naming stops being guesswork at all.
+
+test("Provider: the member dump lists EVERY member, not only recap-shaped ones", function()
+    -- The filter is what makes round one's result ambiguous. An unfiltered dump
+    -- of the whole surface is what ends the ambiguity: a healthy namespace with
+    -- no recap function in it is conclusive, and a namespace with two members in
+    -- it is a proxy.
+    -- red under: reusing isRecapShaped here.
+    local inst = withRecapAPI({
+        GetRecapEvent        = function() end,
+        GetGraveyardsForMap  = function() end,
+        GetSelfResurrectOptions = function() end,
+    })
+
+    local dump = inst.NS.Provider.RecapMembers()
+    local byNS = {}
+    for _, entry in ipairs(dump) do byNS[entry.ns] = entry end
+
+    assertTrue(byNS.C_DeathInfo ~= nil, "the namespace was not reported at all")
+    assertTrue(byNS.C_DeathInfo.present, "a namespace that is there must read present")
+    assertEqual(table.concat(byNS.C_DeathInfo.names, ","),
+        "GetGraveyardsForMap,GetRecapEvent,GetSelfResurrectOptions")
+end)
+
+test("Provider: an absent namespace is reported absent, not empty", function()
+    -- "This client has no C_DeathInfo" and "it has one and it is empty" are
+    -- different findings and only one of them is plausible; collapsing them
+    -- would hide a load-order problem behind a design conclusion.
+    -- red under: returning names = {} with no presence flag.
+    local inst = T.load()
+    local byNS = {}
+    for _, entry in ipairs(inst.NS.Provider.RecapMembers()) do byNS[entry.ns] = entry end
+    assertFalse(byNS.C_DeathInfo.present)
+end)
+
+test("Provider: a reader behind a PROXY namespace is still found", function()
+    -- THE WHOLE REASON FOR ROUND TWO. A namespace that answers through __index
+    -- enumerates as empty, so the walk reports no reader on a client that has
+    -- one. Asking for the documented names directly is the only search that
+    -- survives that.
+    -- red under: discovery by pairs alone.
+    local inst = T.load()
+    local hidden = setmetatable({}, { __index = function(_, key)
+        if key == "GetRecapEvent" then return function() return { spellID = 5 } end end
+        return nil
+    end })
+    inst.mocks.setDeathInfo(hidden)
+
+    assertEqual(#inst.NS.Provider.RecapMembers()[1].names, 0,
+        "the fixture is only meaningful if the walk really sees nothing")
+
+    local found = {}
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do found[api.name] = api.how end
+    assertEqual(found.GetRecapEvent, "named",
+        "a reader the walk cannot see was lost, which is round one's whole doubt")
+end)
+
+test("Provider: a named candidate that is not there is not called a reader", function()
+    -- The candidate list is a list of QUESTIONS, not of answers. Reporting every
+    -- name we asked about as a reader would make the report say yes to a client
+    -- that said no.
+    -- red under: emitting the candidate list verbatim.
+    local inst = withRecapAPI({ GetRecapEvent = function() end })
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do
+        assertTrue(api.name ~= "GetDeathRecapLink",
+            "a candidate the client lacks was reported as present")
+    end
+end)
+
+test("Provider: a reader found BOTH ways is reported once", function()
+    -- red under: concatenating the two searches without dedup.
+    local inst = withRecapAPI({ GetRecapEvent = function() end })
+    local seen = 0
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do
+        if api.ns == "C_DeathInfo" and api.name == "GetRecapEvent" then seen = seen + 1 end
+    end
+    assertEqual(seen, 1)
+end)
+
+test("Provider: the walk still wins the label when it can see the member", function()
+    -- `how` is the finding, not decoration: "the walk saw it" and "only a direct
+    -- index saw it" are the two answers that decide whether round one's empty
+    -- result was the client or the search.
+    local inst = withRecapAPI({ GetRecapEvent = function() end })
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do
+        if api.name == "GetRecapEvent" then assertEqual(api.how, "walk") end
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- Round three: the namespace list was the flaw (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Rounds one and two both concluded "no recap reader on this client", and both
+-- were wrong. The reader is `C_DeathRecap.GetRecapEvents` — a THIRD namespace
+-- neither round ever looked at. EllesmereUIDamageMeters calls it on the same
+-- client this addon reported empty.
+--
+-- The instructive part is how the second round missed it. Round one's doubt was
+-- "the walk may not enumerate", so round two added a direct-index search — and
+-- ran it over the SAME TWO NAMESPACES. Widening the names while leaving the
+-- haystack alone re-asked the question that was already answered and left the
+-- one that mattered untouched. A search is only as wide as its narrowest axis.
+
+test("Provider: C_DeathRecap is searched — the namespace rounds one and two missed", function()
+    -- red under: RECAP_NAMESPACES holding only C_DeathInfo and C_DamageMeter.
+    local inst = T.load()
+    local seen = {}
+    for _, entry in ipairs(inst.NS.Provider.RecapMembers()) do seen[entry.ns] = true end
+    assertTrue(seen.C_DeathRecap, "the namespace that actually carries the reader is not searched")
+end)
+
+test("Provider: GetRecapEvents is asked for BY NAME as well as walked", function()
+    -- The name list is the belt for a proxy namespace, and it is worthless if it
+    -- does not carry the name that turned out to matter.
+    -- red under: leaving the candidate list at the C_DeathInfo pair.
+    local inst = T.load()
+    inst.mocks.setDeathRecap(setmetatable({}, { __index = function(_, key)
+        if key == "GetRecapEvents" then return function() return { { spellId = 5 } } end end
+        return nil
+    end }))
+
+    local found = {}
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do found[api.name] = api.how end
+    assertEqual(found.GetRecapEvents, "named")
+end)
+
+test("Provider: GetRecapMaxHealth is searched too", function()
+    -- The HP percentage on issue #1's right pane is `currentHP / maxHealth`, and
+    -- the max comes from its own call. A probe that found the events and not the
+    -- denominator would leave the pane's hardest column unanswered.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({ GetRecapMaxHealth = function() return 500000 end })
+    local found = {}
+    for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do found[api.name] = true end
+    assertTrue(found.GetRecapMaxHealth)
+end)

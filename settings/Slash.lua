@@ -82,7 +82,7 @@ NS.COMMANDS = {
     { "set",      "Write one setting: /mm set <path> <value>", function(a) cli:CliSet(a) end },
     { "reset",    "Reset one setting: /mm reset <path>",   function(a) cli:CliReset(a) end },
     { "resetall", "Reset every setting to its default",    function() cli:CliResetAll() end },
-    { "debug",    "Console; 'on'/'off' set logging, 'diag' prints a diagnostic report",
+    { "debug",    "Console; 'on'/'off' set logging, 'diag' a diagnostic report, 'recap' the death-recap probe",
                                                                      function(a) doDebug(a) end },
     { "perf",     "Performance capture; try /mm perf help", function(a) doPerf(a) end },
     { "version",  "Print the addon version",   function() cli:CliVersion() end },
@@ -441,6 +441,16 @@ function doDebug(rest)
     -- console first is one more step between a bug and its report.
     if word == "diag" then
         if NS.Diagnostics then NS.Diagnostics.Report() end
+        return
+    end
+
+    -- `recap` is the issue #1 probe on its own — the same report the full `diag`
+    -- carries, without the forty lines of atlas and font output around it. It
+    -- sits on this branch and not below for the same reason `diag` does: it is
+    -- what a player is asked to run, and a console they have to open first is a
+    -- step between us and the answer.
+    if word == "recap" then
+        if NS.Diagnostics then NS.Diagnostics.ReportDeathRecap() end
         return
     end
 
