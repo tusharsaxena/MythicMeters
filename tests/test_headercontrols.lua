@@ -39,6 +39,21 @@ local function scene(configure)
     return inst, window, cfg
 end
 
+--- Take this addon's OWN art away, so a case can reach the rungs beneath it.
+---
+--- With every texture loadable -- which is the mock's default and a live
+--- client's usual state -- the first rung wins for every control, and the atlas
+--- and ASCII rungs below it become unreachable in a test while remaining the
+--- live behaviour on any client missing the file. Both of those rungs exist
+--- because this addon has already shipped invisible controls twice.
+local ICON_PATH = "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\"
+local function withoutOurArt(inst)
+    for _, name in ipairs({ "close", "minimise", "expand", "lock", "unlock",
+                            "settings", "segment", "reset", "export" }) do
+        inst.mocks.setTextureLoadable(ICON_PATH .. name, false)
+    end
+end
+
 --- The x offset a control was actually placed at, off the frame's right edge.
 ---
 --- Read off the RECORDED point rather than off a getter: the mock's
@@ -139,6 +154,7 @@ test("HeaderControls: with no atlas the ASCII rung draws", function()
     -- The bottom rung, and it exists because Unicode glyphs shipped once and
     -- rendered as replacement boxes. It must never be unreachable.
     local inst, window = scene()
+    withoutOurArt(inst)
     inst.mocks.setAtlases({})
     inst.NS.HeaderControls:Apply(window)
 
@@ -151,6 +167,7 @@ end)
 
 test("HeaderControls: an atlas beats the ASCII rung", function()
     local inst, window = scene()
+    withoutOurArt(inst)
     inst.mocks.setAtlases({ ["GM-icon-settings"] = true })
     inst.NS.HeaderControls:Apply(window)
 
@@ -165,8 +182,9 @@ test("HeaderControls: the padlock's two states do not draw the same", function()
     local inst, window, cfg = scene()
     local function art()
         local b = window.controls.lock
-        return table.concat({ tostring(b.tex:GetAtlas()), tostring(b.tex.__desaturated),
-                              tostring(b.tex:GetAlpha()), tostring(b.glyph:GetText()) }, "/")
+        return table.concat({ tostring(b.tex:GetTexture()), tostring(b.tex:GetAtlas()),
+                              tostring(b.tex.__desaturated), tostring(b.tex:GetAlpha()),
+                              tostring(b.glyph:GetText()) }, "/")
     end
 
     cfg.frame.locked = true
@@ -182,7 +200,8 @@ test("HeaderControls: minimise shows the opposite of the state it is in", functi
     local inst, window, cfg = scene()
     local function art()
         local b = window.controls.minimise
-        return tostring(b.tex:GetAtlas()) .. "/" .. tostring(b.glyph:GetText())
+        return table.concat({ tostring(b.tex:GetTexture()), tostring(b.tex:GetAtlas()),
+                              tostring(b.glyph:GetText()) }, "/")
     end
 
     cfg.frame.minimised = false
@@ -298,4 +317,48 @@ test("HeaderControls: a locked window can still reveal its controls", function()
     local _, window = scene(function(cfg) cfg.frame.locked = true end)
     assertEqual(window.dragBar.__mouseEnabled, true,
         "a locked window's title bar took no mouse, so it cannot hover")
+end)
+
+test("HeaderControls: our own art is the FIRST rung", function()
+    -- Custom art does not retire the ladder -- it goes in front of it. The two
+    -- rungs behind are the record of two shipped failures, so the one thing that
+    -- must be provable is which one won.
+    -- red under: the atlas rung being tried first.
+    local inst, window = scene()
+    inst.mocks.setAtlases({ ["GM-icon-settings"] = true })
+    inst.NS.HeaderControls:Apply(window)
+
+    local tex = window.controls.settings.tex
+    assertTrue(tex:IsShown())
+    assertTrue((tostring(tex:GetTexture())):find("icons", 1, true) ~= nil,
+        "the atlas won even though our own art loaded")
+end)
+
+test("HeaderControls: a missing TGA falls through to the atlas", function()
+    -- An addon-shipped texture can fail to load, and it fails the SAME SILENT
+    -- WAY as the two paths that failed before it: nothing drawn, nothing raised.
+    -- red under: assuming our own art always resolves.
+    local inst, window = scene()
+    withoutOurArt(inst)
+    inst.mocks.setAtlases({ ["GM-icon-settings"] = true })
+    inst.NS.HeaderControls:Apply(window)
+
+    local tex = window.controls.settings.tex
+    assertTrue(tex:IsShown(), "nothing drew at all")
+    assertEqual(tex:GetAtlas(), "GM-icon-settings")
+end)
+
+test("HeaderControls: a failed path is not left set under the next rung", function()
+    -- FirstTexture mutates a real Texture to find out whether a file exists,
+    -- because there is no query for one. On a miss it has to clear up after
+    -- itself, or the failed path stays set underneath whatever draws next.
+    -- red under: returning nil without clearing.
+    local inst, window = scene()
+    withoutOurArt(inst)
+    inst.mocks.setAtlases({})
+    inst.NS.HeaderControls:Apply(window)
+
+    local tex = window.controls.settings.tex
+    assertTrue(tex.__texture == nil,
+        "the failed path was left on the texture: " .. tostring(tex.__texture))
 end)

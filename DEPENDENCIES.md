@@ -64,10 +64,27 @@ Versions are pinned only where a version matters: `lua5.1` is hard, `luacheck` a
 
 ## Release / assets
 
-**None.** This addon is packaged from the committed tree — nothing is generated at build time, and
-no image or font tooling is needed to produce what ships. The one binary asset,
-`media/fonts/JetBrainsMono-Regular.ttf`, is committed alongside its `OFL.txt` and is not generated.
-**None of this group is required to build, run or test the addon.**
+Needed only to REGENERATE the header-control icons. Nothing here is required to run the addon, run
+its tests, or ship it -- the TGAs are committed, and `tools/artwork/icon_cleaner.py` exists so the
+art can be rebuilt at another size or replaced from another source without guessing at where the
+current ones came from.
+
+| Tool | Version | Used by | Evidence |
+|---|---|---|---|
+| `python3` | 3.8+ | `tools/artwork/icon_cleaner.py` | the script's shebang |
+| `Pillow` | any recent | reading the source PNGs and writing 32-bit TGA | `from PIL import Image` |
+| `numpy` | any recent | the solidify and normalize stages | `import numpy as np` |
+| `gh` | any recent | fetching the sources from `iconic/open-iconic` | `_gh_file()` shells out to it |
+
+```bash
+sudo apt-get install -y python3 pipx
+# Pillow and numpy via the distro, which is what Ubuntu 24.04's PEP 668 marker
+# wants -- `pip install` into the system Python fails with EXTERNALLY-MANAGED.
+sudo apt-get install -y python3-pil python3-numpy
+```
+
+Verify: `python3 -c "import PIL, numpy; print('ok')"` prints `ok`, and `gh auth status` reports a
+logged-in account.
 
 ## Am I set up correctly?
 

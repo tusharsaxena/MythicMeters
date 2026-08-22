@@ -653,6 +653,40 @@ end
 --- drawing it; SetAtlas on an unknown name is silent.
 ---
 --- @param names table  candidate atlas names, best first
+--- Set a texture from the first path that actually loads, or nil.
+---
+--- THE SIBLING OF FirstAtlas, AND IT CANNOT BE THE SAME SHAPE. `GetAtlasInfo`
+--- is a pure existence query -- ask about a name, get an answer, touch nothing.
+--- There is no such query for a texture FILE. A path that does not exist draws
+--- nothing and raises nothing, which is precisely the failure this addon has
+--- already shipped once, so the only way to find out is to set it on a real
+--- Texture and ask what it is holding afterwards.
+---
+--- Which means this MUTATES, and has to clean up after itself: on a miss it
+--- clears the texture before returning, or the failed path stays set underneath
+--- whatever the caller draws next and the atlas rung inherits an invisible
+--- texture instead of replacing one.
+---
+--- @param texture table  a real Texture object to try the path on
+--- @param ... string     candidate paths, in order
+--- @return string|nil    the path that took
+function Compat.FirstTexture(texture, ...)
+    if type(texture) ~= "table" or not texture.SetTexture then return nil end
+    for i = 1, select("#", ...) do
+        local path = select(i, ...)
+        if type(path) == "string" and path ~= "" then
+            local ok = pcall(texture.SetTexture, texture, path)
+            if ok and texture.GetTexture and texture:GetTexture() then
+                return path
+            end
+        end
+    end
+    -- Nothing took. Leave the texture as we found it rather than holding the
+    -- last failed path.
+    pcall(texture.SetTexture, texture, nil)
+    return nil
+end
+
 --- @return string|nil
 function Compat.FirstAtlas(names)
     local api = _G.C_Texture

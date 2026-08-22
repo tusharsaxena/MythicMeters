@@ -691,7 +691,7 @@ badge and any count quoted in the docs must agree with it.
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
 
-### test_headercontrols.lua (20)
+### test_headercontrols.lua (23)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -713,6 +713,9 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: hover reveal off means always visible
 - HeaderControls: hooking hover does not unseat the drag
 - HeaderControls: a locked window can still reveal its controls
+- HeaderControls: our own art is the FIRST rung
+- HeaderControls: a missing TGA falls through to the atlas
+- HeaderControls: a failed path is not left set under the next rung
 
 ### test_row.lua (66)
 
@@ -1304,7 +1307,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 84 |
-| test_headercontrols.lua | 20 |
+| test_headercontrols.lua | 23 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1319,4 +1322,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1165** |
+| **Total** | **1168** |
