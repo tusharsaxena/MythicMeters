@@ -545,6 +545,83 @@ function Provider.Reset(_)
 end
 
 -- ---------------------------------------------------------------------------
+-- Death recaps (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- One death, opened up: the incoming events that ended it, plus the max health
+-- an HP percentage divides by. `C_DeathRecap` resolves this for ANY player in
+-- the group and ANY death earlier in the run — measured, not assumed; see
+-- docs/superpowers/specs/2026-08-22-death-recap-design.md §1.
+
+--- recapID -> { events, maxHealth }, or `false` for "asked, there is nothing".
+---
+--- THE MEMO IS A CORRECTNESS REQUIREMENT, NOT AN OPTIMISATION. The death
+--- drill-down needs one read PER DEATH merely to label its rows with a wall-clock
+--- time, and modules/Window.lua rebuilds those rows on every refresh pass — four
+--- times a second. Uncached, a five-death list is twenty client calls a second
+--- for a list that cannot change: a death that has already happened is immutable,
+--- which is exactly what makes caching it safe.
+---
+--- The negative is cached too, as `false` rather than nil, so a death the client
+--- no longer holds is asked about once instead of on every pass. `false` is
+--- distinguishable from "not asked yet" and, unlike nil, survives a table lookup.
+local recapCache = {}
+
+--- Forget every cached recap.
+---
+--- Recap ids are SESSION-SCOPED COUNTERS — a live dump showed 18 through 29 for
+--- one run — so id 29 in the next run is a different player's different death. A
+--- memo that outlived a reset would show one player the recap of another, which
+--- is worse than showing nothing.
+function Provider.InvalidateRecaps()
+    recapCache = {}
+end
+
+--- The breakdown behind one death, or nil.
+---
+--- @param recapID number  a `deathRecapID` from a Deaths source row
+--- @return table|nil  { events = array (newest first), maxHealth = opaque }
+function Provider.GetRecap(recapID)
+    -- Suspended first, above everything, exactly like GetColumn: performance-§6
+    -- says a suspended capture must stop the addon ASKING, not merely stop
+    -- drawing, and an answer served from the memo would still be an answer this
+    -- module is meant to be incapable of giving.
+    if suspended then return nil end
+
+    -- `deathRecapID` is documented NeverSecret and this does not bet a raise on
+    -- it. A secret cannot be a table key — indexing the memo with one raises
+    -- before the client is ever reached — and forwarding one into a client
+    -- function is the `bad argument #4` that already shipped once through
+    -- modules/Targets.lua. Both hazards are closed by the same gate.
+    if not Secrets.IsSafeKey(recapID) then return nil end
+
+    local cached = recapCache[recapID]
+    if cached ~= nil then return cached or nil end
+
+    -- The cheap gate first. A death the client no longer holds answers here
+    -- rather than through an empty array we would have to measure — and
+    -- measuring an array of meter values is what `#` is forbidden for.
+    if not Compat.HasRecapEvents(recapID) then
+        recapCache[recapID] = false
+        return nil
+    end
+
+    local events = Compat.GetRecapEvents(recapID)
+    if events == nil then
+        recapCache[recapID] = false
+        return nil
+    end
+
+    -- maxHealth is allowed to be absent. It is only the denominator of the HP
+    -- percentage, and modules/Tooltip.lua degrades to a bar without one; losing
+    -- the whole recap because the client withheld one number would be a much
+    -- larger failure than the one being handled.
+    local recap = { events = events, maxHealth = Compat.GetRecapMaxHealth(recapID) }
+    recapCache[recapID] = recap
+    return recap
+end
+
+-- ---------------------------------------------------------------------------
 -- The death-recap probe (issue #1)
 -- ---------------------------------------------------------------------------
 --
@@ -603,6 +680,9 @@ end
 
 function Provider:OnMeterInvalidated()
     Provider.InvalidateAvailability()
+    -- The recap memo goes with it. Recap ids are session-scoped counters, so the
+    -- same id means a different death after a reset — see InvalidateRecaps.
+    Provider.InvalidateRecaps()
 end
 
 --- Perf-harness suspend (performance-§6). Stops the addon ASKING the meter for

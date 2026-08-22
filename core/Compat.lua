@@ -252,6 +252,80 @@ function Compat.ResetAllCombatSessions()
 end
 
 -- ---------------------------------------------------------------------------
+-- C_DeathRecap — what actually killed somebody
+-- ---------------------------------------------------------------------------
+--
+-- The reader behind the death drill-down, and the API the whole of issue #1 was
+-- blocked on. Measured on a live 12.x client 2026-08-22: it resolves for ANY
+-- player in the group and ANY death earlier in the run, which is precisely what
+-- Blizzard's own recap frame refuses and what the issue could not assume.
+--
+-- Four members exist; three are shimmed here. `GetRecapLink` is left alone until
+-- something wants a chat link (spec §10).
+--
+-- SAME "MIGHT NOT EXIST" DISCIPLINE AS THE METER ABOVE. The namespace is new, a
+-- client one patch behind has none of it, and a PTR build can carry it without
+-- one of its functions — so the namespace and the member are guarded separately.
+-- Every call is additionally wrapped: the client refuses an id it does not
+-- recognise by RAISING, and a raise reaching the render path would take a
+-- tooltip down mid-hover.
+--
+-- WHAT THESE MAY NOT DO. An event carries `amount`, `overkill` and `currentHP`,
+-- and a recap's max health is the denominator of an HP percentage. All of them
+-- are meter values. Nothing here asks how big one is, whether an array is empty,
+-- or anything else: the tables and their numbers are handed straight back, and
+-- `HasRecapEvents` is the only member that answers a question at all.
+
+local function deathRecap()
+    return _G.C_DeathRecap
+end
+
+--- Whether the client still holds a breakdown for this death.
+---
+--- A PLAIN boolean, whatever the client hands back. Callers branch on this to
+--- decide whether a death row has anything behind it, and that branch has to be
+--- answerable at the height of a pull — so a `nil`, a `1` or a secret must all
+--- become `true` or `false` here rather than at ten call sites.
+---
+--- @param recapID number
+--- @return boolean
+function Compat.HasRecapEvents(recapID)
+    local api = deathRecap()
+    if not (api and api.HasRecapEvents) then return false end
+    local ok, has = pcall(api.HasRecapEvents, recapID)
+    if not ok then return false end
+    return has and true or false
+end
+
+--- The incoming events behind one death, NEWEST FIRST, or nil.
+---
+--- Ten in every live sample. The array and its event tables are passed through
+--- untouched — not counted, not reversed, not filtered. Whoever renders them
+--- does that, under core/Secrets.lua's iteration rules.
+---
+--- @param recapID number
+--- @return table|nil
+function Compat.GetRecapEvents(recapID)
+    local api = deathRecap()
+    if not (api and api.GetRecapEvents) then return nil end
+    local ok, events = pcall(api.GetRecapEvents, recapID)
+    if not ok then return nil end
+    return events
+end
+
+--- The player's maximum health for that death — the denominator of an HP
+--- percentage, and possibly secret.
+--- @param recapID number
+--- @return any|nil
+function Compat.GetRecapMaxHealth(recapID)
+    local api = deathRecap()
+    if not (api and api.GetRecapMaxHealth) then return nil end
+    local ok, maxHealth = pcall(api.GetRecapMaxHealth, recapID)
+    if not ok then return nil end
+    return maxHealth
+end
+
+-- ---------------------------------------------------------------------------
 -- Death-recap discovery (issue #1)
 -- ---------------------------------------------------------------------------
 --

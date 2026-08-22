@@ -347,3 +347,77 @@ test("Compat: no file in this addon divides a meter value", function()
         end
     end
 end)
+
+-- ---------------------------------------------------------------------------
+-- C_DeathRecap — the reader behind the death drill-down (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Measured 2026-08-22 on a live 12.x client: `C_DeathRecap` carries
+-- `HasRecapEvents`, `GetRecapEvents`, `GetRecapMaxHealth` and `GetRecapLink`,
+-- and the first three resolve for ANY player and ANY past death in the run.
+-- That measurement is what makes issue #1 buildable at all — see
+-- docs/superpowers/specs/2026-08-22-death-recap-design.md §1.
+--
+-- The namespace is nonetheless treated as absent-by-default here, exactly like
+-- C_DamageMeter: it is new, a client one patch behind has none of it, and the
+-- drill-down has a documented fallback for that case.
+
+test("Compat: the recap shims answer safely on a client with no C_DeathRecap", function()
+    -- red under: indexing the namespace without checking it is there.
+    local inst = T.load()
+    inst.mocks.setDeathRecap(nil)
+    assertFalse(inst.NS.Compat.HasRecapEvents(29))
+    assertNil(inst.NS.Compat.GetRecapEvents(29))
+    assertNil(inst.NS.Compat.GetRecapMaxHealth(29))
+end)
+
+test("Compat: a namespace present but missing one member does not take the rest down", function()
+    -- A PTR build can carry the namespace without one of its functions, which is
+    -- the case that turns a guarded call into a nil-index error on load.
+    -- red under: `return C_DeathRecap.GetRecapMaxHealth(id)` with no member guard.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({ GetRecapEvents = function() return { { spellId = 5 } } end })
+    assertNil(inst.NS.Compat.GetRecapMaxHealth(29))
+    assertEqual(type(inst.NS.Compat.GetRecapEvents(29)), "table")
+end)
+
+test("Compat: a recap call that raises is a nil answer, not a raise", function()
+    -- The client refuses ids it does not recognise, and a refusal reaching the
+    -- render path would take the whole tooltip down mid-hover.
+    -- red under: calling the member without pcall.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() error("no such recap") end,
+        GetRecapEvents    = function() error("no such recap") end,
+        GetRecapMaxHealth = function() error("no such recap") end,
+    })
+    assertFalse(inst.NS.Compat.HasRecapEvents(29))
+    assertNil(inst.NS.Compat.GetRecapEvents(29))
+    assertNil(inst.NS.Compat.GetRecapMaxHealth(29))
+end)
+
+test("Compat: HasRecapEvents is a PLAIN boolean, whatever the client returns", function()
+    -- Callers branch on it. `nil`, `1` and a secret would each be truthy or
+    -- unusable in a different way, and the drill-down's "is there anything
+    -- behind this death" test must be answerable at the height of a pull.
+    -- red under: forwarding the client's return verbatim.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({ HasRecapEvents = function() return 1 end })
+    assertEqual(inst.NS.Compat.HasRecapEvents(29), true)
+    inst.mocks.setDeathRecap({ HasRecapEvents = function() return nil end })
+    assertEqual(inst.NS.Compat.HasRecapEvents(29), false)
+end)
+
+test("Compat: the recap shims never inspect what they carry", function()
+    -- Rule R1. Event amounts and HP figures are meter values; the shim's job is
+    -- to hand back a handle and ask nothing about it.
+    -- red under: `if #events == 0 then return nil end` in the shim.
+    local inst = T.load()
+    local events = { inst.mocks.secretTable({ amount = 900, currentHP = 100 }) }
+    inst.mocks.setDeathRecap({
+        GetRecapEvents    = function() return events end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(738800) end,
+    })
+    assertEqual(inst.NS.Compat.GetRecapEvents(29), events)
+    assertEqual(inst.mocks.reveal(inst.NS.Compat.GetRecapMaxHealth(29)), 738800)
+end)

@@ -890,3 +890,125 @@ test("Provider: GetRecapMaxHealth is searched too", function()
     for _, api in ipairs(inst.NS.Provider.RecapAPIs()) do found[api.name] = true end
     assertTrue(found.GetRecapMaxHealth)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Provider.GetRecap — the one reader of a death (issue #1)
+-- ---------------------------------------------------------------------------
+
+--- An instance whose client answers a recap for `id`, counting the calls.
+local function withRecap(events, maxHealth)
+    local inst = T.load()
+    local calls = { events = 0, maxHealth = 0 }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function()
+            calls.events = calls.events + 1
+            return events
+        end,
+        GetRecapMaxHealth = function()
+            calls.maxHealth = calls.maxHealth + 1
+            return maxHealth
+        end,
+    })
+    return inst, calls
+end
+
+test("Provider.GetRecap hands back the events and the denominator together", function()
+    -- One call site, one answer. The HP percentage needs both halves and getting
+    -- them from two places is how they end up describing different deaths.
+    local inst = withRecap({ { spellId = 100, amount = 900 } }, 738800)
+    local recap = inst.NS.Provider.GetRecap(29)
+    assertEqual(type(recap), "table")
+    assertEqual(recap.events[1].spellId, 100)
+    assertEqual(recap.maxHealth, 738800)
+end)
+
+test("Provider.GetRecap is MEMOIZED — a past death never changes", function()
+    -- Not an optimisation. The drill-down needs one read PER DEATH just to label
+    -- its rows with a wall-clock time, and the render path runs four times a
+    -- second: without a memo that is forty client calls a second for a list that
+    -- cannot change.
+    -- red under: dropping the cache.
+    local inst, calls = withRecap({ { spellId = 100 } }, 500)
+    for _ = 1, 5 do inst.NS.Provider.GetRecap(29) end
+    assertEqual(calls.events, 1, "the recap was re-read on every call")
+end)
+
+test("Provider.GetRecap memoizes per id, not globally", function()
+    -- red under: a single-slot cache that answers every id with the first one.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = id } } end,
+    })
+    assertEqual(inst.NS.Provider.GetRecap(29).events[1].spellId, 29)
+    assertEqual(inst.NS.Provider.GetRecap(28).events[1].spellId, 28)
+end)
+
+test("Provider.GetRecap drops its memo when the meter is invalidated", function()
+    -- The ids are session-scoped counters — 18..29 in a live dump — so id 29 in
+    -- the next run is a DIFFERENT death. A memo that outlived a reset would show
+    -- one player the recap of another.
+    -- red under: never clearing the cache.
+    local inst = T.load()
+    local seen = 0
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function() seen = seen + 1 return { { spellId = seen } } end,
+    })
+    assertEqual(inst.NS.Provider.GetRecap(29).events[1].spellId, 1)
+    inst.NS.Provider.InvalidateRecaps()
+    assertEqual(inst.NS.Provider.GetRecap(29).events[1].spellId, 2)
+end)
+
+test("Provider.GetRecap answers nil when the death has no recap", function()
+    -- A death the client no longer holds still has to draw a row, so "no recap"
+    -- must be an answer rather than an error.
+    -- red under: returning an empty table, which reads as a recap with no events.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({ HasRecapEvents = function() return false end })
+    assertNil(inst.NS.Provider.GetRecap(29))
+end)
+
+test("Provider.GetRecap answers nil for an id it may not use", function()
+    -- `deathRecapID` is documented NeverSecret and the reader still does not bet
+    -- a raise on it: forwarding a secret into a client function is the `bad
+    -- argument #4` that already shipped once through modules/Targets.lua.
+    -- red under: passing the id through without the safe-key gate.
+    local inst = T.load()
+    local touched = false
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() touched = true return true end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+    assertNil(inst.NS.Provider.GetRecap(inst.mocks.secret(29)))
+    assertFalse(touched, "a secret id reached the client")
+end)
+
+test("Provider.GetRecap never inspects an event", function()
+    -- Rule R1, under the simulated secret: the mock traps arithmetic,
+    -- comparison, concatenation and indexing, so an inspection raises here
+    -- rather than mid-pull in front of a player.
+    local inst = T.load()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function()
+            return { inst.mocks.secretTable({ amount = 900, currentHP = 100 }) }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(738800) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+    local recap = inst.NS.Provider.GetRecap(29)
+    assertEqual(type(recap), "table")
+    assertEqual(inst.mocks.reveal(recap.maxHealth), 738800)
+end)
+
+test("Provider.GetRecap is inert while the perf harness has it suspended", function()
+    -- performance-§6: a suspended capture must stop the addon ASKING, not merely
+    -- stop drawing. Every other read in this file already obeys that.
+    -- red under: reading the recap above the suspend gate.
+    local inst, calls = withRecap({ { spellId = 100 } }, 500)
+    inst.NS.Provider:Suspend()
+    assertNil(inst.NS.Provider.GetRecap(29))
+    assertEqual(calls.events, 0, "a suspended provider still called the client")
+end)
