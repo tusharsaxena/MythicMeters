@@ -166,6 +166,17 @@ end
 ---
 --- @param v any
 --- @return boolean
+--- Whether a value is present and may NOT be read.
+---
+--- Distinct from `plainWord` answering nil, which also covers "there is nothing
+--- here". A caption that is absent costs a column nothing; one that is secret
+--- costs the whole measurement.
+local function unreadable(v)
+    if v == nil then return false end
+    local S = NS.Secrets
+    return (S and S.CanAccess and not S.CanAccess(v)) and true or false
+end
+
 --- A string this code may compare, or nil.
 ---
 --- The recap's `event` field decides whether a line is a swing or a heal, and a
@@ -1026,12 +1037,18 @@ local function applySlotLayout(frame, style, mode)
     -- are symmetrical.
     frame.time:SetPoint("LEFT", frame, "LEFT", SLOT_RIGHT_PAD, 0)
 
-    label:SetWidth(charSpan(EVENT_SPELL_CHARS, path, size, flags))
+    -- MEASURED WHERE THAT IS LEGAL, RESERVED WHERE IT IS NOT. `style.eventSpellWidth`
+    -- is set only when every caption in this recap could be read, which out of
+    -- combat is all of them — and out of combat is when a death recap is read.
+    -- Mid-pull the captions are secret, the measurement is refused, and the
+    -- column falls back to the character reservation it always had.
+    label:SetWidth(style.eventSpellWidth or charSpan(EVENT_SPELL_CHARS, path, size, flags))
     label:SetPoint("LEFT", frame.time, "RIGHT", SLOT_GAP, 0)
 
     frame.caster:Show()
     frame.caster:SetFont(path, size, flags)
-    frame.caster:SetWidth(charSpan(EVENT_CASTER_CHARS, path, size, flags))
+    frame.caster:SetWidth(style.eventCasterWidth
+        or charSpan(EVENT_CASTER_CHARS, path, size, flags))
     frame.caster:ClearAllPoints()
     frame.caster:SetPoint("LEFT", label, "RIGHT", SLOT_GAP, 0)
 end
@@ -1568,17 +1585,53 @@ local function drawDeathEvents(recap, numberStyle, style)
     -- is drawn. The offsets are plain numbers this addon computed — the gate in
     -- `eventOffset` guarantees it — so comparing and measuring them is legal
     -- where doing the same to the names beside them would not be.
-    local widest
+    local path, size, flags = style.fontPath, style.fontSize, style.fontFlags
+    local widest, spellW, casterW = nil, 0, 0
+    -- One unreadable caption abandons the whole measurement rather than sizing
+    -- the column from the readable half — a column that fits four names out of
+    -- ten is worse than one reserved for all of them.
+    local namesReadable = true
+
     for i = 1, total do
         local off = eventOffset(ordered[i].timestamp, deathTime)
         if off ~= nil then
             local text = (off > 0) and string.format("%.1fs", off)
                 or string.format("-%.1fs", math.abs(off))
-            local w = measureText(text, style.fontPath, style.fontSize, style.fontFlags)
+            local w = measureText(text, path, size, flags)
             if w ~= nil and (widest == nil or w > widest) then widest = w end
         end
+
+        if namesReadable then
+            local name = plainWord(ordered[i].spellName)
+            local caster = plainWord(ordered[i].sourceName)
+            -- nil is fine on either — a swing has no spell name and plenty of
+            -- events name no caster. What is NOT fine is a value that is there
+            -- and may not be read, which is what plainWord answers nil for too,
+            -- so the two are told apart by asking Secrets directly.
+            if unreadable(ordered[i].spellName) or unreadable(ordered[i].sourceName) then
+                namesReadable = false
+            else
+                local sw = name and measureText(name, path, size, flags) or 0
+                local cw = caster and measureText(caster, path, size, flags) or 0
+                if sw and sw > spellW then spellW = sw end
+                if cw and cw > casterW then casterW = cw end
+            end
+        end
     end
+
     style.eventTimeWidth = widest
+
+    -- A couple of characters of air, so a name that exactly fills its column
+    -- does not read as though it were clipped. Capped at the reservation, or
+    -- shrinking to fit would become growing to fit and a forty-character boss
+    -- ability would push the numbers off the edge.
+    if namesReadable then
+        local pad = charSpan(2, path, size, flags)
+        style.eventSpellWidth  = math.min(spellW + pad, charSpan(EVENT_SPELL_CHARS, path, size, flags))
+        style.eventCasterWidth = math.min(casterW + pad, charSpan(EVENT_CASTER_CHARS, path, size, flags))
+    else
+        style.eventSpellWidth, style.eventCasterWidth = nil, nil
+    end
 
     for i = total, 1, -1 do
         addEventLine(ordered[i], deathTime, maxHealth, numberStyle, style)

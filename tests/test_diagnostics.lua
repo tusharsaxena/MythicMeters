@@ -458,6 +458,18 @@ local function recapReport(inst)
     return table.concat(lines, "\n"), lines
 end
 
+--- A client that answers a recap for every id.
+local function withRecapsFor(inst)
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function(id)
+            return { { spellId = 1, spellName = "X", amount = 1, currentHP = 1,
+                       timestamp = 1787381686 + id } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+end
+
 --- Seed the Deaths column with raw source rows and point window 1 at Current.
 local function deathsSession(inst, rows)
     inst.NS.Database.GetWindows()[1].data.sessionType = 1
@@ -830,4 +842,30 @@ test("Diagnostics: a slot that WAS probed and refused still raises the warning",
 
     local text = recapReport(inst)
     assertTrue(text:find("some slots answered and some did not", 1, true) ~= nil)
+end)
+
+test("Diagnostics: the recap probe reports why a death is dated the way it is", function()
+    -- "Time into the fight" reads as the wall clock whenever the offset behind
+    -- it is unusable, and there are four separate ways for that to happen: the
+    -- row's own offset is -1 (which is every row on Overall), the Current
+    -- session no longer holds the death, the id is secret, or the setting is not
+    -- what the reader thinks it is. From the outside all four look identical.
+    -- red under: printing the dates without the inputs that produced them.
+    local inst = T.load{ enable = true }
+    deathsSession(inst, {
+        death("Player-1-0000000A", "Me", true, 29, 1356),
+        death("Player-1-0000000B", "Notme", false, 28, -1),
+    })
+    withRecapsFor(inst)
+
+    local text = recapReport(inst)
+    assertTrue(text:find("-- dating --", 1, true) ~= nil, "the section must appear")
+    assertTrue(text:find("deathTimeFormat", 1, true) ~= nil,
+        "the setting in force has to be printed, not assumed")
+    assertTrue(text:find("DeathOffset", 1, true) ~= nil,
+        "the fallback's own answer is the thing in doubt")
+    -- Every style, side by side, so a reader can see two of them agreeing.
+    for _, style in ipairs({ "clock", "ago", "elapsed" }) do
+        assertTrue(text:find(style, 1, true) ~= nil, "missing style: " .. style)
+    end
 end)

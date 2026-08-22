@@ -1939,14 +1939,29 @@ test("Tooltip: a Deaths cell's time sits at the right edge, where a share does",
         "the time must be anchored to the carrier's own right edge")
 end)
 
-test("Tooltip: the caster column is narrower than the spell column", function()
-    -- A caster name is shorter than a spell name in almost every case, and the
-    -- column was eating width the numbers wanted.
+test("Tooltip: the caster column's CAP is narrower than the spell column's", function()
+    -- Both columns size to their content now, so which is wider on any given
+    -- hover is up to the data. What still holds is the ceiling each may reach: a
+    -- caster name is shorter than a spell name in almost every case, and the
+    -- reservation reflects that. Forced onto the reserved path with secret
+    -- captions, which is also the mid-pull case.
     local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { spellId = 1, spellName = inst.mocks.secret("X"),
+                       sourceName = inst.mocks.secret("Y"),
+                       amount = inst.mocks.secret(1),
+                       currentHP = inst.mocks.secret(1), timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(1000) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
     local line = spellLines(inst)[1]
     assertTrue(line.caster:GetWidth() < line.label:GetWidth(),
-        "the caster column is no narrower than the spell column")
+        "the caster column's cap is no narrower than the spell column's")
 end)
 
 test("Tooltip: both name columns refuse to wrap, so the engine clips them", function()
@@ -2107,4 +2122,76 @@ test("Tooltip: a Deaths cell dated by fight time uses the same fallback", functi
     row.deaths, row.deathTimes = { 29 }, { -1 }
     inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
     assertEqual(spellLines(inst)[1].amount:GetText(), "22:36")
+end)
+
+test("Tooltip: the name columns shrink to the names actually in this recap", function()
+    -- Reserved at 22 and 16 characters whatever the recap held, so a list of
+    -- "Melee" and "Cryo Surge" carried half a column of slack while the numbers
+    -- went short. Measured when every name is readable, which out of combat is
+    -- all of them — and that is when a death recap is read.
+    -- red under: a constant reservation.
+    local function widths(spell, caster)
+        local inst, cfg, anchor, row = deathBench()
+        inst.mocks.setDeathRecap({
+            HasRecapEvents = function() return true end,
+            GetRecapEvents = function()
+                return { { spellId = 1, spellName = spell, sourceName = caster,
+                           amount = 1, currentHP = 1, timestamp = 1000 } }
+            end,
+            GetRecapMaxHealth = function() return 1000 end,
+        })
+        inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+        local line = spellLines(inst)[1]
+        return line.label:GetWidth(), line.caster:GetWidth()
+    end
+
+    local shortSpell, shortCaster = widths("Melee", "Frostfang")
+    local longSpell,  longCaster  = widths("Rumbling Ward of the Deep", "Avatar of Determination")
+    assertTrue(longSpell > shortSpell, "the spell column did not shrink to its content")
+    assertTrue(longCaster > shortCaster, "the caster column did not shrink to its content")
+end)
+
+test("Tooltip: a name column never grows past its character cap", function()
+    -- Shrinking to fit must not become growing to fit: a boss ability with a
+    -- forty-character name would push the numbers off the edge, which is the
+    -- thing the reservation was there to stop.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { spellId = 1, amount = 1, currentHP = 1, timestamp = 1000,
+                       spellName = string.rep("W", 80), sourceName = string.rep("W", 80) } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local capped = spellLines(inst)[1]
+    local parts = inst.NS.Tooltip.WidthParts()
+    assertTrue(capped.label:GetWidth() < parts.total,
+        "an 80-character spell name took the whole tooltip")
+end)
+
+test("Tooltip: a SECRET name falls back to the fixed reservation", function()
+    -- Measuring the widest of several is a comparison, and comparing a secret
+    -- raises. Mid-pull the captions are secret, so the columns go back to being
+    -- reserved rather than measured — the same trade applyMinimumWidth records.
+    -- red under: measuring without asking whether the name may be read.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { spellId = 1, spellName = inst.mocks.secret("Melee"),
+                       sourceName = inst.mocks.secret("Frostfang"),
+                       amount = inst.mocks.secret(1),
+                       currentHP = inst.mocks.secret(1), timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(1000) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+
+    assertTrue(pcall(function() inst.NS.Tooltip:SpellTooltip(row, anchor, cfg) end),
+        "measuring a secret name raised")
+    local line = spellLines(inst)[1]
+    assertTrue(line.label:GetWidth() > 0, "the column lost its reservation entirely")
 end)

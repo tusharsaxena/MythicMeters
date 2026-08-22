@@ -107,6 +107,7 @@ end
 
 local SECRET = "<secret>"
 
+
 --- Whether a value can be put in a line at all.
 ---
 --- Defers to the namespace's own concat probe where it exists (core/CoreSetup.lua)
@@ -610,6 +611,66 @@ local function reportRecapReaders(apis)
     end
 end
 
+--- Why each death is dated the way it is.
+---
+--- ADDED AFTER TWO FIXES MISSED. "Time into the fight" renders as the wall clock
+--- whenever the offset behind it is unusable, and there are four separate ways
+--- for that to happen — the row's own offset is -1 (which is EVERY row on the
+--- Overall session), the Current session no longer holds that death so the
+--- fallback lookup finds nothing, the id is secret, or the setting in force is
+--- not the one the reader thinks it is. From outside the addon all four look
+--- identical: a column of clock times.
+---
+--- So this prints the inputs rather than the conclusion. Every style is rendered
+--- side by side, because two of them agreeing IS the symptom.
+local function reportDeathDating(sources)
+    out("  -- dating --")
+
+    local S = NS.Secrets
+
+    local F = NS.Numbers or NS.Format
+    local P = NS.Provider
+    if not (F and F.DeathTime and P) then
+        out("    formatter or provider unavailable")
+        return
+    end
+
+    local windows = NS.Database and NS.Database.GetWindows and NS.Database.GetWindows()
+    local cfg = windows and windows[1]
+    local text = cfg and cfg.text or {}
+    out(string.format("    window 1: sessionType=%s  text.deathTimeFormat=%s",
+        tostring(cfg and cfg.data and cfg.data.sessionType),
+        tostring(text.deathTimeFormat)))
+
+    local printed = 0
+    for i = 1, #(sources or {}) do
+        local src = sources[i]
+        local id = src.deathRecapID
+        if not (S and S.IsSafeKey(id)) then
+            out("    [id is secret — nothing can be dated from it]")
+        else
+            local recap = P.GetRecap and P.GetRecap(id) or nil
+            local newest = recap and recap.events and recap.events[1]
+            local when = newest and newest.timestamp
+            local rowOffset = src.deathTimeSeconds
+            local looked = P.DeathOffset and P.DeathOffset(id) or nil
+
+            out(string.format("    id=%s  row deathTimeSeconds=%s  DeathOffset(id)=%s",
+                tostring(id), shown(rowOffset), shown(looked)))
+            out(string.format("      clock=%s  ago=%s  elapsed=%s",
+                tostring(F.DeathTime(when, looked or rowOffset, "clock")),
+                tostring(F.DeathTime(when, looked or rowOffset, "ago")),
+                tostring(F.DeathTime(when, looked or rowOffset, "elapsed"))))
+        end
+        printed = printed + 1
+        if printed >= 4 then break end
+    end
+
+    out("    elapsed matching clock means the offset was refused: look at the two")
+    out("    figures above it. Both nil or -1 is the Overall session reporting")
+    out("    none AND the Current session no longer holding that death.")
+end
+
 --- What the outcome above means for issue #1, said out loud.
 ---
 --- The reader list being empty is not a detail a reader of the report should
@@ -713,6 +774,7 @@ local function reportDeathRecap()
 
     out("  -- probes --")
     local answered, probed = reportRecapProbes(apis, slots)
+    reportDeathDating(sources)
     reportRecapVerdict(apis, answered, probed)
 end
 
