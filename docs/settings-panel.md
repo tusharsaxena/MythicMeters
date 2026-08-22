@@ -28,7 +28,7 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | # | Page | Panel key | Rows | Defaults button | What is on it |
 |---|---|---|---|---|---|
 | 1 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
-| 2 | Frame | `frame` | 15 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip · **Reset position** button |
+| 2 | Frame | `frame` | 24 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip, the seven header controls and their size, hover reveal, minimised · **Reset position** button |
 | 3 | Header | `header` | 16 | yes | Title text, session name / duration / totals, font, alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own font, size, outline, colour and background |
 | 4 | Rows | `rows` | 8 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
 | 5 | Bars | `bars` | 8 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |

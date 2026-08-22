@@ -260,6 +260,22 @@ the row count stays exactly at the cap (`Aggregator.ApplyRowLimit`).
 the row is an opaque handle. `fillDirection` names where the fill *starts*, so `"LEFT"` means the
 bar grows rightward (`SetReverseFill(false)`).
 
+### The header's controls
+
+`showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
+`true`. Six of the seven controls; `closeButton` above is the seventh and deliberately keeps its
+older name, because renaming it to `showClose` for symmetry would migrate every stored profile in
+exchange for a consistency nobody can see.
+
+`hoverReveal = true` fades the strip until the pointer is over the title bar. `minimised = false`
+collapses the window to that bar — the stored `frame.height` is untouched, so expanding restores it
+exactly. `controlSize = 18` is what each control is drawn at; the art ships at 64px and is scaled
+down to this, the same rule `icons.size` follows for the row icons.
+
+**A collapsed window does not poll.** That is a real clause in `ShouldPoll`, not an emergent
+property of hiding: `OnUpdate` is installed on the frame, and the frame stays shown while collapsed
+— only the body hides.
+
 ### `text` — the FontString in every cell
 
 `leftSlot = "total"` · `rightSlot = "none"` — **both take the same four values**, `none` / `total` /

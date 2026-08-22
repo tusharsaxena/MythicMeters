@@ -72,6 +72,34 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythi
 
 **Steps.** Log in. Run `/mm`. Open Settings → AddOns.
 
+### The header's controls (issues #6, #7)
+
+**Steps:** hover the title bar; click each control in turn; turn some off in Settings → Frame.
+
+**Pass.**
+- **Seven controls, right to left:** close, minimise, lock, settings, segment, reset, export. They
+  are drawn from this addon's own art — white glyphs that take the header's text colour. A control
+  that is a plain letter (`*`, `#`, `>`) means the art AND the atlas both failed: the ladder is
+  working, but say so, because it means a texture did not load.
+- **Turning one off closes the gap.** Hide the lock and everything to its left moves right by
+  exactly one slot; nothing to its right moves. A hole where a control was is the indexed layout
+  failing, and it is the whole point of the rewrite.
+- **The title never runs under a control**, at any `Control size` from 10 to 32 and with any
+  combination hidden.
+- **Hover fades the whole strip at once**, not per button — moving between two controls must not
+  flicker. **Check this on a LOCKED window**: locking used to disable the title bar's mouse, which
+  killed the reveal in the one case a player most wants it.
+- **Minimise collapses to the title bar** and the plus/minus flips. The column headers, the rows,
+  the "Waiting for combat data…" notice and the resize grip all go — anything still drawn over a
+  collapsed window is parented to the frame rather than the body.
+- **A collapsed window stops updating.** Verify during a pull: it must not tick. It is a real clause
+  in `ShouldPoll`, not a consequence of hiding, so it is exactly the kind of thing that regresses.
+- **Expanding restores the exact height** the window had, including after a `/reload` — a collapsed
+  window comes back collapsed, and expands to the size you chose rather than to a default.
+- **Reset asks first.** It must open the confirmation, not clear anything, and the dialog must warn
+  that it wipes the game's own meter data too. Cancelling must leave the sessions intact.
+- **Segment opens the same menu the session line does.** Both routes, same list.
+
 **Pass.**
 - Login completes with no Lua errors.
 - Exactly **one** window exists, named "Meter", centered on screen (`Database.SeedWindows` seeds
