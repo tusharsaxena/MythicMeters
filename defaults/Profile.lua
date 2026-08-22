@@ -223,6 +223,8 @@ local WINDOW_TEMPLATE = {
         leftSlot     = "total",   -- none | total | rate | percent
         rightSlot    = "none",    -- none | total | rate | percent
         numberFormat = "abbreviated",  -- abbreviated | full
+        -- How a death is labelled in the Deaths tooltip and the death list.
+        deathTimeFormat = "clock",     -- clock | ago
         -- Characters, not bytes, and 0 means "no cap". Above WoW's 12-character
         -- player-name limit because a meter also lists NPCs, which are not bound
         -- by it. The realm is stripped regardless of this number.

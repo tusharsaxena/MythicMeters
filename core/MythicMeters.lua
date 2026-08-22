@@ -123,6 +123,12 @@ function NS:OnEnable()
     -- one in core/Secrets.lua.
     self:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED", "OnRestrictionChanged")
 
+    -- Feign Death, and nothing else on this event. It is the busiest thing this
+    -- addon listens to — every cast by every unit in a raid — and it is
+    -- registered because the meter reports a feign as a real death and there is
+    -- no other edge that tells us it was one. See modules/Feign.lua.
+    self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "OnSpellSucceeded")
+
     -- The meter itself.
     self:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED", "OnMeterUpdated")
     self:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED",  "OnMeterSession")
@@ -149,6 +155,11 @@ end
 
 local MSG = NS.Constants.MSG
 
+-- Feign Death. Spelled here as well as in modules/Feign.lua because this handler
+-- must not reach into a module to ask a question it can answer with a constant,
+-- and because the module may be absent on a degraded load.
+local FEIGN_DEATH_SPELL = 5384
+
 function NS:OnEnteringWorld(_, isLogin, isReload)
     self:SendMessage(MSG.ENTERING_WORLD, { isLogin = isLogin, isReload = isReload })
 end
@@ -163,6 +174,35 @@ end
 
 function NS:OnZoneChanged()
     self:SendMessage(MSG.ZONE_CHANGED)
+end
+
+--- UNIT_SPELLCAST_SUCCEEDED(unit, castGUID, spellID) — Feign Death only.
+---
+--- THE ONE HANDLER IN THIS SECTION THAT DECIDES SOMETHING, and it is worth
+--- saying why the section's own rule is bent here rather than quietly broken.
+--- The decision is "was this cast Feign Death", and there is nowhere else it
+--- could be made: no other file may see a game event (architecture-§4), and
+--- putting the raw event on the bus would republish every cast in the raid to
+--- every subscriber to save one integer comparison.
+---
+--- So the body stays as small as the question allows — a nil check, one gated
+--- comparison, an early return — because it runs on the busiest path here.
+---
+--- A SECRET SPELL ID IS NOT COMPARED. `spellID == 5384` raises on one, and the
+--- honest answer when the comparison is refused is to record nothing: that
+--- counts the feign as a death, which is exactly the behaviour that shipped
+--- before the filter existed and the safe direction to fail in.
+function NS:OnSpellSucceeded(_, unit, _castGUID, spellID)
+    if unit == nil or spellID == nil then return end
+    if not (NS.Secrets and NS.Secrets.CanCompare(spellID)) then return end
+    if spellID ~= FEIGN_DEATH_SPELL then return end
+
+    local F = NS.Feign
+    if not (F and F.Note) then return end
+
+    local getGUID = _G.UnitGUID
+    if not getGUID then return end
+    F.Note(getGUID(unit))
 end
 
 --- ADDON_RESTRICTION_STATE_CHANGED(type, state).

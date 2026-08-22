@@ -549,6 +549,51 @@ end
 -- ---------------------------------------------------------------------------
 -- Publication
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Death timestamps (issue #1)
+-- ---------------------------------------------------------------------------
+
+--- How a death is labelled, in one of three styles.
+---
+--- TWO STYLES BECAUSE THERE ARE TWO QUESTIONS: "when in the evening" wants a
+--- wall clock, and "how long ago" wants a countdown.
+---
+--- A THIRD -- "how far into the fight" -- was built and removed. It has no clock
+--- to measure against: the client reports no offset for a death on the Overall
+--- session, the Current session is empty once a run is over, and the session's
+--- own duration is combat time rather than wall time. An anchor of the addon's
+--- own did not survive contact with a live client either. Issue #18 carries the
+--- captures and the ways back in; read it before rebuilding this.
+---
+--- BOTH BRANCHES ARE ARITHMETIC OR A COMPARISON, and the inputs come off a
+--- recap. Each is gated, and a refused input answers nil -- the caller draws an
+--- em dash, exactly as it does for a death whose recap has gone.
+---
+--- @param when any        the death's absolute timestamp, from its recap
+--- @param style string|nil "clock" (default) | "ago"
+--- @param now number|nil  the current epoch time; defaults to `time()`
+--- @return string|nil
+function Format.DeathTime(when, style, now)
+    if when == nil or not Secrets.CanAccess(when) then return nil end
+
+    local clock = date("%H:%M:%S", when)
+
+    if style == "ago" then
+        now = now or (_G.time and _G.time()) or nil
+        if now == nil or not Secrets.CanCompare2(now, when) then return clock end
+        local seconds = now - when
+        if seconds < 0 then seconds = 0 end
+        -- Under a minute reads in seconds. "0 min ago" for a death that happened
+        -- while you were reading the tooltip is worse than saying nothing.
+        if seconds < 60 then
+            return string.format(L["%ds ago"] or "%ds ago", seconds)
+        end
+        return string.format(L["%dm ago"] or "%dm ago", math.floor(seconds / 60))
+    end
+
+    return clock
+end
+
 --
 -- The callable table described in the header. Indexing reaches this module;
 -- calling reaches LibKa0s's chat printer. The perf bracket wraps NOTHING here on

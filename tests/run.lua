@@ -207,6 +207,7 @@ local SUITES = {
     "test_format",
     "test_provider",
     "test_roster",
+    "test_feign",
     "test_aggregator",
     "test_aggregator_sort",
     -- the display

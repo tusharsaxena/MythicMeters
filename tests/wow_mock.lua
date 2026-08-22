@@ -1413,6 +1413,36 @@ local function build()
     end
     M.UnitIsPlayer = function(token) return unit(token) ~= nil end
     M.UnitIsDead   = function() return false end
+
+    -- Unit health, for the feign-death filter in modules/Feign.lua. There was no
+    -- health seam here before it, because nothing in this addon had ever needed
+    -- one: every number it shows comes from C_DamageMeter. A unit with no
+    -- recorded health answers full, which is the state that keeps a feign
+    -- REMEMBERED — the clear fires only on a confirmed 0.
+    M.__unitHealth = {}
+    function M.setUnitHealth(token, current, maximum)
+        M.__unitHealth[token] = { current = current, maximum = maximum or 100 }
+    end
+    -- Whether a unit is feigning. Read only in the "they stood back up"
+    -- direction by modules/Feign.lua -- a false reading on a living unit is
+    -- trustworthy, a true one is not, because it lingers through a
+    -- feign-then-die transition.
+    M.__unitFeign = {}
+    function M.setUnitFeignDeath(token, feigning)
+        M.__unitFeign[token] = feigning and true or false
+    end
+    M.UnitIsFeignDeath = function(token)
+        return M.__unitFeign[token] and true or false
+    end
+
+    M.UnitHealth    = function(token)
+        local h = M.__unitHealth[token]
+        return h and h.current or 100
+    end
+    M.UnitHealthMax = function(token)
+        local h = M.__unitHealth[token]
+        return h and h.maximum or 100
+    end
     -- Category-aware, like the real one. No argument means "either group", which
     -- is what every caller that does not care asks.
     M.IsInGroup           = function(category)
@@ -1544,6 +1574,31 @@ local function build()
     M.OpenDeathRecapUI = function(id)
         M.__deathRecaps = (M.__deathRecaps or 0) + 1
         M.__lastRecapID = id
+    end
+
+    -- ── C_DeathInfo ────────────────────────────────────────────────────────
+    --
+    -- The probe for issue #1 exists because NOBODY KNOWS what this namespace
+    -- answers on a live client for a past death or another player's. So the mock
+    -- does not pick an answer: it is a blank slate a test installs a client into,
+    -- and the DEFAULT is the namespace being absent entirely — which is itself
+    -- one of the four outcomes the probe has to survive.
+    --
+    -- `M.setDeathInfo(members)` installs a namespace; `nil` removes it. Each
+    -- member is a plain function, so a test models "answers for the local
+    -- player's newest death and nils everything else" by writing exactly that,
+    -- rather than by configuring a mock that has already guessed.
+    M.C_DeathInfo = nil
+    function M.setDeathInfo(members)
+        M.C_DeathInfo = members
+    end
+
+    -- C_DeathRecap is the namespace the probe's first two rounds never looked
+    -- at, and the one that actually carries `GetRecapEvents`. Same blank-slate
+    -- rule: absent by default, a test installs the client it wants to model.
+    M.C_DeathRecap = nil
+    function M.setDeathRecap(members)
+        M.C_DeathRecap = members
     end
 
     -- ── frames ─────────────────────────────────────────────────────────────

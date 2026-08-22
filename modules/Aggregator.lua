@@ -98,9 +98,19 @@
 --
 --   { guid, windowId, name, classFilename, specIconID, role,
 --     isPlayer, isLocalPlayer,          -- the same fact under both names
---     providerIndex, sortValue, deathRecapID,
+--     providerIndex, sortValue, deathRecapID, deaths,
 --     values = { [statKey] = { total, rate, maxAmount, columnTotal, percent,
---                              deathRecapID, deathTime } } }
+--                              deathRecapID, deathTime, displayText } } }
+--
+-- `deaths` is a FLAT array of recap ids, `{ 29, 28, 27 }`, NEWEST FIRST, with
+-- `false` in place of an id the client did not give. It exists only on a row
+-- that has a Deaths cell — nil everywhere else, built lazily, and never a field
+-- of the row literal, because that literal runs for every row in every window
+-- four times a second. Flat rather than `{ { recapID = n } }` for the same
+-- reason: a wrapper table per death is one allocation per death per pass, and
+-- the perf harness measures bytes per refresh. `deathRecapID` beside it is the newest death alone and is
+-- what the tooltip hint and the cell click read; the array is what the death
+-- drill-down lists (modules/DrillDown.lua).
 --
 -- `cells` is published as an ALIAS of `values` (one table, two names) for the
 -- same reason: the design brief calls the map `cells`, modules/Row.lua reads
@@ -195,8 +205,30 @@ local function setCell(row, statKey, src, maxAmount, isCount)
             row.values[statKey] = cell
         end
         cell.total = cell.total + 1
-        -- The FIRST row wins the recap: the API returns deaths newest-first, and
-        -- the death a player wants to look at is the one that just happened.
+
+        -- EVERY DEATH LANDS ON THE ROW, in the order the API returned them —
+        -- newest first. The scalar below keeps the newest one and four call
+        -- sites read it; this array is what the death drill-down lists, and
+        -- dropping all but the first is exactly what issue #1 exists to undo.
+        --
+        -- Built lazily and hung on the ROW, never on the cell literal below and
+        -- never in newRow: those two run for every row in every column on every
+        -- pass, and a field only Deaths ever fills would widen the whole grid to
+        -- carry it — the same reasoning the comment in fillCorrelated records.
+        local deaths = row.deaths
+        if deaths == nil then deaths = {} row.deaths = deaths end
+        -- FALSE, NEVER NIL, for a death the client gave no recap id for.
+        -- `deaths[#deaths + 1] = nil` is a no-op: the array silently stayed short
+        -- while the counter above went up, so the cell said 3 and the drill-down
+        -- listed 2 — the one disagreement this whole feature must not have. A
+        -- death with no id cannot be opened, but it certainly happened.
+        local id = src.deathRecapID
+        if id == nil then id = false end
+        deaths[#deaths + 1] = id
+
+        -- The FIRST row wins the SCALAR recap: the API returns deaths
+        -- newest-first, and the death a player wants to look at is the one that
+        -- just happened.
         if cell.deathRecapID == nil then
             cell.deathRecapID = src.deathRecapID
             cell.deathTime    = src.deathTimeSeconds
@@ -896,6 +928,11 @@ local function correlateColumn(column, isCount, collisions)
     -- per refresh to hold nothing.
     local byKey, byRate, seen, keyCount = {}, {}, {}, 0
     local byRecap = isCount and {} or nil
+    -- The identity build's half of `row.deaths`. One array per DYING identity
+    -- key, not one table per source per column — the allocation the note above
+    -- refuses. Counted stats are one column of six and most keys never appear
+    -- here at all, so this costs nothing on a run where nobody dies.
+    local byDeaths = isCount and {} or nil
     for _, src in ipairs(column.sources) do
         if not isEnemySource(src) then
             local key = identityKey(src)
@@ -906,6 +943,16 @@ local function correlateColumn(column, isCount, collisions)
                 -- look at is the one that just happened. `deathRecapID` is
                 -- NeverSecret, so it is a plain value in a plain map.
                 if byRecap[key] == nil then byRecap[key] = src.deathRecapID end
+                -- ...and every row lands in the array, newest first, exactly as
+                -- setCell accumulates it on the GUID path. Two builds, one
+                -- shape: a change made to one and not the other is invisible
+                -- until somebody drills in mid-pull.
+                local list = byDeaths[key]
+                if list == nil then list = {} byDeaths[key] = list end
+                -- False, never nil — see setCell. Two builds, one shape.
+                local id = src.deathRecapID
+                if id == nil then id = false end
+                list[#list + 1] = id
             elseif seen[key] then
                 collisions[key] = true
             else
@@ -918,7 +965,7 @@ local function correlateColumn(column, isCount, collisions)
             end
         end
     end
-    return byKey, keyCount, byRate, byRecap
+    return byKey, keyCount, byRate, byRecap, byDeaths
 end
 
 --- Read one column onto the pass and hand it back. Shared by both halves of the
@@ -992,7 +1039,8 @@ end
 --- Fill one non-sort column by correlating it back onto the rows already built.
 local function fillCorrelated(pass, statKey, collisions, localGuid)
     local column, isCount = takeColumn(pass, statKey)
-    local byKey, keyCount, byRate, byRecap = correlateColumn(column, isCount, collisions)
+    local byKey, keyCount, byRate, byRecap, byDeaths =
+        correlateColumn(column, isCount, collisions)
     pass.corrKeys = pass.corrKeys + keyCount
 
     -- A SOURCE THIS COLUMN KNOWS AND NO ROW STANDS FOR GETS ITS OWN ROW.
@@ -1036,6 +1084,14 @@ local function fillCorrelated(pass, statKey, collisions, localGuid)
                 maxAmount = not isCount and column.maxAmount or nil,
             }
             row.values[statKey] = cell
+
+            -- INSIDE the collision guard, deliberately. A collided key is
+            -- left empty above because the source might be the other player's,
+            -- and a death list attached outside that refusal would put one
+            -- player's deaths under the other player's name — the one
+            -- mislabelling this file refuses everywhere else.
+            local deaths = byDeaths and byDeaths[row.identityKey]
+            if deaths ~= nil then row.deaths = deaths end
 
             local recap = byRecap and byRecap[row.identityKey]
             if recap ~= nil then
@@ -1119,8 +1175,38 @@ local function scanColumn(pass, statKey)
     local isSortColumn = (statKey == pass.sortColumn)
     local touched = isCount and {} or nil
 
+    -- THE FEIGN FILTER, and it lives here rather than anywhere downstream.
+    --
+    -- C_DamageMeter hands a Feign Death a valid deathRecapID, so a hunter's
+    -- feign arrives as an ordinary Deaths source and is counted like one. The
+    -- drop has to happen BEFORE rowForSource, because that function creates and
+    -- appends the row as a side effect in all three of its branches — filtering
+    -- after it would leave a phantom empty row instead of no row.
+    --
+    -- Pruned once per pass rather than per source: modules/Feign.lua walks the
+    -- group to find anyone confirmed dead, and doing that per source would walk
+    -- it once per death. It exits on one boolean when nobody has ever feigned,
+    -- which is every run but a hunter's.
+    local Feign = isCount and NS.Feign or nil
+    if Feign and Feign.Prune then Feign.Prune() end
+
     for index, src in ipairs(column.sources) do
-        local row, isOwn = rowForSource(pass, src, index, isSortColumn)
+        -- ASKED PER DEATH, not per player. `ShouldDropDeath` remembers the
+        -- individual deaths it judges fake, so a hunter who later dies for real
+        -- does not bring every earlier feign back into the count with them —
+        -- which is exactly what asking the live set here used to do. It answers
+        -- false for anything it cannot key on, including a secret guid, and that
+        -- is the honest answer: "cannot tell" must mean "real death", because
+        -- the alternative is silently dropping one.
+        local feigned = Feign and Feign.ShouldDropDeath
+            and Feign.ShouldDropDeath(src.guid, src.deathRecapID)
+        -- Spelled as a branch and not as `not feigned and rowForSource(...) or nil`:
+        -- that idiom truncates a multiple return to one value, which silently
+        -- drops `isOwn` and sends every ordinary source down the pet-fold path.
+        local row, isOwn
+        if not feigned then
+            row, isOwn = rowForSource(pass, src, index, isSortColumn)
+        end
         if row then
             if isOwn then
                 setCell(row, statKey, src, maxAmount, isCount)
@@ -1496,19 +1582,96 @@ function Aggregator.TestColumn(a, b, c)
         local total = math.floor(top * (1 - (index - 1) * 0.085) * (shape[statKey] or 1))
         if total < 0 then total = 0 end
 
-        column.sources[index] = {
-            guid            = string.format("Player-9999-TEST%04d", index),
-            name            = member.name,
-            classFilename   = member.class,
-            specIconID      = member.spec,
-            isLocalPlayer   = (index == 3),
-            totalAmount     = total,
-            amountPerSecond = math.floor(total / 300),
-            deathRecapID    = (statKey == "Deaths") and (100 + index) or nil,
-        }
+        -- DEATHS EMITS ONE SOURCE PER DEATH, because that is what the client
+        -- does — see the catalog note in core/Constants.lua. Emitting one per
+        -- member made every preview player die exactly once, and a list of
+        -- length one is the length at which every ordering bug hides. `total`
+        -- is already the role-shaped figure, so it doubles as how many times
+        -- this member died.
+        if statKey == "Deaths" then
+            local deaths = total
+            if deaths < 1 then deaths = 1 end
+            for n = deaths, 1, -1 do
+                column.sources[#column.sources + 1] = {
+                    guid            = string.format("Player-9999-TEST%04d", index),
+                    name            = member.name,
+                    classFilename   = member.class,
+                    specIconID      = member.spec,
+                    isLocalPlayer   = (index == 3),
+                    totalAmount     = 0,
+                    -- Newest first, so the ids descend exactly as the live
+                    -- client's do.
+                    deathRecapID    = 100 + index * 10 + n,
+                }
+            end
+        else
+            column.sources[#column.sources + 1] = {
+                guid            = string.format("Player-9999-TEST%04d", index),
+                name            = member.name,
+                classFilename   = member.class,
+                specIconID      = member.spec,
+                isLocalPlayer   = (index == 3),
+                totalAmount     = total,
+                amountPerSecond = math.floor(total / 300),
+            }
+        end
     end
 
     return column
+end
+
+--- The death recap behind one preview death, in the client's own shape.
+---
+--- Test mode substitutes the DATA SOURCE and nothing else — that is the whole
+--- reason the mock lives at the one function that talks to the client. Without
+--- this, a preview death list is a column of dashes and every tooltip in it is
+--- empty, which is precisely the "two code paths that look alike and behave
+--- differently at every seam nobody duplicated" failure modules/Provider.lua's
+--- header describes.
+---
+--- Deterministic, like every other preview: the same id gives the same recap on
+--- every run, so a screenshot of the preview is reproducible.
+---
+--- @param recapID number  a preview id, `100 + index * 10 + n`
+--- @return table|nil  { events = newest first, maxHealth }
+function Aggregator.TestRecap(a, b)
+    local recapID = a
+    if a == Aggregator then recapID = b end
+    if type(recapID) ~= "number" or recapID < 100 then return nil end
+
+    local maxHealth = 700000
+    -- Wall-clock, spread so two deaths never share a timestamp: the drill-down
+    -- labels its rows with these and identical labels would read as a bug.
+    local died = 1787380000 + recapID * 37
+
+    local events, hp = {}, maxHealth
+    for i = 1, #PREVIEW_SPELLS do
+        local spell = PREVIEW_SPELLS[i]
+        local amount = math.floor(maxHealth * (0.30 - (i - 1) * 0.04))
+        if amount < 1000 then amount = 1000 end
+        -- Built oldest-first so health falls, then reversed: the client returns
+        -- newest first, and a fixture that did not would let a bug in the
+        -- reversal pass unnoticed.
+        events[#events + 1] = {
+            spellId    = spell.id,
+            spellName  = spell.name,
+            sourceName = (i % 3 == 0) and nil or "Preview Trash",
+            hideCaster = (i % 3 == 0) or nil,
+            amount     = amount,
+            currentHP  = hp,
+            event      = "SPELL_DAMAGE",
+            timestamp  = died - (#PREVIEW_SPELLS - i) * 4.7,
+        }
+        hp = hp - amount
+        if hp < 0 then
+            events[#events].overkill = -hp
+            hp = 0
+        end
+    end
+
+    local newestFirst = {}
+    for i = #events, 1, -1 do newestFirst[#newestFirst + 1] = events[i] end
+    return { events = newestFirst, maxHealth = maxHealth }
 end
 
 --- The spell breakdown behind one test row, in the provider's own shape.

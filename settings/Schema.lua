@@ -320,6 +320,15 @@ local SLOT_SORT   = { "none", "total", "rate", "percent" }
 local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
 local NUMFMT_SORT    = { "abbreviated", "full" }
 
+-- How a death is labelled. A third value, "time into the fight", was built and
+-- removed: nothing on the client can date a past death against the run it
+-- happened in. See the note on modules/Format.lua's DeathTime.
+local DEATHTIME_VALUES = {
+    clock = L["Time of day"],
+    ago   = L["How long ago"],
+}
+local DEATHTIME_SORT = { "clock", "ago" }
+
 -- Every ANCHOR_* token GameTooltip:SetOwner accepts, minus ANCHOR_NONE and
 -- ANCHOR_PRESERVE — both of which mean "the caller places it itself", which is
 -- the one thing this addon may not do: a cell handed a secret value has secret
@@ -811,6 +820,13 @@ NS.Schema = {
         values = NUMFMT_VALUES, sorting = NUMFMT_SORT,
         page = "text", group = L["Cell text"],
         label = L["Number format"], desc = L["Abbreviate large numbers (12.4M) or show them in full (12,400,000)."],
+    },
+    {
+        path = "window.text.deathTimeFormat", type = "string", default = "clock",
+        values = DEATHTIME_VALUES, sorting = DEATHTIME_SORT,
+        page = "text", group = L["Cell text"],
+        label = L["Death timestamps"],
+        desc = L["How a death is labelled in the Deaths tooltip and the death list."],
     },
     {
         -- 20 rather than WoW's 12-character player-name limit: a group meter also

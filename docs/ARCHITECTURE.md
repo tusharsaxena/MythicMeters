@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`, 16 `settings/`.
+Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MythicMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -61,7 +61,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` seams | `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring and shipped-media registration. |
 | `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
-| `modules/` data | `Provider`, `Roster`, `Aggregator`, `Format` | Read → join → order → render as text. |
+| `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
@@ -72,7 +72,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **103 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **104 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -159,7 +159,7 @@ that a load-time cycle between two majors.
 | `set <path> <value>` | Write one setting |
 | `reset <path>` | Reset one setting to its default |
 | `resetall` | Reset every setting to its default (Profiles rows are vetoed) |
-| `debug` | Toggle the console window; `on` / `off` set session logging; **`diag`** prints the diagnostic report |
+| `debug` | Toggle the console window; `on` / `off` set session logging; **`diag`** prints the diagnostic report; **`recap`** prints the death-recap probe alone |
 | `perf` | Performance capture — `/mm perf help` for the run's own verbs |
 | `version` | Print the addon version, read from the TOC manifest |
 | `lock` | Lock or unlock every window for dragging (unlocking implies preview) |
@@ -185,7 +185,8 @@ asked once, of `NS.Export.Available()`, and is never re-decided here — see [Ta
 
 **`core/MythicMeters.lua` registers every game event this addon listens to, and no other file
 registers any.** Each handler does the minimum translation and republishes onto the bus; none reads a
-value and none decides anything, which is what lets that section be read as a wiring diagram.
+value and — with one stated exception, the feign filter below — none decides anything, which is what
+lets that section be read as a wiring diagram.
 
 | Event | Handler | Becomes |
 |---|---|---|
@@ -196,6 +197,7 @@ value and none decides anything, which is what lets that section be read as a wi
 | `DAMAGE_METER_CURRENT_SESSION_UPDATED` | `OnMeterUpdated` | `METER_UPDATED` |
 | `DAMAGE_METER_COMBAT_SESSION_UPDATED` | `OnMeterSession` | `METER_SESSION { type, sessionID }` |
 | `DAMAGE_METER_RESET` | `OnMeterReset` | wipes every cache, then `METER_RESET` |
+| `UNIT_SPELLCAST_SUCCEEDED` | `OnSpellSucceeded` | **the one handler that decides something** — Feign Death (5384) only, straight into `modules/Feign.lua`. Nothing reaches the bus: republishing every cast in a raid to save one comparison would be worse, and no other file may see a game event |
 
 The three `DAMAGE_METER_*` handlers carry the `meterEvent` perf bracket. It measures the **fan-out**,
 not the redraw: `SendMessage` walks every subscribed window's callback synchronously, which is the
@@ -355,6 +357,27 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 ## Known limitations
 
+- **The feign-death filter cannot run mid-pull, and that is structural.** `C_DamageMeter` hands a
+  Feign Death a valid `deathRecapID`, so the Deaths column counts a hunter's feign as a death.
+  `modules/Feign.lua` records the GUID off the cast and `modules/Aggregator.lua` drops that source —
+  but the join is a plain GUID against `sourceGUID`, and `sourceGUID` is secret for the whole of a
+  pull. That is the entire reason the aggregator has a second, GUID-free identity build. There is no
+  plain key on the other side of the join while the restriction is up, so **a feign is counted as a
+  death mid-pull and the count corrects itself the moment combat ends.** Do not "fix" this by keying
+  on something secret; there is nothing to key on.
+- **A past death cannot be dated against the run it happened in, so the addon does not try.**
+  Measured on a live client: the **Current** session held *zero* deaths, the **Overall** session held
+  eighteen and reported `deathTimeSeconds = -1` for every one, and the session's own duration is
+  *combat* time rather than wall time — 32 minutes of it spanning a run whose deaths were three hours
+  back. A "time into the fight" timestamp style was built on three separate derivations of that
+  figure and removed — see [#18](https://github.com/tusharsaxena/MythicMeters/issues/18), which
+  carries the captures. `/mm debug recap`'s **dating** section is what proved each one could not
+  work, and is kept for whoever tries again. Deaths are dated by wall clock or by "how long ago".
+- **The death list is a snapshot taken on entry.** While a window is drilled into a player's deaths,
+  `modules/Window.lua` renders `DrillDown:BuildRows` *instead of* running an aggregate pass, so there
+  is no current row to re-read the deaths off. A player who dies again while somebody is looking at
+  their list will not appear in it until the list is left and re-entered. Re-deriving it would cost a
+  second aggregate pass per frame to keep fresh a list nobody is watching change.
 - English (`enUS`) only. The locale plumbing and the metatable fallback exist; no second locale ships.
 - Retail / Midnight only — a single `## Interface` line. `C_DamageMeter` does not exist on Classic.
 - **Pet attribution is best-effort, but an unattributable ally is no longer lost.** Guardians,
@@ -467,9 +490,12 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 Every `.md` under `docs/` appears in exactly one of the three tables below (`documentation-§3`).
 Frozen and generated directories are named once and never enumerated per run: `docs/automated-tests/`,
-`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` holds image evidence attached to GitHub
-issues (GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
-committed file is the only way a screenshot reaches one); it carries no `.md` and so registers no row.
+`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` held image evidence attached to GitHub
+issues — GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
+committed file is the only way a screenshot reaches one. It is **empty today**: an issue's images are
+deleted when it closes, and its links are re-pointed at the commit that last carried them, which
+keeps resolving forever without the repo carrying the weight. Issue #1's are pinned to `dcb29ad`.
+The directory carries no `.md` and so registers no row.
 
 ### Canonical trio (Tier 1)
 
@@ -503,6 +529,7 @@ committed file is the only way a screenshot reaches one); it carries no `.md` an
 | `superpowers/plans/2026-08-09-mythic-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
+| `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 
@@ -513,12 +540,12 @@ registered above.
 
 | Doc | Status | Trigger, as measured |
 |---|---|---|
-| `slash-dispatch.md` | Not applicable | **16 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 6 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 3 words, `perf` delegates its whole sub-surface to the library, and `export` takes one optional window name. The [Slash commands](#slash-commands) section carries all of it in a screen. |
+| `slash-dispatch.md` | Not applicable | **16 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 6 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 4 words, `perf` delegates its whole sub-surface to the library, and `export` takes one optional window name. The [Slash commands](#slash-commands) section carries all of it in a screen. |
 | `message-bus.md` | Not applicable | **12 distinct messages**, all declared in one catalog (`core/Constants.lua` `MSG`) with the owning sender named beside each. Every payload is a flat table of one to two plain fields; none carries a handle, a curve object or a per-unit filter needing prose. The [Message bus](#message-bus) section carries sender, consumers and payload for all twelve in 22 lines. |
 | `compat-layer.md` | Not applicable | **`core/Compat.lua` is 389 lines and 18 shims**, each a guarded namespace check around one passthrough, with no feature decisions and no state. Nothing there inspects a meter value. The comparison point is KickCD's 490-line Compat, which ships the doc. |
 | `midnight-quirks.md` (secret values) | Not applicable | The 12.0 secret-value model is this addon's **defining** constraint, not a quirk beside its main subject — so it is carried by [Taint notes](#taint-notes) (the operation lists, R1/R3, the `Combat`-not-`ChallengeMode` fact) and by [data-flow.md](data-flow.md), which is Tier 1 and mandatory here regardless. A third copy would be the one that drifts. |
 | `profiles.md` | Not applicable | `settings/Profiles.lua` is 113 lines hosting **AceDBOptions-3.0's own tree** unchanged. The addon adds no profile semantics beyond the `PROFILE_CHANGED` fan-out already tabulated above and the reset-all veto already stated under [Settings schema](#settings-schema); the persisted shape is [schema.md](schema.md)'s. |
-| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. The one surface of this addon's own is `/mm debug diag` — `core/Diagnostics.lua`, ~740 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the provider-order probe is the newest section — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
+| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. This addon's own surface is `/mm debug diag` and `/mm debug recap` — `core/Diagnostics.lua`, ~1115 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the death-recap probe for issue #1 is the newest section, the first with a verb of its own, and the first to search the client two ways because one was measured to be unreliable — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
 
 ## Documented deviations
 

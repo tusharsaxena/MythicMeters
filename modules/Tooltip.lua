@@ -166,6 +166,30 @@ end
 ---
 --- @param v any
 --- @return boolean
+--- Whether a value is present and may NOT be read.
+---
+--- Distinct from `plainWord` answering nil, which also covers "there is nothing
+--- here". A caption that is absent costs a column nothing; one that is secret
+--- costs the whole measurement.
+local function unreadable(v)
+    if v == nil then return false end
+    local S = NS.Secrets
+    return (S and S.CanAccess and not S.CanAccess(v)) and true or false
+end
+
+--- A string this code may compare, or nil.
+---
+--- The recap's `event` field decides whether a line is a swing or a heal, and a
+--- comparison against a secret raises. nil means "cannot tell", which lands on
+--- the ordinary path.
+local function plainWord(v)
+    if v == nil then return nil end
+    local S = NS.Secrets
+    if S and S.CanAccess and not S.CanAccess(v) then return nil end
+    if type(v) ~= "string" then return nil end
+    return v
+end
+
 local function plainTruth(v)
     local Secrets = NS.Secrets
     if not (Secrets and Secrets.CanAccess) then return false end
@@ -581,6 +605,37 @@ local LABEL_INSET_LEFT = 4
 --- purpose and neither should drift into the other.
 local NAME_COLUMN_CHARS = 25
 
+-- THE DEATH TOOLTIP'S OWN COLUMNS, in characters, reserved exactly the way
+-- NAME_COLUMN_CHARS is and for the same reason: a spell name and a caster name
+-- are both resolved off ids the client can hand back SECRET, and measuring one
+-- to size its column is the inspection rule R3 forbids. So each column is a
+-- reservation at the configured font and the engine clips into it. Nothing here
+-- cuts a string up — `string.sub` on a secret raises, and a truncation this code
+-- performed would be an inspection besides.
+local EVENT_SPELL_CHARS  = 22
+-- A caster name is shorter than a spell name in nearly every case. Widened
+-- again after 13 clipped "Grizzled Warbringer" a good deal earlier than the
+-- column's own width suggested it would -- these are 'n' widths, and a name
+-- full of wide glyphs runs out of room sooner than the reservation implies.
+local EVENT_CASTER_CHARS = 16
+
+-- The floor for the time column, and only the floor: the real width is measured
+-- from the times actually in the recap being drawn. They are numbers this addon
+-- computed, so measuring them is legal — unlike the names beside them.
+local EVENT_TIME_WIDEST = "-9.9s"
+
+-- The melee swing's own icon, the one Blizzard's recap uses. A swing carries no
+-- spellId at all, so there is nothing to resolve one from.
+local MELEE_ICON = 135274
+
+-- inv_misc_bone_skull_03. Every line of a Deaths cell's tooltip is a death, so
+-- they all wear the same icon — its job is to hold the column where every other
+-- tooltip in the addon puts a spell icon, not to tell one row from another.
+local DEATH_ICON = 237275
+
+-- The widest a wall clock reads. The other two styles are shorter.
+local DEATH_CLOCK_WIDEST = "00:00:00"
+
 --- Rough width of one character, as a fraction of the font's point size.
 ---
 --- A FALLBACK ONLY. The span above is measured properly on `measureText`; this
@@ -855,10 +910,31 @@ local function lineWidget(index)
     -- pool holds one object rather than a record of four.
     label:SetPoint("RIGHT", amount, "LEFT", -SLOT_GAP, 0)
 
+    -- TWO MORE SLOTS, USED ONLY BY THE DEATH BRANCH. They are created for every
+    -- carrier rather than lazily because the pool never destroys one: a carrier
+    -- that grew slots on its first event line would be a different object from
+    -- one that had only ever drawn spells, and the layout below would have to
+    -- test for that on every draw.
+    --
+    -- Their placement and width are stated per draw, in `applySlotLayout`, and
+    -- NOT here — the carrier drawing line 4 of this hover drew line 4 of the
+    -- last one, so anything set once at creation is a stale value waiting to
+    -- happen.
+    local time = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    time:SetJustifyH("RIGHT")
+    if time.SetWordWrap then time:SetWordWrap(false) end
+
+    local caster = frame:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    caster:SetJustifyH("LEFT")
+    if caster.SetWordWrap then caster:SetWordWrap(false) end
+    if label.SetWordWrap then label:SetWordWrap(false) end
+
     frame.bar, frame.amount, frame.share, frame.label = b, amount, share, label
+    frame.time, frame.caster = time, caster
     linePool[index] = frame
     return frame
 end
+
 
 --- A hidden FontString kept solely to measure text, OUTSIDE GameTooltip.
 ---
@@ -886,6 +962,95 @@ local function measureText(text, path, size, flags)
     local ok, w = pcall(ruler.GetStringWidth, ruler)
     if not ok or type(w) ~= "number" then return nil end
     return w
+end
+
+--- The width of N characters at one font, for a reserved column.
+local function charSpan(chars, path, size, flags)
+    return measureText(string.rep("n", chars), path, size, flags)
+        or (chars * size * NAME_WIDTH_PER_CHAR)
+end
+
+--- Place the carrier's text slots for the kind of line about to be drawn.
+---
+--- STATED ON EVERY DRAW, BOTH WAYS. The pool keys a carrier by tooltip line
+--- index, so the frame drawing line 4 of this hover is the one that drew line 4
+--- of the last one — and an event line narrows the name column and shows two
+--- extra slots. A spell line that inherited either would render its name into a
+--- 22-character box with a stray time beside it.
+---
+--- @param frame table   a pooled carrier
+--- @param style table
+--- @param mode string|nil  nil for an ordinary line, "event" for a recap event,
+---   "clock" for a death in a Deaths cell's list
+local function applySlotLayout(frame, style, mode)
+    local path, size, flags = style.fontPath, style.fontSize, style.fontFlags
+    local label = frame.label
+
+    label:ClearAllPoints()
+    frame.share:ClearAllPoints()
+    frame.share:Show()
+    frame.share:SetPoint("RIGHT", frame, "RIGHT", -SLOT_RIGHT_PAD, 0)
+    frame.amount:ClearAllPoints()
+    frame.amount:SetPoint("RIGHT", frame.share, "LEFT", -SLOT_GAP, 0)
+    frame.amount:SetWidth(AMOUNT_SLOT_WIDTH)
+
+    if mode == "clock" then
+        -- ONE FIGURE, AT THE RIGHT EDGE. A death has no share, and leaving the
+        -- empty share slot in place held the time a whole column short of the
+        -- bar's edge while every other tooltip's rightmost figure sits against
+        -- it. So the share comes down and the amount takes its place.
+        frame.time:Hide()
+        frame.caster:Hide()
+        frame.share:Hide()
+        frame.amount:ClearAllPoints()
+        frame.amount:SetPoint("RIGHT", frame, "RIGHT", -SLOT_RIGHT_PAD, 0)
+        frame.amount:SetWidth((measureText(DEATH_CLOCK_WIDEST, path, size, flags)
+            or AMOUNT_SLOT_WIDTH) + SLOT_RIGHT_PAD)
+        label:SetWidth(0)
+        label:SetPoint("LEFT", frame, "LEFT", LABEL_INSET_LEFT, 0)
+        label:SetPoint("RIGHT", frame.amount, "LEFT", -SLOT_GAP, 0)
+        return
+    end
+
+    if mode ~= "event" then
+        frame.time:Hide()
+        frame.caster:Hide()
+        -- Width from its two anchors, as it has always been: the name column of
+        -- a spell line runs from the icon to the amount slot.
+        label:SetWidth(0)
+        label:SetPoint("LEFT", frame, "LEFT", LABEL_INSET_LEFT, 0)
+        label:SetPoint("RIGHT", frame.amount, "LEFT", -SLOT_GAP, 0)
+        return
+    end
+
+    -- Measured from this recap's own longest time where one was worked out,
+    -- with the constant as a floor. Sized to a constant it carried a character
+    -- of slack down its left edge on every list whose longest was shorter.
+    local timeWidth = (style.eventTimeWidth
+        or measureText(EVENT_TIME_WIDEST, path, size, flags) or 0) + SLOT_RIGHT_PAD
+
+    frame.time:Show()
+    frame.time:SetFont(path, size, flags)
+    frame.time:SetWidth(timeWidth)
+    frame.time:ClearAllPoints()
+    -- The same inset the share slot keeps on the right, so the row's two edges
+    -- are symmetrical.
+    frame.time:SetPoint("LEFT", frame, "LEFT", SLOT_RIGHT_PAD, 0)
+
+    -- MEASURED WHERE THAT IS LEGAL, RESERVED WHERE IT IS NOT. `style.eventSpellWidth`
+    -- is set only when every caption in this recap could be read, which out of
+    -- combat is all of them — and out of combat is when a death recap is read.
+    -- Mid-pull the captions are secret, the measurement is refused, and the
+    -- column falls back to the character reservation it always had.
+    label:SetWidth(style.eventSpellWidth or charSpan(EVENT_SPELL_CHARS, path, size, flags))
+    label:SetPoint("LEFT", frame.time, "RIGHT", SLOT_GAP, 0)
+
+    frame.caster:Show()
+    frame.caster:SetFont(path, size, flags)
+    frame.caster:SetWidth(style.eventCasterWidth
+        or charSpan(EVENT_CASTER_CHARS, path, size, flags))
+    frame.caster:ClearAllPoints()
+    frame.caster:SetPoint("LEFT", label, "RIGHT", SLOT_GAP, 0)
 end
 
 --- The width of `NAME_COLUMN_CHARS` characters at one font.
@@ -977,6 +1142,21 @@ local function applyMinimumWidth(style)
     GameTooltip:SetMinimumWidth(Tooltip.WidthParts(style).total)
 end
 
+--- The same floor, plus the death tooltip's two extra columns.
+---
+--- A death line carries a time and a caster that a spell line does not, and they
+--- have to be paid for or they overlap the numbers. Reserved from the font like
+--- everything else here — see the note on applyMinimumWidth for why none of it
+--- may be measured off the names themselves.
+local function applyDeathMinimumWidth(style)
+    if not (_G.GameTooltip and GameTooltip.SetMinimumWidth) then return end
+    local path, size, flags = style.fontPath, style.fontSize, style.fontFlags
+    local extra = (measureText(EVENT_TIME_WIDEST, path, size, flags) or 0)
+        + SLOT_RIGHT_PAD + SLOT_GAP
+        + charSpan(EVENT_CASTER_CHARS, path, size, flags) + SLOT_GAP
+    GameTooltip:SetMinimumWidth(Tooltip.WidthParts(style).total + extra)
+end
+
 --- Everything a line needs to draw itself, resolved ONCE per hover.
 ---
 --- Resolved once rather than per line because every one of these is an LSM fetch
@@ -1055,7 +1235,7 @@ end
 --- @param style table        a resolved style from `lineStyle`
 --- @param label string|nil   text for the carrier's own name slot (target lines);
 ---                           nil leaves it empty, which is what a spell line wants
-local function drawLine(lineIndex, amount, share, value, max, style, label)
+local function drawLine(lineIndex, amount, share, value, max, style, label, mode)
     local name = GameTooltip:GetName()
     local left = name and _G[name .. "TextLeft" .. lineIndex]
     if not left then return end
@@ -1068,6 +1248,10 @@ local function drawLine(lineIndex, amount, share, value, max, style, label)
     frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.label:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+
+    -- Which slots exist on this line, and how wide they are. Re-stated here for
+    -- the same reason the font above it is: the carrier is pooled.
+    applySlotLayout(frame, style, mode)
 
     -- The share slot is sized from the font, so it is re-stated every draw for
     -- the same reason the font is: the carrier is pooled, and line 4 of this
@@ -1098,6 +1282,12 @@ local function drawLine(lineIndex, amount, share, value, max, style, label)
     frame.amount:SetText(amount)
     frame.share:SetText(share)
     frame.label:SetText(label or "")
+    -- Blanked rather than left alone: a hidden slot still holds last hover's
+    -- text, and the death path reads them back in tests.
+    if mode ~= "event" then
+        frame.time:SetText("")
+        frame.caster:SetText("")
+    end
 
     -- THE BAR TAKES THE HANDLES RAW, exactly as modules/Row.lua's cells do.
     --
@@ -1176,6 +1366,329 @@ local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
     drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style, nil)
 end
 
+-- How many deaths a grid cell's tooltip will list before it stops. A raid night
+-- can hold more than anyone reads in a hover, and the drill-down is one click
+-- away with the whole list in it.
+local MAX_DEATH_LINES = 12
+
+-- What a death shows in place of a time when the client no longer holds its
+-- recap. The same em dash modules/DrillDown.lua puts in the cell.
+local NO_CLOCK_TEXT = "\226\128\148"
+
+--- How one death is labelled, in whichever style the hovered window is set to.
+---
+--- The moment of death is the recap's NEWEST event, never `deathTimeSeconds` —
+--- those are different clocks, one absolute and one seconds-into-session, and
+--- the second is unusable besides (see modules/Format.lua's DeathTime).
+---
+--- Kept in step with modules/DrillDown.lua's copy on purpose: this tooltip is
+--- the INDEX into that list, and the two labelling deaths differently would make
+--- one list look like two.
+---
+--- @param recap table|nil
+--- @param style string|nil  the window's timestamp style
+--- @return string|nil
+local function deathClockOf(recap, style)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return nil end
+
+    local Secrets = NS.Secrets
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then
+        return nil
+    end
+
+    local newest = events[1]
+    if type(newest) ~= "table" then return nil end
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(newest) then
+        return nil
+    end
+
+    local F = NS.Numbers or NS.Format
+    if not (F and F.DeathTime) then return nil end
+    return F.DeathTime(newest.timestamp, style)
+end
+
+-- ---------------------------------------------------------------------------
+-- Death events (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- One line per incoming event behind a death, drawn on the same carrier the
+-- spell breakdown uses so fonts, borders, colours and the width machinery are
+-- inherited rather than duplicated.
+--
+-- WHAT IS DIFFERENT FROM A SPELL LINE, and why each difference exists:
+--
+--   * the bar is HP REMAINING, not the amount. A death is read by watching a
+--     health bar empty, and `currentHP` with the recap's own max is exactly that
+--     — handed over raw so the WIDGET divides. Tainted code doing that division
+--     itself is the thing rule R1 forbids.
+--   * the caption carries a time and an attacker as well as a spell. Both extra
+--     terms come off the event, both may be secret, and the join is therefore
+--     ONE string.format rather than any `..`. This file has never concatenated
+--     anything that could be secret and this is not where it starts.
+--   * the amount slot is the damage alone. Overkill goes in the CAPTION instead,
+--     because AMOUNT_SLOT_WIDTH is a fixed 66px with no per-font measurement and
+--     "-787.3K (138.1K overkill)" would clip exactly the way "100.0%" once
+--     clipped to "100....". Widening it would change every tooltip in the addon.
+
+--- Seconds between an event and the death, as a negative number, or nil.
+---
+--- GATED, even though a live capture showed these fields plain in combat. A
+--- subtraction is arithmetic, arithmetic on a secret raises, and "plain today"
+--- is an observation about one build. A refused subtraction costs the time
+--- prefix on one line; an ungated one costs the tooltip mid-pull.
+---
+--- @return number|nil
+local function eventOffset(when, deathTime)
+    if when == nil or deathTime == nil then return nil end
+    local Secrets = NS.Secrets
+    if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(when, deathTime)) then
+        return nil
+    end
+    return when - deathTime
+end
+
+--- The three text columns of one event, plus the icon that heads its line.
+---
+--- SPLIT RATHER THAN COMPOSED. One string used to hold the time, the spell, the
+--- caster and an overkill clause, so a long name pushed the numbers off the
+--- right edge and the killing blow rendered as "355.8Kove…37.3%". Each part now
+--- goes to its own reserved slot and the engine clips into it.
+---
+--- Nothing here joins two of them. A spell name and a caster name are both
+--- resolved off ids the client can hand back secret, and `..` on a secret
+--- raises where a widget setter takes one happily.
+---
+--- @param event table
+--- @param secondsBefore number|nil  already gated; nil when it could not be computed
+--- @return string icon, any timeText, any name, any caster
+local function eventColumns(event, secondsBefore)
+    local spellID = event.spellId
+    local icon = (spellID ~= nil and Compat and Compat.GetSpellTexture)
+        and Compat.GetSpellTexture(spellID) or nil
+
+    -- A MELEE SWING HAS NO SPELL AT ALL — no id, no name — so it fell through to
+    -- the "the client could not name this" placeholder and printed "#?", which
+    -- reads as a bug in the addon rather than as a melee hit. Blizzard's own
+    -- recap draws it as "Melee" with the weapon icon, and so does this.
+    --
+    -- The event type is read through `plainWord`, because it comes off a recap
+    -- like everything else and comparing a secret string raises.
+    local kind = plainWord(event.event)
+    local name = event.spellName
+    if name == nil then
+        if kind == "SWING_DAMAGE" then
+            name = L["Melee"] or "Melee"
+            icon = icon or MELEE_ICON
+        elseif kind == "SPELL_HEAL" or kind == "SPELL_PERIODIC_HEAL" then
+            name = L["Heal"] or "Heal"
+        else
+            -- A spell the client cannot name is shown by id rather than dropped,
+            -- exactly as addSpellLine does it. The explicit nil branch is there
+            -- because string.format("%s", nil) raises in Lua 5.1.
+            name = (spellID ~= nil) and string.format("#%s", spellID) or "#?"
+        end
+    end
+
+    -- `hideCaster` may be a secret boolean, so it goes through plainTruth. An
+    -- absent caster leaves the column EMPTY rather than collapsing it: the
+    -- columns have to line up down the whole tooltip.
+    local caster = event.sourceName
+    if plainTruth(event.hideCaster) then caster = nil end
+
+    local timeText = ""
+    if secondsBefore ~= nil then
+        -- SPELLED WITH THE SIGN, not left to the subtraction. Every event
+        -- precedes the death, so the figure is zero or negative — and the
+        -- killing blow's is exactly zero, which `%.1f` renders as "0.0s" while
+        -- the whole column reads in negatives. "-0.0s" is the honest one: it
+        -- says "at the moment of death", not "zero seconds".
+        if secondsBefore > 0 then
+            timeText = string.format("%.1fs", secondsBefore)
+        else
+            -- math.abs, not unary minus: negating a zero yields NEGATIVE
+            -- zero, which "%.1f" renders as "-0.0" and the sign above then
+            -- doubles into "--0.0s".
+            timeText = string.format("-%.1fs", math.abs(secondsBefore))
+        end
+    end
+
+    return string.format("|T%s:%d:%d:0:0|t", icon or FALLBACK_ICON,
+        TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE), timeText, name, caster or ""
+end
+
+--- Draw one recap event.
+---
+--- NO OVERKILL. It is the part of a killing blow that exceeded health the player
+--- no longer had, it appears on exactly one line out of ten, and on this surface
+--- it was colliding with the HP percentage beside it. The figure is still in the
+--- payload for anything that later wants it.
+---
+--- @param event table
+--- @param deathTime any|nil   the newest event's timestamp
+--- @param maxHealth any|nil   the recap's own max, for the bar
+local function addEventLine(event, deathTime, maxHealth, numberStyle, style)
+    local icon, timeText, name, caster =
+        eventColumns(event, eventOffset(event.timestamp, deathTime))
+
+    -- The tooltip's own line carries ONLY the icon. Everything else is on the
+    -- carrier, in fixed slots, so the columns line up down the whole tooltip
+    -- instead of ragging against names of a dozen different lengths.
+    GameTooltip:AddLine(icon, 1, 1, 1)
+
+    local index = GameTooltip:NumLines()
+    drawLine(index,
+        formatNumber(event.amount, numberStyle),
+        formatShare(event.currentHP, maxHealth),
+        event.currentHP, maxHealth, style, name, "event")
+
+    local frame = lineWidget(index)
+    frame.time:SetText(timeText)
+    frame.caster:SetText(caster)
+end
+
+--- Every event behind one death, oldest first.
+---
+--- REVERSED FROM THE CLIENT'S ORDER, which is newest first. The killing blow
+--- reads as the last line for the same reason a story ends with its ending.
+---
+--- @return boolean  whether anything was drawn
+local function drawDeathEvents(recap, numberStyle, style)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return false end
+    local Secrets = NS.Secrets
+    if not (Secrets and Secrets.SafeIterate) then return false end
+    if Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then return false end
+
+    -- Collected first, because the walk has to run backwards and SafeIterate —
+    -- the only legal way to measure an array whose entries may be secret — runs
+    -- forwards. `#` on it is what rule R1 forbids.
+    local ordered = {}
+    Secrets.SafeIterate(events, function(_, event)
+        if type(event) ~= "table" then return end
+        if Secrets.CanAccessTable and not Secrets.CanAccessTable(event) then return end
+        ordered[#ordered + 1] = event
+        if #ordered >= COLLECT_LIMIT then return false end
+    end)
+
+    local total = #ordered
+    if total == 0 then return false end
+
+    -- Element one is the killing blow, so its timestamp is the moment of death
+    -- and every other line is measured against it.
+    local deathTime = ordered[1].timestamp
+    local maxHealth = recap.maxHealth
+
+    -- The time column is sized from THIS recap's longest offset, before any line
+    -- is drawn. The offsets are plain numbers this addon computed — the gate in
+    -- `eventOffset` guarantees it — so comparing and measuring them is legal
+    -- where doing the same to the names beside them would not be.
+    local path, size, flags = style.fontPath, style.fontSize, style.fontFlags
+    local widest, spellW, casterW = nil, 0, 0
+    -- One unreadable caption abandons the whole measurement rather than sizing
+    -- the column from the readable half — a column that fits four names out of
+    -- ten is worse than one reserved for all of them.
+    local namesReadable = true
+
+    for i = 1, total do
+        local off = eventOffset(ordered[i].timestamp, deathTime)
+        if off ~= nil then
+            local text = (off > 0) and string.format("%.1fs", off)
+                or string.format("-%.1fs", math.abs(off))
+            local w = measureText(text, path, size, flags)
+            if w ~= nil and (widest == nil or w > widest) then widest = w end
+        end
+
+        if namesReadable then
+            local name = plainWord(ordered[i].spellName)
+            local caster = plainWord(ordered[i].sourceName)
+            -- nil is fine on either — a swing has no spell name and plenty of
+            -- events name no caster. What is NOT fine is a value that is there
+            -- and may not be read, which is what plainWord answers nil for too,
+            -- so the two are told apart by asking Secrets directly.
+            if unreadable(ordered[i].spellName) or unreadable(ordered[i].sourceName) then
+                namesReadable = false
+            else
+                local sw = name and measureText(name, path, size, flags) or 0
+                local cw = caster and measureText(caster, path, size, flags) or 0
+                if sw and sw > spellW then spellW = sw end
+                if cw and cw > casterW then casterW = cw end
+            end
+        end
+    end
+
+    style.eventTimeWidth = widest
+
+    -- A couple of characters of air, so a name that exactly fills its column
+    -- does not read as though it were clipped. Capped at the reservation, or
+    -- shrinking to fit would become growing to fit and a forty-character boss
+    -- ability would push the numbers off the edge.
+    if namesReadable then
+        local pad = charSpan(2, path, size, flags)
+        style.eventSpellWidth  = math.min(spellW + pad, charSpan(EVENT_SPELL_CHARS, path, size, flags))
+        style.eventCasterWidth = math.min(casterW + pad, charSpan(EVENT_CASTER_CHARS, path, size, flags))
+    else
+        style.eventSpellWidth, style.eventCasterWidth = nil, nil
+    end
+
+    for i = total, 1, -1 do
+        addEventLine(ordered[i], deathTime, maxHealth, numberStyle, style)
+    end
+    return true
+end
+
+--- @param row table          a death drill-down row (needs .recapID)
+--- @param style table        the line style every carrier is drawn with
+--- @param numberStyle string|nil  the hovered window's abbreviation style
+local function addDeathBreakdown(row, style, numberStyle)
+    local P = NS.Provider
+    local recap = (row.recapID ~= nil and P and P.GetRecap)
+        and P.GetRecap(row.recapID) or nil
+
+    -- THE HEADER IS NOT DECORATION; IT KEEPS A CARRIER OFF LINE 1.
+    --
+    -- drawLine fonts the tooltip line its carrier sits behind and records it, and
+    -- restoreFonts puts SetFontObject(GameTooltipText) back on teardown. On a
+    -- live client GameTooltipTextLeft1 inherits GameTooltipHeaderText, NOT
+    -- GameTooltipText — so an event on line 1 would leave every GameTooltip in
+    -- the game rendering its title in the small body font until the next
+    -- /reload. The damage is to a shared FontString this addon does not own,
+    -- which is why it outlives the hover and everything else here.
+    --
+    -- Every other caller already puts a header on line 1 for its own reasons,
+    -- which is why releaseLines can claim "a spell line is never line 1" and why
+    -- this never fired before. The death branch is the first path that would
+    -- have started at the top.
+    --
+    -- It earns its place besides: the row says only "Death 3", so this is where
+    -- a reader finds out whose death and when. Both terms go through one
+    -- AddDoubleLine rather than any concatenation — `displayName` may be secret.
+    GameTooltip:AddDoubleLine(displayName(row),
+        row.deathClock or L["Death recap"] or "Death recap",
+        1, 1, 1, 1, 0.82, 0)
+
+    -- THE SAME GAP AND CAPTION EVERY OTHER SECTION IN THIS FILE GETS. Without
+    -- them the header sat flush against the first bar, which nothing else here
+    -- does, and the tooltip read as though a different addon had drawn it. The
+    -- gap is also what keeps a carrier off line 1 with room to spare.
+    addSectionGap(style)
+    GameTooltip:AddLine(L["Death recap"] or "Death recap", 1, 0.82, 0)
+
+    if not drawDeathEvents(recap, numberStyle, style) then
+        -- A DEATH THE CLIENT NO LONGER HOLDS SAYS SO. An empty tooltip under the
+        -- cursor reads as a broken addon; a sentence reads as a fact about the
+        -- client, which is what it is.
+        GameTooltip:AddLine(L["No recap stored for this death"] or
+            "No recap stored for this death", 1, 0.82, 0)
+        return
+    end
+
+    -- Reserved from CONFIG, never measured off a line that has held a recap
+    -- value — the whole reason applyMinimumWidth exists. SpellTooltip has never
+    -- needed it before because its other paths draw no carriers.
+    applyDeathMinimumWidth(style)
+end
+
 --- The extra facts an Avoidable Damage row carries: whether the hit was
 --- avoidable, and whether it was deadly.
 ---
@@ -1235,6 +1748,64 @@ local function sourceDetailFor(window, statKey, row)
         and P:GetSourceDetail(sessionTypeOf(window), statKey, row.guid, nil, sessionIDOf(window))
     if type(source) ~= "table" then return nil end
     return source
+end
+
+--- Draw the "Deaths" section on a GRID cell: one line per death, newest first.
+---
+--- ISSUE #1'S FIRST COMPLAINT. This cell used to run the ordinary spell path,
+--- which asks the provider for `combatSpells` on a Deaths source — there is no
+--- spell list on a death row, so it rendered "No data yet": technically honest
+--- and completely useless. A Deaths cell should never have been showing a spell
+--- breakdown at all.
+---
+--- The lines are the same shape the drill-down's rows are, and deliberately so:
+--- this tooltip is the INDEX into that list, so hovering and then clicking
+--- shows the same deaths in the same order.
+---
+--- @param row table       an aggregated row (needs .deaths)
+--- @param style table
+--- @param timeStyle string|nil  the window's timestamp style
+--- @return number  lines drawn
+local function addDeathList(row, style, timeStyle)
+    local deaths = row.deaths
+    if type(deaths) ~= "table" or #deaths == 0 then return 0 end
+
+    local P = provider()
+    if not (P and P.GetRecap) then return 0 end
+
+    addSectionGap(style)
+    GameTooltip:AddLine(L["Deaths"], 1, 0.82, 0)
+
+    local total = #deaths
+    local drawn = 0
+    for i = 1, total do
+        local id = deaths[i]
+        local clock
+        if id ~= false and id ~= nil then
+            -- The offset falls back to the Current session for the reason
+            -- modules/DrillDown.lua's copy records: Overall reports -1 for every
+            -- death it holds, and Overall is what a window shows by default.
+            clock = deathClockOf(P.GetRecap(id), timeStyle)
+        end
+
+        -- Numbered chronologically and listed newest first, exactly as
+        -- modules/DrillDown.lua builds the rows this indexes. A reader who hovers
+        -- and then clicks must see the same list twice.
+        GameTooltip:AddLine(string.format("|T%d:%d:%d:0:0|t %s", DEATH_ICON,
+            TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE,
+            string.format(L["Death %d"] or "Death %d", total - i + 1)), 1, 1, 1)
+        -- The time goes in the AMOUNT slot rather than the line, so the times
+        -- line up in a column instead of ragging against names of two lengths.
+        --
+        -- PLAIN ONES FOR THE BAR, so it draws FULL. A death is not a quantity
+        -- and there is nothing here to scale against, but an empty bar behind
+        -- every line reads as a value that failed to load — so the bar is the
+        -- row's backing, exactly as it is on a death row in the drill-down.
+        drawLine(GameTooltip:NumLines(), clock or NO_CLOCK_TEXT, "", 1, 1, style, nil, "clock")
+        drawn = drawn + 1
+        if drawn >= MAX_DEATH_LINES then break end
+    end
+    return drawn
 end
 
 --- Draw the "Spell breakdown" section, and answer how many spell lines it drew.
@@ -1396,11 +1967,17 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     local color = classes and row and row.classFilename and classes[row.classFilename] or nil
     local style = lineStyle(config, color)
 
+    -- DEATHS TAKES ITS OWN PATH, and never the spell one. See addDeathList.
     local shown = 0
-    local source = config.showSpells and sourceDetailFor(window, statKey, row)
-    if source then
-        shown = addSpellBreakdown(source, statKey, spellLineCap(config),
-            numberStyleOf(window), style)
+    if statKey == "Deaths" then
+        shown = addDeathList(row, style, config.deathTimeFormat
+            or (window and window.text and window.text.deathTimeFormat))
+    else
+        local source = config.showSpells and sourceDetailFor(window, statKey, row)
+        if source then
+            shown = addSpellBreakdown(source, statKey, spellLineCap(config),
+                numberStyleOf(window), style)
+        end
     end
 
     if shown == 0 then
@@ -1565,6 +2142,28 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
     -- pooled bar left over from a spell breakdown would sit behind its text.
     releaseLines()
     if not openTooltip(anchorFrame, config) then return end
+
+    -- THE DEATH BRANCH GOES FIRST, above the spellID path and not below it.
+    -- SetSpellByID replaces the tooltip's whole content, so a death row that
+    -- happened to carry a spellID would silently render the client's spell page
+    -- instead of the event list — a failure that looks like a design choice.
+    -- KEYED ON THE ROW KIND, not on the id. A death the client gave no recap id
+    -- for is still a death row, and falling through to the one-line name path
+    -- would render "Death 2" and nothing else — indistinguishable from a tooltip
+    -- that failed to build.
+    if row and row.isDeath then
+        -- The same class-colour resolution CellTooltip does. `classFilename` is
+        -- NeverSecret, and a death row carries the drilled-into player's, so the
+        -- bars stay that player's colour for the whole trip. A nil colour is a
+        -- legitimate answer: drawLine falls back to grey.
+        local classes = _G.RAID_CLASS_COLORS
+        local color = classes and row.classFilename and classes[row.classFilename] or nil
+        addDeathBreakdown(row, lineStyle(config, color), numberStyleOf(window))
+        GameTooltip:Show()
+        reapplyFonts()
+        if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
+        return
+    end
 
     local spellID = row and row.spellID
     -- SetSpellByID replaces the tooltip's whole content, so it is the last word

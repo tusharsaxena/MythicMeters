@@ -1052,3 +1052,70 @@ test("Cells register for BOTH buttons, or the right click never arrives", functi
     assertTrue(seen["LeftButtonUp"], "left clicks are not registered")
     assertTrue(seen["RightButtonUp"], "right clicks are not registered")
 end)
+
+-- ---------------------------------------------------------------------------
+-- cell.displayText — a cell whose figure is not a number (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- A death row's Deaths cell shows the wall-clock time the player died, with a
+-- full bar behind it. That is a string this addon composed, not a meter value,
+-- so it bypasses the number formatter entirely rather than being squeezed
+-- through it. Every other cell leaves the field nil and renders exactly as it
+-- always has, which is what the third case below pins.
+
+--- A death row as modules/DrillDown.lua builds one.
+local function deathEntry(displayText)
+    return entry({ DamageDone = { total = 1, rate = 99, percent = 50,
+                                  maxAmount = 1, displayText = displayText } },
+        { guid = "death:29", name = "Death 3", isDrillDown = true, maxAmount = 1 })
+end
+
+test("Row: a cell renders displayText in place of its number", function()
+    -- red under: primary being taken only from slotText/renderValue.
+    local _, _, row = bench()
+    row:Update(deathEntry("13:01:06"), 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "13:01:06")
+end)
+
+test("Row: displayText wins over BOTH slots and over the fallback", function()
+    -- The shipped default is leftSlot="none", rightSlot="rate". A death row
+    -- under that profile would render the rate — or, with both slots off, fall
+    -- back to the total and print the number 1 where the time should be.
+    -- red under: applying the override before the slot resolution rather than
+    -- after it.
+    local _, _, row = bench(function(cfg)
+        cfg.text = cfg.text or {}
+        cfg.text.leftSlot, cfg.text.rightSlot = "percent", "rate"
+    end)
+    row:Update(deathEntry("12:49:43"), 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "12:49:43")
+    assertEqual(row.cells.DamageDone.right:GetText(), "",
+        "a second figure beside the time would read as two columns")
+end)
+
+test("Row: a cell with no displayText is completely unaffected", function()
+    -- The belt. Every cell in every ordinary row leaves the field nil, and the
+    -- override must be invisible to all of them.
+    -- red under: `primary = displayText or primary`, which is a truth test and
+    -- would also fire on an empty string.
+    local _, _, row = bench(function(cfg)
+        cfg.text = cfg.text or {}
+        cfg.text.leftSlot, cfg.text.rightSlot = "total", "none"
+    end)
+    row:Update(entry({ DamageDone = { total = 1234, maxAmount = 2000 } }), 1)
+    assertTrue(row.cells.DamageDone.left:GetText() ~= "",
+        "an ordinary cell lost its number")
+end)
+
+test("Row: a death row's bar draws FULL without comparing anything", function()
+    -- total == maxAmount is arranged in the DATA, deliberately, so this file
+    -- never has to compare two values that are secret on every other row.
+    -- red under: a `total == maxAmount` branch in Cell:SetValue.
+    local _, _, row = bench()
+    row:Update(deathEntry("13:01:06"), 1)
+    local bar = row.cells.DamageDone.frame
+    local mn, mx = bar:GetMinMaxValues()
+    assertEqual(mn, 0)
+    assertEqual(mx, 1)
+    assertEqual(bar:GetValue(), 1)
+end)

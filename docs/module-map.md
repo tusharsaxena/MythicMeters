@@ -3,7 +3,7 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MythicMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`,
+Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`,
 16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
@@ -72,6 +72,10 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         suspend that stops the addon ASKING
 │   ├── Roster.lua      — group membership, pet→owner attribution, roles. Built
 │                         from the unit API only; no meter value ever enters it
+│   ├── Feign.lua       — the one source row the addon throws away. C_DamageMeter
+│   │                     gives a Feign Death a valid deathRecapID, so a hunter's
+│   │                     feign is reported as a death; this holds the GUIDs that
+│   │                     are feigning. Cannot run mid-pull -- see its header.
 │   ├── Aggregator.lua  — the GUID join, group filtering, pet folding, the three
 │                         sort modes, identity mode, the row cap, and the
 │                         only two divisions in the addon
@@ -99,7 +103,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (103 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (104 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
@@ -160,6 +164,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Format.lua` | plain table | The `NumericRuleFormatter` instances and the three-rung degradation ladder. No division of a meter value, anywhere | `NS.Format` (callable table), `NS.Numbers`, `NS.NumberFormat` — `Number`, `Rate`, `Duration`, `Percent`, `Invalidate` | `NS.Compat.CreateNumericRuleFormatter`, `NS.Secrets`, `NS.State.Cache("Format")`, `NS.L`. Subscribes `CONFIG_CHANGED`, `PROFILE_CHANGED` on a private bus target |
 | `Provider.lua` | AceAddon | Every meter read, the memoized availability answer, and the suspend flag | `NS.Provider` — `GetColumn`, `GetSourceDetail`, `GetAvailableSessions`, `GetSessionDuration`, `IsAvailable`, `InvalidateAvailability`, `Reset`, `Suspend` / `Resume` / `IsSuspended` | `NS.Compat`, `NS.Secrets`, `NS.Constants.STAT_BY_KEY`. Subscribes `METER_RESET`, `METER_SESSION`, `ENTERING_WORLD`. **Sends `METER_RESET`** from `Provider.Reset` |
 | `Roster.lua` | AceAddon | The group array, the GUID index, the pet→owner map, roles. Rebuilt lazily on first read after an invalidation | `NS.Roster` — `GetGroup`, `Get`, `IsGroupMember`, `OwnerOf`, `RoleOf`, `Refresh` | the unit API through `_G` at call time, `NS.State.Cache("Roster")`. Subscribes `ROSTER_CHANGED`, `ENTERING_WORLD`, `PROFILE_CHANGED` |
+| `Feign.lua` | AceAddon | The set of GUIDs believed to be feigning rather than dead. `C_DamageMeter` hands a Feign Death a valid `deathRecapID`, so the Deaths column counts it. **Cannot run while restricted**: it joins a plain GUID against `sourceGUID`, which is secret for the whole of a pull | `NS.Feign` — `Note`, `IsFeigned`, `Prune`, `Clear` | the unit API through `_G` at call time, `NS.Roster.GetGroup`, `NS.Secrets`. Subscribes `METER_RESET`, `ENTERING_WORLD`, `ROSTER_CHANGED`. Fed by `core/MythicMeters.lua`'s `UNIT_SPELLCAST_SUCCEEDED` handler, which owns the only game event |
 | `Aggregator.lua` | AceAddon | **Two builds**: the exact GUID join (filter, pet folding, ordering) and the identity build that replaces it while `sourceGUID` is secret. Plus the row cap and `percent` | `NS.Aggregator` — `Build`, `ApplyRowLimit`, `TestGroup` / `TestColumn` / `TestSourceDetail` | `NS.Provider`, `NS.Roster`, `NS.Secrets`, `NS.State.Cache("Aggregator")`. Subscribes `METER_RESET`, `PROFILE_CHANGED` |
 | `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetPreview` / `IsPreview`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
 | `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)` and the `WindowProto` methods | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 10 messages on **its own** private bus target |
@@ -183,7 +188,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Header.lua` | The Header page (16 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Rows.lua` | The Rows page (10 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Bars.lua` | The Bars page (9 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Text.lua` | The Text page (10 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Text.lua` | The Text page (11 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Icons.lua` | The Icons page (3 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Tooltip.lua` | The Tooltip page (18 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |

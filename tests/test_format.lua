@@ -411,3 +411,49 @@ test("A ladder the client silently refuses is DETECTED, not assumed", function()
     -- one that ends up installed — not Blizzard's defaults, and not nothing.
     assertEqual(inst.NS.Format.Number(47500), "47.5K")
 end)
+
+-- ---------------------------------------------------------------------------
+-- Format.DeathTime — how a death is labelled (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Three ways to say when somebody died, because there are three different
+-- questions a reader has: "when in the evening", "how long ago", and "how far
+-- into the fight".
+
+test("Format.DeathTime renders the wall clock by default", function()
+    local inst = T.load()
+    local F = inst.NS.Numbers or inst.NS.Format
+    assertEqual(F.DeathTime(1787381686, "clock", 1787381686),
+        inst.mocks.date("%H:%M:%S", 1787381686))
+    assertEqual(F.DeathTime(1787381686, nil, 1787381686),
+        inst.mocks.date("%H:%M:%S", 1787381686), "an unset style is the clock")
+end)
+
+test("Format.DeathTime counts backwards from now", function()
+    local inst = T.load()
+    local F = inst.NS.Numbers or inst.NS.Format
+    -- 8 minutes and change before `now`.
+    local now = 1787381686
+    local text = F.DeathTime(now - 500, "ago", now)
+    assertTrue(text:find("8", 1, true) ~= nil, "500s is 8 minutes, got " .. text)
+    assertTrue(F.DeathTime(now - 20, "ago", now):lower():find("s") ~= nil,
+        "under a minute must read in seconds, not '0 min'")
+end)
+
+test("Format.DeathTime answers nil when there is no timestamp at all", function()
+    local inst = T.load()
+    local F = inst.NS.Numbers or inst.NS.Format
+    assertTrue(nil == F.DeathTime(nil, "clock", 1787381686))
+    assertTrue(nil == F.DeathTime(nil, "ago", 1787381686))
+end)
+
+test("Format.DeathTime never inspects a secret", function()
+    -- Every one of these is arithmetic or a comparison, and all three inputs
+    -- come off a recap. A refused input answers nil rather than raising.
+    local inst = T.load()
+    local F = inst.NS.Numbers or inst.NS.Format
+    inst.mocks.setSecretsAccessible(false)
+    local secret = inst.mocks.secret(1787381686)
+    assertTrue(pcall(F.DeathTime, secret, "clock", 1787381686))
+    assertTrue(nil == F.DeathTime(secret, "clock", 1787381686))
+end)
