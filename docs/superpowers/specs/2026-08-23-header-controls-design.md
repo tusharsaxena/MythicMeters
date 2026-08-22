@@ -1,6 +1,9 @@
 # Header controls and their icons — design (issues #6, #7)
 
-Status: drafted 2026-08-23, awaiting approval. Implements
+Status: **approved 2026-08-23**, and amended the same day — reconnaissance over the four seams
+disproved two claims in §6 and §7 before a line was written. Both amendments are marked AMENDED
+and the original claim is left visible, because "the refresh stops for free" is exactly the kind of
+thing a later reader would re-derive and re-believe. Implements
 [#6 "Move every window control into the header"](https://github.com/tusharsaxena/MythicMeters/issues/6)
 and [#7 "Ship custom icons for the addon's own glyphs"](https://github.com/tusharsaxena/MythicMeters/issues/7).
 They are one design because #7 only has a subject once #6 decides what the controls are.
@@ -32,8 +35,8 @@ The base is 8px, so `-8x` is the 64px one. And `raw.githubusercontent.com` times
 | How are they placed? | **Right-to-left off the frame's right edge at `index × (size + gap)`.** A hidden control yields its index rather than leaving a gap. |
 | Where does the code live? | A **new module**, `modules/HeaderControls.lua`. See §4. |
 | What does minimise do? | **Collapses to the title bar.** Body hides, frame shrinks to header height, state persists. |
-| Does a collapsed window still refresh? | **No**, and it needs no code: `OnUpdate` does not fire on a hidden frame. |
-| Hover reveal? | **Yes**, per-window, default on, hooked to `dragBar` rather than per button. |
+| Does a collapsed window still refresh? | **No — but it costs code.** See §6, AMENDED. |
+| Hover reveal? | **Yes**, per-window, default on, one hook for the whole strip — but `dragBar` needs a change first. See §7, AMENDED. |
 | Does reset confirm? | **Yes — through the dialog that already exists.** No new popup. |
 | Icon art source? | **Open Iconic**, MIT, recoloured white so `SetVertexColor` tints at runtime. |
 | One atlas or one file per glyph? | **One file per glyph.** Drops the texcoord map from the design entirely. |
@@ -115,10 +118,33 @@ Collapsed: the row container, the column headers and the resize grip hide, and t
 becomes the header's. Expanded: everything comes back at the configured height, which was never
 changed — the stored `frame.height` is not touched by minimising, so restoring is exact.
 
-**The refresh stops for free.** `OnUpdate` does not fire on a hidden frame, so hiding the body *is*
-the stop. No flag, no branch in the throttle, nothing to keep in step. This is the addon's existing
-cost model rather than a new one, which is why the issue's note that a minimised window "should not"
-refresh needs no code to honour.
+**AMENDED — the refresh does NOT stop for free, and the original claim was wrong.**
+
+The draft said `OnUpdate` does not fire on a hidden frame, so hiding the body *is* the stop. That is
+true of a hidden frame and irrelevant here: `OnUpdate` is installed on **`self.frame`**
+(`Window.lua:2179`), and `frame` stays shown while collapsed — only the body hides. `ShouldPoll`
+(`:1370`) and `Refresh` (`:1462`) both gate on `self.frame:IsShown()`, which is still true. So a
+collapsed window would go on aggregating every stat and rendering rows into a hidden body, four
+times a second, forever.
+
+`ShouldPoll` therefore grows one clause: a minimised window does not poll. That is the whole fix,
+and it is a real clause rather than an emergent property.
+
+**Two more traps that follow from the same "it is just hiding" instinct:**
+
+* **Hiding `self.body` is not enough.** `self.headerFrame`, `self.notice` and `self.grip` are
+  parented to `frame`, not to `body` — only the row pool lives under the body
+  (`modules/Row.lua:1167`). Hiding the body alone leaves the column-header strip, the "Waiting for
+  combat data…" notice and the resize grip drawn over a collapsed window.
+* **Do not collapse by resizing the anchor.** Shrinking it fires `onSizeChanged` (`:357`), which
+  writes `pendingWidth`/`pendingHeight`, and `SaveSize` (`:1192`) persists whatever is pending on
+  the next resize-stop — so the collapsed height would leak into `frame.height` and destroy the
+  promise that the stored height is untouched. The collapse hides children and leaves the anchor
+  alone.
+
+And `ApplyConfig` (`:704`) unconditionally restores geometry, so **any** `CONFIG_CHANGED` would
+silently expand a collapsed window. The collapse is applied at the tail of `ApplyConfig`, not only
+from the click.
 
 The button's own glyph is the state: `minus` when expanded, `plus` when collapsed — the same
 one-asset-two-states pattern the padlock already uses.
@@ -127,11 +153,25 @@ one-asset-two-states pattern the padlock already uses.
 
 Controls sit at reduced alpha until the pointer is over the title strip, then fade in as one set.
 
-**The hook goes on `dragBar`, not on the buttons.** `dragBar` is an invisible mouse-enabled frame
-spanning the entire title strip — exactly the band the buttons occupy — and the buttons already sit
-five frame levels above it so they win the click. A per-button `OnEnter`/`OnLeave` would fire a
-leave every time the pointer crossed the 4px gap between two buttons, and the set would flicker.
-One enter and one leave for the whole strip is both correct and cheaper.
+**The hook goes on `dragBar`, not on the buttons.** It spans the entire title strip — exactly the
+band the buttons occupy — and the buttons already sit five frame levels above it, so they win the
+click. A per-button `OnEnter`/`OnLeave` would fire a leave every time the pointer crossed the 4px
+gap between two buttons and the set would flicker. One enter and one leave for the whole strip is
+both correct and cheaper.
+
+**AMENDED — but `dragBar` is mouse-disabled while the window is locked**, and locked is precisely
+when a player wants the chrome to fade, so this is the common case rather than an edge one.
+`ApplyLock` (`:1256`) does `dragBar:EnableMouse(not locked)`, and a mouse-disabled frame fires no
+`OnEnter`.
+
+The fix is small and makes the existing code more honest: **`EnableMouse` stays true and locking is
+gated by `RegisterForDrag()` alone**, which `ApplyLock:1252` already does. Dragging a locked window
+was never prevented by the mouse flag — the empty `RegisterForDrag()` is what prevents it — so the
+flag was doing nothing but suppressing hover.
+
+**And the hook must be `HookScript`, not `SetScript`.** `dragBar` already carries `OnDragStart` and
+`OnDragStop`; `GetScript` returns only the first handler while `HookScript` appends, so assigning
+would silently replace the drag wiring.
 
 `window.frame.hoverReveal`, default **true**. Off means the controls are always at full alpha,
 which is today's behaviour and therefore the honest fallback.
