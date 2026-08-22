@@ -1413,6 +1413,24 @@ local function build()
     end
     M.UnitIsPlayer = function(token) return unit(token) ~= nil end
     M.UnitIsDead   = function() return false end
+
+    -- Unit health, for the feign-death filter in modules/Feign.lua. There was no
+    -- health seam here before it, because nothing in this addon had ever needed
+    -- one: every number it shows comes from C_DamageMeter. A unit with no
+    -- recorded health answers full, which is the state that keeps a feign
+    -- REMEMBERED — the clear fires only on a confirmed 0.
+    M.__unitHealth = {}
+    function M.setUnitHealth(token, current, maximum)
+        M.__unitHealth[token] = { current = current, maximum = maximum or 100 }
+    end
+    M.UnitHealth    = function(token)
+        local h = M.__unitHealth[token]
+        return h and h.current or 100
+    end
+    M.UnitHealthMax = function(token)
+        local h = M.__unitHealth[token]
+        return h and h.maximum or 100
+    end
     -- Category-aware, like the real one. No argument means "either group", which
     -- is what every caller that does not care asks.
     M.IsInGroup           = function(category)

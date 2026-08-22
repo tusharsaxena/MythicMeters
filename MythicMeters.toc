@@ -56,6 +56,7 @@ defaults\Profile.lua
 modules\Format.lua
 modules\Provider.lua
 modules\Roster.lua
+modules\Feign.lua
 modules\Aggregator.lua
 modules\WindowManager.lua
 modules\Window.lua

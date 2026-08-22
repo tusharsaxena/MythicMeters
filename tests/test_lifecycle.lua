@@ -26,7 +26,7 @@ local ROOT = T.root or "."
 -- Kept as data so a newly-added module is deliberately wired into coverage
 -- rather than silently skipped.
 local MODULES = {
-    "Provider", "Roster", "Aggregator", "WindowManager", "Tooltip",
+    "Provider", "Roster", "Feign", "Aggregator", "WindowManager", "Tooltip",
     "DrillDown", "Visibility",
 }
 
@@ -38,6 +38,7 @@ local EVENTS = {
     ADDON_RESTRICTION_STATE_CHANGED      = "OnRestrictionChanged",
     DAMAGE_METER_CURRENT_SESSION_UPDATED = "OnMeterUpdated",
     DAMAGE_METER_COMBAT_SESSION_UPDATED  = "OnMeterSession",
+    UNIT_SPELLCAST_SUCCEEDED       = "OnSpellSucceeded",
     DAMAGE_METER_RESET                   = "OnMeterReset",
 }
 
