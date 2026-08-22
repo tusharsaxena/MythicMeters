@@ -584,6 +584,11 @@ local function deathRow(recapID, ordinal, view)
                                  or  string.format("death:none:%d", ordinal),
         recapID       = openable and recapID or nil,
         isDeath       = true,
+        -- The caption again, on the ROW as well as in the cell. modules/Tooltip.lua
+        -- puts it in the death tooltip's header, and reaching into `values` for
+        -- it would make the tooltip depend on which column the drill-down was
+        -- opened from.
+        deathClock    = clock or NO_CLOCK,
         name          = string.format(L["Death %d"] or "Death %d", ordinal),
         icon          = nil,
         classFilename = view.classFilename,

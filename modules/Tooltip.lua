@@ -1347,6 +1347,28 @@ local function addDeathBreakdown(row, style, numberStyle)
     local recap = (row.recapID ~= nil and P and P.GetRecap)
         and P.GetRecap(row.recapID) or nil
 
+    -- THE HEADER IS NOT DECORATION; IT KEEPS A CARRIER OFF LINE 1.
+    --
+    -- drawLine fonts the tooltip line its carrier sits behind and records it, and
+    -- restoreFonts puts SetFontObject(GameTooltipText) back on teardown. On a
+    -- live client GameTooltipTextLeft1 inherits GameTooltipHeaderText, NOT
+    -- GameTooltipText — so an event on line 1 would leave every GameTooltip in
+    -- the game rendering its title in the small body font until the next
+    -- /reload. The damage is to a shared FontString this addon does not own,
+    -- which is why it outlives the hover and everything else here.
+    --
+    -- Every other caller already puts a header on line 1 for its own reasons,
+    -- which is why releaseLines can claim "a spell line is never line 1" and why
+    -- this never fired before. The death branch is the first path that would
+    -- have started at the top.
+    --
+    -- It earns its place besides: the row says only "Death 3", so this is where
+    -- a reader finds out whose death and when. Both terms go through one
+    -- AddDoubleLine rather than any concatenation — `displayName` may be secret.
+    GameTooltip:AddDoubleLine(displayName(row),
+        row.deathClock or L["Death recap"] or "Death recap",
+        1, 1, 1, 1, 0.82, 0)
+
     if not drawDeathEvents(recap, numberStyle, style) then
         -- A DEATH THE CLIENT NO LONGER HOLDS SAYS SO. An empty tooltip under the
         -- cursor reads as a broken addon; a sentence reads as a fact about the

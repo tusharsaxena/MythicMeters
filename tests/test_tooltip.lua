@@ -1420,6 +1420,7 @@ local function deathBench(opts)
     })
     local row = {
         guid = "death:29", recapID = 29, isDeath = true, name = "Death 3",
+        deathClock = "13:01:06",
         classFilename = "PALADIN", isDrillDown = true,
         values = { Deaths = { total = 1, maxAmount = 1, displayText = "13:01:06" } },
         maxAmount = 1,
@@ -1553,7 +1554,34 @@ test("Tooltip: with the values secret the bar still draws and the share does not
 
     local first = spellLines(inst)[1]
     assertTrue(first ~= nil, "no line was drawn at all")
-    assertTrue(first.share:GetText() ~= "0%", "a refused division was rendered as zero")
+    -- EXACTLY EMPTY, not merely "not 0%". The old assertion was true of the
+    -- right answer, of a wrongly computed percentage, and of almost anything
+    -- else — deleting the share argument outright kept the suite green.
+    assertEqual(first.share:GetText(), "",
+        "a refused division must render nothing, never a number")
+    local mn, mx = first.bar:GetMinMaxValues()
+    assertEqual(mn, 0)
+    assertTrue(mx ~= nil and mx ~= 1, "the bar lost its max and fell back to 0..1")
+end)
+
+test("Tooltip: with the values plain the share slot carries the percentage", function()
+    -- The other half of design §9's requirement, which nothing asserted at all.
+    -- red under: passing "" as the share, which deletes the HP column and which
+    -- the suite used to accept.
+    local inst, cfg, anchor, row = deathBench{ maxHealth = 1000 }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function()
+            return { { spellId = 264206, spellName = "Volley", amount = 250,
+                       currentHP = 500, timestamp = 1000.0 } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local share = spellLines(inst)[1].share:GetText()
+    assertTrue(share:find("50", 1, true) ~= nil,
+        "500 of 1000 must render as 50%, got " .. tostring(share))
 end)
 
 test("Tooltip: a death whose recap has gone says so instead of drawing nothing", function()
@@ -1581,4 +1609,47 @@ test("Tooltip: a death with no recap id says so rather than showing a name", fun
     local texts = table.concat(lineTexts(inst), "\n")
     assertTrue(texts:find("recap", 1, true) ~= nil,
         "a death row with no id must explain itself")
+end)
+
+test("Tooltip: a death tooltip has a HEADER, so no carrier ever lands on line 1", function()
+    -- FOUND BY REVIEW, and it leaks out of this addon entirely. drawLine calls
+    -- applyLineFont on the tooltip line it sits behind and records it, and
+    -- restoreFonts puts SetFontObject(GameTooltipText) back on teardown. On a
+    -- live client GameTooltipTextLeft1 inherits GameTooltipHeaderText, not
+    -- GameTooltipText — so a carrier on line 1 means every GameTooltip in the
+    -- GAME renders its title in the small body font until /reload.
+    --
+    -- Every other caller puts a header on line 1 and never hands index 1 to
+    -- drawLine, which is exactly what this file's own releaseLines comment
+    -- claims: "a spell line is never line 1".
+    -- red under: addDeathBreakdown adding no title line.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local byIndex = tooltipLines(inst)
+    assertTrue(byIndex[1] == nil, "an event carrier landed on the tooltip's header line")
+    assertTrue(lineTexts(inst)[1] ~= nil, "there must be a header line at all")
+end)
+
+test("Tooltip: the death header names the player and when they died", function()
+    -- The row itself only says "Death 3"; the tooltip is where the reader finds
+    -- out whose death and at what time.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    -- AddDoubleLine, as CellTooltip's header is: the player on the left, the
+    -- time on the right, so the two read as a caption rather than a sentence.
+    local left  = inst.mocks.GameTooltipTextLeft1
+    local right = inst.mocks.GameTooltipTextRight1
+    assertTrue((right and right:GetText() or ""):find("13:01:06", 1, true) ~= nil,
+        "the time of death is missing")
+    assertTrue((left and left:GetText() or "") ~= "", "the player is missing")
+end)
+
+test("Tooltip: a death with no recap keeps the header too", function()
+    -- The empty case takes the same route out, or it reintroduces the bug on the
+    -- one path nobody looks at.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({ HasRecapEvents = function() return false end })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    assertTrue(tooltipLines(inst)[1] == nil, "a carrier landed on the header line")
 end)
