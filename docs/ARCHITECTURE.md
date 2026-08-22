@@ -370,8 +370,9 @@ and a fallback nobody can run is a fallback nobody has tested.
   eighteen and reported `deathTimeSeconds = -1` for every one, and the session's own duration is
   *combat* time rather than wall time — 32 minutes of it spanning a run whose deaths were three hours
   back. A "time into the fight" timestamp style was built on three separate derivations of that
-  figure and removed; `/mm debug recap`'s **dating** section is what proved each one could not work,
-  and is kept for whoever tries again. Deaths are dated by wall clock or by "how long ago".
+  figure and removed — see [#18](https://github.com/tusharsaxena/MythicMeters/issues/18), which
+  carries the captures. `/mm debug recap`'s **dating** section is what proved each one could not
+  work, and is kept for whoever tries again. Deaths are dated by wall clock or by "how long ago".
 - **The death list is a snapshot taken on entry.** While a window is drilled into a player's deaths,
   `modules/Window.lua` renders `DrillDown:BuildRows` *instead of* running an aggregate pass, so there
   is no current row to re-read the deaths off. A player who dies again while somebody is looking at

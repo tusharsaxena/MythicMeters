@@ -562,8 +562,8 @@ end
 --- to measure against: the client reports no offset for a death on the Overall
 --- session, the Current session is empty once a run is over, and the session's
 --- own duration is combat time rather than wall time. An anchor of the addon's
---- own did not survive contact with a live client either. See the issue linked
---- from docs/ARCHITECTURE.md before rebuilding it.
+--- own did not survive contact with a live client either. Issue #18 carries the
+--- captures and the ways back in; read it before rebuilding this.
 ---
 --- BOTH BRANCHES ARE ARITHMETIC OR A COMPARISON, and the inputs come off a
 --- recap. Each is gated, and a refused input answers nil -- the caller draws an
