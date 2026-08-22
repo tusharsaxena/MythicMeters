@@ -1162,8 +1162,35 @@ local function scanColumn(pass, statKey)
     local isSortColumn = (statKey == pass.sortColumn)
     local touched = isCount and {} or nil
 
+    -- THE FEIGN FILTER, and it lives here rather than anywhere downstream.
+    --
+    -- C_DamageMeter hands a Feign Death a valid deathRecapID, so a hunter's
+    -- feign arrives as an ordinary Deaths source and is counted like one. The
+    -- drop has to happen BEFORE rowForSource, because that function creates and
+    -- appends the row as a side effect in all three of its branches — filtering
+    -- after it would leave a phantom empty row instead of no row.
+    --
+    -- Pruned once per pass rather than per source: modules/Feign.lua walks the
+    -- group to find anyone confirmed dead, and doing that per source would walk
+    -- it once per death. It exits on one boolean when nobody has ever feigned,
+    -- which is every run but a hunter's.
+    local Feign = isCount and NS.Feign or nil
+    if Feign and Feign.Prune then Feign.Prune() end
+
     for index, src in ipairs(column.sources) do
-        local row, isOwn = rowForSource(pass, src, index, isSortColumn)
+        -- `IsFeigned` answers false for a secret guid rather than raising, which
+        -- is also the honest answer: mid-pull `sourceGUID` is secret and this
+        -- build is not the one running anyway (see the module header). "Cannot
+        -- tell" must mean "not feigning", because the alternative is dropping a
+        -- real death.
+        local feigned = Feign and Feign.IsFeigned and Feign.IsFeigned(src.guid)
+        -- Spelled as a branch and not as `not feigned and rowForSource(...) or nil`:
+        -- that idiom truncates a multiple return to one value, which silently
+        -- drops `isOwn` and sends every ordinary source down the pet-fold path.
+        local row, isOwn
+        if not feigned then
+            row, isOwn = rowForSource(pass, src, index, isSortColumn)
+        end
         if row then
             if isOwn then
                 setCell(row, statKey, src, maxAmount, isCount)
