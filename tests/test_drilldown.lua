@@ -788,3 +788,39 @@ test("A death row wears the death icon", function()
     inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
     assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].icon, 237275)
 end)
+
+test("Time into the fight falls back to the segment this addon stamped", function()
+    -- THE CASE THE PROBE CAUGHT. Reviewing after a run: Current holds nothing,
+    -- Overall reports -1 for every death, so both the row's own offset and the
+    -- Current lookup come back empty and the style silently became "time of
+    -- day". The anchor is ours.
+    -- red under: giving up after the Current-session lookup.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })       -- id 29 -> timestamp 29
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+    inst.NS.State.SetSegmentStart(0)
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths.displayText, "00:29")
+end)
+
+test("A death older than the anchor still reads as a wall clock", function()
+    -- After a /reload mid-run the anchor is the reload, and every death before
+    -- it would compute negative. The clock is the honest answer.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+    inst.NS.State.SetSegmentStart(99999)
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths.displayText,
+        inst.mocks.date("%H:%M:%S", 29))
+end)

@@ -365,6 +365,14 @@ and a fallback nobody can run is a fallback nobody has tested.
   plain key on the other side of the join while the restriction is up, so **a feign is counted as a
   death mid-pull and the count corrects itself the moment combat ends.** Do not "fix" this by keying
   on something secret; there is nothing to key on.
+- **"Time into the fight" is measured against a clock this addon keeps, because the client has
+  none.** Measured on a live client reviewed after a run: the **Current** session held *zero* deaths,
+  the **Overall** session held eighteen and reported `deathTimeSeconds = -1` for every one, and the
+  session's own duration is *combat* time rather than wall time — 32 minutes of it spanning a run
+  whose deaths were three hours back. So `core/State.lua` stamps `segmentStartedAt` on a meter reset
+  and `Provider.SegmentOffset` measures against that. A `/reload` mid-run re-stamps it, so deaths
+  before the reload compute negative; those fall back to the wall clock rather than reporting a
+  negative offset. The two lookups below it are tried first and still fire while a run is live.
 - **`deathTimeSeconds` is -1 on the Overall session, so "time into the fight" is read off Current.**
   The client reports no offset for a death on Overall — measured over three live runs — and Overall
   is what a window shows by default, so that timestamp style dated every death with the wall clock

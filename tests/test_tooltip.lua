@@ -2195,3 +2195,22 @@ test("Tooltip: a SECRET name falls back to the fixed reservation", function()
     local line = spellLines(inst)[1]
     assertTrue(line.label:GetWidth() > 0, "the column lost its reservation entirely")
 end)
+
+test("Tooltip: a Deaths cell uses the segment anchor too", function()
+    -- The cell tooltip is the index into the drill-down; the two dating a death
+    -- differently is the two lists disagreeing.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.text = c.text or {}
+        c.text.deathTimeFormat = "elapsed"
+    end }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    inst.NS.State.SetSegmentStart(0)
+
+    local row = deadGridRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }
+    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
+    assertEqual(spellLines(inst)[1].amount:GetText(), "00:29")
+end)

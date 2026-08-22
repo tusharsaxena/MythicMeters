@@ -366,7 +366,10 @@ a raider most wants to know what killed them is the moment they are still fighti
   looked up on the **Current** session instead and joined on the recap id. Check this one on an
   Overall window specifically: that is the case it was reported broken in, and "time into the fight"
   reading identically to "time of day" there means the lookup is not firing. Mid-pull it does fall
-  back to the clock, because both the id and the offset are secret then.
+  back to the clock, because both the id and the offset are secret then. **After the run, out of the
+  dungeon**, the client offers nothing at all — Current is empty and Overall reports `-1` — so the
+  figure comes from an anchor this addon stamps at the meter reset. A `/reload` mid-run moves that
+  anchor, and deaths before it correctly show the wall clock instead of a negative offset.
 - **Deaths cell tooltip**: it lists **that player's deaths, one line each, newest first**, each
   labelled `Death N` with the wall-clock time in the right-hand column. It must NOT say "Spell
   breakdown" and must NOT say "No data yet" — a Deaths source carries no spell list, and running the

@@ -1142,3 +1142,55 @@ test("Provider.DeathOffset forgets everything on a meter reset", function()
     deathsSession(inst, 1, {})
     assertNil(inst.NS.Provider.DeathOffset(29))
 end)
+
+-- ---------------------------------------------------------------------------
+-- Segment offsets — the anchor the client does not supply
+-- ---------------------------------------------------------------------------
+--
+-- MEASURED, not assumed. On a live client reviewed after the run: the Current
+-- session held ZERO deaths and the Overall session held eighteen, every one of
+-- them reporting `deathTimeSeconds = -1`. So there is no offset on the client to
+-- join to, and the session's own duration is combat time rather than wall time
+-- — 32 minutes of it spanning a run whose deaths were three hours back — so it
+-- cannot anchor one either. The only clock left is the one this addon keeps.
+
+test("Provider.SegmentOffset measures from the segment this addon stamped", function()
+    -- red under: no anchor of our own, which is where "time into the fight"
+    -- silently became "time of day".
+    local inst = T.load()
+    inst.NS.State.SetSegmentStart(1000)
+    assertEqual(inst.NS.Provider.SegmentOffset(1356), 356)
+end)
+
+test("Provider.SegmentOffset refuses a death OLDER than the segment it knows", function()
+    -- A /reload mid-run stamps the anchor at the reload, so every death before
+    -- it would compute negative. Answering nil sends the caller back to the wall
+    -- clock, which is honest; a negative "time into the fight" would not be.
+    -- red under: subtracting without checking the order.
+    local inst = T.load()
+    inst.NS.State.SetSegmentStart(2000)
+    assertNil(inst.NS.Provider.SegmentOffset(1356))
+end)
+
+test("Provider.SegmentOffset answers nil before anything has been stamped", function()
+    local inst = T.load()
+    assertNil(inst.NS.Provider.SegmentOffset(1356))
+end)
+
+test("Provider.SegmentOffset never compares a secret", function()
+    local inst = T.load()
+    inst.NS.State.SetSegmentStart(1000)
+    inst.mocks.setSecretsAccessible(false)
+    assertTrue(pcall(inst.NS.Provider.SegmentOffset, inst.mocks.secret(1356)))
+    assertNil(inst.NS.Provider.SegmentOffset(inst.mocks.secret(1356)))
+end)
+
+test("A meter reset re-stamps the segment", function()
+    -- The anchor is "when this segment began", so it moves when the client
+    -- wipes the sessions and a new run starts.
+    local inst = T.load{ enable = true }
+    inst.NS.State.SetSegmentStart(1000)
+    inst.NS:OnMeterReset()
+    assertTrue(inst.NS.State.segmentStartedAt ~= 1000,
+        "the anchor survived a reset and now dates the new run from the old one")
+end)

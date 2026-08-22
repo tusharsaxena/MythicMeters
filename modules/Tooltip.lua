@@ -1797,11 +1797,19 @@ local function addDeathList(row, style, timeStyle)
             -- The offset falls back to the Current session for the reason
             -- modules/DrillDown.lua's copy records: Overall reports -1 for every
             -- death it holds, and Overall is what a window shows by default.
+            local recap = P.GetRecap(id)
             local seconds = row.deathTimes and row.deathTimes[i]
             if not usableOffset(seconds) and P.DeathOffset then
                 seconds = P.DeathOffset(id)
             end
-            clock = deathClockOf(P.GetRecap(id), seconds, timeStyle)
+            -- ...and then the anchor this addon keeps, which after a run is the
+            -- only one there is. See modules/DrillDown.lua's copy for what was
+            -- measured; the two must date a death identically.
+            if not usableOffset(seconds) and P.SegmentOffset then
+                local newest = recap and recap.events and recap.events[1]
+                seconds = P.SegmentOffset(newest and newest.timestamp)
+            end
+            clock = deathClockOf(recap, seconds, timeStyle)
         end
 
         -- Numbered chronologically and listed newest first, exactly as

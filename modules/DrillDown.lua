@@ -644,8 +644,19 @@ local function deathRow(recapID, ordinal, view, offset)
         offset = P.DeathOffset(recapID)
     end
 
-    local clock = (openable and P and P.GetRecap)
-        and deathClock(P.GetRecap(recapID), offset, view.timeStyle) or nil
+    local recap = (openable and P and P.GetRecap) and P.GetRecap(recapID) or nil
+
+    -- AND THEN THE ANCHOR OF OUR OWN, which is the only one left. Measured on a
+    -- live client reviewed after a run: Current held nothing, Overall reported
+    -- -1 for all eighteen deaths, so neither the row nor the lookup above has an
+    -- offset and the style silently became "time of day". core/State.lua's
+    -- SetSegmentStart records the rest of that measurement.
+    if not usableOffset(offset) and P and P.SegmentOffset then
+        local newest = recap and recap.events and recap.events[1]
+        offset = P.SegmentOffset(newest and newest.timestamp)
+    end
+
+    local clock = recap and deathClock(recap, offset, view.timeStyle) or nil
 
     local values = {}
     -- Plain ones on purpose: see the row contract above. The caption carries the

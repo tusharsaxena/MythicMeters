@@ -73,6 +73,26 @@ function State.SetRestricted(v)
     State.restricted = v and true or false
 end
 
+--- Record when the meter's current segment began, as an epoch time.
+---
+--- THE ONE CLOCK THE CLIENT DOES NOT SUPPLY. Measured on a live client reviewed
+--- after a run: the Current session held zero deaths, the Overall session held
+--- eighteen and reported `deathTimeSeconds = -1` for every one of them, and the
+--- session's own duration is COMBAT time rather than wall time — 32 minutes of
+--- it spanning a run whose deaths were three hours back. So there is nothing on
+--- the client to measure "how far into the fight" against, and this is the
+--- anchor "time into the fight" is computed from.
+---
+--- Called ONLY from core/MythicMeters.lua's fan-out, on the edges that begin a
+--- segment. A `/reload` mid-run stamps it at the reload, which is why
+--- `Provider.SegmentOffset` refuses a death older than the anchor rather than
+--- reporting a negative one.
+---
+--- @param when number|nil  epoch seconds; defaults to now
+function State.SetSegmentStart(when)
+    State.segmentStartedAt = when or (_G.time and _G.time()) or nil
+end
+
 --- Turn test (placeholder data) mode on or off.
 ---
 --- This is the ONE sender of TEST_MODE_CHANGED (architecture-§4). Every entry

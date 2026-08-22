@@ -649,6 +649,30 @@ function Provider.DeathOffset(recapID)
     return map[recapID]
 end
 
+--- How far into the current segment this moment was, in seconds, or nil.
+---
+--- THE LAST FALLBACK FOR "TIME INTO THE FIGHT", and the only one left standing.
+--- The client offers no offset for a death on the Overall session and the
+--- Current session is empty once a run is over, so the anchor is one this addon
+--- stamps for itself — see core/State.lua's SetSegmentStart for the measurement
+--- that forced it.
+---
+--- Refuses a moment EARLIER than the anchor. A `/reload` mid-run stamps the
+--- anchor at the reload, so every death before it would compute negative, and a
+--- caller that got one would render "-04:12 into the fight". nil sends it back
+--- to the wall clock, which is the honest answer.
+---
+--- @param when any  an absolute epoch time, from a recap event
+--- @return number|nil
+function Provider.SegmentOffset(when)
+    if when == nil then return nil end
+    local start = State and State.segmentStartedAt
+    if start == nil then return nil end
+    if not Secrets.CanCompare2(when, start) then return nil end
+    if when < start then return nil end
+    return when - start
+end
+
 --- The breakdown behind one death, or nil.
 ---
 --- @param recapID number  a `deathRecapID` from a Deaths source row
