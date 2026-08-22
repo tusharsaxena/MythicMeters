@@ -696,3 +696,4 @@ L["Pet"] = "Pet"
 -- place of a time -- the row still exists, because the count above it says so.
 L["Death %d"] = "Death %d"
 L["No recap stored for this death"] = "No recap stored for this death"
+L["(%s overkill)"] = "(%s overkill)"

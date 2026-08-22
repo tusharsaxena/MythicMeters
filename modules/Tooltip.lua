@@ -1176,6 +1176,191 @@ local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
     drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style, nil)
 end
 
+-- ---------------------------------------------------------------------------
+-- Death events (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- One line per incoming event behind a death, drawn on the same carrier the
+-- spell breakdown uses so fonts, borders, colours and the width machinery are
+-- inherited rather than duplicated.
+--
+-- WHAT IS DIFFERENT FROM A SPELL LINE, and why each difference exists:
+--
+--   * the bar is HP REMAINING, not the amount. A death is read by watching a
+--     health bar empty, and `currentHP` with the recap's own max is exactly that
+--     — handed over raw so the WIDGET divides. Tainted code doing that division
+--     itself is the thing rule R1 forbids.
+--   * the caption carries a time and an attacker as well as a spell. Both extra
+--     terms come off the event, both may be secret, and the join is therefore
+--     ONE string.format rather than any `..`. This file has never concatenated
+--     anything that could be secret and this is not where it starts.
+--   * the amount slot is the damage alone. Overkill goes in the CAPTION instead,
+--     because AMOUNT_SLOT_WIDTH is a fixed 66px with no per-font measurement and
+--     "-787.3K (138.1K overkill)" would clip exactly the way "100.0%" once
+--     clipped to "100....". Widening it would change every tooltip in the addon.
+
+--- Seconds between an event and the death, as a negative number, or nil.
+---
+--- GATED, even though a live capture showed these fields plain in combat. A
+--- subtraction is arithmetic, arithmetic on a secret raises, and "plain today"
+--- is an observation about one build. A refused subtraction costs the time
+--- prefix on one line; an ungated one costs the tooltip mid-pull.
+---
+--- @return number|nil
+local function eventOffset(when, deathTime)
+    if when == nil or deathTime == nil then return nil end
+    local Secrets = NS.Secrets
+    if not (Secrets and Secrets.CanCompare2 and Secrets.CanCompare2(when, deathTime)) then
+        return nil
+    end
+    return when - deathTime
+end
+
+--- One event's caption: icon, time before death, spell, attacker, overkill.
+---
+--- Every variable term goes in as a `%s` or a `%.1f` to ONE string.format call.
+--- The four shapes below are that one call written out per combination rather
+--- than assembled, because assembling it is concatenation by another name.
+---
+--- @param event table
+--- @param secondsBefore number|nil  seconds before death, already gated
+--- @param overkill any|nil   pre-formatted, or nil
+--- @return any  a string, possibly secret
+local function eventCaption(event, secondsBefore, overkill)
+    local spellID = event.spellId
+    local icon = (spellID ~= nil and Compat and Compat.GetSpellTexture)
+        and Compat.GetSpellTexture(spellID) or nil
+
+    -- A spell the client cannot name is shown by id rather than dropped, exactly
+    -- as addSpellLine does it. The explicit nil branch is there because
+    -- string.format("%s", nil) raises in Lua 5.1.
+    local name = event.spellName
+    if name == nil then
+        name = (spellID ~= nil) and string.format("#%s", spellID) or "#?"
+    end
+
+    -- `hideCaster` may be a secret boolean, so it goes through plainTruth; an
+    -- absent sourceName is the other half of the same case and was on a real
+    -- sample. "Volley ()" is worse than "Volley".
+    local source = event.sourceName
+    if plainTruth(event.hideCaster) then source = nil end
+
+    local head = string.format("|T%s:%d:%d:0:0|t", icon or FALLBACK_ICON,
+        TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE)
+
+    -- Composed in at most two string.format calls and never with `..`: the
+    -- overkill clause is finished first, then dropped into the caption as one
+    -- more %s. Both the name and the attacker may be secret, and a secret
+    -- reaching `..` raises where it reaches string.format harmlessly.
+    if overkill ~= nil then
+        overkill = string.format(L["(%s overkill)"] or "(%s overkill)", overkill)
+    end
+
+    if secondsBefore ~= nil and source ~= nil and overkill ~= nil then
+        return string.format("%s %.1fs %s (%s) %s", head, secondsBefore, name, source, overkill)
+    elseif secondsBefore ~= nil and source ~= nil then
+        return string.format("%s %.1fs %s (%s)", head, secondsBefore, name, source)
+    elseif secondsBefore ~= nil and overkill ~= nil then
+        return string.format("%s %.1fs %s %s", head, secondsBefore, name, overkill)
+    elseif secondsBefore ~= nil then
+        return string.format("%s %.1fs %s", head, secondsBefore, name)
+    elseif source ~= nil and overkill ~= nil then
+        return string.format("%s %s (%s) %s", head, name, source, overkill)
+    elseif source ~= nil then
+        return string.format("%s %s (%s)", head, name, source)
+    elseif overkill ~= nil then
+        return string.format("%s %s %s", head, name, overkill)
+    end
+    return string.format("%s %s", head, name)
+end
+
+--- Draw one recap event.
+---
+--- @param event table
+--- @param deathTime any|nil   the newest event's timestamp
+--- @param maxHealth any|nil   the recap's own max, for the bar
+--- @param isFatal boolean     whether this is the killing blow
+local function addEventLine(event, deathTime, maxHealth, isFatal, numberStyle, style)
+    local overkill = nil
+    -- OVERKILL ONLY ON THE KILLING BLOW. On every earlier hit it is zero, and a
+    -- "(0 overkill)" on nine lines out of ten is noise.
+    if isFatal and event.overkill ~= nil then
+        overkill = formatNumber(event.overkill, numberStyle)
+    end
+
+    local caption = eventCaption(event, eventOffset(event.timestamp, deathTime), overkill)
+    GameTooltip:AddLine(caption, 1, 1, 1)
+
+    -- The amount is the damage taken; the share is the HP percentage remaining,
+    -- which formatShare answers as "" rather than "0%" when it may not divide.
+    -- The bar takes currentHP and the max RAW: the widget divides, natively, in
+    -- code that is allowed to see a secret.
+    drawLine(GameTooltip:NumLines(),
+        formatNumber(event.amount, numberStyle),
+        formatShare(event.currentHP, maxHealth),
+        event.currentHP, maxHealth, style, nil)
+end
+
+--- Every event behind one death, oldest first.
+---
+--- REVERSED FROM THE CLIENT'S ORDER, which is newest first. The killing blow
+--- reads as the last line for the same reason a story ends with its ending.
+---
+--- @return boolean  whether anything was drawn
+local function drawDeathEvents(recap, numberStyle, style)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return false end
+    local Secrets = NS.Secrets
+    if not (Secrets and Secrets.SafeIterate) then return false end
+    if Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then return false end
+
+    -- Collected first, because the walk has to run backwards and SafeIterate —
+    -- the only legal way to measure an array whose entries may be secret — runs
+    -- forwards. `#` on it is what rule R1 forbids.
+    local ordered = {}
+    Secrets.SafeIterate(events, function(_, event)
+        if type(event) ~= "table" then return end
+        if Secrets.CanAccessTable and not Secrets.CanAccessTable(event) then return end
+        ordered[#ordered + 1] = event
+        if #ordered >= COLLECT_LIMIT then return false end
+    end)
+
+    local total = #ordered
+    if total == 0 then return false end
+
+    -- Element one is the killing blow, so its timestamp is the moment of death
+    -- and every other line is measured against it.
+    local deathTime = ordered[1].timestamp
+    local maxHealth = recap.maxHealth
+
+    for i = total, 1, -1 do
+        addEventLine(ordered[i], deathTime, maxHealth, i == 1, numberStyle, style)
+    end
+    return true
+end
+
+--- @param row table          a death drill-down row (needs .recapID)
+--- @param style table        the line style every carrier is drawn with
+--- @param numberStyle string|nil  the hovered window's abbreviation style
+local function addDeathBreakdown(row, style, numberStyle)
+    local P = NS.Provider
+    local recap = (P and P.GetRecap) and P.GetRecap(row.recapID) or nil
+
+    if not drawDeathEvents(recap, numberStyle, style) then
+        -- A DEATH THE CLIENT NO LONGER HOLDS SAYS SO. An empty tooltip under the
+        -- cursor reads as a broken addon; a sentence reads as a fact about the
+        -- client, which is what it is.
+        GameTooltip:AddLine(L["No recap stored for this death"] or
+            "No recap stored for this death", 1, 0.82, 0)
+        return
+    end
+
+    -- Reserved from CONFIG, never measured off a line that has held a recap
+    -- value — the whole reason applyMinimumWidth exists. SpellTooltip has never
+    -- needed it before because its other paths draw no carriers.
+    applyMinimumWidth(style)
+end
+
 --- The extra facts an Avoidable Damage row carries: whether the hit was
 --- avoidable, and whether it was deadly.
 ---
@@ -1565,6 +1750,24 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
     -- pooled bar left over from a spell breakdown would sit behind its text.
     releaseLines()
     if not openTooltip(anchorFrame, config) then return end
+
+    -- THE DEATH BRANCH GOES FIRST, above the spellID path and not below it.
+    -- SetSpellByID replaces the tooltip's whole content, so a death row that
+    -- happened to carry a spellID would silently render the client's spell page
+    -- instead of the event list — a failure that looks like a design choice.
+    if row and row.recapID ~= nil then
+        -- The same class-colour resolution CellTooltip does. `classFilename` is
+        -- NeverSecret, and a death row carries the drilled-into player's, so the
+        -- bars stay that player's colour for the whole trip. A nil colour is a
+        -- legitimate answer: drawLine falls back to grey.
+        local classes = _G.RAID_CLASS_COLORS
+        local color = classes and row.classFilename and classes[row.classFilename] or nil
+        addDeathBreakdown(row, lineStyle(config, color), numberStyleOf(window))
+        GameTooltip:Show()
+        reapplyFonts()
+        if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
+        return
+    end
 
     local spellID = row and row.spellID
     -- SetSpellByID replaces the tooltip's whole content, so it is the last word

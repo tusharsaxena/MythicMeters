@@ -1381,3 +1381,186 @@ test("The share slot fits a full 100.0%, at any configured font size", function(
     end
 end)
 
+
+-- ---------------------------------------------------------------------------
+-- The death-event tooltip (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- Hovering a death row shows what killed that player: one line per incoming
+-- event, oldest first, so the killing blow is the last thing read. Icon and
+-- caption on the tooltip's own line; damage and HP percentage in the carrier's
+-- two slots; the bar behind them is HP REMAINING, not damage.
+--
+-- The caption is the risky part. It joins a spell name and an attacker name,
+-- both resolved off ids that the client may hand back secret, and this file has
+-- never concatenated anything that could be one.
+
+--- Two events, newest first, as the client returns them.
+local function recapEvents(opts)
+    opts = opts or {}
+    return {
+        { spellId = 264206, spellName = opts.lastName or "Volley",
+          sourceName = opts.lastSource, hideCaster = opts.hideCaster,
+          amount = 787300, overkill = 138100, currentHP = 100000,
+          event = "SPELL_DAMAGE", timestamp = 1000.0 },
+        { spellId = 1301253, spellName = "Gust", sourceName = "Merektha",
+          amount = 36900, currentHP = 700000,
+          event = "SPELL_DAMAGE", timestamp = 954.6 },
+    }
+end
+
+--- A drill-down death row plus a client that answers its recap.
+local function deathBench(opts)
+    opts = opts or {}
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function() return opts.events or recapEvents(opts) end,
+        GetRecapMaxHealth = function() return opts.maxHealth or 738800 end,
+    })
+    local row = {
+        guid = "death:29", recapID = 29, name = "Death 3",
+        classFilename = "PALADIN", isDrillDown = true,
+        values = { Deaths = { total = 1, maxAmount = 1, displayText = "13:01:06" } },
+        maxAmount = 1,
+    }
+    return inst, cfg, anchor, row
+end
+
+--- Every tooltip line's text, in order.
+local function lineTexts(inst)
+    local out, i = {}, 1
+    while inst.mocks["GameTooltipTextLeft" .. i] do
+        local fs = inst.mocks["GameTooltipTextLeft" .. i]
+        if not fs:IsShown() then break end
+        out[i] = fs:GetText()
+        i = i + 1
+    end
+    return out
+end
+
+test("Tooltip: hovering a death row lists its events, OLDEST first", function()
+    -- The killing blow is the last line read, which is the order the whole
+    -- surface is meant to be read in. The client returns them newest first.
+    -- red under: rendering the array as it arrives.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    local gust, volley = texts:find("Gust", 1, true), texts:find("Volley", 1, true)
+    assertTrue(gust ~= nil and volley ~= nil, "both events must be listed")
+    assertTrue(gust < volley, "the killing blow must be last")
+end)
+
+test("Tooltip: a death row never reaches the client's spell tooltip", function()
+    -- SetSpellByID replaces the tooltip's whole content, so a death row that
+    -- happened to carry a spellID would silently render a spell page instead of
+    -- the event list.
+    -- red under: the death branch sitting after the spellID path.
+    local inst, cfg, anchor, row = deathBench()
+    row.spellID = 264206
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    assertTrue(#spellLines(inst) > 0, "the event carriers were never drawn")
+end)
+
+test("Tooltip: each event line shows the time before death and the attacker", function()
+    local inst, cfg, anchor, row = deathBench{ lastSource = "Merektha" }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("-45.4s", 1, true) ~= nil,
+        "the first event is 45.4s before the killing blow")
+    assertTrue(texts:find("Merektha", 1, true) ~= nil, "the attacker was dropped")
+end)
+
+test("Tooltip: an event with no attacker renders without the clause", function()
+    -- `hideCaster` is true on a real sample and sourceName is simply absent. A
+    -- caption reading "Volley ()" is worse than one reading "Volley".
+    -- red under: formatting the attacker unconditionally.
+    local inst, cfg, anchor, row = deathBench{ hideCaster = true }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("()", 1, true) == nil, "an empty attacker clause was rendered")
+end)
+
+test("Tooltip: the bar behind an event is HP REMAINING, handed over raw", function()
+    -- The percentage is a division and dividing a secret is what rule R1
+    -- forbids. Passing currentHP and maxHealth to the widget lets the engine
+    -- divide, which core/Secrets.lua puts on the MAY list.
+    -- red under: computing currentHP / maxHealth in Lua.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local first = spellLines(inst)[1]
+    local mn, mx = first.bar:GetMinMaxValues()
+    assertEqual(mn, 0)
+    assertEqual(mx, 738800, "the max must be the recap's own max health")
+    assertEqual(first.bar:GetValue(), 700000, "the value must be HP at that event")
+end)
+
+test("Tooltip: the killing blow's overkill is named", function()
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:lower():find("overkill", 1, true) ~= nil)
+end)
+
+test("Tooltip: a secret spell name never meets concatenation", function()
+    -- The whole reason the caption goes through one string.format. Under the
+    -- simulated secret the mock traps `..`, so a join raises here rather than
+    -- mid-pull in front of a player.
+    -- red under: `caption .. " (" .. sourceName .. ")"`.
+    local inst, cfg, anchor, row = deathBench{
+        lastName = nil, lastSource = nil,
+    }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function()
+            return {
+                { spellId = 264206, spellName = inst.mocks.secret("Volley"),
+                  sourceName = inst.mocks.secret("Merektha"),
+                  amount = inst.mocks.secret(787300),
+                  currentHP = inst.mocks.secret(100000),
+                  timestamp = inst.mocks.secret(1000.0) },
+            }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(738800) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+
+    local ok, err = pcall(function()
+        inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    end)
+    assertTrue(ok, "the death tooltip raised on a secret: " .. tostring(err))
+end)
+
+test("Tooltip: with the values secret the bar still draws and the share does not lie", function()
+    -- A percentage that cannot be computed is rendered as nothing, never as 0%.
+    -- The bar is unaffected, because the widget divides.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function() return true end,
+        GetRecapEvents    = function()
+            return { { spellId = 264206, spellName = "Volley",
+                       amount = inst.mocks.secret(787300),
+                       currentHP = inst.mocks.secret(100000),
+                       timestamp = 1000.0 } }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(738800) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local first = spellLines(inst)[1]
+    assertTrue(first ~= nil, "no line was drawn at all")
+    assertTrue(first.share:GetText() ~= "0%", "a refused division was rendered as zero")
+end)
+
+test("Tooltip: a death whose recap has gone says so instead of drawing nothing", function()
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({ HasRecapEvents = function() return false end })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("recap", 1, true) ~= nil, "an empty tooltip reads as a bug")
+end)
