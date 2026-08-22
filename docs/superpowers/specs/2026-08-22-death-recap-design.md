@@ -1,6 +1,6 @@
 # Death recap — design (issue #1)
 
-Status: drafted 2026-08-22, awaiting approval. Implements
+Status: **implemented 2026-08-22**. Drafted, approved and built the same day; the sections below were amended where the build disagreed with the draft, and each amendment says so. Implements
 [#1 "A death-recap window for the run"](https://github.com/tusharsaxena/MythicMeters/issues/1),
 **re-shaped in the same conversation** from the issue's two-pane window to a drill-down. The
 issue's target behaviour is unchanged; only the surface it lands on is.
@@ -65,6 +65,7 @@ EllesmereUIDamageMeters' in-combat tooltip, which renders exact percentages and 
 | What labels a death row? | Name column: **`Death N`**, numbered chronologically. Deaths cell: **wall-clock `HH:MM:SS`** of the death. |
 | Bar on a death row? | **Full.** A death is not a quantity; the bar is the row's backing, not a measure. |
 | Where does the event breakdown live? | The **tooltip** of a hovered death row. No third drill-down level. |
+| What does clicking a death row do? | Opens **Blizzard's own Death Recap** for that exact death, and leaves the list open behind it. *(Added after the draft: the frame was confirmed in-client to render another player's death in full when handed a live id, so our list answers "when" and the game's frame answers "what".)* |
 | Tooltip columns | Time · icon · spell *(attacker)* · damage taken · HP % remaining. |
 | Tooltip order | **Oldest first**, so the killing blow is the last line. Reverses the API's order. |
 | HP % when the values are secret | Bar still drawn (engine divides); the **text** percentage is omitted. See §6. |
@@ -136,12 +137,19 @@ issue's note about `-1` on Overall is therefore closed rather than worked around
 * **The wall-clock time is the newest event's `timestamp`** in that death's recap, run through
   `date("%H:%M:%S", ...)`. This costs one `GetRecapEvents` per death on entry, memoized
   thereafter.
+* **AMENDED: the death list is a snapshot taken on entry.** While a window is drilled in,
+  `modules/Window.lua` renders `BuildRows` *instead of* running an aggregate pass, so there is no
+  current row to re-read `row.deaths` off. A player who dies again while somebody is looking at
+  their list will not appear in it until the list is left and re-entered. Recorded in
+  `docs/ARCHITECTURE.md` → Known limitations.
 * **A death whose recap is empty still draws.** `HasRecapEvents` false, or an empty array, gives
   a row labelled `Death N` with `—` in place of a time. Its tooltip says there is nothing behind
   it. A missing recap must not remove a death that the count includes, or the drill-down and the
   cell above it disagree about how many times somebody died.
 
-Clicking a death row does nothing. There is no third level.
+**Clicking a death row opens Blizzard's own Death Recap for that death** — the row's own id, not
+the newest. The list stays open behind the frame. There is still no third drill-down level: the
+game's frame is the third level, and it is better than one of ours would be.
 
 ## 6. The event tooltip
 
@@ -162,7 +170,7 @@ Name3 — died 13:01:06
 |---|---|
 | icon | `Compat.GetSpellTexture(spellId)`; a melee fallback where there is none. |
 | label | `SetFormattedText("-%.1fs %s (%s)", …)` — seconds before death, spell name, attacker. |
-| amount | The damage taken, negative-signed; heals positive. Overkill appended on the killing blow. |
+| amount | The damage taken. **AMENDED: overkill moved into the caption**, because `AMOUNT_SLOT_WIDTH` is a fixed 66px with no per-font measurement and `-787.3K (138.1K overkill)` would clip exactly as `100.0%` once clipped to `100....`. Widening the slot would move every tooltip in the addon. |
 | share | The HP percentage remaining. |
 | bar | HP remaining at that event. |
 
@@ -215,6 +223,25 @@ and it is fixed here because the drill-down would otherwise list a death that ne
 Every input is plain and unrestricted: no combat log, no new data source, nothing that touches
 the secret rules. `spellID` is guarded for secrecy before the `==` and the GUID before it is used
 as a table key, because a secret key raises on index.
+
+**AMENDED AFTER THE DRAFT — the filter cannot run mid-pull, and that is structural.** The draft did
+not notice, and it is not a defect to fix later: the filter joins a plain GUID recorded from a cast
+against `sourceGUID` on a meter source row, and `sourceGUID` is secret for the whole of a pull.
+That is the entire reason `modules/Aggregator.lua` has a second, GUID-free identity build. There is
+no plain key on the other side of the join while the restriction is up, so a feign **is** counted as
+a death mid-pull and the count corrects itself the moment combat ends and the GUID build resumes.
+Recorded in `docs/ARCHITECTURE.md` → Known limitations, and stated in `modules/Feign.lua`'s own
+header, because the next reader will otherwise file it as a bug or key on something secret to
+"fix" it.
+
+**Also amended:** "segment start" has no single message. `METER_SESSION` fires throughout a session
+rather than only at its start, so clearing on it would drop feign records mid-pull. The set clears
+on `METER_RESET` and `ENTERING_WORLD` — the same pair the recap memo uses — and prunes on
+`ROSTER_CHANGED`.
+
+**Also amended:** nothing in this addon had ever read unit health, so the mock grew its first
+health seam for this. The 0-HP clear is a prune rather than an event, because no health event is
+registered and registering one for this would be a second high-frequency listener.
 
 `deathRecapID` itself is filtered to `> 0`, gated behind `Secrets.IsSafeKey` so the comparison
 can never meet a secret.

@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`, 16 `settings/`.
+Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MythicMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -61,7 +61,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` seams | `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring and shipped-media registration. |
 | `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
-| `modules/` data | `Provider`, `Roster`, `Aggregator`, `Format` | Read → join → order → render as text. |
+| `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
@@ -185,7 +185,8 @@ asked once, of `NS.Export.Available()`, and is never re-decided here — see [Ta
 
 **`core/MythicMeters.lua` registers every game event this addon listens to, and no other file
 registers any.** Each handler does the minimum translation and republishes onto the bus; none reads a
-value and none decides anything, which is what lets that section be read as a wiring diagram.
+value and — with one stated exception, the feign filter below — none decides anything, which is what
+lets that section be read as a wiring diagram.
 
 | Event | Handler | Becomes |
 |---|---|---|
@@ -196,6 +197,7 @@ value and none decides anything, which is what lets that section be read as a wi
 | `DAMAGE_METER_CURRENT_SESSION_UPDATED` | `OnMeterUpdated` | `METER_UPDATED` |
 | `DAMAGE_METER_COMBAT_SESSION_UPDATED` | `OnMeterSession` | `METER_SESSION { type, sessionID }` |
 | `DAMAGE_METER_RESET` | `OnMeterReset` | wipes every cache, then `METER_RESET` |
+| `UNIT_SPELLCAST_SUCCEEDED` | `OnSpellSucceeded` | **the one handler that decides something** — Feign Death (5384) only, straight into `modules/Feign.lua`. Nothing reaches the bus: republishing every cast in a raid to save one comparison would be worse, and no other file may see a game event |
 
 The three `DAMAGE_METER_*` handlers carry the `meterEvent` perf bracket. It measures the **fan-out**,
 not the redraw: `SendMessage` walks every subscribed window's callback synchronously, which is the
@@ -355,6 +357,19 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 ## Known limitations
 
+- **The feign-death filter cannot run mid-pull, and that is structural.** `C_DamageMeter` hands a
+  Feign Death a valid `deathRecapID`, so the Deaths column counts a hunter's feign as a death.
+  `modules/Feign.lua` records the GUID off the cast and `modules/Aggregator.lua` drops that source —
+  but the join is a plain GUID against `sourceGUID`, and `sourceGUID` is secret for the whole of a
+  pull. That is the entire reason the aggregator has a second, GUID-free identity build. There is no
+  plain key on the other side of the join while the restriction is up, so **a feign is counted as a
+  death mid-pull and the count corrects itself the moment combat ends.** Do not "fix" this by keying
+  on something secret; there is nothing to key on.
+- **The death list is a snapshot taken on entry.** While a window is drilled into a player's deaths,
+  `modules/Window.lua` renders `DrillDown:BuildRows` *instead of* running an aggregate pass, so there
+  is no current row to re-read the deaths off. A player who dies again while somebody is looking at
+  their list will not appear in it until the list is left and re-entered. Re-deriving it would cost a
+  second aggregate pass per frame to keep fresh a list nobody is watching change.
 - English (`enUS`) only. The locale plumbing and the metatable fallback exist; no second locale ships.
 - Retail / Midnight only — a single `## Interface` line. `C_DamageMeter` does not exist on Classic.
 - **Pet attribution is best-effort, but an unattributable ally is no longer lost.** Guardians,

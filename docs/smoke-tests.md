@@ -322,7 +322,8 @@ a raider most wants to know what killed them is the moment they are still fighti
 1. Hover a **Damage** cell.
 2. Hover the **name** cell.
 3. Click a Damage cell; then **right-click any row** to leave; then click the same cell twice.
-4. Hover a **Deaths** cell on a row for someone who has died, then click it.
+4. Hover a **Deaths** cell on a row for someone who has died, then click it; hover a death
+   row in the list that opens, then click that.
 5. Move the mouse off the window.
 
 **Pass.**
@@ -350,16 +351,42 @@ a raider most wants to know what killed them is the moment they are still fighti
   frame, and a tooltip that shows in a seam and nowhere else means the cells have taken their mouse
   back. The row must highlight there too — the cells drive that on the grid and cannot here. With
   `/mm debug` on, one `[Tooltip] row spell=<id>` line per row entered says the handler ran at all.
-- **A left-click inside a breakdown does nothing at all.** It used to ask the provider for a
-  breakdown of a spell and render an empty window.
+- **A left-click inside a SPELL breakdown does nothing at all.** It used to ask the provider for a
+  breakdown of a spell and render an empty window. A left-click inside a DEATH list is different —
+  see the death-recap block below.
 - **The mouse wheel scrolls both the grid and a breakdown** when there are more rows than fit. It
   stops at both ends, survives the refresh tick rather than snapping back, and resets to the top when
   you enter or leave a breakdown. Shrink the window until rows are hidden to test it.
 - The drill-down **does not reshuffle** while you watch it, in or out of combat.
-- **Deaths cell**: the tooltip ends with *"Click for details"*, and clicking opens **Blizzard's own
-  death recap** rather than a spell list. If the recap is unavailable the click must fall through to
-  the ordinary breakdown — the cell is never dead. (`deathRecapID` is `NeverSecret`, which is the only
-  reason this can be a click action at all.)
+- **Deaths cell**: clicking it opens a **list of that player's deaths** — one row each, the name
+  column reading `Death 1`, `Death 2`… numbered chronologically so a newest-first list counts *down*,
+  and the Deaths cell carrying the **wall-clock time** of that death with a full bar behind it. A
+  time reading `—` means the client no longer holds that recap; the row must still be there, because
+  the count in the cell it came from says a death happened.
+- **The number of rows in that list must equal the number in the cell you clicked.** They are two
+  independent tallies of one fact, in two separate builds, and disagreeing is the failure this whole
+  surface must not have. Check it both in and out of combat: the identity build runs mid-pull.
+- **Hovering a death row** lists what killed them — one line per incoming hit, **oldest first**, with
+  icon, seconds before death, spell name, the attacker in parentheses where the client names one,
+  the damage taken, and the HP percentage remaining. The bar behind each line is **HP remaining**,
+  not damage, so it empties as you read down. The last line is the killing blow and carries an
+  overkill clause. An event with `hideCaster` shows no parentheses at all — never an empty `()`.
+- **Mid-pull the bars must still draw.** The percentage text may vanish (a percentage is a division,
+  and dividing a secret is illegal) but the bar is the widget dividing natively and is unaffected. A
+  measured capture showed these fields arriving *plain* in combat, so in practice the percentages
+  stay — but a build where they disappear and the bars remain is correct, and a Lua error here means
+  something computed the ratio in Lua.
+- **Clicking a death row opens Blizzard's own Death Recap** for that exact death — not the newest
+  one. Verify with a player who died more than once: the frame's contents must match the row you
+  clicked. The list must stay open behind it; returning to the grid would lose your place.
+- **A hunter's Feign Death must not appear as a death**, in the count or in the list. Out of combat
+  only — see Known limitations: the filter joins a plain GUID against `sourceGUID`, which is secret
+  for the whole of a pull, so mid-pull a feign IS counted and the number corrects itself when combat
+  ends. Feign, leave combat, check the count; then feign, actually die, and confirm the real death is
+  still counted.
+- If the client has no `C_DeathRecap` at all, the Deaths click must fall back to **Blizzard's frame**
+  and then to the ordinary breakdown — the cell is never dead. (`deathRecapID` is `NeverSecret`,
+  which is the only reason any of this can be a click action at all.)
 - Moving the mouse off the window **always** hides the tooltip. A tooltip left pinned under the
   cursor is the single most reported meter bug there is.
 - Set **Tooltip → Hide tooltips in combat** and repeat step 1 during a pull: no tooltip appears, and
