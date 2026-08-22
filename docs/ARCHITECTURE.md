@@ -72,7 +72,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **103 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **104 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -526,6 +526,7 @@ committed file is the only way a screenshot reaches one); it carries no `.md` an
 | `superpowers/plans/2026-08-09-mythic-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
+| `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 

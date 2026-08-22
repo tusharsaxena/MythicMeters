@@ -264,7 +264,8 @@ bar grows rightward (`SetReverseFill(false)`).
 
 `leftSlot = "total"` · `rightSlot = "none"` — **both take the same four values**, `none` / `total` /
 `rate` / `percent`. They used to take different three-value sets overlapping on two, which made "the
-total on the right" unexpressible for no reason anyone could state. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) · `maxNameLength = 20` (0 = no
+total on the right" unexpressible for no reason anyone could state. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) ·
+`deathTimeFormat = "clock"` (`clock` / `ago`) · `maxNameLength = 20` (0 = no
 cap) · `font = Const.FONT_MONO_NAME` ("JetBrains Mono") · `size = 11` · `outline = "NONE"` ·
 `shadow = true` · `color = { r=1, g=1, b=1, a=1 }` · `alpha = 1.0`.
 
@@ -276,6 +277,12 @@ NPCs, which are not bound by it. The realm is stripped regardless of the number.
 Both the strip and the cap are **gated on the concat probe**: `string.match` and `string.sub` read
 the characters of a value, and doing that to a secret is what rule R1 forbids, so a `ConditionalSecret`
 name reaches the widget untouched and uncapped.
+
+`deathTimeFormat` labels a death in the Deaths tooltip and the death drill-down — the time of day,
+or how long ago. A third value, "time into the fight", was built and removed: nothing on the client
+can date a past death against the run it happened in, and the captures that establish that are on
+[issue #18](https://github.com/tusharsaxena/MythicMeters/issues/18). Both surviving values read the
+recap's own newest event timestamp, which is absolute epoch and always present.
 
 **Nothing here divides anything.** `numberFormat` picks which `NumericRuleFormatter` instance
 `modules/Format.lua` hands the value to; the formatter does the division natively, which is the only

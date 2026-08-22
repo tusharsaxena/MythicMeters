@@ -3,7 +3,7 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MythicMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`,
+Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`,
 16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
@@ -103,7 +103,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (103 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (104 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
@@ -188,7 +188,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Header.lua` | The Header page (16 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Rows.lua` | The Rows page (10 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Bars.lua` | The Bars page (9 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Text.lua` | The Text page (10 rows). Pure schema | a page registration | `NS.Helpers` |
+| `Text.lua` | The Text page (11 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Icons.lua` | The Icons page (3 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Tooltip.lua` | The Tooltip page (18 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |
