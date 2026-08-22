@@ -60,6 +60,7 @@ modules\Feign.lua
 modules\Aggregator.lua
 modules\WindowManager.lua
 modules\Window.lua
+modules\HeaderControls.lua
 modules\Row.lua
 modules\Targets.lua
 modules\Tooltip.lua

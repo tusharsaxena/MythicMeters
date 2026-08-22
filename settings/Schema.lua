@@ -557,6 +557,63 @@ NS.Schema = {
         page = "frame", group = L["Row behavior"],
         label = L["Show resize grip"], desc = L["Draw a drag handle in the bottom-right corner for resizing."],
     },
+
+    -- ── The header's controls (issue #6) ─────────────────────────────────────
+    --
+    -- Nine rows kept CONTIGUOUS and placed after resizeGrip. Group headings are
+    -- emitted when `group` CHANGES between consecutive rows, so interleaving one
+    -- of these among the rows above would print a second "Row behavior" heading
+    -- further down the page.
+    --
+    -- Every default here is stated a SECOND time in defaults/Profile.lua, and
+    -- both statements are checked against each other -- see the note above on
+    -- why the two are deliberately not factored into one shared constant.
+    {
+        path = "window.frame.showMinimise", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show minimise"], desc = L["Collapse the window to its title bar and back."],
+    },
+    {
+        path = "window.frame.showLock", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show lock"], desc = L["Lock or unlock the window for dragging."],
+    },
+    {
+        path = "window.frame.showSettings", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show settings"], desc = L["Open this addon's settings at the window you clicked."],
+    },
+    {
+        path = "window.frame.showSegment", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show segment picker"], desc = L["Choose which fight this window shows. The session line stays clickable either way."],
+    },
+    {
+        path = "window.frame.showReset", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show reset"], desc = L["Clear every recorded combat session. Asks first -- it wipes the game's own meter data too, not just this addon's."],
+    },
+    {
+        path = "window.frame.showExport", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show export"], desc = L["Export this window's segment to CSV or to chat."],
+    },
+    {
+        path = "window.frame.hoverReveal", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Reveal controls on hover"], desc = L["Fade the controls until the pointer is over the title bar. Off keeps them always visible."],
+    },
+    {
+        path = "window.frame.minimised", type = "bool", default = false,
+        page = "frame", group = L["Header controls"],
+        label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
+    },
+    {
+        path = "window.frame.controlSize", type = "number", default = 18,
+        min = 10, max = 32, step = 1,
+        page = "frame", group = L["Header controls"],
+        label = L["Control size"], desc = L["How large each header control is drawn, in pixels."],
+    },
     -- `frame.position` is deliberately NOT a row. It is written by a drag, it is
     -- four values with one meaning, and — rule R3 — it is never read back off the
     -- live frame. NS.ResetPositions() is how a reset reaches it, wired into the

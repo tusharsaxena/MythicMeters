@@ -89,6 +89,29 @@ local WINDOW_TEMPLATE = {
         clampToScreen  = true,
         titleBar       = true,
         closeButton    = true,
+        -- ── The header's controls (issue #6) ──
+        --
+        -- Six show* keys, one per control that this addon builds. `closeButton`
+        -- above is the seventh and deliberately keeps its old name: renaming it
+        -- to `showClose` for symmetry would migrate every stored profile in
+        -- exchange for a consistency nobody can see.
+        showMinimise    = true,
+        showLock        = true,
+        showSettings    = true,
+        showSegment     = true,
+        showReset       = true,
+        showExport      = true,
+        -- Chrome fades until the pointer is over the title strip. Off is the
+        -- behaviour every version before this one had, so it is the honest
+        -- fallback rather than a degraded one.
+        hoverReveal     = true,
+        -- Collapsed to the title bar. Persisted like every other window fact, so
+        -- a window left collapsed comes back collapsed.
+        minimised       = false,
+        -- What a control is drawn at. The art ships at 64px and is scaled down
+        -- to this; 18 is what the header has always used, so nothing moves on
+        -- upgrade.
+        controlSize     = 18,
         resizeGrip     = true,
         -- Position is stored, never read back off the frame. Rule R3: a cell
         -- that has been handed a secret value makes its own geometry secret and

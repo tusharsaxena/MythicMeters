@@ -212,6 +212,7 @@ local SUITES = {
     "test_aggregator_sort",
     -- the display
     "test_window",
+    "test_headercontrols",
     "test_row",
     "test_targets",
     "test_tooltip",

@@ -691,6 +691,29 @@ badge and any count quoted in the docs must agree with it.
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
 
+### test_headercontrols.lua (20)
+
+- HeaderControls: every control this addon builds is attached
+- HeaderControls: a control turned off is not placed at all
+- HeaderControls: a hidden control YIELDS its slot
+- HeaderControls: hiding the LAST control moves nothing
+- HeaderControls: control size comes from config
+- HeaderControls: the width reserved equals the width occupied
+- HeaderControls: no title bar means no strip and no reservation
+- HeaderControls: with no atlas the ASCII rung draws
+- HeaderControls: an atlas beats the ASCII rung
+- HeaderControls: the padlock's two states do not draw the same
+- HeaderControls: minimise shows the opposite of the state it is in
+- HeaderControls: a glyph is never given text before a font
+- HeaderControls: reset asks before it wipes anything
+- HeaderControls: minimise writes through the settings seam
+- HeaderControls: the lock button toggles this window only
+- HeaderControls: the strip fades until the pointer is on the title bar
+- HeaderControls: one hover moves the WHOLE strip
+- HeaderControls: hover reveal off means always visible
+- HeaderControls: hooking hover does not unseat the drag
+- HeaderControls: a locked window can still reveal its controls
+
 ### test_row.lua (66)
 
 - Row.OffsetFor is a pure function of the index and the row config
@@ -1281,6 +1304,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 84 |
+| test_headercontrols.lua | 20 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1295,4 +1319,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1145** |
+| **Total** | **1165** |

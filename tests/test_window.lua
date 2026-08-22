@@ -124,12 +124,14 @@ test("Closing HIDES the window; it never deletes it", function()
 end)
 
 test("The header carries a lock and a gear, and the padlock shows the state", function()
-    local _, window, cfg = scene()
+    local inst, window, cfg = scene()
 
-    assertTrue(window.lockButton ~= nil)
-    assertTrue(window.configButton ~= nil)
-    assertTrue(window.lockButton:GetScript("OnClick") ~= nil)
-    assertTrue(window.configButton:GetScript("OnClick") ~= nil)
+    -- The controls live on window.controls now, built by
+    -- modules/HeaderControls.lua. Same widgets, same clicks, one owner.
+    assertTrue(window.controls.lock ~= nil)
+    assertTrue(window.controls.settings ~= nil)
+    assertTrue(window.controls.lock:GetScript("OnClick") ~= nil)
+    assertTrue(window.controls.settings:GetScript("OnClick") ~= nil)
 
     -- The padlock's art is whatever resolved: an atlas where the client has one,
     -- an ASCII character where it does not. Either way the two states must not
@@ -148,12 +150,12 @@ test("The header carries a lock and a gear, and the padlock shows the state", fu
     end
 
     cfg.frame.locked = true
-    window:ApplyHeaderButtons()
-    local lockedArt = art(window.lockButton)
+    inst.NS.HeaderControls:Apply(window)
+    local lockedArt = art(window.controls.lock)
 
     cfg.frame.locked = false
-    window:ApplyHeaderButtons()
-    assertFalse(art(window.lockButton) == lockedArt,
+    inst.NS.HeaderControls:Apply(window)
+    assertFalse(art(window.controls.lock) == lockedArt,
         "an open padlock and a closed one must not draw the same art")
 end)
 
@@ -166,7 +168,7 @@ test("The padlock toggles THIS window only", function()
     other.frame.locked = true
     cfg.frame.locked = true
 
-    window.lockButton:_run("OnClick")
+    window.controls.lock:_run("OnClick")
     assertEqual(cfg.frame.locked, false)
     assertEqual(other.frame.locked, true, "the other window did not move")
 end)
@@ -1201,7 +1203,7 @@ test("Building a window sets no text on a fontless FontString", function()
     -- at BuildFrame, which took the whole addon down before a single window
     -- existed. The harness models the client's rule now, so this case is the
     -- whole build path run under it.
-    -- red under: SetText on a glyph in BuildFrame, before ApplyHeaderButtons.
+    -- red under: SetText on a glyph in Attach, before the first Apply.
     local inst = T.load()
     local cfg = inst.NS.Database.GetWindows()[1]
 
@@ -1210,12 +1212,12 @@ test("Building a window sets no text on a fontless FontString", function()
 
     -- And the glyphs did get their text, once they had a font to draw it with.
     local window = inst.NS.Window.New(cfg)
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
     -- One of the two draws, never neither: an atlas if the client has one, an
     -- ASCII character if it does not.
-    assertTrue(window.configButton.tex:IsShown() or window.configButton.glyph:IsShown(),
+    assertTrue(window.controls.settings.tex:IsShown() or window.controls.settings.glyph:IsShown(),
         "the gear must draw something")
-    assertTrue(window.lockButton.tex:IsShown() or window.lockButton.glyph:IsShown(),
+    assertTrue(window.controls.lock.tex:IsShown() or window.controls.lock.glyph:IsShown(),
         "and the padlock too")
 end)
 
@@ -1228,11 +1230,11 @@ test("Header art falls back to ASCII on a client with none of the atlases", func
     local inst = T.load()
     inst.mocks.setAtlases({})          -- a client with no matching atlas at all
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
 
-    assertFalse(window.configButton.tex:IsShown(), "no atlas resolved")
-    assertTrue(window.configButton.glyph:IsShown(), "so the ASCII fallback draws")
-    local text = window.configButton.glyph:GetText()
+    assertFalse(window.controls.settings.tex:IsShown(), "no atlas resolved")
+    assertTrue(window.controls.settings.glyph:IsShown(), "so the ASCII fallback draws")
+    local text = window.controls.settings.glyph:GetText()
     assertTrue(text ~= nil and text ~= "", "and it is not empty")
 end)
 
@@ -1240,10 +1242,10 @@ test("Header art prefers an atlas where the client has one", function()
     local inst = T.load()
     inst.mocks.setAtlases({ ["GM-icon-settings"] = true })
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
 
-    assertTrue(window.configButton.tex:IsShown(), "the atlas wins when it exists")
-    assertFalse(window.configButton.glyph:IsShown())
+    assertTrue(window.controls.settings.tex:IsShown(), "the atlas wins when it exists")
+    assertFalse(window.controls.settings.glyph:IsShown())
 end)
 
 test("Changing a setting does not close a window the player asked for", function()

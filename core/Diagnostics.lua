@@ -307,14 +307,29 @@ local function reportHeader()
     -- through tostring it took the title above it down with it.
     out(string.format("  session line=%q", shown(inst.sessionText:GetText())))
 
-    for label, button in pairs({ gear = inst.configButton, lock = inst.lockButton,
-                                 export = inst.exportButton }) do
-        if button then
-            out(string.format("  %-5s atlas=%s glyph=%q shown=%s",
-                label,
-                tostring(button.tex and button.tex:GetAtlas()),
+    -- EVERY CONTROL, WALKED OFF THE WINDOW ITSELF. This used to name three
+    -- fields -- configButton, lockButton, exportButton -- inside `if button
+    -- then`, so when the controls moved to modules/HeaderControls.lua the loop
+    -- printed nothing at all: no error, just a diagnostic that had quietly
+    -- stopped covering the header. Walking `inst.controls` means a control added
+    -- later appears here without anyone remembering to add it.
+    local controls = inst.controls
+    if not controls then
+        out("  header controls: none built")
+        return
+    end
+    for _, key in ipairs({ "close", "minimise", "lock", "settings",
+                           "segment", "reset", "export" }) do
+        local button = controls[key]
+        if not button then
+            out(string.format("  %-9s absent", key))
+        else
+            out(string.format("  %-9s atlas=%s glyph=%q shown=%s alpha=%s",
+                key,
+                tostring(button.tex and button.tex.GetAtlas and button.tex:GetAtlas()),
                 tostring(button.glyph and button.glyph:GetText()),
-                tostring(button:IsShown())))
+                tostring(button:IsShown()),
+                tostring(button.GetAlpha and button:GetAlpha())))
         end
     end
 end
