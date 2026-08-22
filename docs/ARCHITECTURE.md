@@ -490,9 +490,12 @@ and a fallback nobody can run is a fallback nobody has tested.
 
 Every `.md` under `docs/` appears in exactly one of the three tables below (`documentation-§3`).
 Frozen and generated directories are named once and never enumerated per run: `docs/automated-tests/`,
-`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` holds image evidence attached to GitHub
-issues (GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
-committed file is the only way a screenshot reaches one); it carries no `.md` and so registers no row.
+`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` held image evidence attached to GitHub
+issues — GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
+committed file is the only way a screenshot reaches one. It is **empty today**: an issue's images are
+deleted when it closes, and its links are re-pointed at the commit that last carried them, which
+keeps resolving forever without the repo carrying the weight. Issue #1's are pinned to `dcb29ad`.
+The directory carries no `.md` and so registers no row.
 
 ### Canonical trio (Tier 1)
 
