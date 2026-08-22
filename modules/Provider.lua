@@ -567,6 +567,27 @@ end
 --- distinguishable from "not asked yet" and, unlike nil, survives a table lookup.
 local recapCache = {}
 
+--- recapID -> seconds into the session, or nil before the first build.
+---
+--- WHY THIS EXISTS AT ALL. `deathTimeSeconds` reads **-1 on the Overall
+--- session** — measured over three live runs — and Overall is what a window
+--- shows by default. So "time into the fight" fell back to the wall clock for
+--- almost everybody and looked broken rather than degraded.
+---
+--- The CURRENT session carries the real figure for the same deaths, and the
+--- recap ids are identical across the two, in the same order. So the offsets are
+--- looked up there and keyed on the id, which is the one field that joins them.
+local deathOffsets = nil
+
+--- Whether an id has been looked for and genuinely has no offset.
+---
+--- Deaths accumulate during a run, so a map built at the first hover is stale
+--- the moment somebody dies again — a miss has to rebuild. But a death that
+--- really has no offset would then re-read the session on every row of every
+--- pass, so a miss is remembered and only ever costs one rebuild.
+local deathOffsetMisses = nil
+
+
 --- Forget every cached recap.
 ---
 --- Recap ids are SESSION-SCOPED COUNTERS — a live dump showed 18 through 29 for
@@ -575,12 +596,57 @@ local recapCache = {}
 --- is worse than showing nothing.
 function Provider.InvalidateRecaps()
     recapCache = {}
+    deathOffsets = nil
+    deathOffsetMisses = nil
 end
 
 --- Whether this client can read a death recap at all. See the shim.
 --- @return boolean
 function Provider.CanReadRecaps()
     return Compat.HasDeathRecap()
+end
+
+--- Read the Current session's Deaths column into the id -> offset map.
+local function buildDeathOffsets()
+    local map = {}
+    local column = Provider.GetColumn(Const.SESSION_TYPE.Current, "Deaths", nil)
+    if type(column) == "table" then
+        for i = 1, #column.sources do
+            local src = column.sources[i]
+            local id = src.deathRecapID
+            local when = src.deathTimeSeconds
+            -- A secret id cannot be a key and a secret offset cannot be compared
+            -- to -1; both are ordinary mid-pull, and both simply do not go in.
+            -- The consequence is the documented one: no offsets during a pull.
+            if Secrets.IsSafeKey(id) and when ~= nil and Secrets.CanCompare(when)
+                and when >= 0 then
+                map[id] = when
+            end
+        end
+    end
+    deathOffsets = map
+    return map
+end
+
+--- How far into the session this death happened, in seconds, or nil.
+---
+--- @param recapID number
+--- @return number|nil
+function Provider.DeathOffset(recapID)
+    if suspended then return nil end
+    if not Secrets.IsSafeKey(recapID) then return nil end
+
+    local map = deathOffsets or buildDeathOffsets()
+    local hit = map[recapID]
+    if hit ~= nil then return hit end
+
+    -- One rebuild per unknown id, then remembered as absent. See the note above.
+    deathOffsetMisses = deathOffsetMisses or {}
+    if deathOffsetMisses[recapID] then return nil end
+    deathOffsetMisses[recapID] = true
+
+    map = buildDeathOffsets()
+    return map[recapID]
 end
 
 --- The breakdown behind one death, or nil.

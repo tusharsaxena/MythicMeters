@@ -134,6 +134,12 @@ local MAX_SPELL_ROWS = Const.MAX_ROWS
 -- "there was a death here and its detail is gone" rather than as a render bug.
 local NO_CLOCK = "\226\128\148"
 
+-- inv_misc_bone_skull_03, the same icon the Deaths tooltip uses. Every row in
+-- this view is a death, so the icon holds the column rather than telling one
+-- row from another -- and a blank square where every other row in the addon has
+-- an icon reads as a texture that failed to load.
+local DEATH_ICON = 237275
+
 
 local BACK_BUTTON_WIDTH  = 64
 local BACK_BUTTON_HEIGHT = 18
@@ -241,6 +247,26 @@ local function copyOffsets(times, deaths)
         out[i] = when
     end
     return out
+end
+
+--- Whether an offset is a figure rather than the client's way of saying it has
+--- none.
+---
+--- THREE WAYS TO HAVE NO OFFSET, and -1 is the one that bites: it is what the
+--- OVERALL session reports for every death it holds, it is a perfectly ordinary
+--- number, and treating it as one dates a death "00:00 into the fight". `false`
+--- is modules/Aggregator.lua's placeholder, and nil is a row built before any of
+--- this existed.
+---
+--- @param offset any
+--- @return boolean
+local function usableOffset(offset)
+    if offset == nil or offset == false then return false end
+    local Secrets = NS.Secrets
+    if Secrets and Secrets.CanCompare and not Secrets.CanCompare(offset) then
+        return false
+    end
+    return type(offset) == "number" and offset >= 0
 end
 
 --- Which timestamp style this window is set to.
@@ -519,7 +545,8 @@ end
 --                  first death, so a newest-first list counts down. Numbering
 --                  from the newest would make "his first death" mean the most
 --                  recent one, which is the opposite of how anyone says it.
---   icon           nil. A death is not a spell and the name cell draws nothing.
+--   icon           the death icon. Every row here is a death, so it holds the
+--                  column rather than telling one row from another.
 --   values         { [statKey] = { total = 1, maxAmount = 1,
 --                                  displayText = "13:01:06" } } — PLAIN ones,
 --                  so the bar draws full without this file or modules/Row.lua
@@ -608,6 +635,15 @@ local function deathRow(recapID, ordinal, view, offset)
     local openable = (recapID ~= false and recapID ~= nil)
 
     local P = provider()
+    -- THE OFFSET FALLS BACK TO THE CURRENT SESSION. Every offset on a row read
+    -- off OVERALL is -1 — the client reports no figure there — and Overall is
+    -- what a window shows by default, so "time into the fight" dated every death
+    -- with the wall clock and looked identical to "time of day". Current holds
+    -- the real figure for the same deaths, joined on the same recap id.
+    if openable and not usableOffset(offset) and P and P.DeathOffset then
+        offset = P.DeathOffset(recapID)
+    end
+
     local clock = (openable and P and P.GetRecap)
         and deathClock(P.GetRecap(recapID), offset, view.timeStyle) or nil
 
@@ -627,7 +663,7 @@ local function deathRow(recapID, ordinal, view, offset)
         -- opened from.
         deathClock    = clock or NO_CLOCK,
         name          = string.format(L["Death %d"] or "Death %d", ordinal),
-        icon          = nil,
+        icon          = DEATH_ICON,
         classFilename = view.classFilename,
         isLocalPlayer = false,
         isDrillDown   = true,

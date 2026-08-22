@@ -602,9 +602,11 @@ local NAME_COLUMN_CHARS = 25
 -- cuts a string up — `string.sub` on a secret raises, and a truncation this code
 -- performed would be an inspection besides.
 local EVENT_SPELL_CHARS  = 22
--- A caster name is shorter than a spell name in nearly every case, and the
--- column was eating width the numbers wanted.
-local EVENT_CASTER_CHARS = 13
+-- A caster name is shorter than a spell name in nearly every case. Widened
+-- again after 13 clipped "Grizzled Warbringer" a good deal earlier than the
+-- column's own width suggested it would -- these are 'n' widths, and a name
+-- full of wide glyphs runs out of room sooner than the reservation implies.
+local EVENT_CASTER_CHARS = 16
 
 -- The floor for the time column, and only the floor: the real width is measured
 -- from the times actually in the recap being drawn. They are numbers this addon
@@ -1697,6 +1699,16 @@ local function sourceDetailFor(window, statKey, row)
     return source
 end
 
+--- Whether an offset is a figure rather than the client's way of saying it has
+--- none. -1 is what the Overall session reports; `false` is the aggregator's
+--- placeholder. Kept in step with modules/DrillDown.lua's copy.
+local function usableOffset(seconds)
+    if seconds == nil or seconds == false then return false end
+    local S = NS.Secrets
+    if S and S.CanCompare and not S.CanCompare(seconds) then return false end
+    return type(seconds) == "number" and seconds >= 0
+end
+
 --- Draw the "Deaths" section on a GRID cell: one line per death, newest first.
 ---
 --- ISSUE #1'S FIRST COMPLAINT. This cell used to run the ordinary spell path,
@@ -1729,8 +1741,14 @@ local function addDeathList(row, style, timeStyle)
         local id = deaths[i]
         local clock
         if id ~= false and id ~= nil then
-            clock = deathClockOf(P.GetRecap(id),
-                row.deathTimes and row.deathTimes[i], timeStyle)
+            -- The offset falls back to the Current session for the reason
+            -- modules/DrillDown.lua's copy records: Overall reports -1 for every
+            -- death it holds, and Overall is what a window shows by default.
+            local seconds = row.deathTimes and row.deathTimes[i]
+            if not usableOffset(seconds) and P.DeathOffset then
+                seconds = P.DeathOffset(id)
+            end
+            clock = deathClockOf(P.GetRecap(id), seconds, timeStyle)
         end
 
         -- Numbered chronologically and listed newest first, exactly as

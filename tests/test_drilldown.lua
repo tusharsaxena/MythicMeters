@@ -753,3 +753,38 @@ test("The offsets travel with the ids, in step", function()
     assertEqual(rows[2].values.Deaths.displayText, "11:13")
     assertEqual(rows[3].values.Deaths.displayText, "04:56")
 end)
+
+test("A death dated 'time into the fight' falls back to the CURRENT session", function()
+    -- THE BUG THIS WAS REPORTED AS. Viewing Overall, every offset the row
+    -- carries is -1, so the style fell back to the wall clock and looked
+    -- identical to "Time of day". Current holds the real figure for the same
+    -- deaths, keyed on the same recap id.
+    -- red under: giving up when the row's own offset is unusable.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+
+    inst.mocks.setSession(1, inst.mocks.Enum.DamageMeterType.Deaths, {
+        combatSources = {
+            { sourceGUID = ALPHA, totalAmount = 0, deathRecapID = 29,
+              deathTimeSeconds = 1356 },
+        }, maxAmount = 0, totalAmount = 0,
+    })
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }   -- what Overall reports
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths.displayText, "22:36")
+end)
+
+test("A death row wears the death icon", function()
+    -- The name column drew nothing at all, leaving a blank square where every
+    -- other row in the addon has an icon.
+    -- red under: icon = nil on a death row.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].icon, 237275)
+end)

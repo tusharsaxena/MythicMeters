@@ -2084,3 +2084,27 @@ test("Tooltip: a Deaths cell follows the same timestamp setting as the list", fu
     assertEqual(lines[1].amount:GetText(), "22:36")
     assertEqual(lines[3].amount:GetText(), "04:56")
 end)
+
+test("Tooltip: a Deaths cell dated by fight time uses the same fallback", function()
+    -- The cell tooltip and the drill-down must date a death identically; one
+    -- falling back and the other not is the two lists disagreeing again.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.text = c.text or {}
+        c.text.deathTimeFormat = "elapsed"
+    end }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    inst.mocks.setSession(1, inst.mocks.Enum.DamageMeterType.Deaths, {
+        combatSources = {
+            { sourceGUID = ALPHA, totalAmount = 0, deathRecapID = 29,
+              deathTimeSeconds = 1356 },
+        }, maxAmount = 0, totalAmount = 0,
+    })
+
+    local row = deadGridRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }
+    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
+    assertEqual(spellLines(inst)[1].amount:GetText(), "22:36")
+end)

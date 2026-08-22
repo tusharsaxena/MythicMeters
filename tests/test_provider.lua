@@ -20,6 +20,7 @@ local assertFalse = T.assertFalse
 local assertNil   = T.assertNil
 
 local CURRENT = 1   -- Enum.DamageMeterSessionType.Current, as the mock reports it
+local ALPHA_GUID = "Player-1-0000000A"
 
 --- A loaded instance with one session installed for every stat, plus the
 --- restriction flipped on when asked for.
@@ -1042,4 +1043,102 @@ test("Provider.GetRecap in test mode does not poison the live memo", function()
     inst.NS.State.testMode = false
     inst.mocks.setDeathRecap(nil)
     assertNil(inst.NS.Provider.GetRecap(113), "a preview recap survived into the live path")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Death offsets — where "time into the fight" actually comes from
+-- ---------------------------------------------------------------------------
+--
+-- `deathTimeSeconds` reads -1 on the OVERALL session, and Overall is what a
+-- window shows by default — so a death list dated "time into the fight" fell
+-- back to the wall clock for almost everybody, which made the option look
+-- broken rather than degraded.
+--
+-- The Current session carries the real figure for the same deaths, and the
+-- recap ids are identical across the two in the same order (measured over three
+-- live runs). So the offsets are looked up there, keyed on the id.
+
+local function deathsSession(inst, sessionType, rows)
+    inst.mocks.setSession(sessionType, inst.mocks.Enum.DamageMeterType.Deaths, {
+        combatSources = rows, maxAmount = 0, totalAmount = 0,
+    })
+end
+
+test("Provider.DeathOffset finds the offset the CURRENT session holds", function()
+    -- red under: no lookup at all, which is where this started.
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 27, deathTimeSeconds = 296 },
+    })
+    assertEqual(inst.NS.Provider.DeathOffset(29), 1356)
+    assertEqual(inst.NS.Provider.DeathOffset(27), 296)
+end)
+
+test("Provider.DeathOffset answers nil for an id Current does not hold", function()
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+    })
+    assertNil(inst.NS.Provider.DeathOffset(999))
+end)
+
+test("Provider.DeathOffset ignores the -1 the Overall session reports", function()
+    -- -1 is the client saying "no figure", and rendering it as 00:00 would be a
+    -- number that looks like data.
+    -- red under: caching whatever the row carries.
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = -1 },
+    })
+    assertNil(inst.NS.Provider.DeathOffset(29))
+end)
+
+test("Provider.DeathOffset reads the session ONCE for a whole list", function()
+    -- It is asked per death, and a death list is redrawn four times a second.
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 28, deathTimeSeconds = 673 },
+    })
+    inst.NS.Provider.DeathOffset(29)
+    inst.mocks.resetMeterCalls()
+    for _ = 1, 10 do inst.NS.Provider.DeathOffset(29) end
+    assertNil(inst.mocks.__meter.calls.GetCombatSessionFromType,
+        "the Current session was re-read for a map that cannot have changed")
+end)
+
+test("Provider.DeathOffset re-reads once when an id it has never seen turns up", function()
+    -- Deaths accumulate during a run, so a map built at the first hover is stale
+    -- the moment somebody dies again. A miss rebuilds it; a second miss on the
+    -- same id does not, or a death with genuinely no offset would re-read the
+    -- session on every row of every pass.
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+    })
+    assertEqual(inst.NS.Provider.DeathOffset(29), 1356)
+
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 40, deathTimeSeconds = 1800 },
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+    })
+    assertEqual(inst.NS.Provider.DeathOffset(40), 1800, "a new death was never picked up")
+
+    inst.mocks.resetMeterCalls()
+    inst.NS.Provider.DeathOffset(777)
+    inst.NS.Provider.DeathOffset(777)
+    local reads = inst.mocks.__meter.calls.GetCombatSessionFromType or 0
+    assertTrue(reads <= 1, "an id with no offset re-read the session every time")
+end)
+
+test("Provider.DeathOffset forgets everything on a meter reset", function()
+    local inst = T.load()
+    deathsSession(inst, 1, {
+        { sourceGUID = ALPHA_GUID, totalAmount = 0, deathRecapID = 29, deathTimeSeconds = 1356 },
+    })
+    assertEqual(inst.NS.Provider.DeathOffset(29), 1356)
+    inst.NS.Provider.InvalidateRecaps()
+    deathsSession(inst, 1, {})
+    assertNil(inst.NS.Provider.DeathOffset(29))
 end)
