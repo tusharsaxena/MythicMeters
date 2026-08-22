@@ -1428,6 +1428,24 @@ local function deathBench(opts)
     return inst, cfg, anchor, row
 end
 
+--- Every death line's four slots, joined, so a case can assert on content
+--- without caring which column it landed in.
+---
+--- The tooltip's own line holds ONLY the icon now — time, spell, caster and the
+--- two numbers are all carrier slots — so a case that reads GameTooltipTextLeft
+--- for a spell name is reading the wrong widget.
+local function slotTexts(inst)
+    local out = {}
+    for _, line in ipairs(spellLines(inst)) do
+        out[#out + 1] = table.concat({
+            line.time:GetText() or "", line.label:GetText() or "",
+            line.caster:GetText() or "", line.amount:GetText() or "",
+            line.share:GetText() or "",
+        }, " ")
+    end
+    return table.concat(out, "\n")
+end
+
 --- Every tooltip line's text, in order.
 local function lineTexts(inst)
     local out, i = {}, 1
@@ -1447,7 +1465,7 @@ test("Tooltip: hovering a death row lists its events, OLDEST first", function()
     local inst, cfg, anchor, row = deathBench()
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
 
-    local texts = table.concat(lineTexts(inst), "\n")
+    local texts = slotTexts(inst)
     local gust, volley = texts:find("Gust", 1, true), texts:find("Volley", 1, true)
     assertTrue(gust ~= nil and volley ~= nil, "both events must be listed")
     assertTrue(gust < volley, "the killing blow must be last")
@@ -1468,7 +1486,7 @@ test("Tooltip: each event line shows the time before death and the attacker", fu
     local inst, cfg, anchor, row = deathBench{ lastSource = "Merektha" }
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
 
-    local texts = table.concat(lineTexts(inst), "\n")
+    local texts = slotTexts(inst)
     assertTrue(texts:find("-45.4s", 1, true) ~= nil,
         "the first event is 45.4s before the killing blow")
     assertTrue(texts:find("Merektha", 1, true) ~= nil, "the attacker was dropped")
@@ -1480,8 +1498,8 @@ test("Tooltip: an event with no attacker renders without the clause", function()
     -- red under: formatting the attacker unconditionally.
     local inst, cfg, anchor, row = deathBench{ hideCaster = true }
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
-    local texts = table.concat(lineTexts(inst), "\n")
-    assertTrue(texts:find("()", 1, true) == nil, "an empty attacker clause was rendered")
+    assertTrue(slotTexts(inst):find("()", 1, true) == nil,
+        "an empty attacker clause was rendered")
 end)
 
 test("Tooltip: the bar behind an event is HP REMAINING, handed over raw", function()
@@ -1499,11 +1517,17 @@ test("Tooltip: the bar behind an event is HP REMAINING, handed over raw", functi
     assertEqual(first.bar:GetValue(), 700000, "the value must be HP at that event")
 end)
 
-test("Tooltip: the killing blow's overkill is named", function()
+test("Tooltip: the killing blow is the LAST line, and carries no overkill", function()
+    -- Overkill was dropped from this surface on purpose — it is the part of a
+    -- killing blow that exceeded health the player no longer had, it appears on
+    -- one line in ten, and it collided with the HP percentage. What still has to
+    -- hold is that the fatal hit reads last.
     local inst, cfg, anchor, row = deathBench()
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
-    local texts = table.concat(lineTexts(inst), "\n")
-    assertTrue(texts:lower():find("overkill", 1, true) ~= nil)
+
+    local lines = spellLines(inst)
+    assertEqual(lines[#lines].label:GetText(), "Volley", "the killing blow must be last")
+    assertTrue(slotTexts(inst):lower():find("overkill", 1, true) == nil)
 end)
 
 test("Tooltip: a secret spell name never meets concatenation", function()
@@ -1760,4 +1784,121 @@ test("Tooltip: the death breakdown gets the same gap and caption every section h
     assertTrue(byIndex[1] == nil and byIndex[2] == nil and byIndex[3] == nil,
         "an event carrier landed on the header, the gap or the caption")
     assertTrue(byIndex[4] ~= nil, "the first event should sit on line 4")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The event tooltip's columns
+-- ---------------------------------------------------------------------------
+--
+-- One string held the time, the spell, the caster and the overkill, so a long
+-- name pushed the numbers off the right edge and the killing blow rendered as
+-- "355.8Kove…37.3%". Four slots now, each a reservation the engine clips
+-- against — never a truncation this code performs, because a spell name and a
+-- caster name can both be secret and cutting one up is inspecting it.
+
+test("Tooltip: an event's time, spell and caster are three separate slots", function()
+    -- red under: one composed caption in the label slot.
+    local inst, cfg, anchor, row = deathBench{ lastSource = "Merektha" }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local last = spellLines(inst)[2]
+    assertEqual(last.time:GetText(), "-0.0s")
+    assertEqual(last.label:GetText(), "Volley")
+    assertEqual(last.caster:GetText(), "Merektha")
+end)
+
+test("Tooltip: each slot has a reserved width, so a long name cannot push the numbers off", function()
+    -- The widths are fixed and the engine clips into them. Measuring the names
+    -- to size the columns is what rule R3 forbids — a caption is secret mid-pull.
+    local inst, cfg, anchor, row = deathBench{
+        lastName = "Ritual of the Fang of the Loa Speaker Nanea and Friends",
+        lastSource = "High Channeler Ryvati of the Bleeding Hollow",
+    }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local first, second = spellLines(inst)[1], spellLines(inst)[2]
+    assertTrue(second.label:GetWidth() > 0, "the spell slot has no reserved width")
+    assertEqual(first.label:GetWidth(), second.label:GetWidth(),
+        "a longer name widened its column instead of being clipped into it")
+    assertEqual(first.caster:GetWidth(), second.caster:GetWidth())
+end)
+
+test("Tooltip: the amount slot carries the damage ALONE", function()
+    -- Overkill is dropped from this surface entirely. It is the part of a
+    -- killing blow that exceeded health the player no longer had, it only ever
+    -- appears on one line, and it was colliding with the HP percentage.
+    -- red under: appending an overkill clause anywhere on the line.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    for _, line in ipairs(spellLines(inst)) do
+        texts = texts .. "\n" .. line.amount:GetText() .. "\n" .. line.label:GetText()
+    end
+    assertTrue(texts:lower():find("overkill", 1, true) == nil,
+        "overkill is still on the death tooltip")
+end)
+
+test("Tooltip: a spell line gets its slots BACK after an event line used them", function()
+    -- THE POOL HAZARD. A carrier is keyed by tooltip line index, so line 4 of
+    -- this hover is the frame that drew line 4 of the last one. An event line
+    -- narrows the label and shows two extra slots; a spell line after it must
+    -- not inherit either.
+    -- red under: laying the columns out once at creation instead of per draw.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    local eventWidth = spellLines(inst)[1].label:GetWidth()
+
+    inst.NS.Tooltip:CellTooltip(
+        { guid = ALPHA, name = "Alpha", classFilename = "MAGE",
+          values = { DamageDone = { total = 100, maxAmount = 100 } } },
+        "DamageDone", anchor, cfg)
+
+    local spell = spellLines(inst)[1]
+    assertTrue(spell ~= nil, "no spell line was drawn")
+    assertEqual(spell.time:IsShown(), false, "a spell line kept the event's time slot")
+    assertEqual(spell.caster:IsShown(), false, "a spell line kept the event's caster slot")
+    assertTrue(spell.label:GetWidth() ~= eventWidth,
+        "a spell line inherited the event line's narrowed name column")
+end)
+
+test("Tooltip: an event with no caster leaves that column empty, not absent", function()
+    -- The columns must line up down the whole tooltip; a missing caster that
+    -- collapsed its slot would shift every column on that row.
+    local inst, cfg, anchor, row = deathBench{ hideCaster = true }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local last = spellLines(inst)[2]
+    assertEqual(last.caster:GetText(), "")
+    assertTrue(last.caster:IsShown(), "the empty caster slot was hidden, moving the row")
+end)
+
+test("Tooltip: the death tooltip reserves a WIDER minimum than a spell breakdown", function()
+    -- Two more columns have to be paid for, or they overlap the numbers.
+    local inst, cfg, anchor, row = deathBench()
+    local parts = inst.NS.Tooltip.WidthParts()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    assertTrue(inst.mocks.GameTooltip.__minWidth > parts.total,
+        "the death tooltip is no wider than a spell one, so its columns collide")
+end)
+
+test("Tooltip: a Deaths cell's rows carry a FULL bar, not an empty one", function()
+    -- An empty bar behind every line reads as a value that failed to load. A
+    -- death is not a quantity, so the bar is the row's backing rather than a
+    -- measure — full, from plain ones, the same way a death row's cell in the
+    -- drill-down does it.
+    -- red under: passing nil for value and max, which draws 0 of 1.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    for _, line in ipairs(spellLines(inst)) do
+        local mn, mx = line.bar:GetMinMaxValues()
+        assertEqual(mn, 0)
+        assertEqual(mx, 1)
+        assertEqual(line.bar:GetValue(), 1, "a death line's bar drew empty")
+    end
 end)
