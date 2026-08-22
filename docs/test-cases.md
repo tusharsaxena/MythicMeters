@@ -81,7 +81,7 @@ badge and any count quoted in the docs must agree with it.
 - Secrets degraded: canaccessvalue alone missing still refuses a known secret
 - Secrets degraded: canaccesstable alone missing still refuses a secret table
 
-### test_compat.lua (23)
+### test_compat.lua (29)
 
 - Compat: GetAddOnMetadata reads the TOC through C_AddOns
 - Compat: GetAddOnMetadata falls back to the deprecated bare global
@@ -106,6 +106,12 @@ badge and any count quoted in the docs must agree with it.
 - Compat: the client's default breakpoints are reachable as a fallback
 - Compat: CreateNumericRuleFormatter answers nil rather than a Lua lookalike
 - Compat: no file in this addon divides a meter value
+- Compat: the recap shims answer safely on a client with no C_DeathRecap
+- Compat: a namespace present but missing one member does not take the rest down
+- Compat: a recap call that raises is a nil answer, not a raise
+- Compat: HasRecapEvents is a PLAIN boolean, whatever the client returns
+- Compat: the recap shims never inspect what they carry
+- Compat.HasDeathRecap keys on the EVENTS, not on the namespace
 
 ### test_state.lua (17)
 
@@ -182,7 +188,7 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
 
-### test_diagnostics.lua (21)
+### test_diagnostics.lua (41)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -205,6 +211,26 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: the provider-order probe reports a RANKED column as ranked
 - Diagnostics: the probe NAMES the position where the order breaks
 - Diagnostics: the probe REFUSES mid-pull rather than reporting a false all-clear
+- Diagnostics: `/mm debug recap` reaches the probe without the debug log
+- Diagnostics: the probe lists EVERY death, not just the newest per player
+- Diagnostics: it probes a NON-LOCAL id and an OLDER id, not only the newest
+- Diagnostics: a client with no reader is the answer that RE-SCOPES the issue
+- Diagnostics: a reader that refuses an id is reported, not swallowed
+- Diagnostics: the probe survives a client that answers nothing at all
+- Diagnostics: a secret id is described rather than called
+- Diagnostics: the recap probe also rides along in the full report
+- Diagnostics: the probe prints the whole namespace surface, unfiltered
+- Diagnostics: an absent namespace reads absent, not empty
+- Diagnostics: it says WHICH search found each reader
+- Diagnostics: with both searches empty the verdict says so CONCLUSIVELY
+- Diagnostics: a reader that answers NOTHING is not a green light
+- Diagnostics: the verdict names WHICH of the four slots answered
+- Diagnostics: a reader found by name is actually CALLED
+- Diagnostics: an ARRAY of events is described as one, with its fields
+- Diagnostics: an empty array is not mistaken for an answer
+- Diagnostics: a slot with no death is not counted as a slot that refused
+- Diagnostics: a slot that WAS probed and refused still raises the warning
+- Diagnostics: the recap probe reports why a death is dated the way it is
 
 ### test_defaults.lua (24)
 
@@ -343,7 +369,7 @@ badge and any count quoted in the docs must agree with it.
 - libs/LibKa0s is the LibKa0s release CLAUDE.md says this addon bundles
 - tests/_kit is the test kit that shipped with that release
 
-### test_format.lua (25)
+### test_format.lua (29)
 
 - Format: NS.Format is a callable table carrying both contracts
 - Format.Number goes through the native ABBREVIATING formatter
@@ -370,8 +396,12 @@ badge and any count quoted in the docs must agree with it.
 - modules/Format.lua never calls table.concat
 - Format.Number and Format.Rate contain no division at all
 - A ladder the client silently refuses is DETECTED, not assumed
+- Format.DeathTime renders the wall clock by default
+- Format.DeathTime counts backwards from now
+- Format.DeathTime answers nil when there is no timestamp at all
+- Format.DeathTime never inspects a secret
 
-### test_provider.lua (35)
+### test_provider.lua (61)
 
 - Provider: core/Compat.lua is the only file that names C_DamageMeter
 - Provider: modules/Provider.lua is the only caller of the meter shims
@@ -408,6 +438,32 @@ badge and any count quoted in the docs must agree with it.
 - Provider.ProbeSourceByGuid names what the API did with a GUID it was handed
 - Provider: an NPC source with no GUID is KEPT, on its creature ID
 - Provider: a source with NEITHER identifier is still dropped
+- Provider: with no recap namespace the probe finds nothing, and says so
+- Provider: it reports the readers the CLIENT has, not a list we wrote
+- Provider: a non-function member is not a reader
+- Provider: the reader list is in a stable order
+- Provider: a reader that raises comes back as a refusal
+- Provider: a reader that is not there comes back as a refusal too
+- Provider: the value comes back unexamined
+- Provider: the member dump lists EVERY member, not only recap-shaped ones
+- Provider: an absent namespace is reported absent, not empty
+- Provider: a reader behind a PROXY namespace is still found
+- Provider: a named candidate that is not there is not called a reader
+- Provider: a reader found BOTH ways is reported once
+- Provider: the walk still wins the label when it can see the member
+- Provider: C_DeathRecap is searched — the namespace rounds one and two missed
+- Provider: GetRecapEvents is asked for BY NAME as well as walked
+- Provider: GetRecapMaxHealth is searched too
+- Provider.GetRecap hands back the events and the denominator together
+- Provider.GetRecap is MEMOIZED — a past death never changes
+- Provider.GetRecap memoizes per id, not globally
+- Provider.GetRecap drops its memo when the meter is invalidated
+- Provider.GetRecap answers nil when the death has no recap
+- Provider.GetRecap answers nil for an id it may not use
+- Provider.GetRecap never inspects an event
+- Provider.GetRecap is inert while the perf harness has it suspended
+- Provider.GetRecap answers a PREVIEW recap in test mode
+- Provider.GetRecap in test mode does not poison the live memo
 
 ### test_roster.lua (22)
 
@@ -434,7 +490,25 @@ badge and any count quoted in the docs must agree with it.
 - A complete build IS cached
 - Solo is complete, not partial
 
-### test_aggregator.lua (55)
+### test_feign.lua (15)
+
+- Feign: the module is published and reachable
+- Feign: a Feign Death cast marks that player
+- Feign: any other cast marks nobody
+- Feign: a SECRET spell id is not compared
+- Feign: a SECRET guid is never used as a key
+- Feign: a feigner confirmed at 0 HP stops being feigned
+- Feign: a feigner still down stays feigned
+- Feign: somebody who left the group is forgotten
+- Feign: a meter reset forgets everything
+- Feign: pruning an empty set costs nothing
+- Feign: a death judged fake STAYS fake after the player really dies
+- Feign: standing back up ends the feign, so the next death is real
+- Feign: a client with no UnitIsFeignDeath keeps the old behaviour
+- Feign: a reset forgets the fake deaths too
+- Feign: ShouldDropDeath answers no for anything it cannot key on
+
+### test_aggregator.lua (70)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -491,6 +565,21 @@ badge and any count quoted in the docs must agree with it.
 - A None source with a class the CLIENT does not know is still refused
 - An ENEMY with a real player class is refused, class or no class
 - A source with NO display type is refused, not assumed friendly
+- Every death lands in row.deaths, not just the newest
+- row.deathRecapID still names the NEWEST death
+- A row with no deaths carries no deaths array at all
+- The count and the deaths array can never disagree
+- A correlated Deaths column keeps every death too
+- A collided identity key gets no deaths array, as it gets no cell
+- Test mode produces a player with several deaths to drill into
+- A death the client gave no recap id still occupies a slot in the list
+- The identity build keeps that slot too
+- A feigned player's death is not counted
+- A feigned player's death is not LISTED either
+- A real death after a feign is counted, and the feigns stay hidden
+- A death after the hunter stands back up is counted
+- The feign filter touches no column but Deaths
+- The feign filter cannot run mid-pull, and does not pretend to
 
 ### test_aggregator_sort.lua (20)
 
@@ -602,7 +691,7 @@ badge and any count quoted in the docs must agree with it.
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
 
-### test_row.lua (62)
+### test_row.lua (66)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -666,6 +755,10 @@ badge and any count quoted in the docs must agree with it.
 - A right click on the ROW ITSELF leaves the breakdown
 - A right click on the GRID is a harmless no-op
 - Cells register for BOTH buttons, or the right click never arrives
+- Row: a cell renders displayText in place of its number
+- Row: displayText wins over BOTH slots and over the fallback
+- Row: a cell with no displayText is completely unaffected
+- Row: a death row's bar draws FULL without comparing anything
 
 ### test_targets.lua (24)
 
@@ -694,7 +787,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (61)
+### test_tooltip.lua (99)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -757,8 +850,46 @@ badge and any count quoted in the docs must agree with it.
 - A name that cannot be read does not change the width, because none is read
 - The name's room is a FIXED span, not the length of the names on screen
 - The share slot fits a full 100.0%, at any configured font size
+- Tooltip: hovering a death row lists its events, OLDEST first
+- Tooltip: a death row never reaches the client's spell tooltip
+- Tooltip: each event line shows the time before death and the attacker
+- Tooltip: an event with no attacker renders without the clause
+- Tooltip: the bar behind an event is HP REMAINING, handed over raw
+- Tooltip: the killing blow is the LAST line, and carries no overkill
+- Tooltip: a secret spell name never meets concatenation
+- Tooltip: with the values secret the bar still draws and the share does not lie
+- Tooltip: with the values plain the share slot carries the percentage
+- Tooltip: a death whose recap has gone says so instead of drawing nothing
+- Tooltip: a death with no recap id says so rather than showing a name
+- Tooltip: a death tooltip has a HEADER, so no carrier ever lands on line 1
+- Tooltip: the death header names the player and when they died
+- Tooltip: a death with no recap keeps the header too
+- Tooltip: a Deaths cell lists the DEATHS, not a spell breakdown
+- Tooltip: a Deaths cell shows one line per death, newest first
+- Tooltip: a Deaths cell still says a click opens the list
+- Tooltip: a cell for a player who has NOT died is unchanged
+- Tooltip: the death breakdown gets the same gap and caption every section has
+- Tooltip: an event's time, spell and caster are three separate slots
+- Tooltip: each slot has a reserved width, so a long name cannot push the numbers off
+- Tooltip: the amount slot carries the damage ALONE
+- Tooltip: a spell line gets its slots BACK after an event line used them
+- Tooltip: an event with no caster leaves that column empty, not absent
+- Tooltip: the death tooltip reserves a WIDER minimum than a spell breakdown
+- Tooltip: a Deaths cell's rows carry a FULL bar, not an empty one
+- Tooltip: every death line in a Deaths cell carries the skull icon
+- Tooltip: a Deaths cell's time sits at the right edge, where a share does
+- Tooltip: the caster column's CAP is narrower than the spell column's
+- Tooltip: both name columns refuse to wrap, so the engine clips them
+- Tooltip: a melee swing reads as Melee, not as #?
+- Tooltip: a heal with no spell id reads as Heal
+- Tooltip: an event with an id the client cannot name still shows the id
+- Tooltip: a SECRET event type is not compared
+- Tooltip: the time column is sized to the widest time in THIS recap
+- Tooltip: the name columns shrink to the names actually in this recap
+- Tooltip: a name column never grows past its character cap
+- Tooltip: a SECRET name falls back to the fixed reservation
 
-### test_drilldown.lua (31)
+### test_drilldown.lua (50)
 
 - DrillDown.IsActive is a PLAIN BOOLEAN, in both directions
 - Enter captures PLAIN identity fields, never a reference to the row
@@ -791,6 +922,25 @@ badge and any count quoted in the docs must agree with it.
 - A meter reset leaves every drill-down
 - Deleting a window leaves the drill-down that belonged to it
 - A bulk registry change sweeps views whose window is gone
+- A Deaths click on a player who died enters the DEATHS view
+- The deaths view lists one row per death, newest first
+- A death row is numbered CHRONOLOGICALLY, so the list counts down
+- A death row carries the wall-clock time as its cell caption
+- A death whose recap the client has dropped still gets a row
+- A Deaths click on a player with no deaths array keeps today's behaviour
+- With no C_DeathRecap a Deaths click does not enter an empty deaths view
+- A second click on the same Deaths cell leaves the deaths view
+- The deaths view never asks the provider for a spell breakdown
+- A death row is flagged as a drill-down row
+- The deaths view is capped like every other breakdown
+- Clicking a death row opens the game's own recap window
+- Clicking a death row does not leave the list
+- Right-clicking a death row still leaves the list
+- Clicking a SPELL row is still a no-op
+- Clicking a death whose recap has gone does nothing rather than opening an empty frame
+- A death with no recap id is still a row, and is not clickable
+- Every death row has a distinct pool identity, id or no id
+- A death row wears the death icon
 
 ### test_export.lua (68)
 
@@ -1113,27 +1263,28 @@ badge and any count quoted in the docs must agree with it.
 | test_loadorder.lua | 7 |
 | test_constants.lua | 21 |
 | test_secrets.lua | 38 |
-| test_compat.lua | 23 |
+| test_compat.lua | 29 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
-| test_diagnostics.lua | 21 |
+| test_diagnostics.lua | 41 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
 | test_debuglogsetup.lua | 29 |
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
-| test_format.lua | 25 |
-| test_provider.lua | 35 |
+| test_format.lua | 29 |
+| test_provider.lua | 61 |
 | test_roster.lua | 22 |
-| test_aggregator.lua | 55 |
+| test_feign.lua | 15 |
+| test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 84 |
-| test_row.lua | 62 |
+| test_row.lua | 66 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 61 |
-| test_drilldown.lua | 31 |
+| test_tooltip.lua | 99 |
+| test_drilldown.lua | 50 |
 | test_export.lua | 68 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
@@ -1144,4 +1295,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **998** |
+| **Total** | **1145** |
