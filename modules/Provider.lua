@@ -594,6 +594,15 @@ function Provider.GetRecap(recapID)
     -- module is meant to be incapable of giving.
     if suspended then return nil end
 
+    -- TEST MODE SUBSTITUTES THE DATA SOURCE AND NOTHING ELSE, exactly as
+    -- GetColumn and GetSourceDetail do. Above the memo, because the preview must
+    -- not be cached into the live path and the live path must not be served a
+    -- preview.
+    if NS.State and NS.State.testMode then
+        local A = NS.Aggregator
+        if A and A.TestRecap then return A.TestRecap(recapID) end
+    end
+
     -- `deathRecapID` is documented NeverSecret and this does not bet a raise on
     -- it. A secret cannot be a table key — indexing the memo with one raises
     -- before the client is ever reached — and forwarding one into a client

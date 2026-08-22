@@ -1012,3 +1012,34 @@ test("Provider.GetRecap is inert while the perf harness has it suspended", funct
     assertNil(inst.NS.Provider.GetRecap(29))
     assertEqual(calls.events, 0, "a suspended provider still called the client")
 end)
+
+test("Provider.GetRecap answers a PREVIEW recap in test mode", function()
+    -- Test mode substitutes the data source and nothing else — that is the whole
+    -- reason the mock lives at the one function that talks to the client. A
+    -- GetRecap that did not follow suit would leave the preview's death list all
+    -- dashes and its tooltips empty, which is exactly the "test mode and normal
+    -- mode are two code paths that look alike and behave differently at every
+    -- seam nobody duplicated" failure this file's header describes.
+    -- red under: no test-mode branch in GetRecap.
+    local inst = T.load()
+    inst.NS.State.testMode = true
+    inst.mocks.setDeathRecap(nil)
+
+    local recap = inst.NS.Provider.GetRecap(113)
+    assertEqual(type(recap), "table")
+    assertTrue(#recap.events > 1, "a preview death needs more than one event")
+    assertTrue(recap.maxHealth > 0)
+    assertTrue(recap.events[1].timestamp > recap.events[2].timestamp,
+        "newest first, exactly as the client returns them")
+    assertTrue(recap.events[1].currentHP < recap.events[2].currentHP,
+        "and health falls towards the killing blow")
+end)
+
+test("Provider.GetRecap in test mode does not poison the live memo", function()
+    local inst = T.load()
+    inst.NS.State.testMode = true
+    assertEqual(type(inst.NS.Provider.GetRecap(113)), "table")
+    inst.NS.State.testMode = false
+    inst.mocks.setDeathRecap(nil)
+    assertNil(inst.NS.Provider.GetRecap(113), "a preview recap survived into the live path")
+end)

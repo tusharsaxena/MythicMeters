@@ -1620,6 +1620,60 @@ function Aggregator.TestColumn(a, b, c)
     return column
 end
 
+--- The death recap behind one preview death, in the client's own shape.
+---
+--- Test mode substitutes the DATA SOURCE and nothing else — that is the whole
+--- reason the mock lives at the one function that talks to the client. Without
+--- this, a preview death list is a column of dashes and every tooltip in it is
+--- empty, which is precisely the "two code paths that look alike and behave
+--- differently at every seam nobody duplicated" failure modules/Provider.lua's
+--- header describes.
+---
+--- Deterministic, like every other preview: the same id gives the same recap on
+--- every run, so a screenshot of the preview is reproducible.
+---
+--- @param recapID number  a preview id, `100 + index * 10 + n`
+--- @return table|nil  { events = newest first, maxHealth }
+function Aggregator.TestRecap(a, b)
+    local recapID = a
+    if a == Aggregator then recapID = b end
+    if type(recapID) ~= "number" or recapID < 100 then return nil end
+
+    local maxHealth = 700000
+    -- Wall-clock, spread so two deaths never share a timestamp: the drill-down
+    -- labels its rows with these and identical labels would read as a bug.
+    local died = 1787380000 + recapID * 37
+
+    local events, hp = {}, maxHealth
+    for i = 1, #PREVIEW_SPELLS do
+        local spell = PREVIEW_SPELLS[i]
+        local amount = math.floor(maxHealth * (0.30 - (i - 1) * 0.04))
+        if amount < 1000 then amount = 1000 end
+        -- Built oldest-first so health falls, then reversed: the client returns
+        -- newest first, and a fixture that did not would let a bug in the
+        -- reversal pass unnoticed.
+        events[#events + 1] = {
+            spellId    = spell.id,
+            spellName  = spell.name,
+            sourceName = (i % 3 == 0) and nil or "Preview Trash",
+            hideCaster = (i % 3 == 0) or nil,
+            amount     = amount,
+            currentHP  = hp,
+            event      = "SPELL_DAMAGE",
+            timestamp  = died - (#PREVIEW_SPELLS - i) * 4.7,
+        }
+        hp = hp - amount
+        if hp < 0 then
+            events[#events].overkill = -hp
+            hp = 0
+        end
+    end
+
+    local newestFirst = {}
+    for i = #events, 1, -1 do newestFirst[#newestFirst + 1] = events[i] end
+    return { events = newestFirst, maxHealth = maxHealth }
+end
+
 --- The spell breakdown behind one test row, in the provider's own shape.
 ---
 --- modules/Tooltip.lua and modules/DrillDown.lua ask this BEFORE the provider

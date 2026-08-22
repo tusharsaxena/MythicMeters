@@ -1653,3 +1653,111 @@ test("Tooltip: a death with no recap keeps the header too", function()
     inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
     assertTrue(tooltipLines(inst)[1] == nil, "a carrier landed on the header line")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The GRID's Deaths cell (issue #1's first complaint)
+-- ---------------------------------------------------------------------------
+--
+-- "The tooltip runs the ordinary spell-breakdown path, which asks the provider
+-- for combatSpells on a Deaths source. There is no spell list on a death row, so
+-- it renders 'No data yet' — technically honest, and useless. A Deaths cell
+-- should not be showing a spell breakdown at all."
+
+--- A grid row for somebody who died three times.
+local function deadGridRow()
+    return {
+        guid = "Player-1-0000000A", name = "Yllarie", classFilename = "PRIEST",
+        deaths = { 29, 28, 27 }, deathRecapID = 29,
+        values = { Deaths = { total = 3, maxAmount = 3 } },
+    }
+end
+
+test("Tooltip: a Deaths cell lists the DEATHS, not a spell breakdown", function()
+    -- red under: the Deaths cell falling through to addSpellBreakdown, which is
+    -- what shipped and what the issue opens with.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id)
+            return { { spellId = 1, spellName = "X", amount = 1, currentHP = 1,
+                       timestamp = 1000 + id } }
+        end,
+        GetRecapMaxHealth = function() return 100 end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("No data yet", 1, true) == nil,
+        "the Deaths cell still ran the spell path")
+    assertTrue(texts:find("Spell breakdown", 1, true) == nil,
+        "a death has no spells and must not claim to")
+end)
+
+test("Tooltip: a Deaths cell shows one line per death, newest first", function()
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id)
+            return { { spellId = 1, spellName = "X", amount = 1, currentHP = 1,
+                       timestamp = id } }
+        end,
+        GetRecapMaxHealth = function() return 100 end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    -- The times sit in the carrier's AMOUNT slot, so they line up in a column
+    -- instead of ragging against labels of two lengths.
+    local slots = {}
+    for _, line in ipairs(spellLines(inst)) do slots[#slots + 1] = line.amount:GetText() end
+    local joined = table.concat(slots, "\n")
+    for _, id in ipairs({ 29, 28, 27 }) do
+        local clock = inst.mocks.date("%H:%M:%S", id)
+        assertTrue(joined:find(clock, 1, true) ~= nil,
+            "the death at " .. clock .. " is missing from the cell tooltip")
+    end
+    assertEqual(slots[1], inst.mocks.date("%H:%M:%S", 29), "newest first")
+end)
+
+test("Tooltip: a Deaths cell still says a click opens the list", function()
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function() return { { spellId = 1, timestamp = 5 } } end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:lower():find("click", 1, true) ~= nil)
+end)
+
+test("Tooltip: a cell for a player who has NOT died is unchanged", function()
+    -- The Deaths column with a zero in it, and every other column, must keep
+    -- exactly the tooltip they have.
+    local inst, cfg, anchor = bench()
+    local row = { guid = ALPHA, name = "Alpha", classFilename = "MAGE",
+                  values = { DamageDone = { total = 100, maxAmount = 100 } } }
+    inst.NS.Tooltip:CellTooltip(row, "DamageDone", anchor, cfg)
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Spell breakdown", 1, true) ~= nil,
+        "an ordinary cell lost its spell breakdown")
+end)
+
+test("Tooltip: the death breakdown gets the same gap and caption every section has", function()
+    -- The header sat flush against the first bar, which no other tooltip in the
+    -- addon does — a spell breakdown puts a paragraph gap and a caption between
+    -- the two, and the death list has to read the same way or it looks like a
+    -- different addon drew it.
+    -- red under: the death branch going straight from AddDoubleLine to drawLine.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = lineTexts(inst)
+    assertTrue((texts[2] or ""):find("%S") == nil,
+        "line 2 must be the section gap, got " .. tostring(texts[2]))
+    assertTrue((texts[3] or "") ~= "", "line 3 must be the caption")
+    -- and the first event carrier therefore starts at line 4, exactly where a
+    -- spell line does.
+    local byIndex = tooltipLines(inst)
+    assertTrue(byIndex[1] == nil and byIndex[2] == nil and byIndex[3] == nil,
+        "an event carrier landed on the header, the gap or the caption")
+    assertTrue(byIndex[4] ~= nil, "the first event should sit on line 4")
+end)

@@ -358,6 +358,11 @@ a raider most wants to know what killed them is the moment they are still fighti
   stops at both ends, survives the refresh tick rather than snapping back, and resets to the top when
   you enter or leave a breakdown. Shrink the window until rows are hidden to test it.
 - The drill-down **does not reshuffle** while you watch it, in or out of combat.
+- **Deaths cell tooltip**: it lists **that player's deaths, one line each, newest first**, each
+  labelled `Death N` with the wall-clock time in the right-hand column. It must NOT say "Spell
+  breakdown" and must NOT say "No data yet" — a Deaths source carries no spell list, and running the
+  spell path there is the dead end this feature replaced. The list is the index into the drill-down:
+  hover then click, and the same deaths appear in the same order.
 - **Deaths cell**: clicking it opens a **list of that player's deaths** — one row each, the name
   column reading `Death 1`, `Death 2`… numbered chronologically so a newest-first list counts *down*,
   and the Deaths cell carrying the **wall-clock time** of that death with a full bar behind it. A
@@ -366,6 +371,10 @@ a raider most wants to know what killed them is the moment they are still fighti
 - **The number of rows in that list must equal the number in the cell you clicked.** They are two
   independent tallies of one fact, in two separate builds, and disagreeing is the failure this whole
   surface must not have. Check it both in and out of combat: the identity build runs mid-pull.
+- **The death tooltip is laid out like every other one** — header, a paragraph gap, a caption, then
+  the bars. A header sitting flush against the first bar means the section gap is missing, and on a
+  live client it also means a bar carrier is on tooltip line 1, which permanently restyles the title
+  of every GameTooltip in the game until `/reload`.
 - **Hovering a death row** lists what killed them — one line per incoming hit, **oldest first**, with
   icon, seconds before death, spell name, the attacker in parentheses where the client names one,
   the damage taken, and the HP percentage remaining. The bar behind each line is **HP remaining**,

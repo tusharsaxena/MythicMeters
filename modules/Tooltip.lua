@@ -1176,6 +1176,44 @@ local function addSpellLine(spell, numberStyle, max, style, sourceTotal)
     drawLine(GameTooltip:NumLines(), amount, share, spell.totalAmount, max, style, nil)
 end
 
+-- How many deaths a grid cell's tooltip will list before it stops. A raid night
+-- can hold more than anyone reads in a hover, and the drill-down is one click
+-- away with the whole list in it.
+local MAX_DEATH_LINES = 12
+
+-- What a death shows in place of a time when the client no longer holds its
+-- recap. The same em dash modules/DrillDown.lua puts in the cell.
+local NO_CLOCK_TEXT = "\226\128\148"
+
+--- The wall-clock time a death happened, from its recap's newest event.
+---
+--- The events arrive newest first, so element one is the killing blow and its
+--- timestamp is the moment of death. Never `deathTimeSeconds`: that is a
+--- different clock — seconds-into-session, and -1 on Overall — and mixing the
+--- two yields a plausible time rather than a visible failure.
+---
+--- @param recap table|nil
+--- @return string|nil
+local function deathClockOf(recap)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return nil end
+
+    local Secrets = NS.Secrets
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then
+        return nil
+    end
+
+    local newest = events[1]
+    if type(newest) ~= "table" then return nil end
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(newest) then
+        return nil
+    end
+
+    local when = newest.timestamp
+    if when == nil or (Secrets and not Secrets.CanAccess(when)) then return nil end
+    return date("%H:%M:%S", when)
+end
+
 -- ---------------------------------------------------------------------------
 -- Death events (issue #1)
 -- ---------------------------------------------------------------------------
@@ -1369,6 +1407,13 @@ local function addDeathBreakdown(row, style, numberStyle)
         row.deathClock or L["Death recap"] or "Death recap",
         1, 1, 1, 1, 0.82, 0)
 
+    -- THE SAME GAP AND CAPTION EVERY OTHER SECTION IN THIS FILE GETS. Without
+    -- them the header sat flush against the first bar, which nothing else here
+    -- does, and the tooltip read as though a different addon had drawn it. The
+    -- gap is also what keeps a carrier off line 1 with room to spare.
+    addSectionGap(style)
+    GameTooltip:AddLine(L["Death recap"] or "Death recap", 1, 0.82, 0)
+
     if not drawDeathEvents(recap, numberStyle, style) then
         -- A DEATH THE CLIENT NO LONGER HOLDS SAYS SO. An empty tooltip under the
         -- cursor reads as a broken addon; a sentence reads as a fact about the
@@ -1443,6 +1488,55 @@ local function sourceDetailFor(window, statKey, row)
         and P:GetSourceDetail(sessionTypeOf(window), statKey, row.guid, nil, sessionIDOf(window))
     if type(source) ~= "table" then return nil end
     return source
+end
+
+--- Draw the "Deaths" section on a GRID cell: one line per death, newest first.
+---
+--- ISSUE #1'S FIRST COMPLAINT. This cell used to run the ordinary spell path,
+--- which asks the provider for `combatSpells` on a Deaths source — there is no
+--- spell list on a death row, so it rendered "No data yet": technically honest
+--- and completely useless. A Deaths cell should never have been showing a spell
+--- breakdown at all.
+---
+--- The lines are the same shape the drill-down's rows are, and deliberately so:
+--- this tooltip is the INDEX into that list, so hovering and then clicking
+--- shows the same deaths in the same order.
+---
+--- @param row table       an aggregated row (needs .deaths)
+--- @param style table
+--- @return number  lines drawn
+local function addDeathList(row, style)
+    local deaths = row.deaths
+    if type(deaths) ~= "table" or #deaths == 0 then return 0 end
+
+    local P = provider()
+    if not (P and P.GetRecap) then return 0 end
+
+    addSectionGap(style)
+    GameTooltip:AddLine(L["Deaths"], 1, 0.82, 0)
+
+    local total = #deaths
+    local drawn = 0
+    for i = 1, total do
+        local id = deaths[i]
+        local clock
+        if id ~= false and id ~= nil then
+            clock = deathClockOf(P.GetRecap(id))
+        end
+
+        -- Numbered chronologically and listed newest first, exactly as
+        -- modules/DrillDown.lua builds the rows this indexes. A reader who hovers
+        -- and then clicks must see the same list twice.
+        GameTooltip:AddLine(string.format(L["Death %d"] or "Death %d", total - i + 1),
+            1, 1, 1)
+        -- The time goes in the AMOUNT slot rather than the line, so the times
+        -- line up in a column instead of ragging against names of two lengths.
+        -- No bar: there is no quantity here to draw one from.
+        drawLine(GameTooltip:NumLines(), clock or NO_CLOCK_TEXT, "", nil, nil, style, nil)
+        drawn = drawn + 1
+        if drawn >= MAX_DEATH_LINES then break end
+    end
+    return drawn
 end
 
 --- Draw the "Spell breakdown" section, and answer how many spell lines it drew.
@@ -1604,11 +1698,16 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     local color = classes and row and row.classFilename and classes[row.classFilename] or nil
     local style = lineStyle(config, color)
 
+    -- DEATHS TAKES ITS OWN PATH, and never the spell one. See addDeathList.
     local shown = 0
-    local source = config.showSpells and sourceDetailFor(window, statKey, row)
-    if source then
-        shown = addSpellBreakdown(source, statKey, spellLineCap(config),
-            numberStyleOf(window), style)
+    if statKey == "Deaths" then
+        shown = addDeathList(row, style)
+    else
+        local source = config.showSpells and sourceDetailFor(window, statKey, row)
+        if source then
+            shown = addSpellBreakdown(source, statKey, spellLineCap(config),
+                numberStyleOf(window), style)
+        end
     end
 
     if shown == 0 then
