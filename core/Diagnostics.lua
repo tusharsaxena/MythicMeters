@@ -52,6 +52,11 @@ local ATLAS_PROBES = {
     "common-icon-settings", "GM-icon-settings",
     "common-icon-lock", "common-icon-unlock", "Garr_LockedBuilding",
     "UI-HUD-MicroMenu-GameMenu-Up",
+    -- The export glyph's candidates. NONE of them has been confirmed on a live
+    -- client, which is the entire reason they are in this list: modules/Window.lua
+    -- draws the ASCII `>` until one of them answers yes here, and this report is
+    -- the only way anybody finds out which.
+    "poi-scrollofresonance", "communities-icon-chat", "UI-HUD-MicroMenu-Questlog-Up",
 }
 
 -- Values chosen so each one lands on a different rung of the breakpoint ladder in
@@ -301,7 +306,8 @@ local function reportHeader()
     -- through tostring it took the title above it down with it.
     out(string.format("  session line=%q", shown(inst.sessionText:GetText())))
 
-    for label, button in pairs({ gear = inst.configButton, lock = inst.lockButton }) do
+    for label, button in pairs({ gear = inst.configButton, lock = inst.lockButton,
+                                 export = inst.exportButton }) do
         if button then
             out(string.format("  %-5s atlas=%s glyph=%q shown=%s",
                 label,

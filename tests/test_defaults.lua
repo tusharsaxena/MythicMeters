@@ -230,10 +230,14 @@ end)
 test("Defaults: the profile itself is nearly empty — almost everything is per-window", function()
     -- A window is an INSTANCE, not a singleton. There are no global display
     -- settings, which is what makes multi-window and copy-settings-from cheap.
+    --
+    -- `export` is addon-wide for the opposite reason rather than by exception:
+    -- it is the memory of one dialog's last four choices, and a player who picks
+    -- a channel in one window means it for the next window too.
     local keys = {}
     for key in pairs(NS.defaults.profile) do keys[#keys + 1] = key end
     table.sort(keys)
-    assertEqual(table.concat(keys, ","), "enabled,minimap,nextWindowId,windows")
+    assertEqual(table.concat(keys, ","), "enabled,export,minimap,nextWindowId,windows")
 end)
 
 test("Defaults: the shipped registry is empty and the id counter starts at 1", function()

@@ -215,6 +215,7 @@ local SUITES = {
     "test_targets",
     "test_tooltip",
     "test_drilldown",
+    "test_export",
     "test_visibility",
     "test_windowmanager",
     "test_minimap",

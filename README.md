@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-926%2F926_passing-green)
+![Tests](https://img.shields.io/badge/Tests-998%2F998_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -40,6 +40,9 @@ The first release.
   Click a cell to drill into it, or a Deaths cell to open the death recap.
 - **The tooltip is yours too.** Its own bar texture, spacing and border, its own font, nine anchor
   positions with an x/y nudge, and a spell cap you can set to zero for "show me all of them".
+- **Take the numbers with you.** The export button in the title bar hands you the whole fight as CSV
+  to paste into a spreadsheet, or prints a ranked top-N to chat — to yourself by default, so a
+  misclick cannot reach your raid.
 - **Stays out of the way.** Shows in dungeons, raids, arenas and battlegrounds; hidden in the open
   world and when you are alone, unless you say otherwise.
 
@@ -63,6 +66,7 @@ Type `/mm` for the command list. `/mythicmeters` does the same thing if you pref
 | `/mm toggle` | Show or hide a window by name, or all of them |
 | `/mm window` | Window management — list, new, delete, copy |
 | `/mm reset-positions` | Move every window back to the center of the screen |
+| `/mm export` | Export a window's segment to CSV or to chat — `/mm export [window]` |
 | `/mm list` | List every setting and its current value |
 | `/mm get PATH` | Print one setting |
 | `/mm set PATH VALUE` | Change one setting |
@@ -93,7 +97,7 @@ are currently looking at, not all of them.
 | Visibility | Dungeon, raid, arena, battleground, open world; hide when solo or in a vehicle |
 | Columns | Add, remove and reorder columns; per-column width and whether it draws a bar |
 | Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |
-| General | Minimap button, debug console |
+| General | Minimap button, debug console, and what the export modal remembers — metric, channel, whisper target, chat lines |
 | Profiles | Share a setup between characters |
 
 ## How it works

@@ -271,6 +271,64 @@ end
 Constants.NAME_COLUMN_WIDTH = 118
 
 -- ---------------------------------------------------------------------------
+-- The export channel catalog
+-- ---------------------------------------------------------------------------
+--
+-- One row per destination the export modal's "Print to Chat" can reach, in the
+-- order the dropdown lists them. Fields:
+--
+--   key          stable identifier. This is what the profile stores and what
+--                `/mm set export.channel` accepts. For the five ordinary
+--                channels it is SendChatMessage's own chatType string, on
+--                purpose rather than by accident, so a reader holding
+--                Blizzard's documentation can map a row to the API call
+--                without a lookup table.
+--   label        full English label for the settings dropdown and the modal.
+--                LOCALIZE AT THE USE SITE — `NS.L[channel.label]` — never here,
+--                for exactly the reason the stat catalog above gives.
+--   chatType     the string handed to SendChatMessage, or nil where there is
+--                nothing to hand it: AUTO has not decided yet and SELF never
+--                sends at all.
+--   auto         resolve this row at send time, walking EXPORT_AUTO_ORDER.
+--   selfOnly     print through NS.Print and send nothing.
+--   needsTarget  the whisper-name field is meaningful for this row.
+--
+-- SELF IS THE SHIPPED DEFAULT, and that is a safety decision rather than a
+-- timid one: every other row puts the player's numbers in front of other
+-- people, and a misclick on a glyph in a title bar must not be able to do that.
+--
+-- ADDING A CHANNEL: add a row. The settings dropdown and the export module both
+-- derive from this array and neither restates it.
+Constants.EXPORT_CHANNELS = {
+    { key = "AUTO",          label = "Auto",            chatType = nil,             auto = true },
+    { key = "SAY",           label = "Say",             chatType = "SAY" },
+    { key = "PARTY",         label = "Party",           chatType = "PARTY" },
+    { key = "RAID",          label = "Raid",            chatType = "RAID" },
+    { key = "INSTANCE_CHAT", label = "Instance",        chatType = "INSTANCE_CHAT" },
+    { key = "GUILD",         label = "Guild",           chatType = "GUILD" },
+    { key = "WHISPER",       label = "Whisper",         chatType = "WHISPER", needsTarget = true },
+    { key = "SELF",          label = "Self only",       chatType = nil,             selfOnly = true },
+}
+
+--- key -> channel row, built from the array above so the two cannot disagree.
+--- A stored channel this build does not offer resolves to nil, which the export
+--- module treats as "print to myself" rather than as a send — the same reading
+--- an unknown stat key gets from STAT_BY_KEY, and for the same reason: the safe
+--- answer is the one that does nothing the player did not ask for.
+Constants.EXPORT_CHANNEL_BY_KEY = {}
+for _, channel in ipairs(Constants.EXPORT_CHANNELS) do
+    Constants.EXPORT_CHANNEL_BY_KEY[channel.key] = channel
+end
+
+--- The ladder `AUTO` walks, in resolution order: the instance group first (it is
+--- the one channel everybody in a dungeon or a battleground can read), then raid,
+--- then party, then say for a player standing alone.
+---
+--- Stated as KEYS into the catalog above rather than as chatType literals, so a
+--- row renamed there cannot leave a stale string here that resolves to nothing.
+Constants.EXPORT_AUTO_ORDER = { "INSTANCE_CHAT", "RAID", "PARTY", "SAY" }
+
+-- ---------------------------------------------------------------------------
 -- The message bus
 -- ---------------------------------------------------------------------------
 --

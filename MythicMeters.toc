@@ -63,6 +63,7 @@ modules\Row.lua
 modules\Targets.lua
 modules\Tooltip.lua
 modules\DrillDown.lua
+modules\Export.lua
 modules\Visibility.lua
 modules\Minimap.lua
 

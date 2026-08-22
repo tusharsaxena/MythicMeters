@@ -3,7 +3,8 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MythicMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty non-vendored source files: 1 locale, 11 `core/`, 1 `defaults/`, 11 `modules/`, 16 `settings/`.
+Forty-three non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 13 `modules/`,
+16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
 
@@ -91,15 +92,18 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         GameTooltip
 │   ├── DrillDown.lua   — per-player per-stat breakdown rendered through the SAME
 │                         row path, right-click-to-leave, and the death-recap hand-off
+│   ├── Export.lua      — a segment as CSV or as ranked chat lines: the pure
+│                         serializers, the modal that drives them, and its own
+│                         copy-paste window. Refuses outright while restricted
 │   ├── Visibility.lua  — the context predicate. Publishes no message and touches
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (99 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (103 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
-    ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (15 verbs), the five
-    │                     schema adapters, and the five host verbs
+    ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
+    │                     schema adapters, and the six host verbs
     ├── OptionsSetup.lua — LibKa0s-Options-1.0 seam: NS.Helpers IS the library
     │                     instance, plus the panel registry and the reset-all veto
     └── Windows · Frame · Header · Rows · Bars · Text · Icons · Tooltip ·
@@ -163,6 +167,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Targets.lua` | plain table | The enemy cross-reference. One walk over every `EnemyDamageTaken` source's spells builds **every** player's target list at once, keyed on `combatSpellDetails.unitName` and cached per session. **All-or-nothing**: one unreadable amount abandons the whole build | `NS.Targets` — `ForPlayer`, `Total`, `Invalidate` | `NS.Provider.GetColumn` / `GetSourceDetail`, `NS.Secrets`, `NS.State.Cache("Targets")`. Subscribes `METER_RESET`, `METER_SESSION`, `METER_UPDATED`, `PROFILE_CHANGED` on a private bus target |
 | `Tooltip.lua` | AceAddon | Both tooltip builders, the legal-only spell sort, the "and N more" line, the Targets section, and the tooltip's own bar/font styling (including restoring the SHARED line FontStrings) | `NS.Tooltip` — `CellTooltip`, `NameTooltip`, `Hide` | `NS.Provider`, `NS.Secrets`, `NS.Numbers`, `NS.Compat.GetSpellInfo`, `NS.WINDOW_TEMPLATE`, `NS.Database.FindWindow` |
 | `DrillDown.lua` | AceAddon | Per-window view state (session-only, in `State.Cache`), the spell-row contract, click routing, the death recap | `NS.DrillDown` — `GetState`, `IsActive`, `Enter`, `Exit`, `ExitAll`, `OnCellClick`, `BuildRows`, `Title`, `AcquireBackButton`, `ReleaseBackButton` | `NS.Provider`, `NS.Secrets`, `NS.Compat`, `NS.Database.FindWindow`. Subscribes `METER_RESET`, `PROFILE_CHANGED`, `WINDOWS_CHANGED`. **The one `DRILLDOWN_CHANGED` sender** |
+| `Export.lua` | plain table | The two serializers and the surface that drives them: `HeaderName`, `CsvField` and `Columns` derive the CSV shape from the stat catalog rather than restating it; `SessionConfig` builds the synthetic window config the aggregator is asked with; the modal, its three selectors and the copy window are built lazily on the first `Open` and reused forever. **Refuses entire while the Combat restriction is active** — `tostring` is not a permitted operation on a secret | `NS.Export` — `Available`, `HeaderName`, `CsvField`, `Columns`, `SessionConfig`, `Build`, `SessionLabel`, `ResolveMetric`, `CSV`, `ChatLines`, `ResolveChannel`, `Send`, `Open` | `NS.Aggregator.Build`, `NS.Secrets`, `NS.Format`, `NS.Constants` (`STATS`, `STAT_BY_KEY`, `MAX_ROWS`, `EXPORT_CHANNELS`, `EXPORT_CHANNEL_BY_KEY`, `EXPORT_AUTO_ORDER`, `FONT_MONO`), `NS.GetSetting` / `NS.SetByPath`, `NS.ApplySkin`, `NS.MakeCloseButton`, `NS.Compat.OpenContextMenu`, `NS.NewBusTarget`, `NS.Constants.MSG`. Subscribes exactly one message — `RESTRICTION_CHANGED`, on a private target taken with the modal frame, so an open dialog greys itself when a pull starts — and sends none |
 | `Visibility.lua` | AceAddon | The context translation table and the predicate. No frame is touched and no message is sent | `NS.Visibility` — `GetContext`, `ShouldShow`, `Allows`, `Evaluate`, `Refresh`, `LastResult`, `Forget` | `NS.Database.GetWindows`, the instance API through `_G`. Subscribes `ZONE_CHANGED`, `ENTERING_WORLD`, `ROSTER_CHANGED`, `PROFILE_CHANGED` |
 | `Minimap.lua` | plain table | The LDB launcher object and the LibDBIcon registration | `NS.Minimap.Init`, `NS.Minimap.Refresh` | `NS.db.profile.minimap` (owned by LibDBIcon once registered), `NS.WindowManager`, `NS.OpenOptionsPanel` |
 
@@ -170,8 +175,8 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 99-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
-| `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the five host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, the schema seam |
+| `Schema.lua` | The 103-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the six host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, `NS.Export`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
 | `Frame.lua` | The Frame page (15 rows) plus the bespoke "Reset position" button | a page registration | `NS.Helpers`, `NS.WindowManager.ResetPosition` |
@@ -184,10 +189,10 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Visibility.lua` | The Visibility page (7 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
 | `Data.lua` | The Data page (6 rows) plus the "Reset meter data" confirmation, which routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration | `NS.Helpers`, `NS.Provider.Reset` |
-| `General.lua` | The General page (4 rows) plus two session-only checkboxes (preview, debug console) and the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
+| `General.lua` | The General page (8 rows): the master enable, the minimap toggle, the two session-only checkboxes (test mode, debug console) and the four addon-wide export preferences — plus the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 99 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
+Schema rows total 103 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
 both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order
@@ -220,10 +225,14 @@ both are bespoke by necessity, and both say why in their file headers.
 4. **`defaults/Profile.lua`** — after `core/Constants.lua`, whose stat catalog it captures at load.
 5. **`modules/`** — `Format` first (nothing reads another module, and `Row` and `Tooltip` both format
    on their first render), then `Provider` → `Roster` → `Aggregator` → `WindowManager` → `Window` →
-   `Row` → `Targets` → `Tooltip` → `DrillDown` → `Visibility` → `Minimap`. `Row.lua` loads before
-   `Tooltip.lua` and `DrillDown.lua` and therefore resolves both at *call* time. `Targets.lua` loads
-   before `Tooltip.lua`, which is its only caller, and resolves the provider at *call* time for the
-   same reason `Tooltip.lua` does.
+   `Row` → `Targets` → `Tooltip` → `DrillDown` → `Export` → `Visibility` → `Minimap`. `Row.lua` loads
+   before `Tooltip.lua` and `DrillDown.lua` and therefore resolves both at *call* time. `Targets.lua`
+   loads before `Tooltip.lua`, which is its only caller, and resolves the provider at *call* time for
+   the same reason `Tooltip.lua` does. `Export.lua` is the one entry here under **no** constraint at
+   all: its in-addon caller — `modules/Window.lua`'s header glyph — loads *before* it, so it can
+   capture no sibling at load and looks every one of them up when a button is clicked instead. It
+   sits after `DrillDown.lua` because that is where the reading order puts it, the last of the things
+   a window does with its rows, and not because anything would break elsewhere.
 6. **`settings/`** — last, and `Schema.lua` first inside it: `Slash.lua` and `OptionsSetup.lua` both
    point their seams at `NS.SetByPath` / `NS.GetSetting` / `NS.FindSchemaRow` / `NS.ApplyDefault` at
    load. `OptionsSetup.lua` must precede every page file, because the pages call `NS.Helpers` members
@@ -261,6 +270,12 @@ active restriction, and there is no second `ADDON_RESTRICTION_STATE_CHANGED` edg
 builds one `NS.Window.New(cfg)` instance per stored config. Windows are re-pointed with `SetConfig`
 on a profile swap rather than torn down and rebuilt — a rebuild is a flicker the player sees.
 
+`modules/Export.lua` appears nowhere in that sequence and needs to. It is a plain table with no
+`OnEnable` and nothing to wire at load; its two frames are built on the first `Open` and never
+before, so a session in which nobody exports never pays for it. The one thing it does keep is taken
+with the modal rather than at load: a private bus target carrying `RESTRICTION_CHANGED`, so a dialog
+left open across a pull greys its own buttons.
+
 ## Bus-target discipline
 
 CallbackHandler keys callbacks by `(message, target)`, so two receivers of one message registered on
@@ -270,6 +285,6 @@ windows.
 
 - AceAddon modules (`Provider`, `Roster`, `Aggregator`, `WindowManager`, `Tooltip`, `DrillDown`,
   `Visibility`) are their own AceEvent targets.
-- Everything else — each `Window` instance, `modules/Format.lua` — owns a private target from
-  `NS.NewBusTarget()`.
+- Everything else — each `Window` instance, `modules/Format.lua`, and the export modal in
+  `modules/Export.lua` once it has been built — owns a private target from `NS.NewBusTarget()`.
 - Nothing registers on the shared addon object.

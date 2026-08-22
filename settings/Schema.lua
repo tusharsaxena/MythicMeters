@@ -359,6 +359,28 @@ for i, stat in ipairs(Const.STATS) do
     STATCOL_SORT[i] = stat.key
 end
 
+-- The export metric list is the sort-column list plus one entry the sort column
+-- has no use for: "" — match whichever column the exporting window is sorted by.
+-- Derived from STATCOL_* rather than rebuilt, so a stat added to the catalog
+-- reaches both lists at once.
+local EXPORTMETRIC_VALUES = { [""] = L["Match the window"] }
+local EXPORTMETRIC_SORT   = { "" }
+for i, key in ipairs(STATCOL_SORT) do
+    EXPORTMETRIC_VALUES[key] = STATCOL_VALUES[key]
+    EXPORTMETRIC_SORT[i + 1] = key
+end
+
+-- The export destinations, derived from the channel catalog the export module
+-- reads, for the same reason: one list, two consumers, and no chance of the
+-- dropdown offering a channel nothing knows how to send to. The catalog stores
+-- plain English in `label` and the localization happens HERE, at the use site,
+-- because core/Constants.lua may load before locales/enUS.lua.
+local CHANNEL_VALUES, CHANNEL_SORT = {}, {}
+for i, channel in ipairs(Const.EXPORT_CHANNELS) do
+    CHANNEL_VALUES[channel.key] = L[channel.label]
+    CHANNEL_SORT[i] = channel.key
+end
+
 -- The session list is a NUMERIC dropdown: the stored value is an
 -- Enum.DamageMeterSessionType number, not a name, so the row is `type = "number"`
 -- with an ordered `{ value =, text = }` array. Both majors infer "enum, not range"
@@ -1167,6 +1189,60 @@ NS.Schema = {
             if not D then return end
             if v then D:Show() else D:Hide() end
         end,
+    },
+
+    -- ── Export ───────────────────────────────────────────────────────────────
+    --
+    -- Addon-wide rather than per-window, and last on the page so the three
+    -- groups stay contiguous: a group heading is emitted only when the group
+    -- CHANGES, so a block wedged between two "Master controls" rows would print
+    -- that heading twice.
+    --
+    -- These are the REMEMBERED choices. The export modal has its own copies of
+    -- the same three dropdowns for a one-off send, and writes each choice back
+    -- here, so the panel and the modal are two views of one preference rather
+    -- than two preferences.
+    {
+        path = "export.metric", type = "string", default = "",
+        values = EXPORTMETRIC_VALUES, sorting = EXPORTMETRIC_SORT,
+        page = "general", group = L["Export"],
+        label = L["Default metric"],
+        desc = L["Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."],
+    },
+    {
+        path = "export.channel", type = "string", default = "SELF",
+        values = CHANNEL_VALUES, sorting = CHANNEL_SORT,
+        page = "general", group = L["Export"],
+        label = L["Default channel"],
+        desc = L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."],
+    },
+    {
+        -- No non-empty check, unlike the window-name row this otherwise copies:
+        -- the empty string is this row's shipped default and a legal value, and
+        -- it is what every channel but Whisper means. The validator is here to
+        -- refuse a table typed in from a hand-edited SavedVariables, nothing
+        -- more; whether the name resolves to a character is the server's answer
+        -- to give, not this seam's.
+        path = "export.whisperTo", type = "string", default = "",
+        dialogControl = "EditBox", maxLetters = 48,
+        page = "general", group = L["Export"],
+        label = L["Whisper target"],
+        desc = L["Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."],
+        validate = function(v) return type(v) == "string" end,
+    },
+    {
+        -- Ceiling shared with the row cap rather than restated: the aggregator
+        -- clamps an export to MAX_ROWS anyway, so a slider that offered 60 would
+        -- be offering a number the send could not honor.
+        path = "export.lines", type = "number", default = 5,
+        min = 1, max = Const.MAX_ROWS, step = 1, fmt = "%d",
+        page = "general", group = L["Export"],
+        label = L["Chat lines"],
+        -- The one desc carrying a number: stating the ceiling as a literal here
+        -- would be a second copy of Const.MAX_ROWS in a sentence nobody would
+        -- think to update.
+        desc = L["How many ranked lines 'Print to Chat' sends, after the header line. The meter never holds more than %d rows, so that is the ceiling."]:format(Const.MAX_ROWS),
+        validate = isNumberIn(1, Const.MAX_ROWS),
     },
 
     -- ── Profiles ─────────────────────────────────────────────────────────────

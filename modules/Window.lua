@@ -99,7 +99,7 @@ local SESSION_BUTTON_WIDTH = 220
 -- candidate there is an ASCII fallback, because the one thing that cannot fail is
 -- a character every font has had since 1963.
 --
--- The FALLBACK IS NOT A PLACEHOLDER. `v`, `^`, `*` and `#` are what this draws on
+-- The FALLBACK IS NOT A PLACEHOLDER. `v`, `^`, `*`, `#` and `>` are what this draws on
 -- a client where nothing else resolves, and that is a legible header rather than
 -- a row of boxes.
 -- CONFIRMED PRESENT on a live 12.x client via `/mm debug diag`, which is the
@@ -126,6 +126,23 @@ local UNLOCK_ATLAS = { "Garr_LockedBuilding" }
 local GEAR_ASCII   = "*"
 local LOCK_ASCII   = "#"
 local UNLOCK_ASCII = "-"
+
+-- THE EXPORT GLYPH IS UNPROBED. Every name below is a CANDIDATE and not one of
+-- them has been confirmed on a live client — which is precisely the mistake the
+-- note at the top of this file records happening twice. `common-icon-settings`
+-- and `common-icon-lock` looked exactly this plausible and were both absent.
+--
+-- So until `/mm debug diag` answers `yes` for one of them, what actually ships
+-- in the header is `>` — send, out, away — and that is a legible button rather
+-- than a gap. FirstAtlas walks the list in order and takes the first the client
+-- admits to, so the extra candidates cost one GetAtlasInfo each at apply time
+-- and nothing at all once one resolves.
+local EXPORT_ATLAS = {
+    "poi-scrollofresonance",
+    "communities-icon-chat",
+    "UI-HUD-MicroMenu-Questlog-Up",
+}
+local EXPORT_ASCII = ">"
 
 -- The header's lock and gear buttons, as GLYPHS rather than as textures.
 --
@@ -385,6 +402,21 @@ local function onLockClick(button)
     inst:MarkDirty()
 end
 
+--- The export glyph: open the export modal for THIS window's segment.
+---
+--- The module is looked up at CALL time rather than captured, because
+--- modules\Export.lua loads after this file and an upvalue taken here would be
+--- nil forever. Absence is also a legitimate state — a half-installed copy of
+--- the addon has no Export module — and the button then does nothing rather
+--- than raising once per click.
+local function onExportClick(button)
+    local inst = button.mmWindow
+    if not inst then return end
+    local Export = NS.Export
+    if not (Export and Export.Open) then return end
+    Export:Open(inst)
+end
+
 --- Click on a column header: sort by it, or reverse it.
 local function onColumnClick(button)
     local inst = button.mmWindow
@@ -480,7 +512,7 @@ function WindowProto:BuildFrame()
 
     if NS.ApplySkin then NS.ApplySkin(frame) end
 
-    -- ── The header's three buttons, right to left: close, settings, lock ──
+    -- ── The header's four buttons, right to left: close, settings, lock, export ──
     --
     -- CLOSING IS HIDING, never deleting. `/mm toggle` and this button are the
     -- same action and the same wording — a window you closed comes back with
@@ -505,8 +537,8 @@ function WindowProto:BuildFrame()
     self.configButton.glyph:SetJustifyH("CENTER")
     -- NO SetText HERE. A FontString has no font until SetFont is called, and
     -- SetText on a fontless one raises "Font not set" — at BUILD time, which took
-    -- the whole addon down before a single window existed. Both glyphs get their
-    -- text in ApplyHeaderButtons, immediately after their SetFont.
+    -- the whole addon down before a single window existed. Every glyph in this
+    -- header gets its text in ApplyHeaderButtons, immediately after its SetFont.
     self.configButton.mmWindow = self
     self.configButton:SetScript("OnClick", onConfigClick)
 
@@ -524,6 +556,43 @@ function WindowProto:BuildFrame()
     self.lockButton.glyph:SetJustifyH("CENTER")
     self.lockButton.mmWindow = self
     self.lockButton:SetScript("OnClick", onLockClick)
+
+    -- Export: the segment THIS window is pointed at, as CSV or as chat lines. It
+    -- lives in the header beside the gear and the lock rather than behind a slash
+    -- verb because the thing being exported is chosen by the window it is clicked
+    -- on — an addon-wide export verb would have to ask which segment first.
+    --
+    -- Built unconditionally, like the gear and the lock and unlike the close
+    -- button: whether it is visible is ApplyHeaderButtons' business, and that
+    -- function has no nil guard for any of the three.
+    self.exportButton = CreateFrame("Button", nil, frame)
+    self.exportButton:SetSize(HEADER_ICON_SIZE, HEADER_ICON_SIZE)
+    self.exportButton.tex = self.exportButton:CreateTexture(nil, "OVERLAY")
+    self.exportButton.tex:SetAllPoints(self.exportButton)
+    self.exportButton.tex:Hide()
+    self.exportButton.glyph = self.exportButton:CreateFontString(nil, "OVERLAY")
+    self.exportButton.glyph:SetAllPoints(self.exportButton)
+    self.exportButton.glyph:SetJustifyH("CENTER")
+    self.exportButton.mmWindow = self
+    self.exportButton:SetScript("OnClick", onExportClick)
+
+    -- THE ONE HEADER BUTTON THAT GETS A TOOLTIP, and it is not an inconsistency.
+    -- A gear and a padlock say what they are; what this one most likely draws is
+    -- `>`, because its atlas candidates are unprobed (see the note above the
+    -- glyph constants) — and a bare `>` in a title bar is a button nobody can
+    -- guess. The tooltip is what makes the fallback shippable rather than merely
+    -- non-broken. Guarded because a stripped client may have no GameTooltip.
+    self.exportButton:SetScript("OnEnter", function(button)
+        local tip = _G.GameTooltip
+        if not (tip and tip.SetOwner) then return end
+        tip:SetOwner(button, "ANCHOR_BOTTOMLEFT")
+        tip:SetText(L["Export a segment to CSV or to chat"], 1, 1, 1, 1, true)
+        tip:Show()
+    end)
+    self.exportButton:SetScript("OnLeave", function()
+        local tip = _G.GameTooltip
+        if tip and tip.Hide then tip:Hide() end
+    end)
 
     -- The header's own text line, and the segment selector behind it.
     --
@@ -747,8 +816,8 @@ local function columnHeaderFont(colHeader)
 end
 
 --- Where the header's two text lines must stop on the right: the frame padding,
---- plus the close button's width when there is one. Shared by the title and the
---- session line so neither can end up running underneath the button.
+--- plus the width of each header button that is currently shown. Shared by the
+--- title and the session line so neither can end up running underneath one.
 function WindowProto:HeaderRightInset()
     -- Every button that sits in the top-right corner has to be counted here, or
     -- the session line runs underneath them. Computed rather than measured — the
@@ -757,14 +826,15 @@ function WindowProto:HeaderRightInset()
     if self.closeButton and self.closeButton:IsShown() then used = used + 18 end
     if self.configButton and self.configButton:IsShown() then used = used + HEADER_ICON_SIZE + 4 end
     if self.lockButton and self.lockButton:IsShown() then used = used + HEADER_ICON_SIZE + 4 end
+    if self.exportButton and self.exportButton:IsShown() then used = used + HEADER_ICON_SIZE + 4 end
     return self.layout.padding + used
 end
 
 --- Place the header's buttons and set the padlock to match the current state.
 ---
---- Right to left: close, gear, lock. The close button is placed in Build and
---- never moves; the other two hang off whichever of them is present, so removing
---- the close button in settings does not leave a gap where it was.
+--- Right to left: close, gear, lock, export. The close button is placed in Build
+--- and never moves; the other three hang off whichever of them is present, so
+--- removing the close button in settings does not leave a gap where it was.
 function WindowProto:ApplyHeaderButtons()
     local frameCfg = self.config.frame or {}
 
@@ -780,7 +850,8 @@ function WindowProto:ApplyHeaderButtons()
     -- target, and the cost of an over-large one here is nil because the only
     -- thing behind them is a drag handle.
     local level = self.dragBar:GetFrameLevel() + 5
-    for _, button in ipairs({ self.configButton, self.lockButton, self.closeButton }) do
+    for _, button in ipairs({ self.configButton, self.lockButton, self.exportButton,
+        self.closeButton }) do
         if button then
             button:SetFrameLevel(level)
             if button.SetHitRectInsets then button:SetHitRectInsets(-3, -3, -3, -3) end
@@ -788,9 +859,9 @@ function WindowProto:ApplyHeaderButtons()
     end
 
     -- ONE ROW, ONE BASELINE. Every button is the same size and sits at the same
-    -- y, and the two glyphs share the header's font — so they align by
-    -- construction rather than by three hand-tuned offsets that drift the moment
-    -- the font size changes.
+    -- y, and the glyphs all share the header's font — so they align by
+    -- construction rather than by a hand-tuned offset per button that drifts the
+    -- moment the font size changes.
     local header = self.config.header or {}
     local path, size, flags = headerFont(header)
     local y = -(self.layout.padding - 1)
@@ -834,11 +905,29 @@ function WindowProto:ApplyHeaderButtons()
     draw(self.lockButton, locked and LOCK_ATLAS or UNLOCK_ATLAS,
         locked and LOCK_ASCII or UNLOCK_ASCII, not locked)
 
-    -- Both are hidden with the title bar, because there is nothing to hang them
-    -- on without one.
+    -- One slot further left than the lock, written as a literal offset off `dx`
+    -- for the same reason the lock's is: `dx` is not an accumulator. It is
+    -- decremented once, for the close button, and every button after that reaches
+    -- its own place from it by arithmetic. Turning it into a real accumulator
+    -- would be tidier and would also silently widen the gear-to-lock seam from
+    -- 2px to 4px, so the existing spacing is matched instead.
+    self.exportButton:ClearAllPoints()
+    self.exportButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT",
+        dx - (HEADER_ICON_SIZE * 2) - 4, y)
+
+    -- No `dimmed` argument: that fourth parameter exists for an icon with two
+    -- states drawn from one asset, and export has exactly one. In particular it
+    -- is NOT wired to the combat restriction — a header glyph that greys and
+    -- ungreys four times a second through a pull is worse to look at than a modal
+    -- that opens and says plainly why it cannot export.
+    draw(self.exportButton, EXPORT_ATLAS, EXPORT_ASCII)
+
+    -- All three are hidden with the title bar, because there is nothing to hang
+    -- them on without one.
     local shown = (frameCfg.titleBar ~= false)
     self.configButton:SetShown(shown)
     self.lockButton:SetShown(shown)
+    self.exportButton:SetShown(shown)
 end
 
 --- The window's name, in the title bar.
