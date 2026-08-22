@@ -549,6 +549,65 @@ end
 -- ---------------------------------------------------------------------------
 -- Publication
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Death timestamps (issue #1)
+-- ---------------------------------------------------------------------------
+
+--- How a death is labelled, in one of three styles.
+---
+--- THREE STYLES BECAUSE THERE ARE THREE QUESTIONS. "When in the evening" wants a
+--- wall clock; "how long ago" wants a countdown; "how far into the fight" wants
+--- an offset. None is right for everyone, and the player picks.
+---
+--- `elapsed` IS NOT "SINCE THE DUNGEON STARTED", and cannot be — there is no
+--- such clock outside a dungeon. It is `deathTimeSeconds`, the meter's own
+--- offset into the SEGMENT the window is showing, which in a key is time into
+--- the run and in the open world is time into the fight. That is the honest
+--- reading and it needs no client call. It is also **-1 on the Overall
+--- session**, which is where most of a death list is looked at, so an unusable
+--- offset falls back to the wall clock rather than rendering "-1" as if it were
+--- data.
+---
+--- EVERY BRANCH IS ARITHMETIC OR A COMPARISON, and all three inputs come off a
+--- recap. Each is gated, and a refused input answers nil — the caller draws an
+--- em dash, exactly as it does for a death whose recap has gone.
+---
+--- @param when any        the death's absolute timestamp, from its recap
+--- @param offset any      `deathTimeSeconds`, or false/nil where there is none
+--- @param style string|nil "clock" (default) | "ago" | "elapsed"
+--- @param now number|nil  the current epoch time; defaults to `time()`
+--- @return string|nil
+function Format.DeathTime(when, offset, style, now)
+    if when == nil or not Secrets.CanAccess(when) then return nil end
+
+    local clock = date("%H:%M:%S", when)
+
+    if style == "ago" then
+        now = now or (_G.time and _G.time()) or nil
+        if now == nil or not Secrets.CanCompare2(now, when) then return clock end
+        local seconds = now - when
+        if seconds < 0 then seconds = 0 end
+        -- Under a minute reads in seconds. "0 min ago" for a death that happened
+        -- while you were reading the tooltip is worse than saying nothing.
+        if seconds < 60 then
+            return string.format(L["%ds ago"] or "%ds ago", seconds)
+        end
+        return string.format(L["%dm ago"] or "%dm ago", math.floor(seconds / 60))
+    end
+
+    if style == "elapsed" then
+        -- `false` is the placeholder modules/Aggregator.lua uses for a death the
+        -- client gave no offset for; -1 is what the Overall session reports for
+        -- every death it holds.
+        if offset == nil or offset == false then return clock end
+        if not Secrets.CanCompare(offset) then return clock end
+        if offset < 0 then return clock end
+        return string.format("%02d:%02d", math.floor(offset / 60), math.floor(offset % 60))
+    end
+
+    return clock
+end
+
 --
 -- The callable table described in the header. Indexing reaches this module;
 -- calling reaches LibKa0s's chat printer. The perf bracket wraps NOTHING here on

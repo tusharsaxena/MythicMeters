@@ -1902,3 +1902,164 @@ test("Tooltip: a Deaths cell's rows carry a FULL bar, not an empty one", functio
         assertEqual(line.bar:GetValue(), 1, "a death line's bar drew empty")
     end
 end)
+
+test("Tooltip: every death line in a Deaths cell carries the skull icon", function()
+    -- The line had no icon at all, so it sat a glyph-width left of every other
+    -- tooltip in the addon and read as a missing texture.
+    -- red under: adding the line without a |T…|t head.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("|T237275:", 1, true) ~= nil,
+        "the skull icon is missing from the death lines")
+end)
+
+test("Tooltip: a Deaths cell's time sits at the right edge, where a share does", function()
+    -- It was in the AMOUNT slot, which is inset by the width of the share slot
+    -- beside it — so the times floated a column short of the bar's right edge
+    -- while every other tooltip's rightmost figure sits against it.
+    -- red under: leaving the clock in the amount slot with the share slot shown.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local line = spellLines(inst)[1]
+    assertEqual(line.share:IsShown(), false,
+        "the empty share slot is still holding the time away from the edge")
+    local _, relTo, relPoint = line.amount:GetPoint(1)
+    assertTrue(relTo == line and relPoint == "RIGHT",
+        "the time must be anchored to the carrier's own right edge")
+end)
+
+test("Tooltip: the caster column is narrower than the spell column", function()
+    -- A caster name is shorter than a spell name in almost every case, and the
+    -- column was eating width the numbers wanted.
+    local inst, cfg, anchor, row = deathBench()
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    local line = spellLines(inst)[1]
+    assertTrue(line.caster:GetWidth() < line.label:GetWidth(),
+        "the caster column is no narrower than the spell column")
+end)
+
+test("Tooltip: both name columns refuse to wrap, so the engine clips them", function()
+    -- This is the whole truncation story. A spell name and a caster name can
+    -- both be secret, so neither may be cut up here — `string.sub` on a secret
+    -- raises, and measuring one to decide where to cut is an inspection. A fixed
+    -- width with wrapping off leaves the clipping to the engine, which is
+    -- allowed to look.
+    -- red under: dropping SetWordWrap(false), which makes a long name wrap onto
+    -- a second line and push every row below it down.
+    local inst, cfg, anchor, row = deathBench{
+        lastName = "Ritual of the Fang of the Loa Speaker Nanea",
+        lastSource = "High Channeler Ryvati of the Bleeding Hollow",
+    }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local line = spellLines(inst)[2]
+    assertEqual(line.label.__wordWrap, false, "the spell column may wrap")
+    assertEqual(line.caster.__wordWrap, false, "the caster column may wrap")
+end)
+
+test("Tooltip: a melee swing reads as Melee, not as #?", function()
+    -- A swing carries NO spellId and no spellName — Blizzard's own recap draws
+    -- it as "Melee" with the weapon icon. Ours fell all the way through to the
+    -- "the client could not name this" placeholder and printed "#?", which reads
+    -- as a bug in the addon rather than as a melee hit.
+    -- red under: keying the fallback on the spell id alone.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { event = "SWING_DAMAGE", amount = 115666, currentHP = 200,
+                       sourceName = "Ruthless Totemcaller", timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local line = spellLines(inst)[1]
+    assertEqual(line.label:GetText(), "Melee")
+    assertTrue(table.concat(lineTexts(inst), "\n"):find("|T135274:", 1, true) ~= nil,
+        "a swing must wear the weapon icon")
+end)
+
+test("Tooltip: a heal with no spell id reads as Heal", function()
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { event = "SPELL_PERIODIC_HEAL", amount = 500,
+                       currentHP = 800, timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    assertEqual(spellLines(inst)[1].label:GetText(), "Heal")
+end)
+
+test("Tooltip: an event with an id the client cannot name still shows the id", function()
+    -- The placeholder still has a job — it just is not the melee case.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { spellId = 999001, event = "SPELL_DAMAGE", amount = 1,
+                       currentHP = 1, timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return 1000 end,
+    })
+    inst.mocks.__spells = setmetatable({}, { __index = function() return nil end })
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+    assertTrue(spellLines(inst)[1].label:GetText():find("999001", 1, true) ~= nil)
+end)
+
+test("Tooltip: a SECRET event type is not compared", function()
+    -- The melee and heal fallbacks both test `event.event`, which comes off a
+    -- recap like everything else here.
+    local inst, cfg, anchor, row = deathBench()
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function()
+            return { { event = inst.mocks.secret("SWING_DAMAGE"),
+                       amount = inst.mocks.secret(1),
+                       currentHP = inst.mocks.secret(1), timestamp = 1000 } }
+        end,
+        GetRecapMaxHealth = function() return inst.mocks.secret(1000) end,
+    })
+    inst.mocks.setSecretsAccessible(false)
+    assertTrue(pcall(function() inst.NS.Tooltip:SpellTooltip(row, anchor, cfg) end),
+        "a secret event type raised")
+end)
+
+test("Tooltip: the time column is sized to the widest time in THIS recap", function()
+    -- It was reserved for "-100.0s" whatever the recap held, so a list whose
+    -- longest was "-81.2s" carried a character of slack down its left edge. The
+    -- offsets are numbers this addon computed, so measuring them is legal —
+    -- unlike the names beside them.
+    -- red under: a constant reservation.
+    local function widthFor(events)
+        local inst, cfg, anchor, row = deathBench()
+        inst.mocks.setDeathRecap({
+            HasRecapEvents = function() return true end,
+            GetRecapEvents = function() return events end,
+            GetRecapMaxHealth = function() return 1000 end,
+        })
+        inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+        return spellLines(inst)[1].time:GetWidth()
+    end
+
+    local narrow = widthFor({ { spellId = 1, currentHP = 1, timestamp = 1000 },
+                              { spellId = 1, currentHP = 1, timestamp = 998 } })
+    local wide   = widthFor({ { spellId = 1, currentHP = 1, timestamp = 1000 },
+                              { spellId = 1, currentHP = 1, timestamp = 100 } })
+    assertTrue(wide > narrow,
+        "a recap spanning 900s must reserve more room than one spanning 2s")
+end)

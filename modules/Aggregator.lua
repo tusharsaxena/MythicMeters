@@ -98,7 +98,7 @@
 --
 --   { guid, windowId, name, classFilename, specIconID, role,
 --     isPlayer, isLocalPlayer,          -- the same fact under both names
---     providerIndex, sortValue, deathRecapID, deaths,
+--     providerIndex, sortValue, deathRecapID, deaths, deathTimes,
 --     values = { [statKey] = { total, rate, maxAmount, columnTotal, percent,
 --                              deathRecapID, deathTime, displayText } } }
 --
@@ -110,7 +110,9 @@
 -- reason: a wrapper table per death is one allocation per death per pass, and
 -- the perf harness measures bytes per refresh. `deathRecapID` beside it is the newest death alone and is
 -- what the tooltip hint and the cell click read; the array is what the death
--- drill-down lists (modules/DrillDown.lua).
+-- drill-down lists (modules/DrillDown.lua). `deathTimes` is its PARALLEL array
+-- of `deathTimeSeconds`, read by index — the two must stay exactly in step, so
+-- a death missing either lands as `false` rather than shortening one of them.
 --
 -- `cells` is published as an ALIAS of `values` (one table, two names) for the
 -- same reason: the design brief calls the map `cells`, modules/Row.lua reads
@@ -225,6 +227,16 @@ local function setCell(row, statKey, src, maxAmount, isCount)
         local id = src.deathRecapID
         if id == nil then id = false end
         deaths[#deaths + 1] = id
+
+        -- A PARALLEL ARRAY, read by index alongside the one above. The two must
+        -- stay exactly in step, so a missing offset lands as `false` for the
+        -- same reason a missing id does: a short array would silently pair each
+        -- death with the previous one's time, which is worse than no time.
+        local times = row.deathTimes
+        if times == nil then times = {} row.deathTimes = times end
+        local when = src.deathTimeSeconds
+        if when == nil then when = false end
+        times[#times + 1] = when
 
         -- The FIRST row wins the SCALAR recap: the API returns deaths
         -- newest-first, and the death a player wants to look at is the one that
@@ -933,6 +945,7 @@ local function correlateColumn(column, isCount, collisions)
     -- refuses. Counted stats are one column of six and most keys never appear
     -- here at all, so this costs nothing on a run where nobody dies.
     local byDeaths = isCount and {} or nil
+    local byTimes  = isCount and {} or nil
     for _, src in ipairs(column.sources) do
         if not isEnemySource(src) then
             local key = identityKey(src)
@@ -953,6 +966,12 @@ local function correlateColumn(column, isCount, collisions)
                 local id = src.deathRecapID
                 if id == nil then id = false end
                 list[#list + 1] = id
+
+                local times = byTimes[key]
+                if times == nil then times = {} byTimes[key] = times end
+                local when = src.deathTimeSeconds
+                if when == nil then when = false end
+                times[#times + 1] = when
             elseif seen[key] then
                 collisions[key] = true
             else
@@ -965,7 +984,7 @@ local function correlateColumn(column, isCount, collisions)
             end
         end
     end
-    return byKey, keyCount, byRate, byRecap, byDeaths
+    return byKey, keyCount, byRate, byRecap, byDeaths, byTimes
 end
 
 --- Read one column onto the pass and hand it back. Shared by both halves of the
@@ -1039,7 +1058,7 @@ end
 --- Fill one non-sort column by correlating it back onto the rows already built.
 local function fillCorrelated(pass, statKey, collisions, localGuid)
     local column, isCount = takeColumn(pass, statKey)
-    local byKey, keyCount, byRate, byRecap, byDeaths =
+    local byKey, keyCount, byRate, byRecap, byDeaths, byTimes =
         correlateColumn(column, isCount, collisions)
     pass.corrKeys = pass.corrKeys + keyCount
 
@@ -1092,6 +1111,8 @@ local function fillCorrelated(pass, statKey, collisions, localGuid)
             -- mislabelling this file refuses everywhere else.
             local deaths = byDeaths and byDeaths[row.identityKey]
             if deaths ~= nil then row.deaths = deaths end
+            local times = byTimes and byTimes[row.identityKey]
+            if times ~= nil then row.deathTimes = times end
 
             local recap = byRecap and byRecap[row.identityKey]
             if recap ~= nil then
