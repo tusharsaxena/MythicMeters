@@ -103,12 +103,18 @@ test("Feign: a feigner confirmed at 0 HP stops being feigned", function()
     assertFalse(inst.NS.Feign.IsFeigned(ALPHA), "the real death after a feign was hidden")
 end)
 
-test("Feign: a feigner still alive stays feigned", function()
-    -- The belt on the case above. Pruning on anything short of a confirmed zero
-    -- would let the feign back into the count.
+test("Feign: a feigner still down stays feigned", function()
+    -- The belt on the case above. A feign keeps the player's real health, so
+    -- health alone cannot end one — it takes a confirmed zero (they died) or
+    -- UnitIsFeignDeath going false on a living unit (they stood up).
+    --
+    -- This case used to read "still ALIVE stays feigned", which was true only
+    -- while nothing could detect a feign ending; that gap is what let a stale
+    -- entry eat every real death a hunter had for the rest of a run.
     local inst = loaded()
     cast(inst, "player", FEIGN_DEATH)
     inst.mocks.setUnitHealth("player", 1)
+    inst.mocks.setUnitFeignDeath("player", true)
     inst.NS.Feign.Prune()
     assertTrue(inst.NS.Feign.IsFeigned(ALPHA))
 end)
@@ -139,4 +145,93 @@ test("Feign: pruning an empty set costs nothing", function()
     inst.mocks.setGroup(nil)
     local ok = pcall(inst.NS.Feign.Prune)
     assertTrue(ok)
+end)
+
+-- ---------------------------------------------------------------------------
+-- A feign is a fact about ONE DEATH, not a flag on a player (found by review)
+-- ---------------------------------------------------------------------------
+--
+-- The set began life as a live predicate — "is this GUID feigning right now" —
+-- asked of a HISTORICAL list of source rows, and that is wrong in both
+-- directions. Clear the entry and every death it was hiding comes back; leave it
+-- standing and every real death the player has is eaten. The fix is to mark the
+-- individual deaths, and to notice when a feign has ended.
+
+test("Feign: a death judged fake STAYS fake after the player really dies", function()
+    -- red under: filtering on the live set alone. The hunter feigns twice, is
+    -- correctly filtered, then really dies — and the two feigns reappear in the
+    -- count and never leave.
+    local inst = loaded()
+    cast(inst, "player", FEIGN_DEATH)
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, 11))
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, 10))
+
+    -- They really die: the entry clears.
+    inst.mocks.setUnitHealth("player", 0)
+    inst.NS.Feign.Prune()
+    assertFalse(inst.NS.Feign.IsFeigned(ALPHA))
+
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, 11), "an earlier feign came back")
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, 10), "an earlier feign came back")
+    assertFalse(inst.NS.Feign.ShouldDropDeath(ALPHA, 20), "the real death was eaten")
+end)
+
+test("Feign: standing back up ends the feign, so the next death is real", function()
+    -- THE OTHER DIRECTION, and the one that loses data. Nothing cleared a feign
+    -- when the feign simply ENDED, so a hunter who feigned in pull one and died
+    -- for real in pull three had that death filtered out for the rest of the
+    -- run — unless some pass happened to catch them at exactly 0 HP.
+    --
+    -- UnitIsFeignDeath is safe to read in THIS direction: it can linger true
+    -- through a feign-then-die transition, which is why it cannot be trusted to
+    -- clear one, but a FALSE reading on a living unit means they are up.
+    -- red under: Prune having only the 0-HP and left-the-group exits.
+    local inst = loaded()
+    cast(inst, "player", FEIGN_DEATH)
+    inst.mocks.setUnitFeignDeath("player", true)
+    inst.NS.Feign.Prune()
+    assertTrue(inst.NS.Feign.IsFeigned(ALPHA), "still down, still feigning")
+
+    inst.mocks.setUnitFeignDeath("player", false)
+    inst.mocks.setUnitHealth("player", 500)
+    inst.NS.Feign.Prune()
+    assertFalse(inst.NS.Feign.IsFeigned(ALPHA), "they stood up; the feign is over")
+    assertFalse(inst.NS.Feign.ShouldDropDeath(ALPHA, 20),
+        "a death after standing up is a real one")
+end)
+
+test("Feign: a client with no UnitIsFeignDeath keeps the old behaviour", function()
+    -- The API is read through _G at call time and may be absent. Missing must
+    -- mean "cannot tell", which leaves the entry standing — the pre-existing
+    -- behaviour, not a silent clear that would let feigns through.
+    local inst = loaded()
+    cast(inst, "player", FEIGN_DEATH)
+    inst.mocks.setUnitFeignDeath("player", true)
+    inst.mocks.setUnitHealth("player", 500)
+    inst.NS.Feign.Prune()
+
+    inst.mocks.UnitIsFeignDeath = nil
+    inst.NS.Feign.Prune()
+    assertTrue(inst.NS.Feign.IsFeigned(ALPHA))
+end)
+
+test("Feign: a reset forgets the fake deaths too", function()
+    -- Recap ids are session-scoped counters, so id 11 after a reset is somebody
+    -- else's death entirely. A surviving mark would hide a real one.
+    local inst = loaded()
+    cast(inst, "player", FEIGN_DEATH)
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, 11))
+    inst.NS:SendMessage(inst.NS.Constants.MSG.METER_RESET)
+    assertFalse(inst.NS.Feign.ShouldDropDeath(ALPHA, 11))
+end)
+
+test("Feign: ShouldDropDeath answers no for anything it cannot key on", function()
+    -- A secret recap id, an absent one, a secret guid. "Cannot tell" must mean
+    -- "not a feign", because the alternative is dropping a real death.
+    local inst = loaded()
+    cast(inst, "player", FEIGN_DEATH)
+    inst.mocks.setSecretsAccessible(false)
+    assertFalse(inst.NS.Feign.ShouldDropDeath(inst.mocks.secret(ALPHA), 11))
+    assertTrue(inst.NS.Feign.ShouldDropDeath(ALPHA, inst.mocks.secret(11)) ~= nil,
+        "a secret id must answer, not raise")
 end)

@@ -1204,3 +1204,118 @@ test("The identity build keeps that slot too", function()
     assertEqual(#rows[1].deaths, 2)
     assertEqual(rows[1].deaths[2], false)
 end)
+
+-- ---------------------------------------------------------------------------
+-- The feign filter, where it actually bites
+-- ---------------------------------------------------------------------------
+--
+-- modules/Feign.lua owns the set; this is the only place it changes what a
+-- player sees. The module having tests of its own proves nothing about whether
+-- the aggregator ever asks it — and for one commit, it did not.
+
+test("A feigned player's death is not counted", function()
+    -- red under: the filter not being called at all, which is how it shipped
+    -- once. Verified by mutation: turning `feigned` into a constant false must
+    -- make this red.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29 }),
+        src(BETA,  0, { recapID = 28 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.NS.Feign.Note(ALPHA)
+
+    local rows = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })
+    assertEqual(#rows, 1, "the feigner still has a row")
+    assertEqual(rows[1].guid, BETA, "and the wrong player was dropped")
+end)
+
+test("A feigned player's death is not LISTED either", function()
+    -- Two tallies of one fact. A filter applied to the count and not to the
+    -- array makes the cell say 1 and the drill-down list 2.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29 }),
+        src(ALPHA, 0, { recapID = 27 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.NS.Feign.Note(ALPHA)
+
+    assertEqual(#inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } }), 0,
+        "the feigner's row survived")
+end)
+
+test("A real death after a feign is counted, and the feigns stay hidden", function()
+    -- BOTH HALVES, because the fix for one broke the other twice over. The
+    -- hunter feigned twice and then really died: the count must read 1, not 3
+    -- and not 0.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 11 }),
+        src(ALPHA, 0, { recapID = 10 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.NS.Feign.Note(ALPHA)
+    inst.mocks.setUnitFeignDeath("player", true)
+    assertEqual(#inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } }), 0)
+
+    -- They really die, and the client reports the new death alongside the old.
+    install(inst, {
+        src(ALPHA, 0, { recapID = 20 }),
+        src(ALPHA, 0, { recapID = 11 }),
+        src(ALPHA, 0, { recapID = 10 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.mocks.setUnitHealth("player", 0)
+
+    local rows = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })
+    assertEqual(#rows, 1)
+    assertEqual(rows[1].values.Deaths.total, 1,
+        "the two feigns came back the moment the real death cleared the entry")
+    assertEqual(#rows[1].deaths, 1)
+    assertEqual(rows[1].deaths[1], 20, "and it must be the REAL death that is listed")
+end)
+
+test("A death after the hunter stands back up is counted", function()
+    -- The other direction. Without a way to notice the feign ended, this death
+    -- was filtered out for the rest of the run.
+    local inst = loaded()
+    inst.NS.Feign.Note(ALPHA)
+    -- The client has to have SEEN the feign before "not feigning any more" means
+    -- anything — otherwise the entry would clear in the instant between the cast
+    -- succeeding and the aura appearing.
+    inst.mocks.setUnitFeignDeath("player", true)
+    inst.mocks.setUnitHealth("player", 500)
+    inst.NS.Feign.Prune()
+
+    inst.mocks.setUnitFeignDeath("player", false)
+    install(inst, { src(ALPHA, 0, { recapID = 40 }) },
+        { statKey = "Deaths", maxAmount = 0 })
+    local rows = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })
+    assertEqual(#rows, 1, "a real death was eaten by a stale feign")
+end)
+
+test("The feign filter touches no column but Deaths", function()
+    -- It is gated on `isCount`, and a feigning hunter is still doing damage.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 500) }, { maxAmount = 500 })
+    inst.NS.Feign.Note(ALPHA)
+    assertEqual(#inst.NS.Aggregator.Build(makeWindow{ columns = { "DamageDone" } }), 1,
+        "a feigning player stopped appearing on the damage column")
+end)
+
+test("The feign filter cannot run mid-pull, and does not pretend to", function()
+    -- STRUCTURAL, not a defect. It joins a plain GUID against sourceGUID, and
+    -- sourceGUID is secret for the whole of a pull — which is the entire reason
+    -- there is a second, GUID-free build. Pinned as behaviour so nobody "fixes"
+    -- it by keying on something secret.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 500, { class = "PALADIN", specIconID = 1 }) },
+        { statKey = "DamageDone", maxAmount = 500 })
+    install(inst, { src(ALPHA, 0, { class = "PALADIN", specIconID = 1, recapID = 29 }) },
+        { statKey = "Deaths", maxAmount = 0 })
+    inst.NS.Feign.Note(ALPHA)
+    inst.mocks.setRestricted(true)
+
+    local rows = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "Deaths" }, sortColumn = "DamageDone" })
+    assertEqual(rows[1].values.Deaths.total, 1,
+        "if this ever reads 0, the restricted build found a plain key and the "
+        .. "limitation can be lifted from docs/ARCHITECTURE.md")
+end)

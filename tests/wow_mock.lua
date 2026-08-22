@@ -1423,6 +1423,18 @@ local function build()
     function M.setUnitHealth(token, current, maximum)
         M.__unitHealth[token] = { current = current, maximum = maximum or 100 }
     end
+    -- Whether a unit is feigning. Read only in the "they stood back up"
+    -- direction by modules/Feign.lua -- a false reading on a living unit is
+    -- trustworthy, a true one is not, because it lingers through a
+    -- feign-then-die transition.
+    M.__unitFeign = {}
+    function M.setUnitFeignDeath(token, feigning)
+        M.__unitFeign[token] = feigning and true or false
+    end
+    M.UnitIsFeignDeath = function(token)
+        return M.__unitFeign[token] and true or false
+    end
+
     M.UnitHealth    = function(token)
         local h = M.__unitHealth[token]
         return h and h.current or 100

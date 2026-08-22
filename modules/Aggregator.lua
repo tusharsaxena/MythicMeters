@@ -1191,12 +1191,15 @@ local function scanColumn(pass, statKey)
     if Feign and Feign.Prune then Feign.Prune() end
 
     for index, src in ipairs(column.sources) do
-        -- `IsFeigned` answers false for a secret guid rather than raising, which
-        -- is also the honest answer: mid-pull `sourceGUID` is secret and this
-        -- build is not the one running anyway (see the module header). "Cannot
-        -- tell" must mean "not feigning", because the alternative is dropping a
-        -- real death.
-        local feigned = Feign and Feign.IsFeigned and Feign.IsFeigned(src.guid)
+        -- ASKED PER DEATH, not per player. `ShouldDropDeath` remembers the
+        -- individual deaths it judges fake, so a hunter who later dies for real
+        -- does not bring every earlier feign back into the count with them —
+        -- which is exactly what asking the live set here used to do. It answers
+        -- false for anything it cannot key on, including a secret guid, and that
+        -- is the honest answer: "cannot tell" must mean "real death", because
+        -- the alternative is silently dropping one.
+        local feigned = Feign and Feign.ShouldDropDeath
+            and Feign.ShouldDropDeath(src.guid, src.deathRecapID)
         -- Spelled as a branch and not as `not feigned and rowForSource(...) or nil`:
         -- that idiom truncates a multiple return to one value, which silently
         -- drops `isOwn` and sends every ordinary source down the pet-fold path.

@@ -58,9 +58,31 @@ local Debug   = NS.Debug
 
 local MSG = Const.MSG
 
--- [guid] = true, for players believed to be feigning. Session-scoped: a run's
--- feigns mean nothing to the next one.
+-- [guid] = "noted" | "down", for players believed to be feigning RIGHT NOW.
+--
+-- THE TWO STATES EXIST TO CLOSE A RACE. The entry is created from the CAST, and
+-- the "they stood back up" exit below is `UnitIsFeignDeath` going false — which
+-- is also what it reads in the instant between the cast succeeding and the aura
+-- being visible. Clearing on that would undo the entry immediately, every time.
+--
+-- So an entry is only eligible for that exit once the client has actually been
+-- SEEN reporting the feign ("down"). A client that never reports one keeps the
+-- entry until a confirmed death or a group change, which is the behaviour that
+-- shipped before the exit existed.
 local feigned = {}
+
+-- [recapID] = true, for individual deaths already judged to be feigns.
+--
+-- WHY BOTH. The live set alone is a predicate about a PLAYER, and it was being
+-- asked of a historical list of source rows — which is wrong in both directions.
+-- Clear the entry, because the hunter finally died for real, and every feign it
+-- had been hiding is counted again from that pass onward. Leave it standing,
+-- because nothing noticed the feign ended, and every genuine death that player
+-- has for the rest of the run is filtered away.
+--
+-- A feign is a fact about ONE DEATH. So the moment a death is judged fake it is
+-- recorded as fake permanently, and the live set only ever decides NEW deaths.
+local fakeDeaths = {}
 
 -- Whether anything is in the set. `next` on every prune would be cheap already;
 -- this makes the common case — nobody in the group has ever feigned — a single
@@ -70,6 +92,19 @@ local anyFeigned = false
 local function unitHealth(unit)
     local f = _G.UnitHealth
     return f and f(unit) or nil
+end
+
+--- What the client says about this unit's feign, or nil where it will not say.
+---
+--- `UnitIsFeignDeath` lingers true through a feign-then-die transition, so a
+--- true answer never proves a feign is still running — but a FALSE answer on a
+--- living unit does prove it has ended. Both readings are returned and the
+--- caller decides; an absent API answers nil, which means "cannot tell" and
+--- leaves an entry exactly where it is.
+local function unitFeigning(unit)
+    local f = _G.UnitIsFeignDeath
+    if f == nil then return nil end
+    return f(unit) and true or false
 end
 
 -- ---------------------------------------------------------------------------
@@ -85,7 +120,7 @@ function Feign.Note(guid)
     -- follower dungeon handing out secret pet GUIDs — so this is a real gate
     -- rather than a formality.
     if not Secrets.IsSafeKey(guid) then return end
-    feigned[guid] = true
+    if feigned[guid] == nil then feigned[guid] = "noted" end
     anyFeigned = true
     if State.debug and Debug then Debug("Feign", "noted %s", tostring(guid)) end
 end
@@ -101,27 +136,66 @@ end
 function Feign.IsFeigned(guid)
     if not anyFeigned then return false end
     if not Secrets.IsSafeKey(guid) then return false end
-    return feigned[guid] == true
+    return feigned[guid] ~= nil
 end
 
---- Forget everybody.
+--- Whether this death should be left out of the count.
+---
+--- THE ONLY QUESTION modules/Aggregator.lua ASKS, and it is deliberately not
+--- "is this player feigning". A death already judged fake stays fake for the
+--- session, whatever the player does afterwards; a new death is judged against
+--- the live set and, if it is a feign, remembered as one.
+---
+--- Answers FALSE for anything it cannot key on — a secret guid, a secret or
+--- absent recap id. "Cannot tell" and "real death" have to be the same answer,
+--- because the alternative is silently dropping one.
+---
+--- @param guid any
+--- @param recapID any
+--- @return boolean
+function Feign.ShouldDropDeath(guid, recapID)
+    local known = Secrets.IsSafeKey(recapID)
+    if known and fakeDeaths[recapID] then return true end
+    if not Feign.IsFeigned(guid) then return false end
+    -- A death with no usable id cannot be remembered, so it is dropped now and
+    -- may reappear if the entry later clears. Rare enough to accept and small
+    -- enough to say out loud rather than guard with a second index.
+    if known then fakeDeaths[recapID] = true end
+    return true
+end
+
+--- Forget everybody, and every death judged fake.
+---
+--- The fake-death marks go too: recap ids are session-scoped counters, so id 11
+--- after a reset is a different player's different death, and a surviving mark
+--- would hide a real one.
 function Feign.Clear()
-    if not anyFeigned then return end
     feigned = {}
+    fakeDeaths = {}
     anyFeigned = false
 end
 
 --- Drop entries that are no longer true.
 ---
---- TWO WAYS OUT OF THE SET, and the first is the one that matters. A hunter who
---- feigns and then really dies must have that death counted, so a confirmed
---- zero health clears the entry. `UnitIsFeignDeath` is deliberately not used
---- for this: it can stay true through a feign-then-die transition, which would
---- hide the real death behind the fake one.
+--- THREE WAYS OUT OF THE SET.
 ---
---- The second is leaving the group, which makes the entry untrackable — there is
---- no unit token left to read health from, so it could never be cleared and
---- would sit in the set for the rest of the session.
+--- A CONFIRMED ZERO HEALTH: the hunter feigned and then really died, and that
+--- death must be counted. `UnitIsFeignDeath` is deliberately not trusted to
+--- decide this one — it can stay true through a feign-then-die transition, which
+--- would hide the real death behind the fake one.
+---
+--- STANDING BACK UP: not feigning, and alive. Without this the set meant "once
+--- feigned" rather than "is feigning", and every genuine death that player had
+--- for the rest of the run was filtered away — a hunter who feigned in one pull
+--- and died in another simply never appeared in the Deaths column. `UnitIsFeignDeath`
+--- IS trusted in this direction: a FALSE reading on a living unit means they are
+--- up, and its known failure mode is staying true too long, never going false too
+--- early. Where the API is absent the answer is "cannot tell", which leaves the
+--- entry standing rather than clearing it on a guess.
+---
+--- LEAVING THE GROUP, which makes the entry untrackable — there is no unit token
+--- left to read health from, so it could never be cleared and would sit in the
+--- set for the rest of the session.
 ---
 --- Called once per refresh pass from the Deaths walk, so the empty case — every
 --- run where nobody has feigned — exits on one boolean before touching the
@@ -154,7 +228,16 @@ function Feign.Prune()
             -- Nil-ness first, then the comparison, and only when the figure can
             -- legally be compared. A health figure from the unit API is not a
             -- meter value, but nothing says the client cannot make one secret.
-            if hp ~= nil and Secrets.CanCompare(hp) and hp <= 0 then
+            local alive = hp ~= nil and Secrets.CanCompare(hp) and hp > 0
+            local dead  = hp ~= nil and Secrets.CanCompare(hp) and hp <= 0
+            local nowFeigning = unitFeigning(unit)
+
+            -- Seeing the feign is what makes the "stood back up" exit usable —
+            -- see the state comment above.
+            if nowFeigning == true then feigned[guid] = "down" end
+            local seenDown = (feigned[guid] == "down")
+
+            if dead or (seenDown and alive and nowFeigning == false) then
                 feigned[guid] = nil
             else
                 remaining = true
