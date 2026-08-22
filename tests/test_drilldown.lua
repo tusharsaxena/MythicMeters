@@ -618,3 +618,58 @@ test("The deaths view is capped like every other breakdown", function()
     inst.NS.DrillDown:OnCellClick(cfg, deadRow(ids), "Deaths")
     assertEqual(#inst.NS.DrillDown:BuildRows(cfg), inst.NS.Constants.MAX_ROWS)
 end)
+
+test("Clicking a death row opens the game's own recap window", function()
+    -- Confirmed in-client: OpenDeathRecapUI renders another player's death in
+    -- full when it is handed a live id. The list answers "when", Blizzard's
+    -- frame answers "what", and neither has to be rebuilt.
+    -- red under: a left click inside a breakdown staying the no-op it is for a
+    -- spell row.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28 }, "Deaths")
+    local row = inst.NS.DrillDown:BuildRows(cfg)[2]
+
+    assertEqual(inst.NS.DrillDown:OnRowClick(cfg, row, "LeftButton"), "recap")
+    assertEqual(inst.mocks.__lastRecapID, 28, "the row's OWN death, not the newest")
+end)
+
+test("Clicking a death row does not leave the list", function()
+    -- The frame opens over the window; coming back to a grid the player did not
+    -- ask to return to would lose their place in the list.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    inst.NS.DrillDown:OnRowClick(cfg, inst.NS.DrillDown:BuildRows(cfg)[1], "LeftButton")
+    assertTrue(inst.NS.DrillDown.IsActive(cfg), "the deaths list closed itself")
+end)
+
+test("Right-clicking a death row still leaves the list", function()
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    assertEqual(inst.NS.DrillDown:OnRowClick(cfg,
+        inst.NS.DrillDown:BuildRows(cfg)[1], "RightButton"), "exit")
+    assertEqual(inst.NS.DrillDown.IsActive(cfg), false)
+end)
+
+test("Clicking a SPELL row is still a no-op", function()
+    -- A spell has no breakdown of its own, and asking for one renders an empty
+    -- window that reads as a broken addon.
+    -- red under: treating every drill-down row as a death row.
+    local inst, cfg = bench()
+    inst.NS.DrillDown:OnCellClick(cfg, playerRow(), "DamageDone")
+    local row = inst.NS.DrillDown:BuildRows(cfg)[1]
+    assertEqual(inst.NS.DrillDown:OnRowClick(cfg, row, "LeftButton"), "none")
+    assertTrue(inst.NS.DrillDown.IsActive(cfg))
+end)
+
+test("Clicking a death whose recap has gone does nothing rather than opening an empty frame", function()
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    local row = inst.NS.DrillDown:BuildRows(cfg)[1]
+    inst.mocks.OpenDeathRecapUI = nil
+
+    assertEqual(inst.NS.DrillDown:OnRowClick(cfg, row, "LeftButton"), "none")
+end)

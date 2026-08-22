@@ -418,12 +418,25 @@ end
 --- On the ROW rather than only on the cells, because the cells do not tile it:
 --- there are seams between them and a margin past the last column, and a
 --- right-click that lands in one of those did nothing at all.
+--- ...and a left-click on a DEATH row opens the game's own recap for it.
+---
+--- Both buttons come here rather than to the cells because the cells give up the
+--- mouse inside a breakdown (see ApplyMouse). The decision itself belongs to
+--- modules/DrillDown.lua — this file wires the click and does not know what a
+--- death is.
 local function rowOnMouseUp(frame, button)
-    if button ~= "RightButton" then return end
     local row = frame.mmRow
     if not row then return end
     local D = NS.DrillDown
-    if D and D.Exit then D:Exit(row.window.config) end
+    if not D then return end
+
+    if D.OnRowClick then
+        D:OnRowClick(row.window.config, row.entry, button)
+        return
+    end
+    -- The pre-OnRowClick behaviour, kept as the fallback so a partially loaded
+    -- namespace still has a way out of a breakdown.
+    if button == "RightButton" and D.Exit then D:Exit(row.window.config) end
 end
 
 local function cellOnMouseUp(frame, button)

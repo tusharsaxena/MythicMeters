@@ -402,6 +402,42 @@ function DrillDown:OnCellClick(window, row, statKey)
     return self:Enter(window, row, statKey) and "enter" or "none"
 end
 
+--- What a click on a drill-down ROW does.
+---
+--- The cells give up the mouse inside a breakdown (modules/Row.lua's
+--- ApplyMouse), so every click in here lands on the row — which is why this is
+--- separate from OnCellClick rather than folded into it.
+---
+--- A DEATH ROW OPENS BLIZZARD'S OWN RECAP. Confirmed in-client: the frame
+--- renders another player's death in full when it is handed a live id, which is
+--- what makes the division of labour work — this list answers "when", and the
+--- game's frame answers "what killed them" better than a second window of ours
+--- would. It does NOT leave the list: the frame opens over the window, and
+--- returning to a grid the player did not ask for would lose their place.
+---
+--- A spell row stays the no-op it has always been. A spell has no breakdown of
+--- its own, and asking for one renders an empty window that reads as a broken
+--- addon rather than as "there is nothing here".
+---
+--- @param window table
+--- @param row table
+--- @param button string
+--- @return string  "recap", "exit" or "none"
+function DrillDown:OnRowClick(window, row, button)
+    if button == "RightButton" then
+        return self:Exit(window) and "exit" or "none"
+    end
+    if type(row) ~= "table" or row.recapID == nil then return "none" end
+
+    if openDeathRecap(row.recapID) then
+        if State.debug and Debug then
+            Debug("DrillDown", "recap window id=%s", tostring(row.recapID))
+        end
+        return "recap"
+    end
+    return "none"
+end
+
 -- ---------------------------------------------------------------------------
 -- Rows
 -- ---------------------------------------------------------------------------
