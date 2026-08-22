@@ -98,9 +98,16 @@
 --
 --   { guid, windowId, name, classFilename, specIconID, role,
 --     isPlayer, isLocalPlayer,          -- the same fact under both names
---     providerIndex, sortValue, deathRecapID,
+--     providerIndex, sortValue, deathRecapID, deaths,
 --     values = { [statKey] = { total, rate, maxAmount, columnTotal, percent,
---                              deathRecapID, deathTime } } }
+--                              deathRecapID, deathTime, displayText } } }
+--
+-- `deaths` is `{ { recapID = n }, ... }`, NEWEST FIRST, and exists only on a row
+-- that has a Deaths cell — nil everywhere else, built lazily, and never a field
+-- of the row literal, because that literal runs for every row in every window
+-- four times a second. `deathRecapID` beside it is the newest death alone and is
+-- what the tooltip hint and the cell click read; the array is what the death
+-- drill-down lists (modules/DrillDown.lua).
 --
 -- `cells` is published as an ALIAS of `values` (one table, two names) for the
 -- same reason: the design brief calls the map `cells`, modules/Row.lua reads
@@ -195,8 +202,23 @@ local function setCell(row, statKey, src, maxAmount, isCount)
             row.values[statKey] = cell
         end
         cell.total = cell.total + 1
-        -- The FIRST row wins the recap: the API returns deaths newest-first, and
-        -- the death a player wants to look at is the one that just happened.
+
+        -- EVERY DEATH LANDS ON THE ROW, in the order the API returned them —
+        -- newest first. The scalar below keeps the newest one and four call
+        -- sites read it; this array is what the death drill-down lists, and
+        -- dropping all but the first is exactly what issue #1 exists to undo.
+        --
+        -- Built lazily and hung on the ROW, never on the cell literal below and
+        -- never in newRow: those two run for every row in every column on every
+        -- pass, and a field only Deaths ever fills would widen the whole grid to
+        -- carry it — the same reasoning the comment in fillCorrelated records.
+        local deaths = row.deaths
+        if deaths == nil then deaths = {} row.deaths = deaths end
+        deaths[#deaths + 1] = { recapID = src.deathRecapID }
+
+        -- The FIRST row wins the SCALAR recap: the API returns deaths
+        -- newest-first, and the death a player wants to look at is the one that
+        -- just happened.
         if cell.deathRecapID == nil then
             cell.deathRecapID = src.deathRecapID
             cell.deathTime    = src.deathTimeSeconds
@@ -896,6 +918,11 @@ local function correlateColumn(column, isCount, collisions)
     -- per refresh to hold nothing.
     local byKey, byRate, seen, keyCount = {}, {}, {}, 0
     local byRecap = isCount and {} or nil
+    -- The identity build's half of `row.deaths`. One array per DYING identity
+    -- key, not one table per source per column — the allocation the note above
+    -- refuses. Counted stats are one column of six and most keys never appear
+    -- here at all, so this costs nothing on a run where nobody dies.
+    local byDeaths = isCount and {} or nil
     for _, src in ipairs(column.sources) do
         if not isEnemySource(src) then
             local key = identityKey(src)
@@ -906,6 +933,13 @@ local function correlateColumn(column, isCount, collisions)
                 -- look at is the one that just happened. `deathRecapID` is
                 -- NeverSecret, so it is a plain value in a plain map.
                 if byRecap[key] == nil then byRecap[key] = src.deathRecapID end
+                -- ...and every row lands in the array, newest first, exactly as
+                -- setCell accumulates it on the GUID path. Two builds, one
+                -- shape: a change made to one and not the other is invisible
+                -- until somebody drills in mid-pull.
+                local list = byDeaths[key]
+                if list == nil then list = {} byDeaths[key] = list end
+                list[#list + 1] = { recapID = src.deathRecapID }
             elseif seen[key] then
                 collisions[key] = true
             else
@@ -918,7 +952,7 @@ local function correlateColumn(column, isCount, collisions)
             end
         end
     end
-    return byKey, keyCount, byRate, byRecap
+    return byKey, keyCount, byRate, byRecap, byDeaths
 end
 
 --- Read one column onto the pass and hand it back. Shared by both halves of the
@@ -992,7 +1026,8 @@ end
 --- Fill one non-sort column by correlating it back onto the rows already built.
 local function fillCorrelated(pass, statKey, collisions, localGuid)
     local column, isCount = takeColumn(pass, statKey)
-    local byKey, keyCount, byRate, byRecap = correlateColumn(column, isCount, collisions)
+    local byKey, keyCount, byRate, byRecap, byDeaths =
+        correlateColumn(column, isCount, collisions)
     pass.corrKeys = pass.corrKeys + keyCount
 
     -- A SOURCE THIS COLUMN KNOWS AND NO ROW STANDS FOR GETS ITS OWN ROW.
@@ -1036,6 +1071,14 @@ local function fillCorrelated(pass, statKey, collisions, localGuid)
                 maxAmount = not isCount and column.maxAmount or nil,
             }
             row.values[statKey] = cell
+
+            -- INSIDE the collision guard, deliberately. A collided key is
+            -- left empty above because the source might be the other player's,
+            -- and a death list attached outside that refusal would put one
+            -- player's deaths under the other player's name — the one
+            -- mislabelling this file refuses everywhere else.
+            local deaths = byDeaths and byDeaths[row.identityKey]
+            if deaths ~= nil then row.deaths = deaths end
 
             local recap = byRecap and byRecap[row.identityKey]
             if recap ~= nil then
@@ -1496,16 +1539,39 @@ function Aggregator.TestColumn(a, b, c)
         local total = math.floor(top * (1 - (index - 1) * 0.085) * (shape[statKey] or 1))
         if total < 0 then total = 0 end
 
-        column.sources[index] = {
-            guid            = string.format("Player-9999-TEST%04d", index),
-            name            = member.name,
-            classFilename   = member.class,
-            specIconID      = member.spec,
-            isLocalPlayer   = (index == 3),
-            totalAmount     = total,
-            amountPerSecond = math.floor(total / 300),
-            deathRecapID    = (statKey == "Deaths") and (100 + index) or nil,
-        }
+        -- DEATHS EMITS ONE SOURCE PER DEATH, because that is what the client
+        -- does — see the catalog note in core/Constants.lua. Emitting one per
+        -- member made every preview player die exactly once, and a list of
+        -- length one is the length at which every ordering bug hides. `total`
+        -- is already the role-shaped figure, so it doubles as how many times
+        -- this member died.
+        if statKey == "Deaths" then
+            local deaths = total
+            if deaths < 1 then deaths = 1 end
+            for n = deaths, 1, -1 do
+                column.sources[#column.sources + 1] = {
+                    guid            = string.format("Player-9999-TEST%04d", index),
+                    name            = member.name,
+                    classFilename   = member.class,
+                    specIconID      = member.spec,
+                    isLocalPlayer   = (index == 3),
+                    totalAmount     = 0,
+                    -- Newest first, so the ids descend exactly as the live
+                    -- client's do.
+                    deathRecapID    = 100 + index * 10 + n,
+                }
+            end
+        else
+            column.sources[#column.sources + 1] = {
+                guid            = string.format("Player-9999-TEST%04d", index),
+                name            = member.name,
+                classFilename   = member.class,
+                specIconID      = member.spec,
+                isLocalPlayer   = (index == 3),
+                totalAmount     = total,
+                amountPerSecond = math.floor(total / 300),
+            }
+        end
     end
 
     return column

@@ -1028,3 +1028,138 @@ test("A source with NO display type is refused, not assumed friendly", function(
     assertEqual(#result, 1, "a source of unknown allegiance was given a row")
     assertEqual(result[1].guid, ALPHA)
 end)
+
+-- ---------------------------------------------------------------------------
+-- row.deaths — every death, not just the newest (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- The Deaths column has always known every death individually — the provider
+-- hands back one source row PER DEATH, each carrying its own `deathRecapID` —
+-- and this file threw all but the first away. `row.deathRecapID` stays exactly
+-- as it is: it is the newest death and four call sites read it. The array is
+-- strictly additive, and it is what the death drill-down lists.
+
+test("Every death lands in row.deaths, not just the newest", function()
+    -- red under: the `if cell.deathRecapID == nil then` first-wins capture being
+    -- the only place a recap id is kept.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29, deathTime = 1356 }),
+        src(ALPHA, 0, { recapID = 28, deathTime = 673  }),
+        src(ALPHA, 0, { recapID = 27, deathTime = 296  }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+
+    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })[1]
+    assertEqual(row.values.Deaths.total, 3, "the count itself must not change")
+    assertEqual(#row.deaths, 3, "deaths were dropped")
+    assertEqual(row.deaths[1].recapID, 29, "newest first, as the API returns them")
+    assertEqual(row.deaths[3].recapID, 27)
+end)
+
+test("row.deathRecapID still names the NEWEST death", function()
+    -- Four call sites read it — the click, the tooltip hint and two promotions.
+    -- The array is additive; repurposing the scalar would break all of them.
+    -- red under: replacing the scalar with the array.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29 }),
+        src(ALPHA, 0, { recapID = 27 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+
+    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })[1]
+    assertEqual(row.deathRecapID, 29)
+end)
+
+test("A row with no deaths carries no deaths array at all", function()
+    -- THE ROW MUST NOT WIDEN. newRow runs for every row in every window on every
+    -- pass; a tenth field costs an allocation per row per pass for windows with
+    -- no Deaths column. The array is created lazily, inside the counted branch.
+    -- red under: `deaths = {}` in the newRow literal.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 500) }, { maxAmount = 500 })
+    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "DamageDone" } })[1]
+    assertNil(row.deaths)
+end)
+
+test("The count and the deaths array can never disagree", function()
+    -- They are two independent tallies of one fact, in two separate builds. A
+    -- filter added to one and not the other makes the cell say 3 and the
+    -- drill-down list 2, which is the disagreement the whole feature must not
+    -- have.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29 }), src(ALPHA, 0, { recapID = 28 }),
+        src(BETA,  0, { recapID = 27 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+
+    for _, row in ipairs(inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })) do
+        assertEqual(#row.deaths, row.values.Deaths.total,
+            "the count and the list describe the same deaths")
+    end
+end)
+
+test("A correlated Deaths column keeps every death too", function()
+    -- Mid-pull there is no GUID, so the identity build tallies deaths through a
+    -- parallel map instead. It is a SECOND capture point, and a change made to
+    -- one build and not the other is invisible until somebody drills in during
+    -- a pull.
+    -- red under: accumulating the array only in setCell.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 500, { class = "PALADIN", specIconID = 1 }) },
+        { statKey = "DamageDone", maxAmount = 500 })
+    install(inst, {
+        src(ALPHA, 0, { class = "PALADIN", specIconID = 1, recapID = 29 }),
+        src(ALPHA, 0, { class = "PALADIN", specIconID = 1, recapID = 27 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.mocks.setRestricted(true)
+
+    local rows = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "Deaths" }, sortColumn = "DamageDone" })
+    assertEqual(rows[1].values.Deaths.total, 2)
+    assertEqual(#rows[1].deaths, 2, "the identity build dropped a death")
+    assertEqual(rows[1].deaths[1].recapID, 29, "newest first here too")
+end)
+
+test("A collided identity key gets no deaths array, as it gets no cell", function()
+    -- Two players of one class and spec cannot be told apart mid-pull, and this
+    -- file's whole warrant for correlating is that it REFUSES rather than
+    -- guesses. A death list attached outside that refusal would put one
+    -- player's deaths under the other player's name.
+    -- red under: assigning row.deaths outside the collision guard.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 500, { class = "PALADIN", specIconID = 1 }),
+        src(BETA,  400, { class = "PALADIN", specIconID = 1 }),
+    }, { statKey = "DamageDone", maxAmount = 500 })
+    install(inst, {
+        src(ALPHA, 0, { class = "PALADIN", specIconID = 1, recapID = 29 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.mocks.setRestricted(true)
+
+    local rows = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "Deaths" }, sortColumn = "DamageDone" })
+    for _, row in ipairs(rows) do
+        assertNil(row.values.Deaths, "the fixture is only meaningful if the key collided")
+        assertNil(row.deaths, "a collided row was given somebody's death list")
+    end
+end)
+
+test("Test mode produces a player with several deaths to drill into", function()
+    -- The preview is how the drill-down is looked at without dying repeatedly in
+    -- a dungeon. One death per member exercises the list at length 1 only, which
+    -- is the length at which every ordering bug hides.
+    -- red under: TestColumn emitting one Deaths source per member.
+    local inst = T.load()
+    inst.NS.State.testMode = true
+    local rows = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })
+
+    local most = 0
+    for _, row in ipairs(rows) do
+        local n = row.deaths and #row.deaths or 0
+        if n > most then most = n end
+        if row.deaths then
+            assertEqual(n, row.values.Deaths.total, "preview count and list disagree")
+        end
+    end
+    assertTrue(most > 1, "no preview player has more than one death")
+end)
