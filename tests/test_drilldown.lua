@@ -462,7 +462,7 @@ end)
 local function deadRow(ids, opts)
     local row = playerRow(opts)
     row.deaths = {}
-    for i = 1, #ids do row.deaths[i] = { recapID = ids[i] } end
+    for i = 1, #ids do row.deaths[i] = ids[i] end
     row.deathRecapID = ids[1]
     return row
 end

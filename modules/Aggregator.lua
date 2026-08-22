@@ -102,10 +102,13 @@
 --     values = { [statKey] = { total, rate, maxAmount, columnTotal, percent,
 --                              deathRecapID, deathTime, displayText } } }
 --
--- `deaths` is `{ { recapID = n }, ... }`, NEWEST FIRST, and exists only on a row
+-- `deaths` is a FLAT array of recap ids, `{ 29, 28, 27 }`, NEWEST FIRST, and
+-- exists only on a row
 -- that has a Deaths cell — nil everywhere else, built lazily, and never a field
 -- of the row literal, because that literal runs for every row in every window
--- four times a second. `deathRecapID` beside it is the newest death alone and is
+-- four times a second. Flat rather than `{ { recapID = n } }` for the same
+-- reason: a wrapper table per death is one allocation per death per pass, and
+-- the perf harness measures bytes per refresh. `deathRecapID` beside it is the newest death alone and is
 -- what the tooltip hint and the cell click read; the array is what the death
 -- drill-down lists (modules/DrillDown.lua).
 --
@@ -214,7 +217,7 @@ local function setCell(row, statKey, src, maxAmount, isCount)
         -- carry it — the same reasoning the comment in fillCorrelated records.
         local deaths = row.deaths
         if deaths == nil then deaths = {} row.deaths = deaths end
-        deaths[#deaths + 1] = { recapID = src.deathRecapID }
+        deaths[#deaths + 1] = src.deathRecapID
 
         -- The FIRST row wins the SCALAR recap: the API returns deaths
         -- newest-first, and the death a player wants to look at is the one that
@@ -939,7 +942,7 @@ local function correlateColumn(column, isCount, collisions)
                 -- until somebody drills in mid-pull.
                 local list = byDeaths[key]
                 if list == nil then list = {} byDeaths[key] = list end
-                list[#list + 1] = { recapID = src.deathRecapID }
+                list[#list + 1] = src.deathRecapID
             elseif seen[key] then
                 collisions[key] = true
             else

@@ -200,14 +200,14 @@ end
 --- be used as a table key could not be memoized, passed to the client, or
 --- printed, so it is dropped here rather than at three later places.
 ---
---- @param deaths table|nil  row.deaths
---- @return table|nil  { recapID, ... } newest first
+--- @param deaths table|nil  row.deaths, a flat array of ids
+--- @return table|nil  a fresh flat array, newest first
 local function copyRecapIDs(deaths)
     if type(deaths) ~= "table" then return nil end
     local Secrets = NS.Secrets
     local ids = {}
     for i = 1, #deaths do
-        local id = deaths[i] and deaths[i].recapID
+        local id = deaths[i]
         if id ~= nil and (not Secrets or Secrets.IsSafeKey(id)) then
             ids[#ids + 1] = id
         end
