@@ -2079,51 +2079,6 @@ test("Tooltip: the time column is sized to the widest time in THIS recap", funct
         "a recap spanning 900s must reserve more room than one spanning 2s")
 end)
 
-test("Tooltip: a Deaths cell follows the same timestamp setting as the list", function()
-    -- The cell tooltip is the index into the drill-down, so the two labelling
-    -- deaths differently would make one list look like two.
-    -- red under: the cell tooltip formatting the wall clock unconditionally.
-    local inst, cfg, anchor = bench{ configure = function(c)
-        c.text = c.text or {}
-        c.text.deathTimeFormat = "elapsed"
-    end }
-    inst.mocks.setDeathRecap({
-        HasRecapEvents = function() return true end,
-        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
-    })
-    local row = deadGridRow()
-    row.deathTimes = { 1356, 673, 296 }
-    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
-
-    local lines = spellLines(inst)
-    assertEqual(lines[1].amount:GetText(), "22:36")
-    assertEqual(lines[3].amount:GetText(), "04:56")
-end)
-
-test("Tooltip: a Deaths cell dated by fight time uses the same fallback", function()
-    -- The cell tooltip and the drill-down must date a death identically; one
-    -- falling back and the other not is the two lists disagreeing again.
-    local inst, cfg, anchor = bench{ configure = function(c)
-        c.text = c.text or {}
-        c.text.deathTimeFormat = "elapsed"
-    end }
-    inst.mocks.setDeathRecap({
-        HasRecapEvents = function() return true end,
-        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
-    })
-    inst.mocks.setSession(1, inst.mocks.Enum.DamageMeterType.Deaths, {
-        combatSources = {
-            { sourceGUID = ALPHA, totalAmount = 0, deathRecapID = 29,
-              deathTimeSeconds = 1356 },
-        }, maxAmount = 0, totalAmount = 0,
-    })
-
-    local row = deadGridRow()
-    row.deaths, row.deathTimes = { 29 }, { -1 }
-    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
-    assertEqual(spellLines(inst)[1].amount:GetText(), "22:36")
-end)
-
 test("Tooltip: the name columns shrink to the names actually in this recap", function()
     -- Reserved at 22 and 16 characters whatever the recap held, so a list of
     -- "Melee" and "Cryo Surge" carried half a column of slack while the numbers
@@ -2194,23 +2149,4 @@ test("Tooltip: a SECRET name falls back to the fixed reservation", function()
         "measuring a secret name raised")
     local line = spellLines(inst)[1]
     assertTrue(line.label:GetWidth() > 0, "the column lost its reservation entirely")
-end)
-
-test("Tooltip: a Deaths cell uses the segment anchor too", function()
-    -- The cell tooltip is the index into the drill-down; the two dating a death
-    -- differently is the two lists disagreeing.
-    local inst, cfg, anchor = bench{ configure = function(c)
-        c.text = c.text or {}
-        c.text.deathTimeFormat = "elapsed"
-    end }
-    inst.mocks.setDeathRecap({
-        HasRecapEvents = function() return true end,
-        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
-    })
-    inst.NS.State.SetSegmentStart(0)
-
-    local row = deadGridRow()
-    row.deaths, row.deathTimes = { 29 }, { -1 }
-    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
-    assertEqual(spellLines(inst)[1].amount:GetText(), "00:29")
 end)

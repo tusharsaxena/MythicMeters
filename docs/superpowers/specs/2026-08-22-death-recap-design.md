@@ -1,6 +1,10 @@
 # Death recap — design (issue #1)
 
-Status: **implemented 2026-08-22**. Drafted, approved and built the same day; the sections below were amended where the build disagreed with the draft, and each amendment says so. Implements
+Status: **implemented 2026-08-22.** One decision below was reversed the same day: a "time into the
+fight" timestamp style was built and removed, because nothing on the client can date a past death
+against the run it happened in. See §11.
+
+ Drafted, approved and built the same day; the sections below were amended where the build disagreed with the draft, and each amendment says so. Implements
 [#1 "A death-recap window for the run"](https://github.com/tusharsaxena/MythicMeters/issues/1),
 **re-shaped in the same conversation** from the issue's two-pane window to a drill-down. The
 issue's target behaviour is unchanged; only the surface it lands on is.
@@ -291,3 +295,25 @@ Cases that must exist, each red before its fix:
   unrelated, since no `WINDOW_TEMPLATE` change is needed here.
 * **The richer event fields** — `avoidable`, `critical`, `school`, `deadly` — are read and
   discarded. Avoidable damage in a recap is a plausible later refinement.
+
+## 11. Reversed: dating a death against its run
+
+A **"time into the fight"** timestamp style shipped and was removed. Three derivations of the
+figure were tried, and the probe in `/mm debug recap` killed each in turn:
+
+| Derivation | Why it failed |
+|---|---|
+| The Deaths row's own `deathTimeSeconds` | **-1 on the Overall session**, which is what a window shows by default. |
+| A join to the **Current** session on the recap id | Current holds real offsets *during* a run and **zero rows** once it is over — which is when a death list is read. |
+| `time() - GetSessionDurationSeconds()` | The session's duration is **combat** time, not wall time: ~32 minutes of it spanning a run whose deaths were ~175 minutes back. |
+| An anchor the addon stamps itself, at `DAMAGE_METER_RESET` | Built, and still did not produce a usable figure in the live client. Removed with the rest. |
+
+**The lesson is about method, not about the API.** Every one of those was plausible from a
+screenshot, each had passing tests, and none of the offline fixtures reproduced the live client.
+What settled it was `/mm debug recap`'s **dating** section printing the *inputs* — the row's own
+figure, each lookup's answer, and every style side by side — rather than the conclusion. That
+section is deliberately **kept** now that the feature is gone: it is what a fourth attempt will
+need on its first day, and its comment says so.
+
+Two styles remain: **time of day** and **how long ago**. Both come from the recap's own newest
+event timestamp, which is absolute epoch and always present.

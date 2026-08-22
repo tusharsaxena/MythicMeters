@@ -358,18 +358,10 @@ a raider most wants to know what killed them is the moment they are still fighti
   stops at both ends, survives the refresh tick rather than snapping back, and resets to the top when
   you enter or leave a breakdown. Shrink the window until rows are hidden to test it.
 - The drill-down **does not reshuffle** while you watch it, in or out of combat.
-- **Settings → Text → Death timestamps** offers three styles, and the Deaths cell tooltip and the
-  death list must agree on whichever is picked — the first is the index into the second, and two
-  labellings would make one list look like two. **Time into the fight** is the meter's own offset
-  into the segment the window is showing, so it reads as time into the run in a key and time into the
-  fight in the open world; on **Overall** the client reports `-1` for every death, so the figure is
-  looked up on the **Current** session instead and joined on the recap id. Check this one on an
-  Overall window specifically: that is the case it was reported broken in, and "time into the fight"
-  reading identically to "time of day" there means the lookup is not firing. Mid-pull it does fall
-  back to the clock, because both the id and the offset are secret then. **After the run, out of the
-  dungeon**, the client offers nothing at all — Current is empty and Overall reports `-1` — so the
-  figure comes from an anchor this addon stamps at the meter reset. A `/reload` mid-run moves that
-  anchor, and deaths before it correctly show the wall clock instead of a negative offset.
+- **Settings → Text → Death timestamps** offers two styles — time of day, and how long ago — and the
+  Deaths cell tooltip and the death list must agree on whichever is picked: the first is the index
+  into the second, and two labellings would make one list look like two. A third style, "time into
+  the fight", was built and removed; see Known limitations before adding one back.
 - **Deaths cell tooltip**: it lists **that player's deaths, one line each, newest first**, each
   labelled `Death N` with the wall-clock time in the right-hand column. It must NOT say "Spell
   breakdown" and must NOT say "No data yet" — a Deaths source carries no spell list, and running the

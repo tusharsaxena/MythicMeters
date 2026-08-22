@@ -423,9 +423,9 @@ end)
 test("Format.DeathTime renders the wall clock by default", function()
     local inst = T.load()
     local F = inst.NS.Numbers or inst.NS.Format
-    assertEqual(F.DeathTime(1787381686, 1356, "clock", 1787381686),
+    assertEqual(F.DeathTime(1787381686, "clock", 1787381686),
         inst.mocks.date("%H:%M:%S", 1787381686))
-    assertEqual(F.DeathTime(1787381686, 1356, nil, 1787381686),
+    assertEqual(F.DeathTime(1787381686, nil, 1787381686),
         inst.mocks.date("%H:%M:%S", 1787381686), "an unset style is the clock")
 end)
 
@@ -434,37 +434,17 @@ test("Format.DeathTime counts backwards from now", function()
     local F = inst.NS.Numbers or inst.NS.Format
     -- 8 minutes and change before `now`.
     local now = 1787381686
-    local text = F.DeathTime(now - 500, 1356, "ago", now)
+    local text = F.DeathTime(now - 500, "ago", now)
     assertTrue(text:find("8", 1, true) ~= nil, "500s is 8 minutes, got " .. text)
-    assertTrue(F.DeathTime(now - 20, 1356, "ago", now):lower():find("s") ~= nil,
+    assertTrue(F.DeathTime(now - 20, "ago", now):lower():find("s") ~= nil,
         "under a minute must read in seconds, not '0 min'")
-end)
-
-test("Format.DeathTime renders time into the fight as mm:ss", function()
-    local inst = T.load()
-    local F = inst.NS.Numbers or inst.NS.Format
-    assertEqual(F.DeathTime(1787381686, 1356, "elapsed", 1787381686), "22:36")
-    assertEqual(F.DeathTime(1787381686, 96, "elapsed", 1787381686), "01:36")
-end)
-
-test("Format.DeathTime falls back to the clock when the offset is unusable", function()
-    -- `deathTimeSeconds` reads -1 on the Overall session, which is where most of
-    -- this list is looked at. A "-1" rendered as "-1:-1" would be a number that
-    -- looks like data; the clock is always available.
-    -- red under: formatting the offset without checking it.
-    local inst = T.load()
-    local F = inst.NS.Numbers or inst.NS.Format
-    local clock = inst.mocks.date("%H:%M:%S", 1787381686)
-    assertEqual(F.DeathTime(1787381686, -1, "elapsed", 1787381686), clock)
-    assertEqual(F.DeathTime(1787381686, false, "elapsed", 1787381686), clock)
-    assertEqual(F.DeathTime(1787381686, nil, "elapsed", 1787381686), clock)
 end)
 
 test("Format.DeathTime answers nil when there is no timestamp at all", function()
     local inst = T.load()
     local F = inst.NS.Numbers or inst.NS.Format
-    assertTrue(nil == F.DeathTime(nil, 1356, "clock", 1787381686))
-    assertTrue(nil == F.DeathTime(nil, 1356, "elapsed", 1787381686))
+    assertTrue(nil == F.DeathTime(nil, "clock", 1787381686))
+    assertTrue(nil == F.DeathTime(nil, "ago", 1787381686))
 end)
 
 test("Format.DeathTime never inspects a secret", function()
@@ -474,6 +454,6 @@ test("Format.DeathTime never inspects a secret", function()
     local F = inst.NS.Numbers or inst.NS.Format
     inst.mocks.setSecretsAccessible(false)
     local secret = inst.mocks.secret(1787381686)
-    assertTrue(pcall(F.DeathTime, secret, 1356, "clock", 1787381686))
-    assertTrue(nil == F.DeathTime(secret, 1356, "clock", 1787381686))
+    assertTrue(pcall(F.DeathTime, secret, "clock", 1787381686))
+    assertTrue(nil == F.DeathTime(secret, "clock", 1787381686))
 end)

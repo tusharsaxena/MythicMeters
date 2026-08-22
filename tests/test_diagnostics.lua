@@ -845,11 +845,11 @@ test("Diagnostics: a slot that WAS probed and refused still raises the warning",
 end)
 
 test("Diagnostics: the recap probe reports why a death is dated the way it is", function()
-    -- "Time into the fight" reads as the wall clock whenever the offset behind
-    -- it is unusable, and there are four separate ways for that to happen: the
-    -- row's own offset is -1 (which is every row on Overall), the Current
-    -- session no longer holds the death, the id is secret, or the setting is not
-    -- what the reader thinks it is. From the outside all four look identical.
+    -- Kept after the feature it was written for was removed. "Time into the
+    -- fight" never worked, and this section is what proved it could not: it
+    -- prints the INPUTS rather than the conclusion, which is how the third
+    -- failed derivation was caught instead of shipped. Anything that later tries
+    -- to date a death against its run will need exactly this again.
     -- red under: printing the dates without the inputs that produced them.
     local inst = T.load{ enable = true }
     deathsSession(inst, {
@@ -862,10 +862,10 @@ test("Diagnostics: the recap probe reports why a death is dated the way it is", 
     assertTrue(text:find("-- dating --", 1, true) ~= nil, "the section must appear")
     assertTrue(text:find("deathTimeFormat", 1, true) ~= nil,
         "the setting in force has to be printed, not assumed")
-    assertTrue(text:find("DeathOffset", 1, true) ~= nil,
-        "the fallback's own answer is the thing in doubt")
-    -- Every style, side by side, so a reader can see two of them agreeing.
-    for _, style in ipairs({ "clock", "ago", "elapsed" }) do
+    assertTrue(text:find("deathTimeSeconds", 1, true) ~= nil,
+        "the field three failed derivations were built on has to be visible")
+    -- Both styles, side by side, so a reader can see them agreeing.
+    for _, style in ipairs({ "clock", "ago" }) do
         assertTrue(text:find(style, 1, true) ~= nil, "missing style: " .. style)
     end
 end)

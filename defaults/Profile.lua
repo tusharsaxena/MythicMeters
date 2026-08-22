@@ -224,10 +224,7 @@ local WINDOW_TEMPLATE = {
         rightSlot    = "none",    -- none | total | rate | percent
         numberFormat = "abbreviated",  -- abbreviated | full
         -- How a death is labelled in the Deaths tooltip and the death list.
-        -- The wall clock ships because it is the only one that is always
-        -- available: `elapsed` reads -1 on the Overall session and falls back
-        -- to this anyway. See modules/Format.lua's DeathTime.
-        deathTimeFormat = "clock",     -- clock | ago | elapsed
+        deathTimeFormat = "clock",     -- clock | ago
         -- Characters, not bytes, and 0 means "no cap". Above WoW's 12-character
         -- player-name limit because a meter also lists NPCs, which are not bound
         -- by it. The realm is stripped regardless of this number.

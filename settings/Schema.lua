@@ -320,17 +320,14 @@ local SLOT_SORT   = { "none", "total", "rate", "percent" }
 local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
 local NUMFMT_SORT    = { "abbreviated", "full" }
 
--- How a death is labelled. `elapsed` is the meter's own offset into the SEGMENT
--- the window is showing -- time into the run in a key, time into the fight in
--- the open world -- because there is no "start of the dungeon" clock outside
--- one. It reads -1 on the Overall session and falls back to the wall clock
--- there, which is why the wall clock is the shipped default.
+-- How a death is labelled. A third value, "time into the fight", was built and
+-- removed: nothing on the client can date a past death against the run it
+-- happened in. See the note on modules/Format.lua's DeathTime.
 local DEATHTIME_VALUES = {
-    clock   = L["Time of day"],
-    ago     = L["How long ago"],
-    elapsed = L["Time into the fight"],
+    clock = L["Time of day"],
+    ago   = L["How long ago"],
 }
-local DEATHTIME_SORT = { "clock", "ago", "elapsed" }
+local DEATHTIME_SORT = { "clock", "ago" }
 
 -- Every ANCHOR_* token GameTooltip:SetOwner accepts, minus ANCHOR_NONE and
 -- ANCHOR_PRESERVE — both of which mean "the caller places it itself", which is
@@ -829,7 +826,7 @@ NS.Schema = {
         values = DEATHTIME_VALUES, sorting = DEATHTIME_SORT,
         page = "text", group = L["Cell text"],
         label = L["Death timestamps"],
-        desc = L["How a death is labelled in the Deaths tooltip and the death list. Time into the fight is the meter's own offset into the segment this window is showing, and falls back to the time of day on Overall, where the client does not report one."],
+        desc = L["How a death is labelled in the Deaths tooltip and the death list."],
     },
     {
         -- 20 rather than WoW's 12-character player-name limit: a group meter also

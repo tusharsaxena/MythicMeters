@@ -613,21 +613,15 @@ end
 
 --- Why each death is dated the way it is.
 ---
---- ADDED AFTER TWO FIXES MISSED. "Time into the fight" renders as the wall clock
---- whenever the offset behind it is unusable, and there are four separate ways
---- for that to happen — the row's own offset is -1 (which is EVERY row on the
---- Overall session), the Current session no longer holds that death so the
---- fallback lookup finds nothing, the id is secret, or the setting in force is
---- not the one the reader thinks it is. From outside the addon all four look
---- identical: a column of clock times.
----
---- So this prints the inputs rather than the conclusion. Every style is rendered
---- side by side, because two of them agreeing IS the symptom.
+--- KEPT AFTER THE FEATURE IT WAS WRITTEN FOR WAS REMOVED. "Time into the fight"
+--- never worked and is gone, and this section is what proved it could not: it
+--- prints the INPUTS rather than the conclusion, which is how the third failed
+--- derivation was caught instead of shipped. Anything that later tries to date a
+--- death against its run will need exactly this again.
 local function reportDeathDating(sources)
     out("  -- dating --")
 
     local S = NS.Secrets
-
     local F = NS.Numbers or NS.Format
     local P = NS.Provider
     if not (F and F.DeathTime and P) then
@@ -652,23 +646,19 @@ local function reportDeathDating(sources)
             local recap = P.GetRecap and P.GetRecap(id) or nil
             local newest = recap and recap.events and recap.events[1]
             local when = newest and newest.timestamp
-            local rowOffset = src.deathTimeSeconds
-            local looked = P.DeathOffset and P.DeathOffset(id) or nil
 
-            out(string.format("    id=%s  row deathTimeSeconds=%s  DeathOffset(id)=%s",
-                tostring(id), shown(rowOffset), shown(looked)))
-            out(string.format("      clock=%s  ago=%s  elapsed=%s",
-                tostring(F.DeathTime(when, looked or rowOffset, "clock")),
-                tostring(F.DeathTime(when, looked or rowOffset, "ago")),
-                tostring(F.DeathTime(when, looked or rowOffset, "elapsed"))))
+            -- `deathTimeSeconds` is printed although nothing reads it any more.
+            -- It is the field three separate attempts were built on, and seeing
+            -- it read -1 here is what a reader needs before trying a fourth.
+            out(string.format("    id=%s  row deathTimeSeconds=%s  recap timestamp=%s",
+                tostring(id), shown(src.deathTimeSeconds), shown(when)))
+            out(string.format("      clock=%s  ago=%s",
+                tostring(F.DeathTime(when, "clock")),
+                tostring(F.DeathTime(when, "ago"))))
         end
         printed = printed + 1
         if printed >= 4 then break end
     end
-
-    out("    elapsed matching clock means the offset was refused: look at the two")
-    out("    figures above it. Both nil or -1 is the Overall session reporting")
-    out("    none AND the Current session no longer holding that death.")
 end
 
 --- What the outcome above means for issue #1, said out loud.

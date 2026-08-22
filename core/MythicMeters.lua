@@ -254,12 +254,6 @@ function NS:OnMeterReset()
     local Perf = NS.Perf
     local t0 = Perf and Perf.on and debugprofilestop()
     if NS.State then NS.State.WipeCache() end
-    -- A WIPED SESSION IS A NEW SEGMENT, and "time into the fight" is measured
-    -- from here. The client supplies no such clock — core/State.lua records what
-    -- was measured — so this stamp is the only anchor there is. Set BEFORE the
-    -- message, like the cache wipe above it, so a subscriber that recomputes
-    -- synchronously is never handed the previous run's start.
-    if NS.State and NS.State.SetSegmentStart then NS.State.SetSegmentStart() end
     self:SendMessage(MSG.METER_RESET)
     if t0 then Perf.Note("meterEvent", debugprofilestop() - t0) end
 end

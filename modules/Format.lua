@@ -555,29 +555,25 @@ end
 
 --- How a death is labelled, in one of three styles.
 ---
---- THREE STYLES BECAUSE THERE ARE THREE QUESTIONS. "When in the evening" wants a
---- wall clock; "how long ago" wants a countdown; "how far into the fight" wants
---- an offset. None is right for everyone, and the player picks.
+--- TWO STYLES BECAUSE THERE ARE TWO QUESTIONS: "when in the evening" wants a
+--- wall clock, and "how long ago" wants a countdown.
 ---
---- `elapsed` IS NOT "SINCE THE DUNGEON STARTED", and cannot be — there is no
---- such clock outside a dungeon. It is `deathTimeSeconds`, the meter's own
---- offset into the SEGMENT the window is showing, which in a key is time into
---- the run and in the open world is time into the fight. That is the honest
---- reading and it needs no client call. It is also **-1 on the Overall
---- session**, which is where most of a death list is looked at, so an unusable
---- offset falls back to the wall clock rather than rendering "-1" as if it were
---- data.
+--- A THIRD -- "how far into the fight" -- was built and removed. It has no clock
+--- to measure against: the client reports no offset for a death on the Overall
+--- session, the Current session is empty once a run is over, and the session's
+--- own duration is combat time rather than wall time. An anchor of the addon's
+--- own did not survive contact with a live client either. See the issue linked
+--- from docs/ARCHITECTURE.md before rebuilding it.
 ---
---- EVERY BRANCH IS ARITHMETIC OR A COMPARISON, and all three inputs come off a
---- recap. Each is gated, and a refused input answers nil — the caller draws an
+--- BOTH BRANCHES ARE ARITHMETIC OR A COMPARISON, and the inputs come off a
+--- recap. Each is gated, and a refused input answers nil -- the caller draws an
 --- em dash, exactly as it does for a death whose recap has gone.
 ---
 --- @param when any        the death's absolute timestamp, from its recap
---- @param offset any      `deathTimeSeconds`, or false/nil where there is none
---- @param style string|nil "clock" (default) | "ago" | "elapsed"
+--- @param style string|nil "clock" (default) | "ago"
 --- @param now number|nil  the current epoch time; defaults to `time()`
 --- @return string|nil
-function Format.DeathTime(when, offset, style, now)
+function Format.DeathTime(when, style, now)
     if when == nil or not Secrets.CanAccess(when) then return nil end
 
     local clock = date("%H:%M:%S", when)
@@ -593,16 +589,6 @@ function Format.DeathTime(when, offset, style, now)
             return string.format(L["%ds ago"] or "%ds ago", seconds)
         end
         return string.format(L["%dm ago"] or "%dm ago", math.floor(seconds / 60))
-    end
-
-    if style == "elapsed" then
-        -- `false` is the placeholder modules/Aggregator.lua uses for a death the
-        -- client gave no offset for; -1 is what the Overall session reports for
-        -- every death it holds.
-        if offset == nil or offset == false then return clock end
-        if not Secrets.CanCompare(offset) then return clock end
-        if offset < 0 then return clock end
-        return string.format("%02d:%02d", math.floor(offset / 60), math.floor(offset % 60))
     end
 
     return clock

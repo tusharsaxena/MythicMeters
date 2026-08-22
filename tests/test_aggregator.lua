@@ -1319,38 +1319,3 @@ test("The feign filter cannot run mid-pull, and does not pretend to", function()
         "if this ever reads 0, the restricted build found a plain key and the "
         .. "limitation can be lifted from docs/ARCHITECTURE.md")
 end)
-
-test("Each death carries its session offset beside its recap id", function()
-    -- The "time into the fight" label needs `deathTimeSeconds`, which is on the
-    -- source row and was being thrown away with everything else. A PARALLEL
-    -- array rather than a table per death: the perf harness counts allocations
-    -- on a path that runs four times a second.
-    -- red under: keeping only the ids.
-    local inst = loaded()
-    install(inst, {
-        src(ALPHA, 0, { recapID = 29, deathTime = 1356 }),
-        src(ALPHA, 0, { recapID = 27, deathTime = 296  }),
-    }, { statKey = "Deaths", maxAmount = 0 })
-
-    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })[1]
-    assertEqual(#row.deathTimes, 2)
-    assertEqual(row.deathTimes[1], 1356)
-    assertEqual(row.deathTimes[2], 296)
-end)
-
-test("A death with no session offset still lines up with its id", function()
-    -- The two arrays are read by index. A missing offset that shortened one of
-    -- them would silently pair each death with the previous one's time — which
-    -- is worse than showing no time at all.
-    -- red under: appending deathTimeSeconds without a placeholder.
-    local inst = loaded()
-    install(inst, {
-        src(ALPHA, 0, { recapID = 29, deathTime = 1356 }),
-        src(ALPHA, 0, { recapID = 28 }),
-        src(ALPHA, 0, { recapID = 27, deathTime = 296 }),
-    }, { statKey = "Deaths", maxAmount = 0 })
-
-    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })[1]
-    assertEqual(#row.deathTimes, 3, "the arrays fell out of step")
-    assertEqual(row.deathTimes[3], 296, "the last death took the wrong time")
-end)

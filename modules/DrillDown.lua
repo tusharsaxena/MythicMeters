@@ -229,46 +229,6 @@ local function copyRecapIDs(deaths)
     return ids
 end
 
---- The session offsets on an aggregated row, as a fresh plain array.
----
---- Padded to the length of the ids it accompanies, because the two are read by
---- INDEX: a short array would silently label each death with the previous one's
---- time, which is worse than labelling none of them.
----
---- @param times table|nil   row.deathTimes
---- @param deaths table|nil  row.deaths, for the length
---- @return table|nil
-local function copyOffsets(times, deaths)
-    if type(deaths) ~= "table" then return nil end
-    local out = {}
-    for i = 1, #deaths do
-        local when = (type(times) == "table") and times[i] or nil
-        if when == nil then when = false end
-        out[i] = when
-    end
-    return out
-end
-
---- Whether an offset is a figure rather than the client's way of saying it has
---- none.
----
---- THREE WAYS TO HAVE NO OFFSET, and -1 is the one that bites: it is what the
---- OVERALL session reports for every death it holds, it is a perfectly ordinary
---- number, and treating it as one dates a death "00:00 into the fight". `false`
---- is modules/Aggregator.lua's placeholder, and nil is a row built before any of
---- this existed.
----
---- @param offset any
---- @return boolean
-local function usableOffset(offset)
-    if offset == nil or offset == false then return false end
-    local Secrets = NS.Secrets
-    if Secrets and Secrets.CanCompare and not Secrets.CanCompare(offset) then
-        return false
-    end
-    return type(offset) == "number" and offset >= 0
-end
-
 --- Which timestamp style this window is set to.
 --- @param window table|number
 --- @return string|nil
@@ -366,10 +326,6 @@ function DrillDown:Enter(window, row, statKey, kind)
         statKey       = statKey,
         kind          = kind or "spells",
         deaths        = (kind == "deaths") and copyRecapIDs(row.deaths) or nil,
-        -- The offsets travel WITH the ids and are read by index beside them.
-        -- Captured here rather than looked up later for the same reason the ids
-        -- are: the aggregated row is rebuilt from scratch on the next pass.
-        deathTimes    = (kind == "deaths") and copyOffsets(row.deathTimes, row.deaths) or nil,
         -- Which of the three timestamp styles this window is set to. Read at
         -- Enter so every row in one list is labelled the same way even if the
         -- setting changes while it is open.
@@ -600,10 +556,9 @@ end
 --- timestamp is the moment of death.
 ---
 --- @param recap table|nil  a Provider.GetRecap result
---- @param offset any       this death's `deathTimeSeconds`, or false
 --- @param style string|nil the window's timestamp style
 --- @return string|nil
-local function deathClock(recap, offset, style)
+local function deathClock(recap, style)
     local events = recap and recap.events
     if type(events) ~= "table" then return nil end
 
@@ -620,7 +575,7 @@ local function deathClock(recap, offset, style)
 
     local F = NS.Numbers or NS.Format
     if not (F and F.DeathTime) then return nil end
-    return F.DeathTime(newest.timestamp, offset, style)
+    return F.DeathTime(newest.timestamp, style)
 end
 
 --- One drill-down row from one death.
@@ -628,35 +583,15 @@ end
 --- @param recapID number  plain, already vetted by copyRecapIDs
 --- @param ordinal number   1 for the run's FIRST death
 --- @param view table
-local function deathRow(recapID, ordinal, view, offset)
+local function deathRow(recapID, ordinal, view)
     -- `false` is a death the client gave no id for. It still draws — the count
     -- says it happened — but there is nothing to read and nothing to open, so it
     -- carries no recapID and takes its pool identity from its position instead.
     local openable = (recapID ~= false and recapID ~= nil)
 
     local P = provider()
-    -- THE OFFSET FALLS BACK TO THE CURRENT SESSION. Every offset on a row read
-    -- off OVERALL is -1 — the client reports no figure there — and Overall is
-    -- what a window shows by default, so "time into the fight" dated every death
-    -- with the wall clock and looked identical to "time of day". Current holds
-    -- the real figure for the same deaths, joined on the same recap id.
-    if openable and not usableOffset(offset) and P and P.DeathOffset then
-        offset = P.DeathOffset(recapID)
-    end
-
     local recap = (openable and P and P.GetRecap) and P.GetRecap(recapID) or nil
-
-    -- AND THEN THE ANCHOR OF OUR OWN, which is the only one left. Measured on a
-    -- live client reviewed after a run: Current held nothing, Overall reported
-    -- -1 for all eighteen deaths, so neither the row nor the lookup above has an
-    -- offset and the style silently became "time of day". core/State.lua's
-    -- SetSegmentStart records the rest of that measurement.
-    if not usableOffset(offset) and P and P.SegmentOffset then
-        local newest = recap and recap.events and recap.events[1]
-        offset = P.SegmentOffset(newest and newest.timestamp)
-    end
-
-    local clock = recap and deathClock(recap, offset, view.timeStyle) or nil
+    local clock = recap and deathClock(recap, view.timeStyle) or nil
 
     local values = {}
     -- Plain ones on purpose: see the row contract above. The caption carries the
@@ -696,8 +631,7 @@ local function deathRows(view)
 
     local total = #ids
     for i = 1, total do
-        rows[#rows + 1] = deathRow(ids[i], total - i + 1, view,
-            view.deathTimes and view.deathTimes[i])
+        rows[#rows + 1] = deathRow(ids[i], total - i + 1, view)
         if #rows >= MAX_SPELL_ROWS then break end
     end
     return rows

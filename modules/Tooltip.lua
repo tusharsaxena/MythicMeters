@@ -1379,18 +1379,16 @@ local NO_CLOCK_TEXT = "\226\128\148"
 ---
 --- The moment of death is the recap's NEWEST event, never `deathTimeSeconds` —
 --- those are different clocks, one absolute and one seconds-into-session, and
---- mixing them yields a plausible time rather than a visible failure. The offset
---- is passed alongside and used only by the style that wants one.
+--- the second is unusable besides (see modules/Format.lua's DeathTime).
 ---
 --- Kept in step with modules/DrillDown.lua's copy on purpose: this tooltip is
 --- the INDEX into that list, and the two labelling deaths differently would make
 --- one list look like two.
 ---
 --- @param recap table|nil
---- @param sessionOffset any  this death's `deathTimeSeconds`, or false
 --- @param style string|nil  the window's timestamp style
 --- @return string|nil
-local function deathClockOf(recap, sessionOffset, style)
+local function deathClockOf(recap, style)
     local events = recap and recap.events
     if type(events) ~= "table" then return nil end
 
@@ -1407,7 +1405,7 @@ local function deathClockOf(recap, sessionOffset, style)
 
     local F = NS.Numbers or NS.Format
     if not (F and F.DeathTime) then return nil end
-    return F.DeathTime(newest.timestamp, sessionOffset, style)
+    return F.DeathTime(newest.timestamp, style)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1752,16 +1750,6 @@ local function sourceDetailFor(window, statKey, row)
     return source
 end
 
---- Whether an offset is a figure rather than the client's way of saying it has
---- none. -1 is what the Overall session reports; `false` is the aggregator's
---- placeholder. Kept in step with modules/DrillDown.lua's copy.
-local function usableOffset(seconds)
-    if seconds == nil or seconds == false then return false end
-    local S = NS.Secrets
-    if S and S.CanCompare and not S.CanCompare(seconds) then return false end
-    return type(seconds) == "number" and seconds >= 0
-end
-
 --- Draw the "Deaths" section on a GRID cell: one line per death, newest first.
 ---
 --- ISSUE #1'S FIRST COMPLAINT. This cell used to run the ordinary spell path,
@@ -1797,19 +1785,7 @@ local function addDeathList(row, style, timeStyle)
             -- The offset falls back to the Current session for the reason
             -- modules/DrillDown.lua's copy records: Overall reports -1 for every
             -- death it holds, and Overall is what a window shows by default.
-            local recap = P.GetRecap(id)
-            local seconds = row.deathTimes and row.deathTimes[i]
-            if not usableOffset(seconds) and P.DeathOffset then
-                seconds = P.DeathOffset(id)
-            end
-            -- ...and then the anchor this addon keeps, which after a run is the
-            -- only one there is. See modules/DrillDown.lua's copy for what was
-            -- measured; the two must date a death identically.
-            if not usableOffset(seconds) and P.SegmentOffset then
-                local newest = recap and recap.events and recap.events[1]
-                seconds = P.SegmentOffset(newest and newest.timestamp)
-            end
-            clock = deathClockOf(recap, seconds, timeStyle)
+            clock = deathClockOf(P.GetRecap(id), timeStyle)
         end
 
         -- Numbered chronologically and listed newest first, exactly as
