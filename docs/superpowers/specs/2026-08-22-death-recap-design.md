@@ -82,11 +82,17 @@ EllesmereUIDamageMeters' in-combat tooltip, which renders exact percentages and 
 | `modules/DrillDown.lua` | A second view kind, `deaths`, beside `spells`. `OnCellClick` enters it instead of opening Blizzard's frame. |
 | `modules/Row.lua` | A cell may carry `displayText`, which wins over the formatted number. |
 | `modules/Tooltip.lua` | A death branch in `SpellTooltip`, rendering the event list through the existing `drawLine`. |
-| `core/MythicMeters.lua` | `UNIT_SPELLCAST_SUCCEEDED` onto the bus, for the feign filter. |
+| `modules/Feign.lua` | **new — AMENDED.** The draft assumed the feign set could live on existing state. It owns a set, prunes it against unit health and the roster, and subscribes to three messages; that is a module, and the aggregator may not register the game event that feeds it. |
+| `core/MythicMeters.lua` | `UNIT_SPELLCAST_SUCCEEDED` → `modules/Feign.lua`. **AMENDED: nothing reaches the bus** — republishing every cast in a raid to save one integer comparison would be worse, and no other file may see a game event. |
 | `locales/enUS.lua` | New strings. |
-| `tests/test_drilldown.lua`, `test_tooltip.lua`, `test_aggregator.lua`, `test_provider.lua`, `test_compat.lua` | Extended. |
+| `tests/test_feign.lua` | **new** suite, declared in `tests/run.lua`'s manifest. |
+| `tests/wow_mock.lua` | A `C_DeathRecap` seam, absent by default, and the addon's **first** unit-health seam — nothing here had ever read one, because every number it shows comes from `C_DamageMeter`. |
+| `tests/test_drilldown.lua`, `test_tooltip.lua`, `test_aggregator.lua`, `test_provider.lua`, `test_compat.lua`, `test_row.lua`, `test_lifecycle.lua` | Extended. |
+| `MythicMeters.toc` | `modules\Feign.lua`, after `modules\Roster.lua` and before `modules\Aggregator.lua`. |
 
-No new module and no new file. The feature is a view kind and a tooltip body.
+The death recap itself is a view kind and a tooltip body — no new module. `modules/Feign.lua` is
+one, and it is not part of the recap: it is a defect in the shipped Deaths column that this feature
+would otherwise have made visible twice over.
 
 ## 4. The data path
 
