@@ -2063,3 +2063,24 @@ test("Tooltip: the time column is sized to the widest time in THIS recap", funct
     assertTrue(wide > narrow,
         "a recap spanning 900s must reserve more room than one spanning 2s")
 end)
+
+test("Tooltip: a Deaths cell follows the same timestamp setting as the list", function()
+    -- The cell tooltip is the index into the drill-down, so the two labelling
+    -- deaths differently would make one list look like two.
+    -- red under: the cell tooltip formatting the wall clock unconditionally.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.text = c.text or {}
+        c.text.deathTimeFormat = "elapsed"
+    end }
+    inst.mocks.setDeathRecap({
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id) return { { spellId = 1, timestamp = id } } end,
+    })
+    local row = deadGridRow()
+    row.deathTimes = { 1356, 673, 296 }
+    inst.NS.Tooltip:CellTooltip(row, "Deaths", anchor, cfg)
+
+    local lines = spellLines(inst)
+    assertEqual(lines[1].amount:GetText(), "22:36")
+    assertEqual(lines[3].amount:GetText(), "04:56")
+end)

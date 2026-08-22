@@ -1356,16 +1356,22 @@ local MAX_DEATH_LINES = 12
 -- recap. The same em dash modules/DrillDown.lua puts in the cell.
 local NO_CLOCK_TEXT = "\226\128\148"
 
---- The wall-clock time a death happened, from its recap's newest event.
+--- How one death is labelled, in whichever style the hovered window is set to.
 ---
---- The events arrive newest first, so element one is the killing blow and its
---- timestamp is the moment of death. Never `deathTimeSeconds`: that is a
---- different clock — seconds-into-session, and -1 on Overall — and mixing the
---- two yields a plausible time rather than a visible failure.
+--- The moment of death is the recap's NEWEST event, never `deathTimeSeconds` —
+--- those are different clocks, one absolute and one seconds-into-session, and
+--- mixing them yields a plausible time rather than a visible failure. The offset
+--- is passed alongside and used only by the style that wants one.
+---
+--- Kept in step with modules/DrillDown.lua's copy on purpose: this tooltip is
+--- the INDEX into that list, and the two labelling deaths differently would make
+--- one list look like two.
 ---
 --- @param recap table|nil
+--- @param sessionOffset any  this death's `deathTimeSeconds`, or false
+--- @param style string|nil  the window's timestamp style
 --- @return string|nil
-local function deathClockOf(recap)
+local function deathClockOf(recap, sessionOffset, style)
     local events = recap and recap.events
     if type(events) ~= "table" then return nil end
 
@@ -1380,9 +1386,9 @@ local function deathClockOf(recap)
         return nil
     end
 
-    local when = newest.timestamp
-    if when == nil or (Secrets and not Secrets.CanAccess(when)) then return nil end
-    return date("%H:%M:%S", when)
+    local F = NS.Numbers or NS.Format
+    if not (F and F.DeathTime) then return nil end
+    return F.DeathTime(newest.timestamp, sessionOffset, style)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1705,8 +1711,9 @@ end
 ---
 --- @param row table       an aggregated row (needs .deaths)
 --- @param style table
+--- @param timeStyle string|nil  the window's timestamp style
 --- @return number  lines drawn
-local function addDeathList(row, style)
+local function addDeathList(row, style, timeStyle)
     local deaths = row.deaths
     if type(deaths) ~= "table" or #deaths == 0 then return 0 end
 
@@ -1722,7 +1729,8 @@ local function addDeathList(row, style)
         local id = deaths[i]
         local clock
         if id ~= false and id ~= nil then
-            clock = deathClockOf(P.GetRecap(id))
+            clock = deathClockOf(P.GetRecap(id),
+                row.deathTimes and row.deathTimes[i], timeStyle)
         end
 
         -- Numbered chronologically and listed newest first, exactly as
@@ -1907,7 +1915,8 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     -- DEATHS TAKES ITS OWN PATH, and never the spell one. See addDeathList.
     local shown = 0
     if statKey == "Deaths" then
-        shown = addDeathList(row, style)
+        shown = addDeathList(row, style, config.deathTimeFormat
+            or (window and window.text and window.text.deathTimeFormat))
     else
         local source = config.showSpells and sourceDetailFor(window, statKey, row)
         if source then

@@ -223,6 +223,34 @@ local function copyRecapIDs(deaths)
     return ids
 end
 
+--- The session offsets on an aggregated row, as a fresh plain array.
+---
+--- Padded to the length of the ids it accompanies, because the two are read by
+--- INDEX: a short array would silently label each death with the previous one's
+--- time, which is worse than labelling none of them.
+---
+--- @param times table|nil   row.deathTimes
+--- @param deaths table|nil  row.deaths, for the length
+--- @return table|nil
+local function copyOffsets(times, deaths)
+    if type(deaths) ~= "table" then return nil end
+    local out = {}
+    for i = 1, #deaths do
+        local when = (type(times) == "table") and times[i] or nil
+        if when == nil then when = false end
+        out[i] = when
+    end
+    return out
+end
+
+--- Which timestamp style this window is set to.
+--- @param window table|number
+--- @return string|nil
+local function timeStyleOf(window)
+    local text = type(window) == "table" and window.text or nil
+    return text and text.deathTimeFormat or nil
+end
+
 --- Whether this client can open a death at all.
 ---
 --- Asked BEFORE entering the deaths view rather than discovered inside it: a
@@ -312,6 +340,14 @@ function DrillDown:Enter(window, row, statKey, kind)
         statKey       = statKey,
         kind          = kind or "spells",
         deaths        = (kind == "deaths") and copyRecapIDs(row.deaths) or nil,
+        -- The offsets travel WITH the ids and are read by index beside them.
+        -- Captured here rather than looked up later for the same reason the ids
+        -- are: the aggregated row is rebuilt from scratch on the next pass.
+        deathTimes    = (kind == "deaths") and copyOffsets(row.deathTimes, row.deaths) or nil,
+        -- Which of the three timestamp styles this window is set to. Read at
+        -- Enter so every row in one list is labelled the same way even if the
+        -- setting changes while it is open.
+        timeStyle     = timeStyleOf(window),
         name          = row.name,
         classFilename = row.classFilename,
         sessionType   = sessionTypeOf(window),
@@ -523,21 +559,24 @@ local function spellRow(spell, view, maxAmount)
     }
 end
 
---- The wall-clock time a death happened, as "HH:MM:SS", or nil.
+--- How this death is labelled, in whichever style the window is set to.
 ---
---- FROM THE RECAP'S OWN NEWEST EVENT, and never from `deathTimeSeconds`. The two
---- are different clocks: an event timestamp is absolute epoch, while
---- `deathTimeSeconds` is seconds-into-session and reads -1 on the Overall
---- session, where most of this list is looked at. Mixing them produces a
---- plausible time rather than a visible failure, which is the worse kind of
---- wrong.
+--- THE MOMENT OF DEATH COMES FROM THE RECAP'S OWN NEWEST EVENT, and never from
+--- `deathTimeSeconds`. The two are different clocks: an event timestamp is
+--- absolute epoch, while `deathTimeSeconds` is seconds-into-session and reads -1
+--- on the Overall session, where most of this list is looked at. Mixing them
+--- produces a plausible time rather than a visible failure, which is the worse
+--- kind of wrong — so the offset is passed alongside as the OFFSET and used only
+--- by the style that wants one.
 ---
 --- The events arrive newest first, so element one is the killing blow and its
 --- timestamp is the moment of death.
 ---
 --- @param recap table|nil  a Provider.GetRecap result
+--- @param offset any       this death's `deathTimeSeconds`, or false
+--- @param style string|nil the window's timestamp style
 --- @return string|nil
-local function deathClock(recap)
+local function deathClock(recap, offset, style)
     local events = recap and recap.events
     if type(events) ~= "table" then return nil end
 
@@ -552,11 +591,9 @@ local function deathClock(recap)
         return nil
     end
 
-    local when = newest.timestamp
-    -- `date` would raise on a secret, and a timestamp is undocumented enough
-    -- that its secrecy is not something to assume either way.
-    if when == nil or (Secrets and not Secrets.CanAccess(when)) then return nil end
-    return date("%H:%M:%S", when)
+    local F = NS.Numbers or NS.Format
+    if not (F and F.DeathTime) then return nil end
+    return F.DeathTime(newest.timestamp, offset, style)
 end
 
 --- One drill-down row from one death.
@@ -564,7 +601,7 @@ end
 --- @param recapID number  plain, already vetted by copyRecapIDs
 --- @param ordinal number   1 for the run's FIRST death
 --- @param view table
-local function deathRow(recapID, ordinal, view)
+local function deathRow(recapID, ordinal, view, offset)
     -- `false` is a death the client gave no id for. It still draws — the count
     -- says it happened — but there is nothing to read and nothing to open, so it
     -- carries no recapID and takes its pool identity from its position instead.
@@ -572,7 +609,7 @@ local function deathRow(recapID, ordinal, view)
 
     local P = provider()
     local clock = (openable and P and P.GetRecap)
-        and deathClock(P.GetRecap(recapID)) or nil
+        and deathClock(P.GetRecap(recapID), offset, view.timeStyle) or nil
 
     local values = {}
     -- Plain ones on purpose: see the row contract above. The caption carries the
@@ -612,7 +649,8 @@ local function deathRows(view)
 
     local total = #ids
     for i = 1, total do
-        rows[#rows + 1] = deathRow(ids[i], total - i + 1, view)
+        rows[#rows + 1] = deathRow(ids[i], total - i + 1, view,
+            view.deathTimes and view.deathTimes[i])
         if #rows >= MAX_SPELL_ROWS then break end
     end
     return rows

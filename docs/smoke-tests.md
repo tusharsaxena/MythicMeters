@@ -358,6 +358,12 @@ a raider most wants to know what killed them is the moment they are still fighti
   stops at both ends, survives the refresh tick rather than snapping back, and resets to the top when
   you enter or leave a breakdown. Shrink the window until rows are hidden to test it.
 - The drill-down **does not reshuffle** while you watch it, in or out of combat.
+- **Settings → Text → Death timestamps** offers three styles, and the Deaths cell tooltip and the
+  death list must agree on whichever is picked — the first is the index into the second, and two
+  labellings would make one list look like two. **Time into the fight** is the meter's own offset
+  into the segment the window is showing, so it reads as time into the run in a key and time into the
+  fight in the open world; on **Overall** the client reports `-1` and it falls back to the time of
+  day, which is expected rather than a bug.
 - **Deaths cell tooltip**: it lists **that player's deaths, one line each, newest first**, each
   labelled `Death N` with the wall-clock time in the right-hand column. It must NOT say "Spell
   breakdown" and must NOT say "No data yet" — a Deaths source carries no spell list, and running the
@@ -375,9 +381,12 @@ a raider most wants to know what killed them is the moment they are still fighti
   the bars. A header sitting flush against the first bar means the section gap is missing, and on a
   live client it also means a bar carrier is on tooltip line 1, which permanently restyles the title
   of every GameTooltip in the game until `/reload`.
-- **Hovering a death row** lists what killed them — one line per incoming hit, **oldest first**, with
-  icon, seconds before death, spell name, the attacker in parentheses where the client names one,
-  the damage taken, and the HP percentage remaining. The bar behind each line is **HP remaining**,
+- **Hovering a death row** lists what killed them — one line per incoming hit, **oldest first**, in
+  four columns: seconds before death, spell, attacker, damage taken, and the HP percentage
+  remaining. The columns must line up down the whole tooltip; a long spell or caster name is clipped
+  into its column rather than pushing the numbers off the edge, and it must never wrap onto a second
+  line. A **melee swing** reads as `Melee` with the weapon icon — it carries no spell id at all, and
+  `#?` there means the fallback is broken. The bar behind each line is **HP remaining**,
   not damage, so it empties as you read down. The last line is the killing blow and carries an
   overkill clause. An event with `hideCaster` shows no parentheses at all — never an empty `()`.
 - **Mid-pull the bars must still draw.** The percentage text may vanish (a percentage is a division,

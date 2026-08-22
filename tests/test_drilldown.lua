@@ -704,3 +704,52 @@ test("Every death row has a distinct pool identity, id or no id", function()
     assertEqual(#rows, 2)
     assertTrue(rows[1].guid ~= rows[2].guid, "two death rows share a pool identity")
 end)
+
+test("A death row's caption follows the window's timestamp setting", function()
+    -- red under: deathClock formatting the wall clock unconditionally.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29 }, { 1356 }
+    row.deathRecapID = 29
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths.displayText, "22:36")
+end)
+
+test("A death with no session offset falls back to the wall clock", function()
+    -- `deathTimeSeconds` is -1 on Overall, which is where most of this list is
+    -- looked at. Rendering that as "-1:-1" would be a number that looks like data.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29 }, { -1 }
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths.displayText,
+        inst.mocks.date("%H:%M:%S", 29))
+end)
+
+test("The offsets travel with the ids, in step", function()
+    -- Two parallel arrays copied into the view. If only one is captured, or they
+    -- fall out of step, each death is labelled with the previous one's time.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    cfg.text = cfg.text or {}
+    cfg.text.deathTimeFormat = "elapsed"
+
+    local row = playerRow()
+    row.deaths, row.deathTimes = { 29, 28, 27 }, { 1356, 673, 296 }
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertEqual(rows[1].values.Deaths.displayText, "22:36")
+    assertEqual(rows[2].values.Deaths.displayText, "11:13")
+    assertEqual(rows[3].values.Deaths.displayText, "04:56")
+end)
