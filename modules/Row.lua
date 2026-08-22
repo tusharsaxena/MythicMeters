@@ -133,11 +133,17 @@ end
 --- be a truth test on a secret, which raises; `== nil` on a non-boolean secret
 --- is explicitly permitted (design §4).
 ---
---- @return any total, any rate, any maxAmount, number|nil percent
+--- `displayText` is the fifth return and the odd one out: a string this addon
+--- COMPOSED, not a figure the meter reported. A death row's cell shows the
+--- wall-clock time the player died (modules/DrillDown.lua), which no number
+--- formatter can produce from a value. It is read here so the two row shapes
+--- stay resolved in one place, exactly like the four figures beside it.
+---
+--- @return any total, any rate, any maxAmount, number|nil percent, string|nil displayText
 local function cellFigures(entry, key)
     local source = entry.cells or entry.values
     local c = source and source[key]
-    if c == nil then return nil, nil, nil, nil end
+    if c == nil then return nil, nil, nil, nil, nil end
 
     local total = c.value
     if total == nil then total = c.total end
@@ -145,7 +151,7 @@ local function cellFigures(entry, key)
     local max = c.maxAmount
     if max == nil then max = entry.maxAmount end
 
-    return total, c.rate, max, c.percent
+    return total, c.rate, max, c.percent, c.displayText
 end
 
 --- Render a share-of-the-group figure.
@@ -698,6 +704,7 @@ end
 --- @param entry table  the aggregated row (a player, or a spell in a
 ---   drill-down); every numeric field on it is an OPAQUE handle apart from
 ---   `percent`, which modules/Aggregator.lua computed and is therefore plain
+---   `displayText`, a caption this addon composed — see cellFigures
 function Cell:SetValue(entry)
     self.entry = entry
 
@@ -705,7 +712,7 @@ function Cell:SetValue(entry)
     local text = cfg.text or {}
     local mode = text.numberFormat or "abbreviated"
 
-    local total, rate, colMax, percent = cellFigures(entry, self.key)
+    local total, rate, colMax, percent, displayText = cellFigures(entry, self.key)
     local bar = self.frame
 
     -- `== nil` is the ONE test this file applies to a meter value, and it is
@@ -782,6 +789,20 @@ function Cell:SetValue(entry)
     -- One figure sits at the left edge; two span the cell.
     if primary == nil then
         primary, secondary = secondary, nil
+    end
+
+    -- A CELL CAN CARRY A CAPTION INSTEAD OF A FIGURE, and when it does the
+    -- caption is the whole cell. A death row's Deaths cell holds the wall-clock
+    -- time of the death; a second number beside it would read as two columns,
+    -- and the slot the profile happens to prefer — the shipped default is
+    -- `rate` — would otherwise print a figure where the time belongs.
+    --
+    -- Applied AFTER the slot resolution and the fallback above, so a cell that
+    -- leaves this nil goes through the identical path it always has. `~= nil`
+    -- and not `or`: `or` is a truth test spelled differently, and it would also
+    -- fire on an empty string.
+    if displayText ~= nil then
+        primary, secondary = displayText, nil
     end
 
     self.left:SetText(primary or "")
