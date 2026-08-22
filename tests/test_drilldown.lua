@@ -443,3 +443,178 @@ test("A bulk registry change sweeps views whose window is gone", function()
     assertNil(views[9999], "the window 9999 does not exist")
     assertEqual(inst.NS.DrillDown.IsActive(cfg), true, "and the live one is untouched")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The deaths view (issue #1)
+-- ---------------------------------------------------------------------------
+--
+-- A second view kind beside the spell breakdown. Its rows are DEATHS, not
+-- spells: the name column carries an ordinal and the drilled column carries the
+-- wall-clock time the player died, with a full bar behind it.
+--
+-- The Deaths click becomes a ladder rather than a replacement. The deaths view
+-- first; Blizzard's own frame second, so a client without C_DeathRecap keeps
+-- exactly the behaviour it has today; the ordinary breakdown last, so the cell
+-- is never dead.
+
+--- A grid row for a player who died `n` times, ids descending as the API gives
+--- them.
+local function deadRow(ids, opts)
+    local row = playerRow(opts)
+    row.deaths = {}
+    for i = 1, #ids do row.deaths[i] = { recapID = ids[i] } end
+    row.deathRecapID = ids[1]
+    return row
+end
+
+--- Install a client that answers a recap for every id, with a known death time.
+local function withRecaps(inst, opts)
+    opts = opts or {}
+    inst.mocks.setDeathRecap({
+        HasRecapEvents    = function(id) return not (opts.missing and opts.missing[id]) end,
+        GetRecapEvents    = function(id)
+            if opts.missing and opts.missing[id] then return nil end
+            return {
+                { spellId = 1301253, spellName = "Agony", amount = 327236,
+                  currentHP = 179516, overkill = 147720, event = "SPELL_DAMAGE",
+                  timestamp = (opts.base or 1787381686) + id },
+                { spellId = 264206, spellName = "Burrow", amount = 549517,
+                  currentHP = 466585, event = "SPELL_DAMAGE",
+                  timestamp = (opts.base or 1787381686) + id - 10 },
+            }
+        end,
+        GetRecapMaxHealth = function() return 738800 end,
+    })
+end
+
+test("A Deaths click on a player who died enters the DEATHS view", function()
+    -- red under: the Deaths branch still handing off to Blizzard's frame first.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local action = inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28, 27 }, "Deaths")
+
+    assertEqual(action, "enter")
+    assertTrue(inst.NS.DrillDown.IsActive(cfg))
+    assertEqual(inst.NS.DrillDown.GetState(cfg).kind, "deaths")
+    assertNil(inst.mocks.__lastRecapID, "Blizzard's frame must not also open")
+end)
+
+test("The deaths view lists one row per death, newest first", function()
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28, 27 }, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertEqual(#rows, 3)
+    assertEqual(rows[1].recapID, 29, "the most recent death is at the top")
+    assertEqual(rows[3].recapID, 27)
+end)
+
+test("A death row is numbered CHRONOLOGICALLY, so the list counts down", function()
+    -- Death 1 is the run's first death. Numbering from the newest would make
+    -- "his first death" mean the most recent one, which is the opposite of how
+    -- anyone says it.
+    -- red under: ordinal = the array index.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28, 27 }, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertTrue(rows[1].name:find("3", 1, true) ~= nil, "the newest of three is Death 3")
+    assertTrue(rows[3].name:find("1", 1, true) ~= nil, "the oldest is Death 1")
+end)
+
+test("A death row carries the wall-clock time as its cell caption", function()
+    -- The timestamp on a recap event is absolute epoch, unlike deathTimeSeconds
+    -- which is seconds-into-session. The two clocks must never be mixed, so the
+    -- caption comes from the recap's own newest event.
+    -- red under: formatting deathTimeSeconds, which is -1 on Overall.
+    local inst, cfg = bench()
+    withRecaps(inst, { base = 0 })
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+
+    local cell = inst.NS.DrillDown:BuildRows(cfg)[1].values.Deaths
+    assertEqual(cell.displayText, inst.mocks.date("%H:%M:%S", 29))
+    assertEqual(cell.total, 1)
+    assertEqual(cell.maxAmount, 1, "the bar draws full from the data, not a branch")
+end)
+
+test("A death whose recap the client has dropped still gets a row", function()
+    -- A missing recap must not remove a death the count includes, or the
+    -- drill-down and the cell above it disagree about how many times somebody
+    -- died.
+    -- red under: skipping a death whose GetRecap answers nil.
+    local inst, cfg = bench()
+    withRecaps(inst, { missing = { [28] = true } })
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28, 27 }, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertEqual(#rows, 3, "a death vanished from the list")
+    assertTrue(rows[2].values.Deaths.displayText ~= nil,
+        "a row with no recap still needs something in the cell")
+end)
+
+test("A Deaths click on a player with no deaths array keeps today's behaviour", function()
+    -- The second rung. A client without C_DeathRecap, or a row built before this
+    -- feature existed, still reaches Blizzard's own frame rather than a view
+    -- with nothing in it.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local action = inst.NS.DrillDown:OnCellClick(cfg, playerRow{ deathRecapID = 4242 }, "Deaths")
+    assertEqual(action, "recap")
+    assertEqual(inst.mocks.__lastRecapID, 4242)
+end)
+
+test("With no C_DeathRecap a Deaths click does not enter an empty deaths view", function()
+    -- red under: entering the view on row.deaths alone, without asking whether
+    -- anything can read one.
+    local inst, cfg = bench()
+    inst.mocks.setDeathRecap(nil)
+    local action = inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29, 28 }, "Deaths")
+    assertEqual(action, "recap", "the frame hand-off is still the better fallback")
+end)
+
+test("A second click on the same Deaths cell leaves the deaths view", function()
+    -- The exit toggle keys on guid + statKey, and the view must keep the
+    -- PLAYER's guid for it to keep matching.
+    -- red under: storing a synthesized guid on the view.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local row = deadRow{ 29, 28 }
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+    assertEqual(inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths"), "exit")
+    assertEqual(inst.NS.DrillDown.IsActive(cfg), false)
+end)
+
+test("The deaths view never asks the provider for a spell breakdown", function()
+    -- Two view kinds, one lifecycle: the deaths branch must skip the source
+    -- detail lookup entirely rather than fetching one and ignoring it.
+    -- red under: branching after the GetSourceDetail call.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    inst.mocks.resetMeterCalls()
+
+    inst.NS.DrillDown:BuildRows(cfg)
+    assertNil(inst.mocks.__meter.calls.GetCombatSessionSourceFromType,
+        "the deaths view read a spell breakdown it cannot use")
+end)
+
+test("A death row is flagged as a drill-down row", function()
+    -- modules/Row.lua keys three behaviours off it: the realm strip, the class
+    -- icon ladder, and giving the mouse to the row rather than the cell — which
+    -- is the only way the tooltip is reachable at all.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow{ 29 }, "Deaths")
+    assertEqual(inst.NS.DrillDown:BuildRows(cfg)[1].isDrillDown, true)
+end)
+
+test("The deaths view is capped like every other breakdown", function()
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local ids = {}
+    for i = 1, inst.NS.Constants.MAX_ROWS + 10 do ids[i] = 500 - i end
+    inst.NS.DrillDown:OnCellClick(cfg, deadRow(ids), "Deaths")
+    assertEqual(#inst.NS.DrillDown:BuildRows(cfg), inst.NS.Constants.MAX_ROWS)
+end)

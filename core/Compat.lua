@@ -280,6 +280,22 @@ local function deathRecap()
     return _G.C_DeathRecap
 end
 
+--- Whether this client can read a death recap AT ALL.
+---
+--- Asked before a caller commits to a surface built out of recaps: a client one
+--- patch behind has no C_DeathRecap, and a death list whose every row reads as a
+--- dash is worse than the fallback such a client has always had.
+---
+--- Keyed on `GetRecapEvents` rather than on the namespace alone, because the
+--- events ARE the feature — a build carrying the table and not that member can
+--- do nothing useful.
+---
+--- @return boolean
+function Compat.HasDeathRecap()
+    local api = deathRecap()
+    return (api and type(api.GetRecapEvents) == "function") and true or false
+end
+
 --- Whether the client still holds a breakdown for this death.
 ---
 --- A PLAIN boolean, whatever the client hands back. Callers branch on this to

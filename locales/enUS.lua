@@ -689,3 +689,10 @@ L["Tank"] = "Tank"
 L["Healer"] = "Healer"
 L["Damage dealer"] = "Damage dealer"
 L["Pet"] = "Pet"
+
+-- The death drill-down (issue #1). "Death %d" numbers a player's deaths
+-- chronologically, so the newest sits at the top of a list that counts down.
+-- The dash is what a death whose recap the client no longer holds shows in
+-- place of a time -- the row still exists, because the count above it says so.
+L["Death %d"] = "Death %d"
+L["No recap stored for this death"] = "No recap stored for this death"

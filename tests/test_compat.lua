@@ -421,3 +421,17 @@ test("Compat: the recap shims never inspect what they carry", function()
     assertEqual(inst.NS.Compat.GetRecapEvents(29), events)
     assertEqual(inst.mocks.reveal(inst.NS.Compat.GetRecapMaxHealth(29)), 738800)
 end)
+
+test("Compat.HasDeathRecap keys on the EVENTS, not on the namespace", function()
+    -- A build carrying the table without that member can do nothing useful, and
+    -- a death list whose every row reads as a dash is worse than the fallback a
+    -- client without the namespace has always had.
+    -- red under: `return C_DeathRecap ~= nil`.
+    local inst = T.load()
+    inst.mocks.setDeathRecap(nil)
+    assertFalse(inst.NS.Compat.HasDeathRecap())
+    inst.mocks.setDeathRecap({ GetRecapMaxHealth = function() return 1 end })
+    assertFalse(inst.NS.Compat.HasDeathRecap())
+    inst.mocks.setDeathRecap({ GetRecapEvents = function() return {} end })
+    assertTrue(inst.NS.Compat.HasDeathRecap())
+end)

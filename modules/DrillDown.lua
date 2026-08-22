@@ -93,7 +93,20 @@ local Debug  = NS.Debug
 
 local Perf = NS.Perf or {}
 
--- [windowId] = { guid, statKey, name, classFilename, sessionType }
+-- [windowId] = { guid, statKey, kind, deaths, name, classFilename,
+--                sessionType, sessionID }
+--
+-- `kind` is "spells" or "deaths" and picks which breakdown BuildRows produces.
+-- `deaths` exists only on the second kind: a plain array of recap ids, copied
+-- out of the aggregated row at Enter.
+--
+-- IT IS A SNAPSHOT, AND HAS TO BE. While a window is drilled in,
+-- modules/Window.lua renders BuildRows INSTEAD of running an aggregate pass, so
+-- there is no current row to re-read the deaths off. The consequence is
+-- narrow and worth stating: a player who dies again while somebody is staring
+-- at their death list will not see the new death until the list is left and
+-- re-entered. Re-deriving it would cost a second aggregate pass per frame to
+-- keep a list fresh that nobody is watching change.
 local views = State.Cache("DrillDown")
 
 -- [windowId] = Button. Frames are never destroyed, only hidden and reused —
@@ -115,6 +128,12 @@ local MSG_DRILLDOWN = Const.MSG.DRILLDOWN_CHANGED
 -- anyone reads it; the cap keeps one pathological source from asking the pool
 -- for hundreds of frames.
 local MAX_SPELL_ROWS = Const.MAX_ROWS
+
+-- What a death row shows instead of a wall clock when the client no longer
+-- holds the recap. An em dash rather than an empty cell, so the row reads as
+-- "there was a death here and its detail is gone" rather than as a render bug.
+local NO_CLOCK = "\226\128\148"
+
 
 local BACK_BUTTON_WIDTH  = 64
 local BACK_BUTTON_HEIGHT = 18
@@ -169,6 +188,46 @@ end
 -- ---------------------------------------------------------------------------
 -- Death recap
 -- ---------------------------------------------------------------------------
+
+--- The recap ids on an aggregated row, as a fresh plain array, or nil.
+---
+--- COPIED, never referenced. modules/Aggregator.lua rebuilds every row from
+--- scratch on the next pass, so holding its `deaths` table would pin an object
+--- that is about to be garbage — the same reason Enter copies name and guid
+--- rather than keeping the row.
+---
+--- A recap id is NeverSecret and this still vets each one: an id that could not
+--- be used as a table key could not be memoized, passed to the client, or
+--- printed, so it is dropped here rather than at three later places.
+---
+--- @param deaths table|nil  row.deaths
+--- @return table|nil  { recapID, ... } newest first
+local function copyRecapIDs(deaths)
+    if type(deaths) ~= "table" then return nil end
+    local Secrets = NS.Secrets
+    local ids = {}
+    for i = 1, #deaths do
+        local id = deaths[i] and deaths[i].recapID
+        if id ~= nil and (not Secrets or Secrets.IsSafeKey(id)) then
+            ids[#ids + 1] = id
+        end
+    end
+    if #ids == 0 then return nil end
+    return ids
+end
+
+--- Whether this client can open a death at all.
+---
+--- Asked BEFORE entering the deaths view rather than discovered inside it: a
+--- view whose every row says "no recap" is worse than the hand-off below, which
+--- is what a client without C_DeathRecap has always had.
+---
+--- @return boolean
+local function canReadRecaps()
+    local P = provider()
+    return (P and P.CanReadRecaps and P.CanReadRecaps()) and true or false
+end
+
 
 --- Hand a death off to Blizzard's own recap UI.
 ---
@@ -234,8 +293,9 @@ end
 --- @param window table
 --- @param row table    an aggregated row (needs .guid)
 --- @param statKey string
+--- @param kind string|nil  "spells" (default) or "deaths"
 --- @return boolean  whether the view changed
-function DrillDown:Enter(window, row, statKey)
+function DrillDown:Enter(window, row, statKey, kind)
     local id = windowIdOf(window)
     if id == nil or type(row) ~= "table" or row.guid == nil then return false end
     if not Const.STAT_BY_KEY[statKey] then return false end
@@ -243,6 +303,8 @@ function DrillDown:Enter(window, row, statKey)
     views[id] = {
         guid          = row.guid,
         statKey       = statKey,
+        kind          = kind or "spells",
+        deaths        = (kind == "deaths") and copyRecapIDs(row.deaths) or nil,
         name          = row.name,
         classFilename = row.classFilename,
         sessionType   = sessionTypeOf(window),
@@ -316,11 +378,25 @@ function DrillDown:OnCellClick(window, row, statKey)
         return self:Exit(window) and "exit" or "none"
     end
 
-    if statKey == "Deaths" and openDeathRecap(row.deathRecapID) then
-        if State.debug and Debug then
-            Debug("DrillDown", "recap id=%s", tostring(row.deathRecapID))
+    -- DEATHS IS A LADDER, and the order is the whole of it.
+    --
+    -- The deaths view first, where the client can read a recap and the row knows
+    -- which deaths to list. Blizzard's own frame second, so a client without
+    -- C_DeathRecap keeps exactly the behaviour it has today rather than losing
+    -- the one thing that worked. The ordinary spell breakdown last, so the cell
+    -- is never dead — even though a Deaths source has no spell list and that
+    -- breakdown is the "No data yet" this feature exists to replace.
+    if statKey == "Deaths" then
+        local deaths = canReadRecaps() and copyRecapIDs(row.deaths) or nil
+        if deaths ~= nil then
+            return self:Enter(window, row, statKey, "deaths") and "enter" or "none"
         end
-        return "recap"
+        if openDeathRecap(row.deathRecapID) then
+            if State.debug and Debug then
+                Debug("DrillDown", "recap id=%s", tostring(row.deathRecapID))
+            end
+            return "recap"
+        end
     end
 
     return self:Enter(window, row, statKey) and "enter" or "none"
@@ -352,6 +428,25 @@ end
 --   overkillAmount / isAvoidable / isDeadly
 --                  passed through for the tooltip. Possibly secret; nothing in
 --                  this file looks at them.
+--
+-- A DEATH ROW IS THE SAME SHAPE WITH A DIFFERENT "PLAYER" — one of that
+-- player's deaths rather than one of their spells:
+--
+--   guid           "death:<recapID>", synthesized for the pool exactly as a
+--                  spell's is.
+--   recapID        the plain id. modules/Tooltip.lua keys its death branch on
+--                  the presence of this field, and reads the recap through it.
+--   name           "Death N", numbered CHRONOLOGICALLY — Death 1 is the run's
+--                  first death, so a newest-first list counts down. Numbering
+--                  from the newest would make "his first death" mean the most
+--                  recent one, which is the opposite of how anyone says it.
+--   icon           nil. A death is not a spell and the name cell draws nothing.
+--   values         { [statKey] = { total = 1, maxAmount = 1,
+--                                  displayText = "13:01:06" } } — PLAIN ones,
+--                  so the bar draws full without this file or modules/Row.lua
+--                  comparing two values that are secret on every other row, and
+--                  a caption where a number would be, because no formatter can
+--                  turn a value into a wall clock.
 
 --- One drill-down row from one DamageMeterCombatSpell.
 local function spellRow(spell, view, maxAmount)
@@ -385,6 +480,88 @@ local function spellRow(spell, view, maxAmount)
     }
 end
 
+--- The wall-clock time a death happened, as "HH:MM:SS", or nil.
+---
+--- FROM THE RECAP'S OWN NEWEST EVENT, and never from `deathTimeSeconds`. The two
+--- are different clocks: an event timestamp is absolute epoch, while
+--- `deathTimeSeconds` is seconds-into-session and reads -1 on the Overall
+--- session, where most of this list is looked at. Mixing them produces a
+--- plausible time rather than a visible failure, which is the worse kind of
+--- wrong.
+---
+--- The events arrive newest first, so element one is the killing blow and its
+--- timestamp is the moment of death.
+---
+--- @param recap table|nil  a Provider.GetRecap result
+--- @return string|nil
+local function deathClock(recap)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return nil end
+
+    local Secrets = NS.Secrets
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then
+        return nil
+    end
+
+    local newest = events[1]
+    if type(newest) ~= "table" then return nil end
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(newest) then
+        return nil
+    end
+
+    local when = newest.timestamp
+    -- `date` would raise on a secret, and a timestamp is undocumented enough
+    -- that its secrecy is not something to assume either way.
+    if when == nil or (Secrets and not Secrets.CanAccess(when)) then return nil end
+    return date("%H:%M:%S", when)
+end
+
+--- One drill-down row from one death.
+---
+--- @param recapID number  plain, already vetted by copyRecapIDs
+--- @param ordinal number   1 for the run's FIRST death
+--- @param view table
+local function deathRow(recapID, ordinal, view)
+    local P = provider()
+    local clock = P and P.GetRecap and deathClock(P.GetRecap(recapID)) or nil
+
+    local values = {}
+    -- Plain ones on purpose: see the row contract above. The caption carries the
+    -- information; the bar is the row's backing, not a measure of anything.
+    values[view.statKey] = { total = 1, maxAmount = 1, displayText = clock or NO_CLOCK }
+
+    return {
+        guid          = string.format("death:%d", recapID),
+        recapID       = recapID,
+        name          = string.format(L["Death %d"] or "Death %d", ordinal),
+        icon          = nil,
+        classFilename = view.classFilename,
+        isLocalPlayer = false,
+        isDrillDown   = true,
+        values        = values,
+        maxAmount     = 1,
+    }
+end
+
+--- Every death in the view, newest first.
+---
+--- A DEATH WITH NO RECAP STILL GETS A ROW. The client drops a recap eventually,
+--- and skipping that death would make this list shorter than the count in the
+--- cell it was opened from — the two disagreeing about how many times somebody
+--- died is worse than one row reading as a dash.
+local function deathRows(view)
+    local ids = view.deaths
+    local rows = {}
+    if type(ids) ~= "table" then return rows end
+
+    local total = #ids
+    for i = 1, total do
+        rows[#rows + 1] = deathRow(ids[i], total - i + 1, view)
+        if #rows >= MAX_SPELL_ROWS then break end
+    end
+    return rows
+end
+
 --- The rows a window should draw while it is in a drill-down.
 ---
 --- Returns nil when the window is not drilled in, which is how
@@ -407,6 +584,19 @@ function DrillDown:BuildRows(window)
     if not view then return nil, nil, false end
 
     local t0 = Perf.on and debugprofilestop()
+
+    -- THE DEATHS BRANCH SKIPS THE SOURCE LOOKUP ENTIRELY. A Deaths source has no
+    -- spell list — that is the whole reason this view exists — so fetching one
+    -- and ignoring it would be a client read per refresh pass for nothing.
+    if view.kind == "deaths" then
+        local deathList = deathRows(view)
+        if t0 then Perf.Note("aggregate", debugprofilestop() - t0) end
+        if State.debug and Debug then
+            Debug("DrillDown", "rows window=%s stat=%s kind=deaths n=%d",
+                tostring(windowIdOf(window)), view.statKey, #deathList)
+        end
+        return deathList, DrillDown.Title(window), true
+    end
 
     local P = provider()
     -- A test row answers for itself; the provider has no such source. Same

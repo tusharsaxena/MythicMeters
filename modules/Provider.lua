@@ -577,6 +577,12 @@ function Provider.InvalidateRecaps()
     recapCache = {}
 end
 
+--- Whether this client can read a death recap at all. See the shim.
+--- @return boolean
+function Provider.CanReadRecaps()
+    return Compat.HasDeathRecap()
+end
+
 --- The breakdown behind one death, or nil.
 ---
 --- @param recapID number  a `deathRecapID` from a Deaths source row
