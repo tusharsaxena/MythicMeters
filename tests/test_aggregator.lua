@@ -1163,3 +1163,44 @@ test("Test mode produces a player with several deaths to drill into", function()
     end
     assertTrue(most > 1, "no preview player has more than one death")
 end)
+
+test("A death the client gave no recap id still occupies a slot in the list", function()
+    -- FOUND BY REVIEW, and it is the invariant this whole feature rests on.
+    -- `deaths[#deaths + 1] = src.deathRecapID` is a NO-OP when the id is nil, so
+    -- a death with no id silently shortened the array while the count went up:
+    -- the cell said 3 and the drill-down listed 2. A death with no id cannot be
+    -- opened, but it certainly happened.
+    -- red under: appending the id without a placeholder.
+    local inst = loaded()
+    install(inst, {
+        src(ALPHA, 0, { recapID = 29 }),
+        src(ALPHA, 0),
+        src(ALPHA, 0, { recapID = 27 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+
+    local row = inst.NS.Aggregator.Build(makeWindow{ columns = { "Deaths" } })[1]
+    assertEqual(row.values.Deaths.total, 3)
+    assertEqual(#row.deaths, 3, "the count and the list disagree")
+    assertEqual(row.deaths[1], 29)
+    assertEqual(row.deaths[2], false, "an unopenable death is false, not missing")
+    assertEqual(row.deaths[3], 27)
+end)
+
+test("The identity build keeps that slot too", function()
+    -- Two builds, one shape. The GUID build being fixed and the identity build
+    -- not would make the lists differ in and out of combat.
+    local inst = loaded()
+    install(inst, { src(ALPHA, 500, { class = "PALADIN", specIconID = 1 }) },
+        { statKey = "DamageDone", maxAmount = 500 })
+    install(inst, {
+        src(ALPHA, 0, { class = "PALADIN", specIconID = 1, recapID = 29 }),
+        src(ALPHA, 0, { class = "PALADIN", specIconID = 1 }),
+    }, { statKey = "Deaths", maxAmount = 0 })
+    inst.mocks.setRestricted(true)
+
+    local rows = inst.NS.Aggregator.Build(
+        makeWindow{ columns = { "DamageDone", "Deaths" }, sortColumn = "DamageDone" })
+    assertEqual(rows[1].values.Deaths.total, 2)
+    assertEqual(#rows[1].deaths, 2)
+    assertEqual(rows[1].deaths[2], false)
+end)

@@ -1419,7 +1419,7 @@ local function deathBench(opts)
         GetRecapMaxHealth = function() return opts.maxHealth or 738800 end,
     })
     local row = {
-        guid = "death:29", recapID = 29, name = "Death 3",
+        guid = "death:29", recapID = 29, isDeath = true, name = "Death 3",
         classFilename = "PALADIN", isDrillDown = true,
         values = { Deaths = { total = 1, maxAmount = 1, displayText = "13:01:06" } },
         maxAmount = 1,
@@ -1563,4 +1563,22 @@ test("Tooltip: a death whose recap has gone says so instead of drawing nothing",
 
     local texts = table.concat(lineTexts(inst), "\n")
     assertTrue(texts:find("recap", 1, true) ~= nil, "an empty tooltip reads as a bug")
+end)
+
+test("Tooltip: a death with no recap id says so rather than showing a name", function()
+    -- It fell through to the one-line displayName path, which on a death row
+    -- renders "Death 2" and nothing else — indistinguishable from a tooltip that
+    -- failed to build.
+    -- red under: keying the death branch on recapID instead of on the row kind.
+    local inst, cfg, anchor = deathBench()
+    local row = {
+        guid = "death:none:2", isDeath = true, name = "Death 2",
+        classFilename = "PALADIN", isDrillDown = true,
+        values = { Deaths = { total = 1, maxAmount = 1, displayText = "\226\128\148" } },
+    }
+    inst.NS.Tooltip:SpellTooltip(row, anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("recap", 1, true) ~= nil,
+        "a death row with no id must explain itself")
 end)

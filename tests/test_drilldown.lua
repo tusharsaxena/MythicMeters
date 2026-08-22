@@ -673,3 +673,34 @@ test("Clicking a death whose recap has gone does nothing rather than opening an 
 
     assertEqual(inst.NS.DrillDown:OnRowClick(cfg, row, "LeftButton"), "none")
 end)
+
+test("A death with no recap id is still a row, and is not clickable", function()
+    -- It happened; the count says so. It just cannot be opened.
+    -- red under: copyRecapIDs dropping the placeholder, which would make the
+    -- list shorter than the cell it was opened from.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local row = playerRow()
+    row.deaths = { 29, false, 27 }
+    row.deathRecapID = 29
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertEqual(#rows, 3, "the unopenable death vanished")
+    assertNil(rows[2].recapID)
+    assertEqual(inst.NS.DrillDown:OnRowClick(cfg, rows[2], "LeftButton"), "none")
+end)
+
+test("Every death row has a distinct pool identity, id or no id", function()
+    -- The row pool keys on guid. Two rows sharing one would fight over a widget.
+    local inst, cfg = bench()
+    withRecaps(inst)
+    local row = playerRow()
+    row.deaths = { false, false }
+    row.deathRecapID = nil
+    inst.NS.DrillDown:OnCellClick(cfg, row, "Deaths")
+
+    local rows = inst.NS.DrillDown:BuildRows(cfg)
+    assertEqual(#rows, 2)
+    assertTrue(rows[1].guid ~= rows[2].guid, "two death rows share a pool identity")
+end)

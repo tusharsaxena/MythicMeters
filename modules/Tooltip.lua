@@ -1344,7 +1344,8 @@ end
 --- @param numberStyle string|nil  the hovered window's abbreviation style
 local function addDeathBreakdown(row, style, numberStyle)
     local P = NS.Provider
-    local recap = (P and P.GetRecap) and P.GetRecap(row.recapID) or nil
+    local recap = (row.recapID ~= nil and P and P.GetRecap)
+        and P.GetRecap(row.recapID) or nil
 
     if not drawDeathEvents(recap, numberStyle, style) then
         -- A DEATH THE CLIENT NO LONGER HOLDS SAYS SO. An empty tooltip under the
@@ -1755,7 +1756,11 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
     -- SetSpellByID replaces the tooltip's whole content, so a death row that
     -- happened to carry a spellID would silently render the client's spell page
     -- instead of the event list — a failure that looks like a design choice.
-    if row and row.recapID ~= nil then
+    -- KEYED ON THE ROW KIND, not on the id. A death the client gave no recap id
+    -- for is still a death row, and falling through to the one-line name path
+    -- would render "Death 2" and nothing else — indistinguishable from a tooltip
+    -- that failed to build.
+    if row and row.isDeath then
         -- The same class-colour resolution CellTooltip does. `classFilename` is
         -- NeverSecret, and a death row carries the drilled-into player's, so the
         -- bars stay that player's colour for the whole trip. A nil colour is a

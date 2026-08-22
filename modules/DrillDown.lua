@@ -208,8 +208,15 @@ local function copyRecapIDs(deaths)
     local ids = {}
     for i = 1, #deaths do
         local id = deaths[i]
-        if id ~= nil and (not Secrets or Secrets.IsSafeKey(id)) then
+        -- EVERY DEATH KEEPS ITS SLOT, openable or not. An id the client withheld
+        -- arrives as `false` and an id we may not use is turned into one here, so
+        -- the list is always exactly as long as the count it was opened from.
+        -- Dropping either would make the drill-down and the cell above it
+        -- disagree about how many times somebody died.
+        if id ~= false and id ~= nil and (not Secrets or Secrets.IsSafeKey(id)) then
             ids[#ids + 1] = id
+        else
+            ids[#ids + 1] = false
         end
     end
     if #ids == 0 then return nil end
@@ -558,8 +565,14 @@ end
 --- @param ordinal number   1 for the run's FIRST death
 --- @param view table
 local function deathRow(recapID, ordinal, view)
+    -- `false` is a death the client gave no id for. It still draws — the count
+    -- says it happened — but there is nothing to read and nothing to open, so it
+    -- carries no recapID and takes its pool identity from its position instead.
+    local openable = (recapID ~= false and recapID ~= nil)
+
     local P = provider()
-    local clock = P and P.GetRecap and deathClock(P.GetRecap(recapID)) or nil
+    local clock = (openable and P and P.GetRecap)
+        and deathClock(P.GetRecap(recapID)) or nil
 
     local values = {}
     -- Plain ones on purpose: see the row contract above. The caption carries the
@@ -567,8 +580,10 @@ local function deathRow(recapID, ordinal, view)
     values[view.statKey] = { total = 1, maxAmount = 1, displayText = clock or NO_CLOCK }
 
     return {
-        guid          = string.format("death:%d", recapID),
-        recapID       = recapID,
+        guid          = openable and string.format("death:%d", recapID)
+                                 or  string.format("death:none:%d", ordinal),
+        recapID       = openable and recapID or nil,
+        isDeath       = true,
         name          = string.format(L["Death %d"] or "Death %d", ordinal),
         icon          = nil,
         classFilename = view.classFilename,

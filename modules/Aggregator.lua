@@ -102,8 +102,8 @@
 --     values = { [statKey] = { total, rate, maxAmount, columnTotal, percent,
 --                              deathRecapID, deathTime, displayText } } }
 --
--- `deaths` is a FLAT array of recap ids, `{ 29, 28, 27 }`, NEWEST FIRST, and
--- exists only on a row
+-- `deaths` is a FLAT array of recap ids, `{ 29, 28, 27 }`, NEWEST FIRST, with
+-- `false` in place of an id the client did not give. It exists only on a row
 -- that has a Deaths cell — nil everywhere else, built lazily, and never a field
 -- of the row literal, because that literal runs for every row in every window
 -- four times a second. Flat rather than `{ { recapID = n } }` for the same
@@ -217,7 +217,14 @@ local function setCell(row, statKey, src, maxAmount, isCount)
         -- carry it — the same reasoning the comment in fillCorrelated records.
         local deaths = row.deaths
         if deaths == nil then deaths = {} row.deaths = deaths end
-        deaths[#deaths + 1] = src.deathRecapID
+        -- FALSE, NEVER NIL, for a death the client gave no recap id for.
+        -- `deaths[#deaths + 1] = nil` is a no-op: the array silently stayed short
+        -- while the counter above went up, so the cell said 3 and the drill-down
+        -- listed 2 — the one disagreement this whole feature must not have. A
+        -- death with no id cannot be opened, but it certainly happened.
+        local id = src.deathRecapID
+        if id == nil then id = false end
+        deaths[#deaths + 1] = id
 
         -- The FIRST row wins the SCALAR recap: the API returns deaths
         -- newest-first, and the death a player wants to look at is the one that
@@ -942,7 +949,10 @@ local function correlateColumn(column, isCount, collisions)
                 -- until somebody drills in mid-pull.
                 local list = byDeaths[key]
                 if list == nil then list = {} byDeaths[key] = list end
-                list[#list + 1] = src.deathRecapID
+                -- False, never nil — see setCell. Two builds, one shape.
+                local id = src.deathRecapID
+                if id == nil then id = false end
+                list[#list + 1] = id
             elseif seen[key] then
                 collisions[key] = true
             else
