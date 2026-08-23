@@ -72,6 +72,12 @@ NS.HeaderControls = HeaderControls
 -- buys: spacing is derived, so it cannot drift per button.
 local GAP = 4
 
+-- What LibKa0s draws its close button at, fixed by that library rather than by
+-- this addon's `controlSize` (libs/LibKa0s/Core.lua). The strip has to know,
+-- because a slot pitch that assumes every control is `controlSize` wide puts the
+-- close button on top of its neighbour at any size below 14.
+local EXTERNAL_SIZE = 18
+
 -- Where our own art lives. Extensionless on purpose -- the client appends it,
 -- and a path carrying `.tga` is one of the two spellings that silently draws
 -- nothing.
@@ -105,8 +111,10 @@ local CONTROLS = {
     -- the same thing both ways and the control stops meaning anything.
     { key = "minimise", setting = "showMinimise",  art = "minimise", state = true,
       atlas = { "common-icon-forwardarrow" },   ascii = "-", asciiAlt = "+" },
+    -- Two characters, for the reason minimise has two: the atlas rung tells the
+    -- states apart by desaturating, and the ASCII rung has no such trick.
     { key = "lock",     setting = "showLock",      art = "lock",     state = true,
-      atlas = { "Garr_LockedBuilding" },        ascii = "#" },
+      atlas = { "Garr_LockedBuilding" },        ascii = "#", asciiAlt = "-" },
     { key = "settings", setting = "showSettings",  art = "settings",
       atlas = { "GM-icon-settings", "common-icon-settings" }, ascii = "*" },
     { key = "segment",  setting = "showSegment",   art = "segment",
@@ -145,12 +153,24 @@ function HeaderControls.WidthUsed(window)
     local frameCfg = (window.config or {}).frame or {}
     if frameCfg.titleBar == false then return 0 end
 
-    local size, shown = controlSize(frameCfg), 0
+    -- THE EXTERNAL CONTROL IS NOT OUR SIZE AND MAY NOT EXIST. LibKa0s fixes the
+    -- close button at 18x18 whatever `controlSize` says, and its degraded stub
+    -- builds nothing at all -- so counting it as `size`, or counting it when it
+    -- was never created, reserves room that does not match the strip. Both were
+    -- real: at controlSize 10 the title ran under the X, and on a degraded
+    -- install 22px of header was reserved for a button that is not there.
+    local size, total, shown = controlSize(frameCfg), 0, 0
+    local built = window.controls
     for i = 1, #CONTROLS do
-        if enabled(frameCfg, CONTROLS[i]) then shown = shown + 1 end
+        local control = CONTROLS[i]
+        if enabled(frameCfg, control)
+            and (not control.external or not built or built[control.key]) then
+            total = total + (control.external and EXTERNAL_SIZE or size)
+            shown = shown + 1
+        end
     end
     if shown == 0 then return 0 end
-    return shown * size + (shown - 1) * GAP
+    return total + (shown - 1) * GAP
 end
 
 -- ---------------------------------------------------------------------------
@@ -215,7 +235,8 @@ end
 local function artFor(control, frameCfg)
     if control.key == "lock" then
         local locked = frameCfg.locked and true or false
-        return locked and "lock" or "unlock", not locked, control.ascii
+        return locked and "lock" or "unlock", not locked,
+               (locked and control.ascii or control.asciiAlt)
     end
     if control.key == "minimise" then
         local down = frameCfg.minimised and true or false
@@ -238,7 +259,20 @@ end
 local function write(window, key, value)
     local set = NS.SetByPath
     if not set then return end
-    set("window.frame." .. key, value, window.config)
+
+    -- POINT THE SEAM AT THIS WINDOW FIRST. `window.`-prefixed paths resolve
+    -- against ONE integer -- the active window id -- and NS.SetByPath takes only
+    -- (path, value): a third argument is silently ignored. Without this line a
+    -- click on window 2's minimise wrote to whichever window the settings panel
+    -- was last left on, which is a control doing something to a window the
+    -- player is not looking at.
+    --
+    -- This is the same mechanism the gear has always used to make the panel open
+    -- on the window whose gear was clicked.
+    if window.id and NS.State and NS.State.SetActiveWindow then
+        NS.State.SetActiveWindow(window.id)
+    end
+    set("window.frame." .. key, value)
 end
 
 local function onClick(frame)
@@ -259,7 +293,14 @@ local function onClick(frame)
     elseif control == "lock" then
         write(window, "locked", not (frameCfg.locked and true or false))
     elseif control == "settings" then
-        if NS.OpenOptionsPanel then NS.OpenOptionsPanel(window.config) end
+        -- Point the panel at the window whose gear was clicked, so the pages
+        -- that open are about THIS window rather than whichever one the picker
+        -- was last left on. OpenOptionsPanel takes no arguments; the active id
+        -- is how it is told which window it is about.
+        if window.id and NS.State and NS.State.SetActiveWindow then
+            NS.State.SetActiveWindow(window.id)
+        end
+        if NS.OpenOptionsPanel then NS.OpenOptionsPanel() end
     elseif control == "segment" then
         if window.OpenSegmentMenu then window:OpenSegmentMenu() end
     elseif control == "reset" then
@@ -271,8 +312,10 @@ local function onClick(frame)
         local show = _G.StaticPopup_Show
         if show then show("MYTHICMETERS_RESET_METER_DATA") end
     elseif control == "export" then
+        -- The WINDOW, not its config: Export.Open reads the instance to centre
+        -- its modal on the window it was opened from.
         local E = NS.Export
-        if E and E.Open then E:Open(window.config) end
+        if E and E.Open then E:Open(window) end
     end
 end
 
@@ -344,7 +387,7 @@ function HeaderControls:Apply(window)
     local level = window.dragBar and (window.dragBar:GetFrameLevel() + 5) or nil
 
     local y = -(layout.padding - 1)
-    local slot = 0
+    local used = 0
 
     for i = 1, #CONTROLS do
         local control = CONTROLS[i]
@@ -359,10 +402,17 @@ function HeaderControls:Apply(window)
                 -- actually drawn, so turning one off closes the gap rather than
                 -- leaving a hole, and the controls past it move by exactly one
                 -- step. That is the whole reason the placement is indexed.
-                local dx = -(layout.padding + slot * (size + GAP))
+                -- `used` accumulates the widths ACTUALLY placed, rather than
+                -- multiplying an index by one assumed size: the close button is
+                -- 18 whatever `controlSize` says, so an index-times-size step
+                -- overlapped it with its neighbour below 14 and left a hole
+                -- above 18.
+                local width = control.external and EXTERNAL_SIZE or size
+                local dx = -(layout.padding + used)
                 button:ClearAllPoints()
                 button:SetPoint("TOPRIGHT", window.frame, "TOPRIGHT", dx, y)
                 if not control.external then button:SetSize(size, size) end
+                used = used + width + GAP
                 if level then button:SetFrameLevel(level) end
                 -- The hit rect is grown past the art: 18px is a small target and
                 -- the only thing behind these is a drag handle.
@@ -378,7 +428,6 @@ function HeaderControls:Apply(window)
                     local art, dimmed, ascii = artFor(control, frameCfg)
                     drawIcon(button, control, art, style, dimmed, ascii)
                 end
-                slot = slot + 1
             end
         end
     end
@@ -427,6 +476,27 @@ end
 function HeaderControls:HookHover(window)
     local bar = window.dragBar
     if not bar then return end
+
+    -- THE CONTROLS THEMSELVES HAVE TO BE HOOKED TOO, and this is not belt and
+    -- braces. They sit FIVE FRAME LEVELS ABOVE dragBar so they win the click --
+    -- which also means the pointer reaching a control leaves dragBar, firing its
+    -- OnLeave and fading the strip at the exact moment the player went for it.
+    --
+    -- Hooking both and treating hover as "the pointer is on the strip OR on one
+    -- of its controls" is what makes the reveal survive its own frame ordering.
+    for i = 1, #CONTROLS do
+        local button = window.controls and window.controls[CONTROLS[i].key]
+        if button and button.HookScript then
+            button:HookScript("OnEnter", function()
+                window.headerHovered = true
+                HeaderControls.ApplyHoverAlpha(window)
+            end)
+            button:HookScript("OnLeave", function()
+                window.headerHovered = bar.IsMouseOver and bar:IsMouseOver() or false
+                HeaderControls.ApplyHoverAlpha(window)
+            end)
+        end
+    end
 
     -- HOOKSCRIPT, NOT SETSCRIPT. `dragBar` already carries OnDragStart and
     -- OnDragStop; GetScript answers only the FIRST handler while HookScript

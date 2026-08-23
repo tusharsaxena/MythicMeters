@@ -362,3 +362,126 @@ test("HeaderControls: a failed path is not left set under the next rung", functi
     assertTrue(tex.__texture == nil,
         "the failed path was left on the texture: " .. tostring(tex.__texture))
 end)
+
+-- ---------------------------------------------------------------------------
+-- What review found, and what now pins it
+-- ---------------------------------------------------------------------------
+
+test("HeaderControls: a click writes to the window it was clicked ON", function()
+    -- THE WORST BUG IN THE FIRST CUT. `window.`-prefixed paths resolve against
+    -- ONE integer -- the active window id -- and NS.SetByPath takes only
+    -- (path, value), so the third argument this passed was silently ignored.
+    -- Clicking minimise on the second window wrote to whichever one the settings
+    -- panel had last been left on: a control changing a window the player is not
+    -- even looking at.
+    -- red under: calling SetByPath without setting the active window first.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+    NS.WindowManager:Create("Second")
+    local cfgs = NS.Database.GetWindows()
+    assertTrue(#cfgs >= 2, "the fixture needs two windows")
+
+    local first  = NS.Window.New(cfgs[1])
+    local second = NS.Window.New(cfgs[2])
+
+    -- Point the panel at the FIRST window, then click the SECOND window's button.
+    NS.State.SetActiveWindow(cfgs[1].id)
+    second.controls.minimise:_run("OnClick")
+
+    assertEqual(cfgs[2].frame.minimised, true, "the clicked window did not change")
+    assertFalse(cfgs[1].frame.minimised and true or false,
+        "the click landed on the window the PANEL had selected, not the one clicked")
+    assertTrue(first ~= nil)
+end)
+
+test("HeaderControls: the gear points the panel at its own window", function()
+    -- Same mechanism, and the reason it exists: the pages that open must be
+    -- about THIS window rather than whichever the picker was last left on.
+    -- red under: OpenOptionsPanel called without setting the active id.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+    NS.WindowManager:Create("Second")
+    local cfgs = NS.Database.GetWindows()
+    local second = NS.Window.New(cfgs[2])
+
+    NS.State.SetActiveWindow(cfgs[1].id)
+    second.controls.settings:_run("OnClick")
+    assertEqual(NS.State.activeWindowId, cfgs[2].id)
+end)
+
+test("HeaderControls: the padlock's ASCII rung differs between states", function()
+    -- The atlas rung tells two states apart by desaturating. The ASCII rung has
+    -- no such trick, so it needs a second character -- and without one a client
+    -- with no atlas drew the identical padlock locked and unlocked.
+    -- red under: one `ascii` for both states.
+    local inst, window, cfg = scene()
+    withoutOurArt(inst)
+    inst.mocks.setAtlases({})
+
+    cfg.frame.locked = true
+    inst.NS.HeaderControls:Apply(window)
+    local lockedChar = window.controls.lock.glyph:GetText()
+
+    cfg.frame.locked = false
+    inst.NS.HeaderControls:Apply(window)
+    assertFalse(window.controls.lock.glyph:GetText() == lockedChar,
+        "the ASCII padlock reads the same locked and unlocked")
+end)
+
+test("HeaderControls: the strip fits at every size the schema allows", function()
+    -- The close button is LibKa0s' and is 18px whatever controlSize says, so a
+    -- slot pitch that assumed one width put it on top of its neighbour below 14
+    -- and left a hole above 18.
+    -- red under: dx = -(padding + index * (size + GAP)).
+    for _, size in ipairs({ 10, 14, 18, 24, 32 }) do
+        local inst, window = scene(function(cfg) cfg.frame.controlSize = size end)
+        local placed = {}
+        for _, key in ipairs({ "close", "minimise", "lock", "settings",
+                               "segment", "reset", "export" }) do
+            local b = window.controls[key]
+            if b and b:IsShown() then
+                local w = (key == "close") and 18 or size
+                placed[#placed + 1] = { x = offsetOf(b), w = w, key = key }
+            end
+        end
+        for i = 2, #placed do
+            local right, left = placed[i - 1], placed[i]
+            -- Right-to-left: each control's own right edge must clear the
+            -- previous one's left edge, with the gap intact.
+            local gap = (-left.x) - ((-right.x) + right.w)
+            assertEqual(gap, 4,
+                ("size %d: %s to %s gap was %d"):format(size, right.key, left.key, gap))
+        end
+        assertTrue(inst ~= nil)
+    end
+end)
+
+test("HeaderControls: a degraded install reserves no room for a button it lacks", function()
+    -- LibKa0s' stub answers nil, so the close control is genuinely absent rather
+    -- than hidden. WidthUsed counted it anyway, so the title clipped 22px early
+    -- for the life of that session.
+    -- red under: counting every enabled control whether or not it was built.
+    local inst = T.load()
+    inst.NS.MakeCloseButton = function() return nil end
+    local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
+
+    assertTrue(window.controls.close == nil, "the fixture needs no close button")
+    -- Six controls at 18, five gaps of 4.
+    assertEqual(inst.NS.HeaderControls.WidthUsed(window), 6 * 18 + 5 * 4)
+end)
+
+test("HeaderControls: reaching a control does not fade the strip", function()
+    -- The controls sit FIVE FRAME LEVELS ABOVE the strip so they win the click,
+    -- which also means the pointer arriving on one LEAVES the strip -- firing its
+    -- OnLeave and fading the set at the exact moment the player went for it.
+    -- red under: hooking hover on dragBar alone.
+    local _, window = scene()
+    window.dragBar:_run("OnEnter")
+    assertEqual(window.controls.settings:GetAlpha(), 1)
+
+    -- The pointer moves off the strip and onto a control.
+    window.dragBar:_run("OnLeave")
+    window.controls.settings:_run("OnEnter")
+    assertEqual(window.controls.settings:GetAlpha(), 1,
+        "the strip faded as the pointer reached a control")
+end)

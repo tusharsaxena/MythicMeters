@@ -937,8 +937,32 @@ function WindowProto:ApplyMinimised()
     -- existed has no key at all, and `~= false` would collapse every one of them.
     local down = frameCfg.minimised and true or false
 
+    -- THE WINDOW ACTUALLY SHRINKS. Hiding the children alone left a full-height
+    -- empty frame sitting there, which is not what "collapse to the title bar"
+    -- means to anybody looking at it.
+    --
+    -- The ANCHOR is left alone -- resizing it fires onSizeChanged, which writes
+    -- pendingWidth/pendingHeight, and SaveSize persists whatever is pending on
+    -- the next resize-stop, so the collapsed height would leak into
+    -- frame.height and the window would never come back to the size the player
+    -- chose. The visible frame is unpinned from the anchor's bottom instead and
+    -- given the title bar's own height; expanding re-pins it.
+    local frame = self.frame
+    if down then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", self.anchor, "TOPLEFT", 0, 0)
+        frame:SetPoint("TOPRIGHT", self.anchor, "TOPRIGHT", 0, 0)
+        frame:SetHeight(self.layout.padding * 2 + self.layout.titleHeight)
+    else
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", self.anchor, "TOPLEFT", 0, 0)
+        frame:SetPoint("BOTTOMRIGHT", self.anchor, "BOTTOMRIGHT", 0, 0)
+    end
+
     if self.body then self.body:SetShown(not down) end
     if self.headerFrame then self.headerFrame:SetShown(not down) end
+    -- The notice is re-shown by Refresh whenever there is nothing to draw, so
+    -- hiding it here is not enough on its own -- Refresh checks the same flag.
     if self.notice and down then self.notice:Hide() end
     -- ApplyLock is the grip's other author, so expanding must not resurrect a
     -- grip the lock had hidden.
@@ -1039,7 +1063,13 @@ end
 --- ends up permanently undraggable until a reload.
 function WindowProto:ApplyLock()
     local locked = self.locked
-    if self.grip then self.grip:SetShown(not locked) end
+    -- MINIMISE IS THE GRIP'S OTHER AUTHOR, so this has to agree with it or
+    -- `/mm lock off` resurrects a grip over a collapsed window. Whichever of the
+    -- two runs last wins, so both ask the same question.
+    if self.grip then
+        local down = (self.config.frame or {}).minimised and true or false
+        self.grip:SetShown(not locked and not down)
+    end
 
     for _, row in ipairs(self.pool.all) do
         row:EnableCellMouse()
@@ -1272,6 +1302,13 @@ end
 --- mode is on; then the rows are drawn.
 function WindowProto:Refresh()
     if not (self.frame and self.frame:IsShown()) then return end
+    -- A COLLAPSED WINDOW HAS NOWHERE TO DRAW. ShouldPoll's clause covers the
+    -- polling half of the tick and nothing else: onUpdate takes an early branch
+    -- on `dirty`, and every meter message sets that flag, so without this the
+    -- whole aggregate-and-render ran for a hidden body through an entire fight.
+    -- It also stops ShowNotice putting the "waiting for combat data" line back
+    -- over a window that has been collapsed.
+    if (self.config.frame or {}).minimised then return end
 
     local t0 = Perf.on and debugprofilestop()
 

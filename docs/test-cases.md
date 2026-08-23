@@ -604,7 +604,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (84)
+### test_window.lua (91)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -690,8 +690,15 @@ badge and any count quoted in the docs must agree with it.
 - The body claims the mouse only while a breakdown is open
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
+- Minimise hides everything below the title bar
+- Minimise actually shrinks the window
+- Minimise leaves the STORED height alone, so expanding restores it
+- A collapsed window does not aggregate or render
+- A collapsed window keeps the notice hidden
+- Unlocking does not resurrect the grip on a collapsed window
+- A profile written before minimise existed is not collapsed
 
-### test_headercontrols.lua (23)
+### test_headercontrols.lua (29)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -716,6 +723,12 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: our own art is the FIRST rung
 - HeaderControls: a missing TGA falls through to the atlas
 - HeaderControls: a failed path is not left set under the next rung
+- HeaderControls: a click writes to the window it was clicked ON
+- HeaderControls: the gear points the panel at its own window
+- HeaderControls: the padlock's ASCII rung differs between states
+- HeaderControls: the strip fits at every size the schema allows
+- HeaderControls: a degraded install reserves no room for a button it lacks
+- HeaderControls: reaching a control does not fade the strip
 
 ### test_row.lua (66)
 
@@ -1306,8 +1319,8 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 84 |
-| test_headercontrols.lua | 23 |
+| test_window.lua | 91 |
+| test_headercontrols.lua | 29 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1322,4 +1335,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1168** |
+| **Total** | **1181** |
