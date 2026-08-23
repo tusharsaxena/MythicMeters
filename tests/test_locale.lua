@@ -21,7 +21,7 @@
 --     in game. The locale file's own header calls this out; this suite is what
 --     keeps it from happening anyway.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertNil = T.test, T.assertEqual, T.assertTrue, T.assertNil
 
@@ -56,7 +56,7 @@ test("Locale: a missing key returns the key itself", function()
 end)
 
 test("Locale: the fallback never returns nil, for any key shape", function()
-    for _, key in ipairs({ "", "%s", "Column %d", "Ka0s Mythic Meters", "1234" }) do
+    for _, key in ipairs({ "", "%s", "Column %d", "Ka0s Multi Meters", "1234" }) do
         assertTrue(L[key] ~= nil, "L[" .. string.format("%q", key) .. "] answered nil")
     end
 end)

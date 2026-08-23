@@ -16,7 +16,7 @@
 --     with the fixture arriving SECRET, which is the only configuration in which
 --     that mistake shows up.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS, mocks = T.NS, T.mocks
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
@@ -47,8 +47,8 @@ end
 -- ── the manifest reader ─────────────────────────────────────────────────────
 
 test("Compat: GetAddOnMetadata reads the TOC through C_AddOns", function()
-    assertEqual(Compat.GetAddOnMetadata("MythicMeters", "Version"), mocks.__toc.Version)
-    assertEqual(Compat.GetAddOnMetadata("MythicMeters", "Title"), mocks.__toc.Title)
+    assertEqual(Compat.GetAddOnMetadata("MultiMeters", "Version"), mocks.__toc.Version)
+    assertEqual(Compat.GetAddOnMetadata("MultiMeters", "Title"), mocks.__toc.Title)
 end)
 
 test("Compat: GetAddOnMetadata falls back to the deprecated bare global", function()
@@ -60,7 +60,7 @@ test("Compat: GetAddOnMetadata falls back to the deprecated bare global", functi
         m.C_AddOns = nil
         m.GetAddOnMetadata = function(_, field) return field == "Version" and "9.9.9" or nil end
     end }
-    assertEqual(inst.NS.Compat.GetAddOnMetadata("MythicMeters", "Version"), "9.9.9")
+    assertEqual(inst.NS.Compat.GetAddOnMetadata("MultiMeters", "Version"), "9.9.9")
     assertEqual(inst.NS.version, "9.9.9",
         "core/Namespace.lua resolves the version through the same fallback at load")
 end)
@@ -69,7 +69,7 @@ test("Compat: GetAddOnMetadata answers nil — not a placeholder — with no rea
     -- nil is what lets core/Namespace.lua tell "no manifest" from "manifest says
     -- empty" and apply FALLBACK_VERSION.
     local inst = loadWithout("C_AddOns", "GetAddOnMetadata")
-    assertNil(inst.NS.Compat.GetAddOnMetadata("MythicMeters", "Version"))
+    assertNil(inst.NS.Compat.GetAddOnMetadata("MultiMeters", "Version"))
     assertEqual(inst.NS.version, inst.NS.FALLBACK_VERSION)
 end)
 

@@ -19,7 +19,7 @@
 --     because a fallback that re-implements the format is exactly the drift the
 --     extraction exists to end.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
 
@@ -99,7 +99,7 @@ test("DebugLogSetup: the debug flag never reaches SavedVariables", function()
     -- asked for, and the flag is session-only for exactly that reason.
     local inst = T.load{}
     inst.NS.DebugLog:SetEnabled(true)
-    local saved = _G.MythicMetersDB
+    local saved = _G.MultiMetersDB
     assertNil((saved.profiles and saved.profiles.Default or {}).debug)
     assertNil((saved.global or {}).debug)
 end)
@@ -119,7 +119,7 @@ test("DebugLogSetup: the [Init] summary names the version, the schema and the pr
     -- red under: dropping the schema version from initSummary.
     local inst = T.load{}
     inst.NS.DebugLog:SetEnabled(true)
-    local line = inst.NS.DebugLog:FindLine("MythicMeters v")
+    local line = inst.NS.DebugLog:FindLine("MultiMeters v")
     assertTrue(line ~= nil, "no [Init] session summary was emitted")
     assertTrue(line:find(inst.NS.version, 1, true) ~= nil, "the summary omits the version")
     assertTrue(line:find("schema v" .. tostring(inst.NS.db.global.schemaVersion), 1, true) ~= nil,

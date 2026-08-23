@@ -18,7 +18,7 @@
 -- nothing, and because settings/Schema.lua's own `sameDefault` is one level deep
 -- while nothing stops a future default from being two.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue = T.test, T.assertEqual, T.assertTrue
 

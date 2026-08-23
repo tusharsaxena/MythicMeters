@@ -14,7 +14,7 @@
 -- has to put it in every new window with no edit to this file, and the order has
 -- to be the catalog's — which is the left-to-right layout the design fixes.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil

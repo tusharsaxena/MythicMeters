@@ -14,7 +14,7 @@
 --     and it silently orphans every module that took its sub-table as a load-time
 --     upvalue: the module keeps writing to a table nothing reads.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
@@ -60,7 +60,7 @@ test("State: the SavedVariables globals never carry a state flag after a full lo
     local inst = T.load{}
     inst.NS.State.debug = true
     inst.NS.State.SetTestMode(true)
-    local saved = _G.MythicMetersDB
+    local saved = _G.MultiMetersDB
     assertTrue(saved ~= nil, "the database must actually have been built")
     for _, key in ipairs({ "debug", "testMode", "restricted", "activeWindowId" }) do
         assertNil((saved.profiles and saved.profiles.Default or {})[key],
@@ -87,10 +87,10 @@ test("State: core/Secrets.lua stays the authority, and State is only its mirror"
     inst.mocks.setRestricted(true)
     assertTrue(inst.NS.Secrets.IsRestricted(), "the client says restricted")
     assertFalse(inst.NS.State.restricted,
-        "but the mirror only moves when core/MythicMeters.lua writes it")
+        "but the mirror only moves when core/MultiMeters.lua writes it")
 end)
 
-test("State: only core/MythicMeters.lua writes the restriction mirror", function()
+test("State: only core/MultiMeters.lua writes the restriction mirror", function()
     -- One writer per flag is what makes this file reviewable in a screen. A
     -- second caller of SetRestricted is a second answer to "when did that flip".
     -- red under: calling State.SetRestricted from a module's OnEnable.
@@ -104,7 +104,7 @@ test("State: only core/MythicMeters.lua writes the restriction mirror", function
             callers[#callers + 1] = rel
         end
     end
-    assertEqual(table.concat(callers, ", "), "core/MythicMeters.lua")
+    assertEqual(table.concat(callers, ", "), "core/MultiMeters.lua")
 end)
 
 -- ── testMode ─────────────────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ end)
 -- ── no side effects at load ─────────────────────────────────────────────────
 
 test("State: loading core/State.lua creates no frame and registers no game event", function()
-    -- Unlike the sibling addons' State.lua this one is inert: core/MythicMeters.lua
+    -- Unlike the sibling addons' State.lua this one is inert: core/MultiMeters.lua
     -- owns every game event and fans it onto the bus, so a second listener here
     -- would be a second source of truth for the same transition.
     local fh = assert(io.open((T.root or ".") .. "/core/State.lua", "r"))

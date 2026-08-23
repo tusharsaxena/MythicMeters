@@ -35,7 +35,7 @@ local function Build(mainCategory)
     local H = NS.Helpers
     if not (H and H.CreatePanel) then return nil end
 
-    local ctx = H.CreatePanel("MythicMetersFramePanel", L["Frame"], {
+    local ctx = H.CreatePanel("MultiMetersFramePanel", L["Frame"], {
         pageKey        = PAGE,
         defaultsButton = true,
     })

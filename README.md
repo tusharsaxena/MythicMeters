@@ -1,4 +1,4 @@
-# Ka0s Mythic Meters
+# Ka0s Multi Meters
 
 ![WoW](https://img.shields.io/badge/WoW-Midnight_12.0.7-purple)
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
@@ -6,7 +6,7 @@
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
 ![Tests](https://img.shields.io/badge/Tests-1206%2F1206_passing-green)
 
-Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
+Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
 player and one column per statistic.
 
@@ -53,7 +53,7 @@ with the next version.
 
 ## Usage
 
-Type `/mm` for the command list. `/mythicmeters` does the same thing if you prefer.
+Type `/mm` for the command list. `/multimeters` does the same thing if you prefer.
 
 ### Slash commands
 
@@ -102,7 +102,7 @@ are currently looking at, not all of them.
 
 ## How it works
 
-Blizzard's built-in damage meter already tracks all of this. Mythic Meters asks it for the numbers
+Blizzard's built-in damage meter already tracks all of this. Multi Meters asks it for the numbers
 and arranges them as a grid — so the figures you see are the same ones Blizzard's own meter would
 show, and there is no second copy of the combat log being parsed in the background.
 
@@ -181,7 +181,7 @@ two together, so pet damage is left out until the fight ends rather than shown a
 ## Issues and feature requests
 
 Please raise them on GitHub:
-<https://github.com/tusharsaxena/MythicMeters/issues>
+<https://github.com/tusharsaxena/MultiMeters/issues>
 
 ## Version History
 

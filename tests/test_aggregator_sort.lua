@@ -20,7 +20,7 @@
 -- reached. `setSecretValues` would seal the GUID along with the amounts — it is
 -- the same SecretWhenInCombat trigger — and there would be no rows to order.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

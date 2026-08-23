@@ -1,4 +1,4 @@
-# Dependencies — Ka0s Mythic Meters
+# Dependencies — Ka0s Multi Meters
 
 What you need installed to build, run, test or release this addon. Commands are for
 **WSL2 / Ubuntu** (the collection's development environment). How to *verify* the addon once you are
@@ -10,7 +10,7 @@ such rather than listed as a requirement.
 ## Runtime (in-game) — what a player needs
 
 - **World of Warcraft (Retail), patch 12.0 or later.** Single `## Interface: 120007` line in
-  `MythicMeters.toc` — Retail only.
+  `MultiMeters.toc` — Retail only.
 
   The version floor is a real requirement, not the usual boilerplate: this addon reads
   `C_DamageMeter`, which does not exist before 12.0. On an older client

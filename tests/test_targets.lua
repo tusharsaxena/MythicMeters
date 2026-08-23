@@ -15,7 +15,7 @@
 -- it did" — and a player cannot see that, where an absent section is a visible
 -- absence.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

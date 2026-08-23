@@ -36,7 +36,7 @@ local patch is reverted silently by the next re-vendor, and in the meantime this
 something no other repo runs. `tests/test_vendor_sync.lua` is the byte-identity gate that says so
 out loud.
 
-What stays in `tests/run.lua` is only what is genuinely Ka0s Mythic Meters': the two load lists, the
+What stays in `tests/run.lua` is only what is genuinely Ka0s Multi Meters': the two load lists, the
 instance factory `loadInstance`, the lifecycle kick, and the suite list.
 
 The kit **collects, then runs**. `test()` only records a case; nothing executes until `Kit.run`.
@@ -47,10 +47,10 @@ registry rather than a second code path.
 
 ```lua
 local LIB_FILES   = Loader.xmlFiles(root .. "/libs/LibKa0s/LibKa0s.xml")
-local ADDON_FILES = Loader.tocFiles(root .. "/MythicMeters.toc")
+local ADDON_FILES = Loader.tocFiles(root .. "/MultiMeters.toc")
 ```
 
-The addon half comes straight out of `MythicMeters.toc`, in TOC order, so the runner cannot drift
+The addon half comes straight out of `MultiMeters.toc`, in TOC order, so the runner cannot drift
 from what the client loads. The library half comes out of `LibKa0s.xml`, in the XML's own order,
 because the TOC pulls the whole library in through that one `.xml` and `Loader.tocFiles`
 deliberately skips it.

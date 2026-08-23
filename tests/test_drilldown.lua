@@ -15,7 +15,7 @@
 --     the cursor the instant the restriction lifted is worse than an order the
 --     player can learn. The fixtures ascend so that a sort would be visible.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

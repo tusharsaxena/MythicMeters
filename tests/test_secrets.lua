@@ -29,7 +29,7 @@
 -- answers 0 while indexing answers three entries. An implementation reaching for
 -- the length operator visits nothing and the case goes red.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS, mocks = T.NS, T.mocks
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil

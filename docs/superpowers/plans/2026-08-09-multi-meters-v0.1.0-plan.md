@@ -1,6 +1,6 @@
 # Ka0s Mythic Meters — v0.1.0 Implementation Plan
 
-Executes [the approved design](../specs/2026-08-09-mythic-meters-design.md). Written 2026-08-09.
+Executes [the approved design](../specs/2026-08-09-multi-meters-design.md). Written 2026-08-09.
 
 ## Sequencing rationale
 

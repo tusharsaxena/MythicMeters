@@ -1,6 +1,6 @@
 # Smoke tests
 
-Manual, in-client checks for **Ka0s Mythic Meters**. Run before claiming a non-trivial change works,
+Manual, in-client checks for **Ka0s Multi Meters**. Run before claiming a non-trivial change works,
 before tagging a release, and after refreshing `libs/` or bumping `## Interface:`.
 
 This file covers what the headless suite **cannot**. `lua tests/run.lua` loads every source file
@@ -20,7 +20,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
   run is **"no errors thrown at any point"** — and in this addon the errors that matter arrive
   *four times a second, mid-pull*, so a single one is a hard fail even if the window looks right.
 - **Chat banner.** Every line the addon prints starts with a cyan `[MM]`. A doubled `[MM][MM]`
-  banner, or any line missing it, is a bug (`core/MythicMeters.lua` reclaims `NS.Print` from
+  banner, or any line missing it, is a bug (`core/MultiMeters.lua` reclaims `NS.Print` from
   AceConsole immediately after `NewAddon` — a green line with a trailing colon means the reclaim
   broke).
 - **"Restricted"** below means the `Combat` addon restriction is **active**, which is when meter
@@ -67,8 +67,8 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 
 ### 1. Fresh install + first login
 
-**Setup.** Quit WoW. Delete `WTF/Account/<ACCOUNT>/SavedVariables/MythicMeters.lua` (and the `.bak`).
-Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythic Meters**.
+**Setup.** Quit WoW. Delete `WTF/Account/<ACCOUNT>/SavedVariables/MultiMeters.lua` (and the `.bak`).
+Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi Meters**.
 
 **Steps.** Log in. Run `/mm`. Open Settings → AddOns.
 
@@ -136,13 +136,13 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythi
 - Standing solo in the open world the window is **hidden** — `visibility.world` ships `false` and
   `hideWhenSolo` ships `true`.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
-- Settings → AddOns shows a **Ka0s Mythic Meters** parent with **thirteen** subcategories in this
+- Settings → AddOns shows a **Ka0s Multi Meters** parent with **thirteen** subcategories in this
   order: Windows · Frame · Header · Rows · Bars · Text · Icons · Tooltip · Visibility · Columns ·
   Data · General · Profiles.
 - **No `schema error:` line and no "schema path does not resolve" line appears at any point.**
   `NS.ValidateSchema` runs from the options descriptor at panel creation; a line here means a schema
   row's path does not resolve against `defaults/Profile.lua`, or its default disagrees with the tree.
-- After `/reload`, `MythicMetersDB` exists on disk with `profileKeys`, `profiles.Default`,
+- After `/reload`, `MultiMetersDB` exists on disk with `profileKeys`, `profiles.Default`,
   `global.schemaVersion = 1`, a one-entry `profile.windows` array whose window has `id = 1`, and
   `profile.nextWindowId = 2`.
 
@@ -198,7 +198,7 @@ second edge to catch.
 - **Combat refusal.** Enter combat (a dummy is fine here). `/mm config` **refuses** and prints one
   gray notice. It must **not** queue the request and open the panel when combat ends.
 - **Profiles page mid-combat.** With the Settings window closed, enter combat, then open Settings →
-  AddOns → Ka0s Mythic Meters → **Profiles** from the Blizzard sidebar. The page must close the
+  AddOns → Ka0s Multi Meters → **Profiles** from the Blizzard sidebar. The page must close the
   Settings window and print the refusal — that route bypasses `/mm config` entirely, which is why the
   page carries its own guard.
 
@@ -270,7 +270,7 @@ encounter).
 - Entering a vehicle hides the window; leaving shows it again. This one may take up to one refresh
   interval (0.25s default) because no bus message announces a vehicle transition — the predicate is
   read live rather than cached, which is why it is right at all.
-- **Master enable off** (`/mm set enabled false`, or General → Enable Mythic Meters) hides every
+- **Master enable off** (`/mm set enabled false`, or General → Enable Multi Meters) hides every
   window immediately and stops the addon reading the meter at all.
 - **Preview mode overrides context**: with preview on, the window shows wherever you are standing.
 
@@ -575,7 +575,7 @@ should correct itself within one refresh.
 **Pass.**
 - The window **explains itself** in place of rows:
   - *"Blizzard's damage meter is not available."*
-  - *"Mythic Meters reads every number from the game's built-in damage meter. Enable it to see data
+  - *"Multi Meters reads every number from the game's built-in damage meter. Enable it to see data
     here."*
   - and, in gray, *"Reason: …"* — **Blizzard's own `failureReason`, quoted verbatim**. It is not
     translated and not second-guessed: the game knows why its meter is off, and guessing on its
@@ -609,7 +609,7 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 /mm reset-positions
 /mm debug           /mm debug on        /mm debug off
 /mm perf            /mm perf help
-/mythicmeters help
+/multimeters help
 ```
 
 **Pass.**
@@ -690,7 +690,7 @@ switch back to Default → copy from Test → reset.
 - **The addon still loads and the window still draws rows.** This is the point: a missing vendored
   library degrades, it does not break the addon.
 - One honest chat line names the cause, once, on the first line the addon prints — the shared clause
-  *"The LibKa0s library is missing from this installation of Ka0s Mythic Meters (expected in
+  *"The LibKa0s library is missing from this installation of Ka0s Multi Meters (expected in
   libs/LibKa0s)"* — followed by what is unavailable.
 - `/mm config` says the settings panel is unavailable. `/mm list|get|set|reset|resetall` each name the
   missing library. `/mm perf` says performance measurement is unavailable.
@@ -798,7 +798,7 @@ this change set.
 
 Needs a profile written by v0.1.0, so do this before wiping SavedVariables.
 
-1. Log in with an existing `MythicMeters.lua` SavedVariables file from before this change.
+1. Log in with an existing `MultiMeters.lua` SavedVariables file from before this change.
 2. **Every column is the same width**, and the window is wide enough to show the rightmost one
    without clipping.
 3. A window you had previously dragged **wider** than the grid needs keeps its width — the migration
@@ -1061,7 +1061,7 @@ misclick.
   a Self export is a hard fail** and worth stopping on.
 - **The shape is a header line then ranked lines:**
   ```
-  Mythic Meters — Damage — Current (2:14)
+  Multi Meters — Damage — Current (2:14)
   1. Kaosz 4.8M (84.2K, 31.2%)
   2. Brewz 4.1M (71.9K, 26.6%)
   ```

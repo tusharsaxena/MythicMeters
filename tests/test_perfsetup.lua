@@ -19,7 +19,7 @@
 -- and discards. A suspend that only hid frames would still be reading the meter
 -- forty times a second behind the measurement.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
 
@@ -80,11 +80,11 @@ test("PerfSetup: the capture ring is a SECOND SavedVariables global, outside the
 function()
     -- performance-§5: inside the profile, "copy profile" clones it and "reset
     -- profile" wipes it — neither of which is wanted from a diagnostics store.
-    local fh = assert(io.open(ROOT .. "/MythicMeters.toc", "r"))
+    local fh = assert(io.open(ROOT .. "/MultiMeters.toc", "r"))
     local toc = fh:read("*a")
     fh:close()
-    assertTrue(toc:match("##%s*SavedVariables:[^\r\n]*MythicMetersPerfDB") ~= nil,
-        "MythicMetersPerfDB must be declared in ## SavedVariables")
+    assertTrue(toc:match("##%s*SavedVariables:[^\r\n]*MultiMetersPerfDB") ~= nil,
+        "MultiMetersPerfDB must be declared in ## SavedVariables")
     assertTrue(toc:find("core\\PerfSetup.lua", 1, true) ~= nil, "core/PerfSetup.lua must be in the TOC")
 
     local inst = T.load{}
@@ -193,7 +193,7 @@ test("PerfSetup: every instrumented module takes the probe as a file-scope upval
     -- anti-patterns #43: reaching the probe through an NS lookup on a per-frame
     -- path is the ungated-instrumentation smell.
     --
-    -- core/MythicMeters.lua is the documented exception and is NOT in this list:
+    -- core/MultiMeters.lua is the documented exception and is NOT in this list:
     -- its three brackets are event handlers rather than per-frame work, and it
     -- reads NS.Perf at call time on purpose so a degraded or test install that
     -- re-publishes the seam later is not frozen out. That exception is stated in

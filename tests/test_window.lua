@@ -11,7 +11,7 @@
 -- them. A read that crept back in is a failure with a stack trace, not a comment
 -- somebody has to notice.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
@@ -88,7 +88,7 @@ test("Window builds a bare anchor plus the visible frame, and names both", funct
     assertTrue(window.anchor ~= nil, "the clean geometry frame")
     assertTrue(window.frame ~= nil, "the visible one")
     assertFalse(window.anchor == window.frame)
-    assertEqual(window.frame:GetName(), "MythicMetersWindow" .. tostring(window.id))
+    assertEqual(window.frame:GetName(), "MultiMetersWindow" .. tostring(window.id))
     assertEqual(window.anchor:GetName(), window.frame:GetName() .. "Anchor")
 
     -- The visible window inherits the anchor's geometry rather than owning any:
@@ -1241,7 +1241,7 @@ test("Header art falls back to ASCII on a client with none of the atlases", func
     -- covers the ladder in full; this case stays because it is the one that
     -- names the two failures the ladder exists for.
     inst.mocks.setTextureLoadable(
-        "Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\icons\\settings", false)
+        "Interface\\AddOns\\MultiMeters\\libs\\LibKa0s\\media\\icons\\settings", false)
     inst.mocks.setAtlases({})          -- a client with no matching atlas at all
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
     inst.NS.HeaderControls:Apply(window)

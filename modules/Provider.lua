@@ -527,7 +527,7 @@ end
 ---     ways it can change (see the Availability block above);
 ---   * announces METER_RESET on the bus, which is what wipes the frozen sort
 ---     orders, drops every open drill-down and marks the windows dirty. The game
----     fires DAMAGE_METER_RESET too and core/MythicMeters.lua fans that onto the
+---     fires DAMAGE_METER_RESET too and core/MultiMeters.lua fans that onto the
 ---     same message, so the dispatch may happen twice — every handler on it is
 ---     idempotent, and a duplicate wipe is a far smaller problem than a window
 ---     that keeps drawing rows for sessions that no longer exist if the event
@@ -681,7 +681,7 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --
--- The provider registers no GAME events — core/MythicMeters.lua owns every one
+-- The provider registers no GAME events — core/MultiMeters.lua owns every one
 -- of those and fans them onto the bus (architecture-§4). What it registers is
 -- the three bus messages that can invalidate a memoized answer. Being an
 -- AceAddon module, it is its OWN AceEvent target, so its subscriptions cannot

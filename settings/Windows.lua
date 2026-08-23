@@ -289,7 +289,7 @@ end
 -- Deleting a window discards every setting on ten pages and cannot be undone,
 -- so it confirms. Registered at file load with the window name stamped in at
 -- show time by StaticPopup_Show's format argument.
-StaticPopupDialogs["MYTHICMETERS_DELETE_WINDOW"] = {
+StaticPopupDialogs["MULTIMETERS_DELETE_WINDOW"] = {
     text         = L["Delete the window '%s'?"],
     button1      = L["Yes"],
     button2      = L["No"],
@@ -401,7 +401,7 @@ local function render(ctx)
             local w = activeWindow()
             if not w then return print_(L["No window is selected."]) end
             if #windows() <= 1 then return print_(L["The last window cannot be deleted."]) end
-            StaticPopup_Show("MYTHICMETERS_DELETE_WINDOW", w.name or "")
+            StaticPopup_Show("MULTIMETERS_DELETE_WINDOW", w.name or "")
         end,
     }, nil)
 
@@ -427,7 +427,7 @@ local function Build(mainCategory)
     -- nothing for "restore this page's defaults" to restore. Deleting the
     -- registry back to one seed window is not what a player clicking Defaults
     -- expects, and it is what the button would have to mean.
-    local ctx = H.CreatePanel("MythicMetersWindowsPanel", L["Windows"], {
+    local ctx = H.CreatePanel("MultiMetersWindowsPanel", L["Windows"], {
         pageKey        = PAGE,
         defaultsButton = false,
     })

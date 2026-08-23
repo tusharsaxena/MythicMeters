@@ -349,7 +349,7 @@ local function onClick(frame)
             NS.ShowResetMeterData()
         else
             local show = _G.StaticPopup_Show
-            if show then show("MYTHICMETERS_RESET_METER_DATA") end
+            if show then show("MULTIMETERS_RESET_METER_DATA") end
         end
     elseif control == "export" then
         -- The WINDOW, not its config: Export.Open reads the instance to centre

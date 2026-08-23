@@ -31,7 +31,7 @@ local function Build(mainCategory)
     local H = NS.Helpers
     if not (H and H.CreatePanel) then return nil end
 
-    local ctx = H.CreatePanel("MythicMetersTooltipPanel", L["Tooltip"], {
+    local ctx = H.CreatePanel("MultiMetersTooltipPanel", L["Tooltip"], {
         pageKey        = PAGE,
         defaultsButton = true,
     })

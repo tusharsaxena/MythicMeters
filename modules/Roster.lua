@@ -59,7 +59,7 @@
 -- ---------------------------------------------------------------------------
 --
 -- The build brief made this module the sole SENDER of the roster message. It
--- cannot be, and should not be: core/MythicMeters.lua is the addon's single game
+-- cannot be, and should not be: core/MultiMeters.lua is the addon's single game
 -- event listener (architecture-§4), it already registers GROUP_ROSTER_UPDATE,
 -- and it already wipes this module's cache and publishes
 -- Constants.MSG.ROSTER_CHANGED. A second sender would be a second source of
@@ -77,7 +77,7 @@
 -- the event handler. A raid regroup can fire GROUP_ROSTER_UPDATE a dozen times
 -- in a second while nothing is on screen; building on demand collapses that to
 -- one build at the next refresh. The cache lives in core/State.lua's shared
--- cache under "Roster" — the same sub-table core/MythicMeters.lua wipes — so
+-- cache under "Roster" — the same sub-table core/MultiMeters.lua wipes — so
 -- there is one invalidation seam rather than two that can fall out of step.
 
 local addonName, NS = ...
@@ -505,7 +505,7 @@ end
 --- which is precisely when remembering them stops being useful and starts being
 --- a list of strangers.
 ---
---- core/MythicMeters.lua's reset handler wipes every cache namespace and so
+--- core/MultiMeters.lua's reset handler wipes every cache namespace and so
 --- reaches both of these already; this exists so a caller that means "the meter
 --- was reset" has one spelling for it rather than having to know there are two
 --- namespaces to clear.
@@ -519,7 +519,7 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --
--- Bus subscriptions only. core/MythicMeters.lua owns GROUP_ROSTER_UPDATE and
+-- Bus subscriptions only. core/MultiMeters.lua owns GROUP_ROSTER_UPDATE and
 -- PLAYER_ENTERING_WORLD and publishes both onto the bus; this module listens.
 -- See the header for why the message's sender is there and not here.
 --

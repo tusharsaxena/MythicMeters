@@ -1,4 +1,4 @@
-# CLAUDE.md — Ka0s Mythic Meters
+# CLAUDE.md — Ka0s Multi Meters
 
 **Ka0s WoW addon.** Adheres to the **Ka0s WoW Addon Standard** —
 https://github.com/tusharsaxena/WowAddonStandards

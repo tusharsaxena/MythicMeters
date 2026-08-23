@@ -27,7 +27,7 @@
 -- building the result through the meter mock would make every case below also a
 -- case about the join. tests/test_aggregator.lua owns that.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
@@ -666,12 +666,12 @@ end
 
 test("Export.ChatLines heads the dump with the addon, the metric and the segment", function()
     local lines = T.NS.Export.ChatLines(chatFixture(), "DamageDone", 5, "Ulgrax")
-    assertEqual(lines[1], "Mythic Meters" .. EM_DASH .. "Damage" .. EM_DASH .. "Ulgrax (2:14)")
+    assertEqual(lines[1], "Multi Meters" .. EM_DASH .. "Damage" .. EM_DASH .. "Ulgrax (2:14)")
 end)
 
 test("Export.ChatLines omits the segment from the header when there is none", function()
     local lines = T.NS.Export.ChatLines(chatFixture(), "DamageDone", 5, nil)
-    assertEqual(lines[1], "Mythic Meters" .. EM_DASH .. "Damage (2:14)")
+    assertEqual(lines[1], "Multi Meters" .. EM_DASH .. "Damage (2:14)")
 end)
 
 test("Export.ChatLines numbers the rows and never reorders them", function()
@@ -758,7 +758,7 @@ end)
 
 test("Export.ChatLines falls back to the first catalog stat for an unknown key", function()
     local lines = T.NS.Export.ChatLines(chatFixture(), "NoSuchStat", 1, "Ulgrax")
-    assertEqual(lines[1], "Mythic Meters" .. EM_DASH .. "Damage" .. EM_DASH .. "Ulgrax (2:14)")
+    assertEqual(lines[1], "Multi Meters" .. EM_DASH .. "Damage" .. EM_DASH .. "Ulgrax (2:14)")
 end)
 
 test("Export.ChatLines answers nothing rather than raising with no formatter", function()

@@ -11,7 +11,7 @@
 -- secret — so it can only run out of combat, and the tests below pin that
 -- limitation as behaviour rather than leave it to be discovered.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

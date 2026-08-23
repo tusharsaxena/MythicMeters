@@ -18,7 +18,7 @@
 -- By the time a suite can look at NS every file has run, so every capture
 -- resolved — a runtime check cannot see the ordering at all.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test, assertTrue, assertEqual = T.test, T.assertTrue, T.assertEqual
 
 local ROOT = T.root or "."
@@ -65,7 +65,7 @@ test("loadorder: every file the TOC names exists on disk", function()
     assertTrue(#T.loadedAddonFiles > 0, "the TOC-derived file list is empty")
     for _, rel in ipairs(T.loadedAddonFiles) do
         local fh = io.open(ROOT .. "/" .. rel, "r")
-        assertTrue(fh ~= nil, "MythicMeters.toc names a file that is not on disk: " .. rel)
+        assertTrue(fh ~= nil, "MultiMeters.toc names a file that is not on disk: " .. rel)
         if fh then fh:close() end
     end
 end)
@@ -94,7 +94,7 @@ end)
 test("loadorder: the TOC declares no duplicate file line", function()
     -- A file listed twice runs twice. Every core/ file here is written to be
     -- loaded once — core/LSMPatch.lua registers a PLAYER_LOGIN frame, and
-    -- core/MythicMeters.lua calls AceAddon:NewAddon — so a duplicated line is a
+    -- core/MultiMeters.lua calls AceAddon:NewAddon — so a duplicated line is a
     -- second bootstrap, not a no-op.
     local seen, dupes = {}, {}
     for _, rel in ipairs(T.loadedAddonFiles) do
@@ -241,7 +241,7 @@ test("loadorder: the five LibKa0s seams load in the order their headers pin", fu
     assertTrue(schema < optionsSetup, "Schema must load before OptionsSetup")
 end)
 
-test("loadorder: core/MythicMeters.lua loads after every core/ setup file", function()
+test("loadorder: core/MultiMeters.lua loads after every core/ setup file", function()
     -- Its AceConsole reclaim reads NS.Util.print back off core/CoreSetup.lua,
     -- and its OnInitialize calls NS:InitDB from core/Database.lua at CALL time.
     -- Only the first of those is a load-order constraint, and it is the one an
@@ -249,8 +249,8 @@ test("loadorder: core/MythicMeters.lua loads after every core/ setup file", func
     -- nothing and every chat line comes out in AceConsole green.
     local index = {}
     for i, rel in ipairs(T.loadedAddonFiles) do index[rel:lower()] = i end
-    assertTrue(index["core/mythicmeters.lua"] > index["core/coresetup.lua"],
-        "core/MythicMeters.lua must load after core/CoreSetup.lua or the printer reclaim is a no-op")
+    assertTrue(index["core/multimeters.lua"] > index["core/coresetup.lua"],
+        "core/MultiMeters.lua must load after core/CoreSetup.lua or the printer reclaim is a no-op")
     assertTrue(index["core/compat.lua"] < index["core/namespace.lua"],
         "core/Namespace.lua reads the TOC manifest through Compat at LOAD time")
 end)

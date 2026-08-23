@@ -14,7 +14,7 @@
 -- reviewable in one screen instead of grepped for.
 --
 -- NO SIDE EFFECTS. Unlike the sibling addons' State.lua, this one creates no
--- bootstrap frame and registers no events: core/MythicMeters.lua owns every game
+-- bootstrap frame and registers no events: core/MultiMeters.lua owns every game
 -- event this addon listens to and fans them onto the bus, so a second listener
 -- here would be a second source of truth for the same transition.
 --
@@ -30,7 +30,7 @@ local addonName, NS = ...
 --
 -- `restricted` mirrors the Combat addon restriction so a per-frame render pass
 -- can branch on a plain boolean instead of calling into C_RestrictedActions
--- forty times a second. core/MythicMeters.lua is its only writer, off
+-- forty times a second. core/MultiMeters.lua is its only writer, off
 -- ADDON_RESTRICTION_STATE_CHANGED; core/Secrets.lua remains the AUTHORITY, and
 -- anything that must be right rather than fast asks Secrets.IsRestricted()
 -- directly.
@@ -67,7 +67,7 @@ NS.State = State
 -- ---------------------------------------------------------------------------
 
 --- Record the current addon-restriction state. Called ONLY from
---- core/MythicMeters.lua's ADDON_RESTRICTION_STATE_CHANGED handler.
+--- core/MultiMeters.lua's ADDON_RESTRICTION_STATE_CHANGED handler.
 --- @param v boolean
 function State.SetRestricted(v)
     State.restricted = v and true or false

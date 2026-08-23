@@ -72,9 +72,9 @@ local function Build(mainCategory)
 
     -- Registered once, at build time. The table AceDBOptions returns is live
     -- against NS.db, so it does not need rebuilding when the profile changes.
-    AceConfig:RegisterOptionsTable("MythicMeters-Profiles", AceDBOptions:GetOptionsTable(NS.db))
+    AceConfig:RegisterOptionsTable("MultiMeters-Profiles", AceDBOptions:GetOptionsTable(NS.db))
 
-    local ctx = H.CreatePanel("MythicMetersProfilesPanel", L["Profiles"], {
+    local ctx = H.CreatePanel("MultiMetersProfilesPanel", L["Profiles"], {
         pageKey        = PAGE,
         defaultsButton = false,   -- explicit, per the note above
     })
@@ -102,7 +102,7 @@ local function Build(mainCategory)
             if NS.Print then NS.Print(L["Cannot open settings during combat."]) end
             return
         end
-        AceConfigDialog:Open("MythicMeters-Profiles", container)
+        AceConfigDialog:Open("MultiMeters-Profiles", container)
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Profiles"])

@@ -15,7 +15,7 @@
 -- the case below stores a false, an empty string and a zero, runs the real merge,
 -- and asserts all three survived.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
@@ -63,7 +63,7 @@ end
 --- global and then drive the REAL NS:InitDB() against it.
 local function preSeeded(saved)
     local inst = T.load{ initDB = false, options = false }
-    _G.MythicMetersDB = saved
+    _G.MultiMetersDB = saved
     inst.NS:InitDB()
     inst.NS:RunMigrations()
     return inst
@@ -88,7 +88,7 @@ test("Database: the profile is the SHARED Default, not a per-character one", fun
     local fh = assert(io.open((T.root or ".") .. "/core/Database.lua", "r"))
     local src = fh:read("*a")
     fh:close()
-    assertTrue(src:match('AceDB:New%("MythicMetersDB",%s*NS%.defaults,%s*true%)') ~= nil,
+    assertTrue(src:match('AceDB:New%("MultiMetersDB",%s*NS%.defaults,%s*true%)') ~= nil,
         "InitDB must pass `true` for the shared Default profile")
     assertEqual(T.load{}.NS.db:GetCurrentProfile(), "Default")
 end)

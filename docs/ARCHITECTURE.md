@@ -1,6 +1,6 @@
 # Architecture
 
-Orient-yourself map for **Ka0s Mythic Meters**. A single-frame, multi-column group meter for Retail
+Orient-yourself map for **Ka0s Multi Meters**. A single-frame, multi-column group meter for Retail
 (Midnight, 12.x): one row per group member, one column per statistic, each cell a `StatusBar` with a
 `FontString` on it. Every number is read from Blizzard's built-in damage meter through
 `C_DamageMeter`; the addon never parses the combat log.
@@ -12,9 +12,9 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
 
-The addon is built on the **private namespace** WoW hands each file. `core/MythicMeters.lua` calls
+The addon is built on the **private namespace** WoW hands each file. `core/MultiMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
-addon object**. There is no `_G.MythicMeters` and no rebind. `NS.addon` is published for callers that
+addon object**. There is no `_G.MultiMeters` and no rebind. `NS.addon` is published for callers that
 want to name "the AceAddon object" without assuming the promotion.
 
 Three things define the shape of everything else:
@@ -72,7 +72,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` values | `Constants.lua`, `Namespace.lua`, `State.lua` | The stat catalog, the bus catalog, identity, session-only flags and the shared cache. |
 | `core/` the rule | `Secrets.lua` | **The only file that inspects a meter value.** |
 | `core/` seams | `MediaSetup`, `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring, the art and font seam, and one AceGUI widget fixup. |
-| `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
+| `core/` runtime | `MultiMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `HeaderControls`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
@@ -124,13 +124,13 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 
 | Message | Sender | Consumers | Payload |
 |---|---|---|---|
-| `METER_UPDATED` | `core/MythicMeters.lua` | `Targets`, every `Window` | — |
-| `METER_SESSION` | `core/MythicMeters.lua` | `Provider`, `Targets`, every `Window` | `{ type, sessionID }` |
-| `METER_RESET` | `core/MythicMeters.lua`, and `Provider.Reset` for the manual path | `Provider`, `Aggregator`, `Targets`, `DrillDown`, every `Window` | — |
-| `ROSTER_CHANGED` | `core/MythicMeters.lua` | `Roster`, `Visibility`, every `Window` | — |
-| `ZONE_CHANGED` | `core/MythicMeters.lua` | `Visibility`, every `Window` | — |
-| `ENTERING_WORLD` | `core/MythicMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
-| `RESTRICTION_CHANGED` | `core/MythicMeters.lua` | every `Window`, the export modal (`modules/Export.lua`) | `{ type, state }` |
+| `METER_UPDATED` | `core/MultiMeters.lua` | `Targets`, every `Window` | — |
+| `METER_SESSION` | `core/MultiMeters.lua` | `Provider`, `Targets`, every `Window` | `{ type, sessionID }` |
+| `METER_RESET` | `core/MultiMeters.lua`, and `Provider.Reset` for the manual path | `Provider`, `Aggregator`, `Targets`, `DrillDown`, every `Window` | — |
+| `ROSTER_CHANGED` | `core/MultiMeters.lua` | `Roster`, `Visibility`, every `Window` | — |
+| `ZONE_CHANGED` | `core/MultiMeters.lua` | `Visibility`, every `Window` | — |
+| `ENTERING_WORLD` | `core/MultiMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
+| `RESTRICTION_CHANGED` | `core/MultiMeters.lua` | every `Window`, the export modal (`modules/Export.lua`) | `{ type, state }` |
 | `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `Targets`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
@@ -156,7 +156,7 @@ addon object.
 
 ## Slash commands
 
-`/mm` and `/mythicmeters` are aliases, registered through AceConsole (never a raw `SLASH_*` global).
+`/mm` and `/multimeters` are aliases, registered through AceConsole (never a raw `SLASH_*` global).
 `NS.COMMANDS` in `settings/Slash.lua` is the sender-authoritative dispatch table: **16 verbs**, the
 ten reserved ones first in the order the standard fixes, then this addon's six. The dispatcher, the
 help renderer and the schema CLI are LibKa0s-Slash-1.0's; the verb table stays this addon's and is
@@ -196,7 +196,7 @@ asked once, of `NS.Export.Available()`, and is never re-decided here — see [Ta
 
 ## Event subscriptions
 
-**`core/MythicMeters.lua` registers every game event this addon listens to, and no other file
+**`core/MultiMeters.lua` registers every game event this addon listens to, and no other file
 registers any.** Each handler does the minimum translation and republishes onto the bus; none reads a
 value and — with one stated exception, the feign filter below — none decides anything, which is what
 lets that section be read as a wiring diagram.
@@ -385,7 +385,7 @@ and a fallback nobody can run is a fallback nobody has tested.
   eighteen and reported `deathTimeSeconds = -1` for every one, and the session's own duration is
   *combat* time rather than wall time — 32 minutes of it spanning a run whose deaths were three hours
   back. A "time into the fight" timestamp style was built on three separate derivations of that
-  figure and removed — see [#18](https://github.com/tusharsaxena/MythicMeters/issues/18), which
+  figure and removed — see [#18](https://github.com/tusharsaxena/MultiMeters/issues/18), which
   carries the captures. `/mm debug recap`'s **dating** section is what proved each one could not
   work, and is kept for whoever tries again. Deaths are dated by wall clock or by "how long ago".
 - **The death list is a snapshot taken on entry.** While a window is drilled into a player's deaths,
@@ -540,8 +540,8 @@ The directory carries no `.md` and so registers no row.
 | `settings-panel.md` | The thirteen pages, per-option behavior, and the write seam |
 | `data-flow.md` | `C_DamageMeter` → pixel, and the secret-value rules that shape every hop |
 | `common-tasks.md` | Recipes for the changes made most often here |
-| `superpowers/specs/2026-08-09-mythic-meters-design.md` | Tier 3 planning history — the approved v0.1.0 design |
-| `superpowers/plans/2026-08-09-mythic-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
+| `superpowers/specs/2026-08-09-multi-meters-design.md` | Tier 3 planning history — the approved v0.1.0 design |
+| `superpowers/plans/2026-08-09-multi-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
 | `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
@@ -584,7 +584,7 @@ Rows are shaped `| Rule | What differs | Why | Decided | Re-check trigger |`.
 **One row is ratified.** The register also carried a row for a root `TODO.md`
 holding work that was decided but unscheduled, adopted as a stopgap until the repo had an issue store.
 That row was retired on 2026-08-11 when the backlog moved to
-[GitHub issues](https://github.com/tusharsaxena/MythicMeters/issues), which is precisely the re-check
+[GitHub issues](https://github.com/tusharsaxena/MultiMeters/issues), which is precisely the re-check
 trigger it was written with.
 
 Rows above are ratified. The paragraph below is why the section is never *removed* even when it is
@@ -599,7 +599,7 @@ Three things read like deviations and are not, recorded here so the same questio
   publishes `NS.Numbers` / `NS.NumberFormat` as unambiguous aliases. That is a naming decision inside
   this addon, not a departure from a numbered rule.
 - **`modules/Roster.lua` does not send `ROSTER_CHANGED`.** The build brief made it the sender; it
-  cannot be, because `core/MythicMeters.lua` is the single game-event listener and already owns
+  cannot be, because `core/MultiMeters.lua` is the single game-event listener and already owns
   `GROUP_ROSTER_UPDATE`. The direction is inverted and the module subscribes instead. The message
   still has exactly one sender — which is what the rule asks for.
 - **`METER_RESET` has two dispatch sites.** Both are inside the one-sender contract's intent: the
@@ -608,7 +608,7 @@ Three things read like deviations and are not, recorded here so the same questio
 
 ## Load order
 
-`MythicMeters.toc` is the source of truth; the order is dependency, not alphabetical. Full
+`MultiMeters.toc` is the source of truth; the order is dependency, not alphabetical. Full
 per-file reasoning in [module-map.md](module-map.md#load-order). The binding constraints:
 
 1. `libs/` — Ace3, LibKa0s, LibSharedMedia, AceGUI-3.0-SharedMediaWidgets, LibDataBroker, LibDBIcon.
@@ -618,7 +618,7 @@ per-file reasoning in [module-map.md](module-map.md#load-order). The binding con
 4. `core/MediaSetup.lua` **before `core/Constants.lua`**, which resolves `FONT_MONO` from the
    `NS.MediaFont` it publishes. It is the one seam outside the cause clause, so it is free to load
    first and has to.
-5. `core/CoreSetup.lua` before `core/MythicMeters.lua`, whose AceConsole reclaim reads
+5. `core/CoreSetup.lua` before `core/MultiMeters.lua`, whose AceConsole reclaim reads
    `NS.Util.print`; and **first of the five seams that share the cause clause**, because it defines
    `NS.LIBKA0S_MISSING`.
 6. `core/PerfSetup.lua` after `core/Namespace.lua` (a nil `version` stamps every capture record `v?`)

@@ -1,13 +1,13 @@
 # Saved variables and the settings schema
 
-Two saved-variables are declared in `MythicMeters.toc`:
+Two saved-variables are declared in `MultiMeters.toc`:
 
 | Global | Owner | What it holds |
 |---|---|---|
-| `MythicMetersDB` | AceDB-3.0, assembled in `core/Database.lua` | every setting — the window registry, the id counter, the minimap table, and the account-wide schema version |
-| `MythicMetersPerfDB` | `LibKa0s-Perf-1.0`, wired in `core/PerfSetup.lua` | `/mm perf` A/B capture records |
+| `MultiMetersDB` | AceDB-3.0, assembled in `core/Database.lua` | every setting — the window registry, the id counter, the minimap table, and the account-wide schema version |
+| `MultiMetersPerfDB` | `LibKa0s-Perf-1.0`, wired in `core/PerfSetup.lua` | `/mm perf` A/B capture records |
 
-`MythicMetersPerfDB` sits **outside** the profile tree on purpose, and it is not merely "a second
+`MultiMetersPerfDB` sits **outside** the profile tree on purpose, and it is not merely "a second
 table for tidiness". A capture record is diagnostics, not configuration: it describes one measured
 session on one machine, and it means nothing under a different profile. Folding it into
 `db.profile` would make a profile switch appear to delete captures and a profile copy appear to
@@ -15,7 +15,7 @@ duplicate them, and it would put library-owned bytes inside the tree `NS.Validat
 Defaults sweep both walk. Nothing in this addon reads or writes it directly — the library owns its
 shape, and deleting it loses captures and nothing else.
 
-Everything below is about `MythicMetersDB`.
+Everything below is about `MultiMetersDB`.
 
 ---
 
@@ -318,7 +318,7 @@ name reaches the widget untouched and uncapped.
 `deathTimeFormat` labels a death in the Deaths tooltip and the death drill-down — the time of day,
 or how long ago. A third value, "time into the fight", was built and removed: nothing on the client
 can date a past death against the run it happened in, and the captures that establish that are on
-[issue #18](https://github.com/tusharsaxena/MythicMeters/issues/18). Both surviving values read the
+[issue #18](https://github.com/tusharsaxena/MultiMeters/issues/18). Both surviving values read the
 recap's own newest event timestamp, which is absolute epoch and always present.
 
 **Nothing here divides anything.** `numberFormat` picks which `NumericRuleFormatter` instance
@@ -695,7 +695,7 @@ session cache, and fires **one** `PROFILE_CHANGED` message. `fireProfileChanged`
 emitter — every path that makes the active profile a different thing routes through it, so the bus
 catalog names one site and stays true.
 
-`AceDB:New("MythicMetersDB", NS.defaults, true)` passes `true` as the third argument, which AceDB
+`AceDB:New("MultiMetersDB", NS.defaults, true)` passes `true` as the third argument, which AceDB
 expands to the shared `"Default"` profile. Omitting it falls back to a **per-character** profile,
 which contradicts the documentation and is the source of every "each new character lands on its own
 settings" report in the collection. Players who want per-character opt in through the Profiles page.

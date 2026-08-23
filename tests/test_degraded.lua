@@ -30,7 +30,7 @@
 -- row and path for path. A missing member turns that count into a smaller number
 -- and this case names the page that vanished.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
 
@@ -100,7 +100,7 @@ test("Degraded: core/CoreSetup.lua takes its fallback and the printer still work
     assertEqual(type(inst.NS.Print), "function")
     assertTrue(inst.NS.Print == inst.NS.Util.print,
         "the two names must be ONE function on the degraded path too — the AceConsole reclaim "
-        .. "in core/MythicMeters.lua compares them")
+        .. "in core/MultiMeters.lua compares them")
 
     inst.NS.Print("a degraded line")
     local chat = inst.mocks.__chat

@@ -1,6 +1,6 @@
 # Module map
 
-Where each responsibility lives, what each file publishes, and what it consumes. `MythicMeters.toc`
+Where each responsibility lives, what each file publishes, and what it consumes. `MultiMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
 Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`,
@@ -18,7 +18,7 @@ Full reasoning in [data-flow.md](data-flow.md) and [ARCHITECTURE.md](ARCHITECTUR
 ## Directory tree
 
 ```
-MythicMeters (AceAddon; the private NS table is promoted in place — no _G.MythicMeters)
+MultiMeters (AceAddon; the private NS table is promoted in place — no _G.MultiMeters)
 ├── locales/
 │   └── enUS.lua        — NS.L, with the key-is-the-string metatable fallback.
 │                         Loads FIRST, ahead of core/, and bootstraps the namespace
@@ -52,7 +52,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │   ├── LSMPatch.lua    — the PLAYER_LOGIN fixup that hides the vendored LSM30_Border
 │                         widget's 42×42 preview tile. It registered the shipped font
 │                         too until the face moved into the LibKa0s payload
-│   ├── MythicMeters.lua — AceAddon bootstrap, the AceConsole printer reclaim, THE
+│   ├── MultiMeters.lua — AceAddon bootstrap, the AceConsole printer reclaim, THE
 │                         SINGLE GAME-EVENT LISTENER (7 events fanned onto the bus),
 │                         and NS.ShouldShow — the one show ladder
 │   ├── Database.lua    — the AceDB instance, window-shape key-fill, the id counter,
@@ -144,11 +144,11 @@ own strings entirely.
 | `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.version`, `NS.Compat`, and `Provider` / `WindowManager` / `Visibility` at call time |
 | `DebugLogSetup.lua` | The console descriptor (including `addonName`, which is what makes the console's own close/copy/clear draw the collection's art), the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
 | `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
-| `MythicMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
+| `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |
 | `Diagnostics.lua` | The `/mm debug diag` report: atlas probes, the formatter ladder, visibility, header, name column, cells, tooltip font and width, the Targets cross-reference, and the provider-order probe. Every section is `pcall`-wrapped, and nothing here inspects a meter value | `NS.Diagnostics` (`Report`) | `NS.DebugLog`, `NS.Print`, `NS.Provider`, `NS.Constants.STATS`, `NS.Database`, `NS.Secrets`, `NS.WindowManager` |
 
-**Sends:** `MythicMeters.lua` sends `ENTERING_WORLD`, `ROSTER_CHANGED`, `ZONE_CHANGED`,
+**Sends:** `MultiMeters.lua` sends `ENTERING_WORLD`, `ROSTER_CHANGED`, `ZONE_CHANGED`,
 `RESTRICTION_CHANGED`, `METER_UPDATED`, `METER_SESSION`, `METER_RESET`. `State.lua` sends
 `PREVIEW_CHANGED`. `Database.lua` sends `PROFILE_CHANGED`.
 
@@ -168,7 +168,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Format.lua` | plain table | The `NumericRuleFormatter` instances and the three-rung degradation ladder. No division of a meter value, anywhere | `NS.Format` (callable table), `NS.Numbers`, `NS.NumberFormat` — `Number`, `Rate`, `Duration`, `Percent`, `Invalidate` | `NS.Compat.CreateNumericRuleFormatter`, `NS.Secrets`, `NS.State.Cache("Format")`, `NS.L`. Subscribes `CONFIG_CHANGED`, `PROFILE_CHANGED` on a private bus target |
 | `Provider.lua` | AceAddon | Every meter read, the memoized availability answer, and the suspend flag | `NS.Provider` — `GetColumn`, `GetSourceDetail`, `GetAvailableSessions`, `GetSessionDuration`, `IsAvailable`, `InvalidateAvailability`, `Reset`, `Suspend` / `Resume` / `IsSuspended` | `NS.Compat`, `NS.Secrets`, `NS.Constants.STAT_BY_KEY`. Subscribes `METER_RESET`, `METER_SESSION`, `ENTERING_WORLD`. **Sends `METER_RESET`** from `Provider.Reset` |
 | `Roster.lua` | AceAddon | The group array, the GUID index, the pet→owner map, roles. Rebuilt lazily on first read after an invalidation | `NS.Roster` — `GetGroup`, `Get`, `IsGroupMember`, `OwnerOf`, `RoleOf`, `Refresh` | the unit API through `_G` at call time, `NS.State.Cache("Roster")`. Subscribes `ROSTER_CHANGED`, `ENTERING_WORLD`, `PROFILE_CHANGED` |
-| `Feign.lua` | AceAddon | The set of GUIDs believed to be feigning rather than dead. `C_DamageMeter` hands a Feign Death a valid `deathRecapID`, so the Deaths column counts it. **Cannot run while restricted**: it joins a plain GUID against `sourceGUID`, which is secret for the whole of a pull | `NS.Feign` — `Note`, `IsFeigned`, `Prune`, `Clear` | the unit API through `_G` at call time, `NS.Roster.GetGroup`, `NS.Secrets`. Subscribes `METER_RESET`, `ENTERING_WORLD`, `ROSTER_CHANGED`. Fed by `core/MythicMeters.lua`'s `UNIT_SPELLCAST_SUCCEEDED` handler, which owns the only game event |
+| `Feign.lua` | AceAddon | The set of GUIDs believed to be feigning rather than dead. `C_DamageMeter` hands a Feign Death a valid `deathRecapID`, so the Deaths column counts it. **Cannot run while restricted**: it joins a plain GUID against `sourceGUID`, which is secret for the whole of a pull | `NS.Feign` — `Note`, `IsFeigned`, `Prune`, `Clear` | the unit API through `_G` at call time, `NS.Roster.GetGroup`, `NS.Secrets`. Subscribes `METER_RESET`, `ENTERING_WORLD`, `ROSTER_CHANGED`. Fed by `core/MultiMeters.lua`'s `UNIT_SPELLCAST_SUCCEEDED` handler, which owns the only game event |
 | `Aggregator.lua` | AceAddon | **Two builds**: the exact GUID join (filter, pet folding, ordering) and the identity build that replaces it while `sourceGUID` is secret. Plus the row cap and `percent` | `NS.Aggregator` — `Build`, `ApplyRowLimit`, `TestGroup` / `TestColumn` / `TestSourceDetail` | `NS.Provider`, `NS.Roster`, `NS.Secrets`, `NS.State.Cache("Aggregator")`. Subscribes `METER_RESET`, `PROFILE_CHANGED` |
 | `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetPreview` / `IsPreview`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
 | `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)`, `NS.HeaderStyle(window)` (the header's font and colour, read by `modules/HeaderControls.lua`), and the `WindowProto` methods — including `TitleRowTop(h)`, the one centre line the title, the session line and the control strip are all placed against | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 10 messages on **its own** private bus target |
@@ -207,7 +207,7 @@ both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order
 
-`MythicMeters.toc` is authoritative. The order is dependency, not alphabetical.
+`MultiMeters.toc` is authoritative. The order is dependency, not alphabetical.
 
 1. **`libs/`** — LibStub, CallbackHandler, AceAddon/Event/Timer/DB/DBOptions/Console/Config/GUI,
    LibKa0s, LibSharedMedia, AceGUI-3.0-SharedMediaWidgets, LibDataBroker, LibDBIcon.
@@ -220,7 +220,7 @@ both are bespoke by necessity, and both say why in their file headers.
    3. `Namespace.lua` — resolves `NS.version` at load; everything after may read it.
    4. `State.lua` — after `Constants` (the preview toggle names a message from the catalog).
    5. `Secrets.lua` — before any consumer. Deliberately carries **no** perf bracket.
-   6. `CoreSetup.lua` — after `Constants` (for the prefix), before `MythicMeters.lua` (whose
+   6. `CoreSetup.lua` — after `Constants` (for the prefix), before `MultiMeters.lua` (whose
       AceConsole reclaim reads `NS.Util.print`), and **first of the five LibKa0s seams**, because
       `NS.LIBKA0S_MISSING` is defined here.
    7. `PerfSetup.lua` — after `Namespace` (a nil `version` stamps every capture record `v?`) and
@@ -230,7 +230,7 @@ both are bespoke by necessity, and both say why in their file headers.
       and therefore before `defaults/Profile.lua` names the font at load. This is one of the few
       TOC positions in `core/` that is load-bearing rather than conventional.
    10. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
-   11. `MythicMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
+   11. `MultiMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
    12. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
        time, because `defaults/` loads later.
    13. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
@@ -253,9 +253,9 @@ both are bespoke by necessity, and both say why in their file headers.
 
 ## AceAddon lifecycle
 
-`core/MythicMeters.lua` calls `AceAddon-3.0:NewAddon(NS, addonName, "AceEvent-3.0", "AceTimer-3.0",
+`core/MultiMeters.lua` calls `AceAddon-3.0:NewAddon(NS, addonName, "AceEvent-3.0", "AceTimer-3.0",
 "AceConsole-3.0")`. `NewAddon` promotes the table it is handed, so **`NS` is the addon object** —
-there is no `_G.MythicMeters` and no rebind. `NS.addon` is published anyway, so a test or the perf
+there is no `_G.MultiMeters` and no rebind. `NS.addon` is published anyway, so a test or the perf
 descriptor can name "the AceAddon object" without assuming the promotion happened in place.
 
 Immediately after `NewAddon`, `NS.Print` is reclaimed from AceConsole's mixin by re-pointing it at
@@ -271,7 +271,7 @@ Immediately after `NewAddon`, `NS.Print` is reclaimed from AceConsole's mixin by
 3. `NS.Minimap.Init()` — **after** `InitDB`, because LibDBIcon stores the button's position inside
    `NS.db.profile.minimap`.
 4. `NS.CreateOptionsPanel()` — schema validation, the parent category, and the queued page builders.
-5. `NS.Slash:Register()` — `/mm` and `/mythicmeters`, through AceConsole. If the settings layer never
+5. `NS.Slash:Register()` — `/mm` and `/multimeters`, through AceConsole. If the settings layer never
    loaded, both verbs are claimed anyway and say so rather than going silent.
 
 **`NS:OnEnable`** registers the seven game events and seeds `NS.State.restricted` from

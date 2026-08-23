@@ -15,7 +15,7 @@
 -- place, which is worse than an error. So the fallbacks are loaded with `Enum`
 -- deliberately removed and compared against the live values.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertNil
@@ -49,7 +49,7 @@ test("Constants: the monospace font comes from the LibKa0s payload", function()
     -- is still absolute from this addon's own folder, because a vendored library
     -- lives inside it.
     -- red under: a path into this addon's own media/fonts/, which no longer exists.
-    assertTrue(Const.FONT_MONO:find("Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\fonts\\",
+    assertTrue(Const.FONT_MONO:find("Interface\\AddOns\\MultiMeters\\libs\\LibKa0s\\media\\fonts\\",
         1, true) == 1,
         "FONT_MONO must come from the vendored payload: " .. tostring(Const.FONT_MONO))
     assertTrue(Const.FONT_MONO:lower():match("%.ttf$") ~= nil, "FONT_MONO must name a TTF")
@@ -60,7 +60,7 @@ test("Constants: the font it names exists in the vendored payload", function()
     -- Blizzard's fallback face, silently — the exact thing shipping a monospace
     -- font was meant to avoid. It is now the LIBRARY's job to ship the bytes and
     -- this addon's job to carry the vendored copy, so the file has to be there.
-    local rel = Const.FONT_MONO:gsub("\\", "/"):gsub("^Interface/AddOns/MythicMeters/", "")
+    local rel = Const.FONT_MONO:gsub("\\", "/"):gsub("^Interface/AddOns/MultiMeters/", "")
     local fh = io.open((T.root or ".") .. "/" .. rel, "rb")
     assertTrue(fh ~= nil, "the vendored font is missing from the repo: " .. rel)
     if fh then fh:close() end
@@ -231,7 +231,7 @@ test("Constants: every bus message is uniquely named under the addon's prefix", 
     for key, name in pairs(Const.MSG) do
         n = n + 1
         assertEqual(type(name), "string", "MSG." .. key)
-        assertTrue(name:find("Ka0s_MythicMeters_", 1, true) == 1,
+        assertTrue(name:find("Ka0s_MultiMeters_", 1, true) == 1,
             "MSG." .. key .. " is not prefixed: " .. name)
         assertNil(seen[name], "two MSG constants share the wire name " .. name)
         seen[name] = key

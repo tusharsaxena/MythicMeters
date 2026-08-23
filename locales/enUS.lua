@@ -35,10 +35,10 @@ NS.L = L
 -- Addon shell
 -- ---------------------------------------------------------------------------
 
-L["Ka0s Mythic Meters"] = "Ka0s Mythic Meters"
+L["Ka0s Multi Meters"] = "Ka0s Multi Meters"
 L["A multi-column group meter: one row per player, one column per statistic."] =
     "A multi-column group meter: one row per player, one column per statistic."
-L["Mythic Meters"] = "Mythic Meters"
+L["Multi Meters"] = "Multi Meters"
 L["Meter"] = "Meter"
 
 -- ---------------------------------------------------------------------------
@@ -520,7 +520,7 @@ L["Clear every recorded combat session?"] = "Clear every recorded combat session
 -- ---------------------------------------------------------------------------
 
 L["Master controls"] = "Master controls"
-L["Enable Mythic Meters"] = "Enable Mythic Meters"
+L["Enable Multi Meters"] = "Enable Multi Meters"
 L["Master switch for the addon. When off, no window is drawn and no data is read."] =
     "Master switch for the addon. When off, no window is drawn and no data is read."
 L["Show minimap button"] = "Show minimap button"
@@ -567,8 +567,8 @@ L["How many ranked lines 'Print to Chat' sends, after the header line. The meter
 
 L["Blizzard's damage meter is not available."] =
     "Blizzard's damage meter is not available."
-L["Mythic Meters reads every number from the game's built-in damage meter. Enable it to see data here."] =
-    "Mythic Meters reads every number from the game's built-in damage meter. Enable it to see data here."
+L["Multi Meters reads every number from the game's built-in damage meter. Enable it to see data here."] =
+    "Multi Meters reads every number from the game's built-in damage meter. Enable it to see data here."
 L["Reason: %s"] = "Reason: %s"
 L["Waiting for combat data..."] = "Waiting for combat data..."
 -- Shown in gray on the header line for the whole of a pull. The grid is built a
@@ -648,7 +648,7 @@ L["No window named '%s'."] = "No window named '%s'."
 L["Exported %d rows to chat."] = "Exported %d rows to chat."
 
 -- ---------------------------------------------------------------------------
--- Slash commands (/mm, /mythicmeters)
+-- Slash commands (/mm, /multimeters)
 -- ---------------------------------------------------------------------------
 
 L["Slash Commands"] = "Slash Commands"

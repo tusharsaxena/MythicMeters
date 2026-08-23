@@ -7,7 +7,7 @@
 -- addon has already shipped invisible controls twice; a test that only drives
 -- the top rung would let either of those regress silently.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
@@ -46,7 +46,7 @@ end
 --- and ASCII rungs below it become unreachable in a test while remaining the
 --- live behaviour on any client missing the file. Both of those rungs exist
 --- because this addon has already shipped invisible controls twice.
-local ICON_PATH = "Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\icons\\"
+local ICON_PATH = "Interface\\AddOns\\MultiMeters\\libs\\LibKa0s\\media\\icons\\"
 local function withoutOurArt(inst)
     for _, name in ipairs({ "close", "minimise", "expand", "lock", "unlock",
                             "settings", "segment", "reset", "export" }) do
@@ -342,7 +342,7 @@ test("HeaderControls: reset asks before it wipes anything", function()
     inst.mocks.resetMeterCalls()
 
     window.controls.reset:_run("OnClick")
-    assertEqual(asked, "MYTHICMETERS_RESET_METER_DATA")
+    assertEqual(asked, "MULTIMETERS_RESET_METER_DATA")
     assertTrue(inst.mocks.__meter.calls.ResetAllCombatSessions == nil,
         "the click reset the meter without asking")
 end)

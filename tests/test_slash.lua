@@ -16,7 +16,7 @@
 -- cheapest possible mistake and the most expensive one to notice, so the shape is
 -- asserted directly rather than inferred from one verb happening to work.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test = T.test
 local assertEqual, assertTrue, assertFalse = T.assertEqual, T.assertTrue, T.assertFalse
 
@@ -419,7 +419,7 @@ test("Slash: registration goes through AceConsole, on both tokens", function()
     target.RegisterChatCommand = real
 
     assertEqual(type(registered["mm"]), "function")
-    assertEqual(type(registered["mythicmeters"]), "function")
+    assertEqual(type(registered["multimeters"]), "function")
 end)
 
 test("Slash: both registered tokens reach the SAME dispatcher", function()
@@ -434,7 +434,7 @@ test("Slash: both registered tokens reach the SAME dispatcher", function()
     local opened = 0
     inst.NS.OpenOptionsPanel = function() opened = opened + 1 end
     registered["mm"]("config")
-    registered["mythicmeters"]("config")
+    registered["multimeters"]("config")
     assertEqual(opened, 2, "the alias must be a real alias, not a second command with its own drift")
 end)
 
@@ -444,8 +444,8 @@ test("Slash: no raw SLASH_* global is claimed anywhere", function()
     local inst = T.load()
     inst.NS.Slash:Register()
     for _, name in ipairs({
-        "SLASH_MM1", "SLASH_MM2", "SLASH_MYTHICMETERS1", "SLASH_MYTHICMETERS2",
-        "SLASH_KA0SMYTHICMETERS1",
+        "SLASH_MM1", "SLASH_MM2", "SLASH_MULTIMETERS1", "SLASH_MULTIMETERS2",
+        "SLASH_KA0SMULTIMETERS1",
     }) do
         assertEqual(_G[name], nil, name .. " was set — registration must go through AceConsole")
         assertEqual(inst.mocks[name], nil, name .. " was set on the simulated client")

@@ -25,7 +25,7 @@ local Util = NS.Util
 --     a time.
 --
 -- PUBLISHED AS BOTH NS.Print AND NS.Util.print, AND THEY ARE THE SAME OBJECT.
--- core/MythicMeters.lua embeds AceConsole-3.0 into NS via AceAddon:NewAddon,
+-- core/MultiMeters.lua embeds AceConsole-3.0 into NS via AceAddon:NewAddon,
 -- which stamps AceConsole's own `:Print` over NS.Print — green, trailing colon,
 -- no cyan tag, no error and nothing to say so (anti-patterns #36). That file
 -- reclaims the key afterwards by reading it back off NS.Util.print, and the
@@ -36,7 +36,7 @@ local Util = NS.Util
 --   AFTER  core/Constants.lua   — NS.PREFIX is the tag. Belt and braces: the
 --                                 prefix is handed over in the FUNCTION form
 --                                 below anyway, so it is re-read on every call.
---   BEFORE core/MythicMeters.lua — its AceConsole reclaim reads NS.Util.print.
+--   BEFORE core/MultiMeters.lua — its AceConsole reclaim reads NS.Util.print.
 --   FIRST of the five LibKa0s seams — NS.LIBKA0S_MISSING is set here and the
 --                                 other four append their own consequence to it.
 
@@ -52,7 +52,7 @@ local Util = NS.Util
 -- BOTH paths — a half-vendored libs/LibKa0s can have Core.lua present and
 -- Perf.lua missing — and set HERE because this file is the first of the five the
 -- TOC loads.
-NS.LIBKA0S_MISSING = "The LibKa0s library is missing from this installation of Ka0s Mythic Meters " ..
+NS.LIBKA0S_MISSING = "The LibKa0s library is missing from this installation of Ka0s Multi Meters " ..
     "(expected in libs/LibKa0s)"
 
 -- The stored-color reader's fallback, defined ONCE and above the branch because
@@ -135,7 +135,7 @@ if not lib then
     end
 
     -- ONE function object under both names, exactly as on the live path — the
-    -- AceConsole reclaim in core/MythicMeters.lua compares them.
+    -- AceConsole reclaim in core/MultiMeters.lua compares them.
     NS.Print   = fallbackPrint
     Util.print = fallbackPrint
 
@@ -221,7 +221,7 @@ local printer = lib:New({
 -- Plain functions, never methods — call sites do `local print = NS.Print` at file
 -- scope and call it bare, so neither may need a `self`.
 --
--- THE SAME OBJECT under both names. See the header: core/MythicMeters.lua's
+-- THE SAME OBJECT under both names. See the header: core/MultiMeters.lua's
 -- AceConsole reclaim restores NS.Print from NS.Util.print, and it only restores
 -- the library printer because these two assignments share one function.
 NS.Print   = printer.Print

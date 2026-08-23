@@ -7,7 +7,7 @@
 -- `--list` renderer and the source loader all belong to the VENDORED KIT
 -- (tests/_kit/, from LibKa0s — never edited here; tests/test_vendor_sync.lua is
 -- the byte-identity gate). What stays in this file is only what is genuinely Ka0s
--- Mythic Meters': the two load lists, the instance factory, the lifecycle kick,
+-- Multi Meters': the two load lists, the instance factory, the lifecycle kick,
 -- and the suite list.
 --
 -- COLLECT-THEN-RUN. The kit's `test()` only RECORDS; nothing executes until
@@ -25,9 +25,9 @@ local Loader = dofile(root .. "/tests/_kit/loader.lua")
 -- assuming the process's working directory.
 local mockmod = assert(loadfile(root .. "/tests/wow_mock.lua"))(root)
 
--- Every addon chunk is called as chunk("MythicMeters", NS), reproducing the
+-- Every addon chunk is called as chunk("MultiMeters", NS), reproducing the
 -- client's `local addonName, NS = ...` header. Library chunks ignore the varargs.
-Loader.addonName = "MythicMeters"
+Loader.addonName = "MultiMeters"
 
 -- ---------------------------------------------------------------------------
 -- The vendored library load list
@@ -80,7 +80,7 @@ end
 -- The addon's own files, in TOC order. Repo-relative (`core/Compat.lua`), because
 -- that is what the TOC says; only the loader needs them resolved. DERIVED, so the
 -- runner cannot drift from what the client loads.
-local ADDON_FILES = Loader.tocFiles(root .. "/MythicMeters.toc")
+local ADDON_FILES = Loader.tocFiles(root .. "/MultiMeters.toc")
 
 --- Repo-relative paths resolved against the root this script was invoked through.
 local function rooted(list)
@@ -114,7 +114,7 @@ end
 --- Isolation is per-instance and comes from the mock, not from the process: the
 --- kit's loader resolves every WoW global through THIS instance's `mocks` table,
 --- and every symbol the addon publishes lands on THIS instance's `NS`. There is no
---- `_G.MythicMeters` rebind to share — the namespace stays private
+--- `_G.MultiMeters` rebind to share — the namespace stays private
 --- (architecture-§1) — and no source file in this addon writes a global other
 --- than its two SavedVariables tables, which are cleared below.
 local function loadInstance(opts)
@@ -137,8 +137,8 @@ local function loadInstance(opts)
     -- writes to the real _G, deliberately, so a migration path behaves as it does
     -- in the client). Clearing them per instance is what keeps two instances from
     -- inheriting each other's database.
-    _G.MythicMetersDB     = nil
-    _G.MythicMetersPerfDB = nil
+    _G.MultiMetersDB     = nil
+    _G.MultiMetersPerfDB = nil
 
     local NS = {}
     Loader.loadAll(opts.libFiles or LIB_FILES, NS, mocks)
@@ -146,7 +146,7 @@ local function loadInstance(opts)
 
     -- ── the lifecycle kick, in the client's own order ──────────────────────
     --
-    -- core/MythicMeters.lua's OnInitialize does exactly this: InitDB, then
+    -- core/MultiMeters.lua's OnInitialize does exactly this: InitDB, then
     -- RunMigrations, then the minimap launcher, then the options panel, then the
     -- slash registration. It is spelled out here rather than called through
     -- OnInitialize so a suite can stop after any step — and so the standard's four
@@ -239,7 +239,7 @@ local SUITES = {
 -- Kit.expose merges the registry and every assertion into this table, so the
 -- suites reach `T.test`, `T.assertEqual`, `T.skip`, `T.assertSurfaceParity` and
 -- the rest off the same global they reach `T.NS` off.
-_G.MYTHICMETERS_TEST = Kit.expose{
+_G.MULTIMETERS_TEST = Kit.expose{
     root  = root,
     -- the shared instance
     NS    = shared.NS,

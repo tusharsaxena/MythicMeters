@@ -39,7 +39,7 @@
 -- `register` is a factory rather than auto-registration: adopting the shared gate
 -- must not move docs/test-cases.md's counts.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local ROOT = T.root or "."
 local VendorSync = dofile(ROOT .. "/tests/_kit/vendor_sync.lua")
 

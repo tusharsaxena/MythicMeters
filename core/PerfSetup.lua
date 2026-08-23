@@ -84,9 +84,9 @@ end
 
 NS.Perf = lib:New({
     name    = addonName,
-    title   = "Ka0s Mythic Meters",
+    title   = "Ka0s Multi Meters",
     slash   = "/mm",
-    sv      = "MythicMetersPerfDB",
+    sv      = "MultiMetersPerfDB",
     -- The TOC manifest is the better source than the in-code constant: it cannot
     -- drift from the packaged build (slash-commands-§3). NS.version remains the
     -- fallback for a client without the metadata API, and settings/Slash.lua

@@ -1,4 +1,4 @@
--- core/MythicMeters.lua
+-- core/MultiMeters.lua
 --
 -- The AceAddon bootstrap and the addon's single game-event listener.
 --
@@ -24,7 +24,7 @@ local addonName, NS = ...
 -- namespace WoW passes as the second vararg to every file, and the core/ files
 -- loaded earlier have already hung Compat / Constants / State / Secrets /
 -- Database onto this same table. After this call NS IS the addon object — there
--- is NO _G.MythicMeters rebind, and there never will be: the namespace stays
+-- is NO _G.MultiMeters rebind, and there never will be: the namespace stays
 -- private (architecture-§1).
 local addon = LibStub("AceAddon-3.0"):NewAddon(
     NS,
@@ -91,7 +91,7 @@ function NS:OnInitialize()
     -- after core/.
     if NS.CreateOptionsPanel then NS.CreateOptionsPanel() end
 
-    -- `/mm` and `/mythicmeters`. The dispatcher, the help renderer and the
+    -- `/mm` and `/multimeters`. The dispatcher, the help renderer and the
     -- schema CLI are LibKa0s-Slash-1.0's, adopted in settings/Slash.lua; this is
     -- the registration seam.
     if NS.Slash and NS.Slash.Register then
@@ -105,7 +105,7 @@ function NS:OnInitialize()
             out("slash commands are unavailable — the settings layer failed to load")
         end
         self:RegisterChatCommand("mm", unavailable)
-        self:RegisterChatCommand("mythicmeters", unavailable)
+        self:RegisterChatCommand("multimeters", unavailable)
     end
 end
 

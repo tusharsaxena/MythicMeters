@@ -35,7 +35,7 @@
 --
 -- TOC POSITION: anywhere in the `# Modules` block. It reads no other module at
 -- load, and the one thing it does need — NS.db — is not touched until Init()
--- runs, which core/MythicMeters.lua calls from OnInitialize after NS:InitDB().
+-- runs, which core/MultiMeters.lua calls from OnInitialize after NS:InitDB().
 
 local addonName, NS = ...
 
@@ -90,7 +90,7 @@ end
 -- that will not go away when the cursor leaves the button.
 local function onTooltipShow(tt)
     if not (tt and tt.AddLine) then return end
-    tt:AddLine(L["Ka0s Mythic Meters"])
+    tt:AddLine(L["Ka0s Multi Meters"])
     if tt.AddDoubleLine then
         tt:AddDoubleLine(L["Version"], tostring(NS.version), 1, 1, 1, 0.6, 0.6, 0.6)
     end
@@ -151,7 +151,7 @@ local function brokerObject(LDB)
 
     return LDB:NewDataObject(addonName, {
         type  = "launcher",
-        label = L["Mythic Meters"],
+        label = L["Multi Meters"],
         icon  = ICON,
         OnClick        = onClick,
         OnTooltipShow  = onTooltipShow,
@@ -164,7 +164,7 @@ end
 
 --- Create the broker object and hang the minimap button on it.
 ---
---- Called from core/MythicMeters.lua's OnInitialize AFTER NS:InitDB(), because
+--- Called from core/MultiMeters.lua's OnInitialize AFTER NS:InitDB(), because
 --- the table handed to LibDBIcon has to be the live profile's — see the header.
 ---
 --- Idempotent: a second call (a reload of the settings layer, a test calling it

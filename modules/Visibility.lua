@@ -16,7 +16,7 @@
 -- raid pull because that is when the meter events fire fastest.
 --
 -- So this file publishes a PREDICATE and nothing else. NS.ShouldShow (in
--- core/MythicMeters.lua) consults it as step 3 of the one show ladder, and a
+-- core/MultiMeters.lua) consults it as step 3 of the one show ladder, and a
 -- window whose answer is false is never built and never refreshed. There is no
 -- Show, no Hide and no SetAlpha anywhere below, and adding one would quietly
 -- turn the refusal back into a curtain drawn over work that still happens.
@@ -30,7 +30,7 @@
 -- refresh tick, never per frame. A cached context would buy nothing measurable
 -- and would cost the one thing that matters: correctness across a transition
 -- this module cannot see. Entering a vehicle fires no event that
--- core/MythicMeters.lua fans onto the bus, so a cache keyed on the bus would go
+-- core/MultiMeters.lua fans onto the bus, so a cache keyed on the bus would go
 -- stale for as long as the player sat in the vehicle. Reading live means the
 -- vehicle answer is right the next time anything asks — at worst one refresh
 -- interval later, which is a quarter of a second by default.
@@ -50,7 +50,7 @@ local addonName, NS = ...
 local Visibility = NS:NewModule("Visibility", "AceEvent-3.0")
 
 -- Published under the flat name as well as the AceAddon module registry, because
--- the two call sites reach for it differently: core/MythicMeters.lua's ladder
+-- the two call sites reach for it differently: core/MultiMeters.lua's ladder
 -- uses NS:GetModule("Visibility", true) so a partial install fails open, and
 -- settings/Slash.lua resolves NS.<Name> first. Same object either way.
 NS.Visibility = Visibility
@@ -151,7 +151,7 @@ function Visibility.ShouldShow(window)
 end
 
 --- The ladder's entry point, named for what the ladder asks rather than for what
---- this module computes: core/MythicMeters.lua reads
+--- this module computes: core/MultiMeters.lua reads
 --- `Visibility:Allows(window)`.
 ---
 --- A method (colon) rather than a plain function because that is how the ladder
@@ -283,7 +283,7 @@ end
 -- Wiring
 -- ---------------------------------------------------------------------------
 --
--- Bus messages only. core/MythicMeters.lua is the addon's single game-event
+-- Bus messages only. core/MultiMeters.lua is the addon's single game-event
 -- listener (architecture-§4), so this module hears about a zone change through
 -- ZONE_CHANGED rather than by registering ZONE_CHANGED_NEW_AREA itself — which
 -- is what keeps "the game said something" to one reviewable place.

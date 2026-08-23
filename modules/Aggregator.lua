@@ -1722,7 +1722,7 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --
--- Bus subscriptions only — core/MythicMeters.lua owns every game event.
+-- Bus subscriptions only — core/MultiMeters.lua owns every game event.
 --
 -- THE `Activating` EDGE IS NO LONGER LISTENED FOR. It used to be the last legal
 -- moment to take a value-sort, and that sort's result was frozen and reapplied

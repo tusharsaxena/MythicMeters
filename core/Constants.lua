@@ -346,7 +346,7 @@ Constants.EXPORT_AUTO_ORDER = { "INSTANCE_CHAT", "RAID", "PARTY", "SAY" }
 -- ---------------------------------------------------------------------------
 --
 -- Modules talk to each other through AceEvent messages named
--- "Ka0s_MythicMeters_<Event>" and never by reaching into another module's table
+-- "Ka0s_MultiMeters_<Event>" and never by reaching into another module's table
 -- (architecture-§4). Every name is declared here so the catalog in
 -- docs/ARCHITECTURE.md has one place to be checked against, and so a typo in a
 -- subscriber is a nil-index at load rather than a callback that silently never
@@ -355,39 +355,39 @@ Constants.EXPORT_AUTO_ORDER = { "INSTANCE_CHAT", "RAID", "PARTY", "SAY" }
 -- ONE SENDER EACH. The owner is named in the comment beside each constant; a
 -- second sender is a bug, not a convenience.
 Constants.MSG = {
-    -- core/MythicMeters.lua fans the raw game events onto the bus. Nothing else
+    -- core/MultiMeters.lua fans the raw game events onto the bus. Nothing else
     -- registers DAMAGE_METER_* / GROUP_ROSTER_UPDATE / ... directly, so there is
     -- one place where "the game said something" becomes "the addon knows".
-    METER_UPDATED       = "Ka0s_MythicMeters_METER_UPDATED",       -- current session ticked
-    METER_SESSION       = "Ka0s_MythicMeters_METER_SESSION",       -- { type, sessionID }
-    METER_RESET         = "Ka0s_MythicMeters_METER_RESET",         -- sessions wiped
-    ROSTER_CHANGED      = "Ka0s_MythicMeters_ROSTER_CHANGED",      -- group composition moved
-    ZONE_CHANGED        = "Ka0s_MythicMeters_ZONE_CHANGED",        -- instance context moved
-    ENTERING_WORLD      = "Ka0s_MythicMeters_ENTERING_WORLD",      -- login / reload / zone-in
-    RESTRICTION_CHANGED = "Ka0s_MythicMeters_RESTRICTION_CHANGED", -- { type, state }
+    METER_UPDATED       = "Ka0s_MultiMeters_METER_UPDATED",       -- current session ticked
+    METER_SESSION       = "Ka0s_MultiMeters_METER_SESSION",       -- { type, sessionID }
+    METER_RESET         = "Ka0s_MultiMeters_METER_RESET",         -- sessions wiped
+    ROSTER_CHANGED      = "Ka0s_MultiMeters_ROSTER_CHANGED",      -- group composition moved
+    ZONE_CHANGED        = "Ka0s_MultiMeters_ZONE_CHANGED",        -- instance context moved
+    ENTERING_WORLD      = "Ka0s_MultiMeters_ENTERING_WORLD",      -- login / reload / zone-in
+    RESTRICTION_CHANGED = "Ka0s_MultiMeters_RESTRICTION_CHANGED", -- { type, state }
 
     -- core/Database.lua, on an AceDB profile swap / copy / reset.
-    PROFILE_CHANGED     = "Ka0s_MythicMeters_PROFILE_CHANGED",     -- { newProfileKey }
+    PROFILE_CHANGED     = "Ka0s_MultiMeters_PROFILE_CHANGED",     -- { newProfileKey }
 
     -- settings/ — the single write seam (NS.SetByPath) announces, nobody else.
-    CONFIG_CHANGED      = "Ka0s_MythicMeters_CONFIG_CHANGED",      -- { section, windowId }
+    CONFIG_CHANGED      = "Ka0s_MultiMeters_CONFIG_CHANGED",      -- { section, windowId }
 
     -- modules/WindowManager.lua, when the window REGISTRY changes shape (a
     -- window created, deleted, renamed or duplicated). Distinct from
     -- CONFIG_CHANGED, which is a setting moving inside a window that already
     -- exists: the registry message forces a rebuild, the config message a
     -- refresh.
-    WINDOWS_CHANGED     = "Ka0s_MythicMeters_WINDOWS_CHANGED",     -- { windowId, action }
+    WINDOWS_CHANGED     = "Ka0s_MultiMeters_WINDOWS_CHANGED",     -- { windowId, action }
 
     -- core/State.lua, when preview mode is toggled by the unlock state or by
     -- `/mm preview`.
-    TEST_MODE_CHANGED     = "Ka0s_MythicMeters_PREVIEW_CHANGED",     -- { enabled }
+    TEST_MODE_CHANGED     = "Ka0s_MultiMeters_PREVIEW_CHANGED",     -- { enabled }
 
     -- modules/DrillDown.lua, when a window enters or leaves a per-source
     -- breakdown. Declared here rather than spelled out at the two use sites: a
     -- hand-written wire string in the sender and another in the subscriber is
     -- exactly the pair this catalog exists to make impossible to mistype.
-    DRILLDOWN_CHANGED   = "Ka0s_MythicMeters_DRILLDOWN_CHANGED",   -- { windowId, active }
+    DRILLDOWN_CHANGED   = "Ka0s_MultiMeters_DRILLDOWN_CHANGED",   -- { windowId, active }
 }
 
 -- ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ local PAGE = "data"
 -- C_DamageMeter.ResetAllCombatSessions wipes the data Blizzard's own meter is
 -- showing too, not just ours. A player who meant "clear my window" and got
 -- "clear the game's history" has no way back, so it confirms first.
-StaticPopupDialogs["MYTHICMETERS_RESET_METER_DATA"] = {
+StaticPopupDialogs["MULTIMETERS_RESET_METER_DATA"] = {
     text         = L["Clear every recorded combat session?"],
     button1      = L["Yes"],
     button2      = L["No"],
@@ -84,7 +84,7 @@ function NS.ShowResetMeterData()
     local show = _G.StaticPopup_Show
     if not show then return nil end
 
-    local dialog = show("MYTHICMETERS_RESET_METER_DATA")
+    local dialog = show("MULTIMETERS_RESET_METER_DATA")
     if dialog and dialog.SetPoint and _G.UIParent then
         dialog:ClearAllPoints()
         dialog:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
@@ -98,7 +98,7 @@ local function Build(mainCategory)
     local H = NS.Helpers
     if not (H and H.CreatePanel) then return nil end
 
-    local ctx = H.CreatePanel("MythicMetersDataPanel", L["Data"], {
+    local ctx = H.CreatePanel("MultiMetersDataPanel", L["Data"], {
         pageKey        = PAGE,
         defaultsButton = true,
     })

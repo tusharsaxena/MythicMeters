@@ -12,7 +12,7 @@
 -- matters most: it counts the meter calls a window that must not show makes, and
 -- the answer has to be zero.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
@@ -408,7 +408,7 @@ test("Visibility listens on the bus and registers no game event", function()
     for line in fh:lines() do
         if not line:match("^%s*%-%-") then
             assertFalse(line:gsub("%s%-%-.*$", ""):find("RegisterEvent", 1, true) ~= nil,
-                "core/MythicMeters.lua is the addon's single game-event listener")
+                "core/MultiMeters.lua is the addon's single game-event listener")
         end
     end
     fh:close()

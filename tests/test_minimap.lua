@@ -10,14 +10,14 @@
 -- optional, because both libraries are OptionalDeps and a stripped build must
 -- lose the button and nothing else.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
 local assertTrue  = T.assertTrue
 local assertNil   = T.assertNil
 
-local ADDON = "MythicMeters"
+local ADDON = "MultiMeters"
 
 local function ldb(inst)  return inst.mocks.__libs["LibDataBroker-1.1"] end
 local function icon(inst) return inst.mocks.__libs["LibDBIcon-1.0"] end

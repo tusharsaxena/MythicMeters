@@ -391,7 +391,7 @@ local function Build(mainCategory)
     -- is nothing per-row to restore; "reset the columns" is what duplicating a
     -- fresh window gives, and the global reset already rebuilds them from the
     -- catalog through NS.ApplyDefault.
-    local ctx = H.CreatePanel("MythicMetersColumnsPanel", L["Columns"], {
+    local ctx = H.CreatePanel("MultiMetersColumnsPanel", L["Columns"], {
         pageKey        = PAGE,
         defaultsButton = false,
     })

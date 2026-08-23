@@ -33,7 +33,7 @@ Expanded, with the guards named:
   DAMAGE_METER_CURRENT_SESSION_UPDATED
   DAMAGE_METER_COMBAT_SESSION_UPDATED(type, sessionID)
   DAMAGE_METER_RESET
-        │  core/MythicMeters.lua — THE SINGLE GAME-EVENT LISTENER
+        │  core/MultiMeters.lua — THE SINGLE GAME-EVENT LISTENER
         │  each handler translates and republishes; none decides anything
         ▼
   MSG.METER_UPDATED / METER_SESSION / METER_RESET        [bucket: meterEvent]
@@ -80,7 +80,7 @@ Expanded, with the guards named:
 
 ## 1. The event stream and the coalescing throttle
 
-`core/MythicMeters.lua` registers all seven game events this addon listens to and is the only file
+`core/MultiMeters.lua` registers all seven game events this addon listens to and is the only file
 that registers any. Each of the three `DAMAGE_METER_*` handlers does the minimum translation and
 republishes onto the closed message bus; none of them reads a value and none of them decides
 anything. Keeping the decisions out of there is what lets that section be read as a wiring diagram.

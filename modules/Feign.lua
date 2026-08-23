@@ -43,7 +43,7 @@
 -- the reasons modules/Roster.lua's header gives: the headless harness installs
 -- its unit mocks after the files load.
 --
--- The spell id itself lives in core/MythicMeters.lua beside the handler that
+-- The spell id itself lives in core/MultiMeters.lua beside the handler that
 -- compares it, not here: this module never sees the cast, only its conclusion.
 
 local addonName, NS = ...
@@ -251,7 +251,7 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 --
--- The cast itself arrives from core/MythicMeters.lua, which owns every game
+-- The cast itself arrives from core/MultiMeters.lua, which owns every game
 -- event in this addon (architecture-§4). What is subscribed here are the three
 -- bus messages that make the set stale.
 

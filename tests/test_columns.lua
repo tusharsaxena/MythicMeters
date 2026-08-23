@@ -26,11 +26,11 @@
 --   * the width slider's range and the carve-out's validator agree, because the
 --     CLI and a hand-edited SavedVariables reach the seam without the slider.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test = T.test
 local assertEqual, assertTrue, assertFalse = T.assertEqual, T.assertTrue, T.assertFalse
 
-local PANEL = "MythicMetersColumnsPanel"
+local PANEL = "MultiMetersColumnsPanel"
 
 local function aceGUI(inst) return inst.mocks.__libs["AceGUI-3.0"] end
 

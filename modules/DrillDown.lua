@@ -75,7 +75,7 @@
 -- from last week's raid would be nonsense, and worse, it would be a stored
 -- reference to a sourceGUID that no longer exists.
 --
--- Living in State.Cache buys one more thing: core/MythicMeters.lua already wipes
+-- Living in State.Cache buys one more thing: core/MultiMeters.lua already wipes
 -- every cache on DAMAGE_METER_RESET and on a profile change, and both of those
 -- invalidate a breakdown completely. The wipe is in place, so the upvalue below
 -- keeps pointing at the live table (see core/State.lua's WipeCache).
@@ -787,7 +787,7 @@ end
 -- Wiring
 -- ---------------------------------------------------------------------------
 --
--- Bus messages only — core/MythicMeters.lua is the addon's single game-event
+-- Bus messages only — core/MultiMeters.lua is the addon's single game-event
 -- listener. METER_RESET and PROFILE_CHANGED both invalidate every captured
 -- GUID; WINDOWS_CHANGED can delete the window a view belongs to.
 

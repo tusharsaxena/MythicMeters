@@ -51,9 +51,9 @@ read_globals = {
   "StaticPopup_Show",
 }
 globals = {
-  "MythicMetersDB",     -- SavedVariables write target (the AceDB tree)
-  "MythicMetersPerfDB", -- LibKa0s-Perf capture ring; a SECOND top-level SV global, deliberately
-                        -- outside the AceDB tree so "copy profile" does not clone it and
-                        -- "reset profile" does not wipe it
+  "MultiMetersDB",     -- SavedVariables write target (the AceDB tree)
+  "MultiMetersPerfDB", -- LibKa0s-Perf capture ring; a SECOND top-level SV global, deliberately
+                       -- outside the AceDB tree so "copy profile" does not clone it and
+                       -- "reset profile" does not wipe it
   "StaticPopupDialogs", -- addon registers named popups by adding fields to this table
 }

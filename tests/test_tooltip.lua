@@ -13,7 +13,7 @@
 -- order, so "did it sort" is answered by looking at the tooltip rather than by
 -- trusting a flag.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

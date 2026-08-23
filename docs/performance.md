@@ -22,7 +22,7 @@ This addon has **exactly one hot path, and it is event-driven rather than per-fr
 `OnUpdate` doing work, no combat-log parsing, and no per-unit polling. What there is:
 
 1. **`DAMAGE_METER_*` on a busy pull.** `DAMAGE_METER_CURRENT_SESSION_UPDATED` fires far faster than
-   anything needs to redraw. Each of the three handlers in `core/MythicMeters.lua` does one thing —
+   anything needs to redraw. Each of the three handlers in `core/MultiMeters.lua` does one thing —
    fan the event out on the message bus — and that fan-out walks every subscribed window's callback
    synchronously. That is the `meterEvent` bucket, and it scales with **event rate × number of open
    windows**.
@@ -73,7 +73,7 @@ overlap, and **a parent must never be summed with its children**.
 
 | Bucket | Inside | What it brackets | Call sites |
 |---|---|---|---|
-| `meterEvent` | — | one `DAMAGE_METER_*` handler, i.e. the bus fan-out to every window | `core/MythicMeters.lua:200`, `:210`, `:218` |
+| `meterEvent` | — | one `DAMAGE_METER_*` handler, i.e. the bus fan-out to every window | `core/MultiMeters.lua:200`, `:210`, `:218` |
 | `refresh` | — | one coalesced window refresh pass | `modules/Window.lua:1274`, `:1284`, `:1307`, `:1314` (every exit) |
 | `providerRead` | `refresh` | one `C_DamageMeter` column read | `modules/Provider.lua:332` |
 | `aggregate` | `refresh` | the GUID join and the ordering pass | `modules/Aggregator.lua:1220`, `modules/DrillDown.lua:435` |
@@ -125,7 +125,7 @@ Two details that keep it that way:
 - **The upvalue is resolved at load, never per call.** `NS.Perf` is a table index; doing it inside
   the bracket would put a hash lookup on the hot path to save nothing. `core/PerfSetup.lua` loads
   before `modules/`, so the upvalue is always either the live harness or its stub — never nil.
-- **`core/MythicMeters.lua` deliberately does the opposite** and resolves `NS.Perf` at call time
+- **`core/MultiMeters.lua` deliberately does the opposite** and resolves `NS.Perf` at call time
   (`local Perf = NS.Perf; local t0 = Perf and Perf.on and ...`). Its handlers are an *event* path,
   not a per-frame one, so one extra table index behind an `and` is affordable — and it buys immunity
   to the seam being republished after load on a degraded install or under test.
@@ -265,14 +265,14 @@ today.
 /mm perf start [label]         # begin a run; zeroes the counters, stamps who and where you are
 /mm perf measure a             # arm Experiment A — addon ACTIVE; records only while combat is up
 /mm perf measure b             # arm Experiment B — same, with the addon SUSPENDED first
-/mm perf finish                # end the run, save it to MythicMetersPerfDB, lift any suspend
+/mm perf finish                # end the run, save it to MultiMetersPerfDB, lift any suspend
 /mm perf report                # totals for the run
 /mm perf dump                  # the raw record, one line of JSON, ready to paste
 /mm perf cancel                # abandon the run; nothing is saved
 /mm perf show | hide | toggle  # the clickable step panel
 ```
 
-`/mythicmeters` is the long form and works identically. The step panel runs the identical code path
+`/multimeters` is the long form and works identically. The step panel runs the identical code path
 as the typed verbs — the library returns lines, `settings/Slash.lua` prints them through the tagged
 printer — so clicking and typing cannot diverge.
 
@@ -290,7 +290,7 @@ verb the help index, the settings landing page and the README all miss.
    window open is not the same measurement.
 3. `/mm perf start <label>`, then `measure a`, fight; then `measure b`, fight the same fight. Each
    arm records only while combat is up.
-4. `/mm perf finish`, then `report` and `dump`. `/reload` to flush `MythicMetersPerfDB` to disk.
+4. `/mm perf finish`, then `report` and `dump`. `/reload` to flush `MultiMetersPerfDB` to disk.
 5. Press **Copy** on the debug-log window and commit the run as a bundle under
    [`perf-analysis/`](perf-analysis/) if it is worth keeping. One paste carries the report, the dump
    and the run's lifecycle lines — all three of the bundle's artifacts.

@@ -44,10 +44,10 @@ local function helpers() return NS.Helpers end
 -- AFTER this file has run, so a captured reference would be nil forever.
 
 local descriptor = {
-    parentTitle   = "Ka0s Mythic Meters",
+    parentTitle   = "Ka0s Multi Meters",
     -- Named rather than anonymous so /framestack attributes the canvas to this
     -- addon and two addons cannot collide on it.
-    mainPanelName = "MythicMetersMainPanel",
+    mainPanelName = "MultiMetersMainPanel",
 
     print = function(line) if NS.Print then NS.Print(line) end end,
     debug = function(tag, fmt, ...) if NS.Debug then NS.Debug(tag, fmt, ...) end end,

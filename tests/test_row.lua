@@ -10,7 +10,7 @@
 -- formatter — and both are asserted below on the values the widget actually
 -- received, which the frame stub records raw.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

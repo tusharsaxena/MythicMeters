@@ -175,7 +175,7 @@ end
 
 cli = SlashLib:New({
     slash        = "/mm",
-    slashAliases = { "/mythicmeters" },
+    slashAliases = { "/multimeters" },
     commands     = NS.COMMANDS,
     aliases      = { options = "config" },   -- back-compat with the collection's older spelling
 
@@ -500,5 +500,5 @@ function Sl:Register()
     local target = NS.addon or NS
     if not target.RegisterChatCommand then return end
     target:RegisterChatCommand("mm", function(input) Sl:OnSlash(input) end)
-    target:RegisterChatCommand("mythicmeters", function(input) Sl:OnSlash(input) end)
+    target:RegisterChatCommand("multimeters", function(input) Sl:OnSlash(input) end)
 end

@@ -9,7 +9,7 @@
 -- restricted case drops the pet's contribution and says so, and both halves of
 -- that are asserted rather than assumed.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

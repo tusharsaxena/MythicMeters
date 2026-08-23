@@ -12,7 +12,7 @@
 -- that makes it correct is spelled out at EnsureWindowShape: test with `== nil`,
 -- NEVER `stored.k or D.k`.
 --
--- TOC POSITION: after core/State.lua and before core/MythicMeters.lua, whose
+-- TOC POSITION: after core/State.lua and before core/MultiMeters.lua, whose
 -- OnInitialize calls NS:InitDB(). The defaults tree it merges against loads
 -- LATER (the `# Defaults` block follows `# Core`), which is fine because every
 -- read of NS.defaults here happens at CALL time.
@@ -37,7 +37,7 @@ NS.Database = Database
 -- v2 makes every column one uniform width (see migrations[1] below).
 local CURRENT_DB_VERSION = 3
 
--- The ONE Ka0s_MythicMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
+-- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
 -- swap, a copy, a reset — routes here rather than writing its own SendMessage,
 -- so the bus catalog in docs/ARCHITECTURE.md names one site and stays true.
@@ -387,7 +387,7 @@ function NS:InitDB()
     -- contradicts the documentation and is the source of every "each new
     -- character lands on its own settings" report in the collection. Players who
     -- want per-character opt in through the Profiles page.
-    local db = AceDB:New("MythicMetersDB", NS.defaults, true)
+    local db = AceDB:New("MultiMetersDB", NS.defaults, true)
     NS.db         = db
     Database.db   = db
 

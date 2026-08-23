@@ -368,7 +368,7 @@ function WindowProto:BuildFrame()
 
     local cfg   = self.config
     local frameCfg = cfg.frame or {}
-    local name  = "MythicMetersWindow" .. tostring(self.id)
+    local name  = "MultiMetersWindow" .. tostring(self.id)
 
     -- The clean geometry frame. Empty on purpose — see the file header.
     local anchor = CreateFrame("Frame", name .. "Anchor", UIParent)
@@ -774,7 +774,7 @@ function WindowProto:ApplyTitle()
     -- between a player and reading placeholder data as their own performance is a
     -- label saying otherwise. It goes in the TITLE rather than in the session
     -- line because the title is the part of the window nothing else competes for.
-    local title = header.title ~= "" and header.title or (cfg.name or L["Mythic Meters"])
+    local title = header.title ~= "" and header.title or (cfg.name or L["Multi Meters"])
     if NS.State and NS.State.testMode then
         title = title .. "   |cffff2020" .. L["TEST MODE"] .. "|r"
     end
@@ -1888,7 +1888,7 @@ function WindowProto:ShowNotice(reason)
     self:HideAll()
     local lines = {
         L["Blizzard's damage meter is not available."],
-        L["Mythic Meters reads every number from the game's built-in damage meter. Enable it to see data here."],
+        L["Multi Meters reads every number from the game's built-in damage meter. Enable it to see data here."],
     }
     if reason ~= nil and NS.IsConcatSafe and NS.IsConcatSafe(reason) then
         lines[#lines + 1] = NS.GRAY .. L["Reason: %s"]:format(tostring(reason)) .. "|r"

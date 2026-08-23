@@ -49,7 +49,7 @@ second sender is a bug, not a convenience. Receivers that are not AceAddon modul
 target from `NS.NewBusTarget()` — CallbackHandler keys callbacks by `(message, target)`, so two
 receivers on the same object silently clobber each other (anti-pattern #32).
 
-**Modules subscribe; they never register game events.** `core/MythicMeters.lua` is the addon's single
+**Modules subscribe; they never register game events.** `core/MultiMeters.lua` is the addon's single
 game-event listener and fans everything onto the bus.
 
 **Perf brackets are Shape A, inline, with a load-time upvalue.** `local Perf = NS.Perf` at file
@@ -343,7 +343,7 @@ local function Build(mainCategory)
     local H = NS.Helpers
     if not (H and H.CreatePanel) then return nil end
 
-    local ctx = H.CreatePanel("MythicMeters<Name>Panel", L["<Name>"], {
+    local ctx = H.CreatePanel("MultiMeters<Name>Panel", L["<Name>"], {
         panelKey = PAGE, defaultsButton = true,
     })
     ctx.panel.defaultsOnClick = function() H.RestoreDefaults(PAGE, ctx) end
@@ -362,7 +362,7 @@ if NS.RegisterOptionsPage then
 end
 ```
 
-**2. `MythicMeters.toc`** — add the file in the `# Settings` block, **after** `settings/Schema.lua`
+**2. `MultiMeters.toc`** — add the file in the `# Settings` block, **after** `settings/Schema.lua`
 and `settings/OptionsSetup.lua`, in the position you want the page to appear. Registration order is
 page order.
 
@@ -426,7 +426,7 @@ is a sub-verb nobody can discover (`slash-commands-§4`).
   page and the README all miss.
 - Registration goes through AceConsole (`Sl:Register`), never a raw `SLASH_*` global. AceConsole owns
   the deregistration a `/reload` needs and the collision check two addons claiming one token need.
-- `/mythicmeters` is a real alias reaching the same dispatcher, not a second command.
+- `/multimeters` is a real alias reaching the same dispatcher, not a second command.
 - If the verb acts on windows, route it through `modules/WindowManager.lua` rather than
   reimplementing anything. The panel calls the same methods, and duplicating the rule gives the CLI
   and the panel two ideas of what "delete a window" means.
@@ -439,7 +439,7 @@ is a sub-verb nobody can discover (`slash-commands-§4`).
 comment beside it and the payload shape after it.
 
 ```lua
-SESSION_PICKED = "Ka0s_MythicMeters_SESSION_PICKED",   -- { windowId, sessionID }
+SESSION_PICKED = "Ka0s_MultiMeters_SESSION_PICKED",   -- { windowId, sessionID }
 ```
 
 Every name is declared here so the catalog in `ARCHITECTURE.md` has one place to be checked against,
@@ -450,7 +450,7 @@ fires.
 
 | Message | Sole sender |
 |---|---|
-| `METER_UPDATED` `METER_SESSION` `METER_RESET` `ROSTER_CHANGED` `ZONE_CHANGED` `ENTERING_WORLD` `RESTRICTION_CHANGED` | `core/MythicMeters.lua` (the addon's only game-event listener) |
+| `METER_UPDATED` `METER_SESSION` `METER_RESET` `ROSTER_CHANGED` `ZONE_CHANGED` `ENTERING_WORLD` `RESTRICTION_CHANGED` | `core/MultiMeters.lua` (the addon's only game-event listener) |
 | `PROFILE_CHANGED` | `core/Database.lua` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`'s tail) |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` |
@@ -467,7 +467,7 @@ sessions that no longer exist.
 Anything else — a window instance, `modules/Format.lua` — takes a private target from
 `NS.NewBusTarget()`.
 
-**4. Name it from the catalog and only the catalog.** Never `Const.MSG.X or "Ka0s_MythicMeters_X"`.
+**4. Name it from the catalog and only the catalog.** Never `Const.MSG.X or "Ka0s_MultiMeters_X"`.
 A hand-spelled fallback defeats the exact protection the catalog exists to give: a misspelled or
 removed key must fail loudly at load, not quietly ship a name no subscriber is listening on.
 
@@ -537,7 +537,7 @@ if t0 then Perf.Note("myBucket", debugprofilestop() - t0) end
 **1. Write `tests/test_<name>.lua`.**
 
 ```lua
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 
 T.test("aggregator drops an unattributable pet", function()
@@ -589,7 +589,7 @@ Two things move, and **they must move in the same commit.**
 
 ```sh
 LIBKA0S=/path/to/LibKa0s          # checked out at the tag, e.g. v1.8.4
-MM=/path/to/MythicMeters
+MM=/path/to/MultiMeters
 
 rm -rf "$MM/libs/LibKa0s" "$MM/tests/_kit"
 cp -r "$LIBKA0S/LibKa0s" "$MM/libs/LibKa0s"

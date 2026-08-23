@@ -308,8 +308,8 @@ if not lib then
 end
 
 NS.DebugLog = lib:New({
-    -- Seeds MythicMetersDebugWindow / MythicMetersDebugCopyWindow /
-    -- MythicMetersDebugCopyScroll. Two hosts sharing a name would clobber each
+    -- Seeds MultiMetersDebugWindow / MultiMetersDebugCopyWindow /
+    -- MultiMetersDebugCopyScroll. Two hosts sharing a name would clobber each
     -- other's globals and each other's Esc handler.
     name  = addonName,
     -- THE FOLDER NAME, which is a different question from the one above even though
@@ -322,8 +322,8 @@ NS.DebugLog = lib:New({
     -- nothing. Passed explicitly for that reason rather than left to the library to
     -- infer from `name`.
     addonName = addonName,
-    -- The library appends its own " — Debug", giving "Ka0s Mythic Meters — Debug".
-    title = "Ka0s Mythic Meters",
+    -- The library appends its own " — Debug", giving "Ka0s Multi Meters — Debug".
+    title = "Ka0s Multi Meters",
     font  = NS.Constants and NS.Constants.FONT_MONO,
     slash = "/mm",
     -- fontSize omitted: 10 is the library's default and is this addon's value.
@@ -357,7 +357,7 @@ NS.DebugLog = lib:New({
         local ver     = NS.version or "?"
         local schema  = NS.db and NS.db.global and NS.db.global.schemaVersion or "?"
         local profile = NS.db and NS.db.GetCurrentProfile and NS.db:GetCurrentProfile() or "?"
-        return ("MythicMeters v%s, schema v%s, profile '%s'"):format(
+        return ("MultiMeters v%s, schema v%s, profile '%s'"):format(
             NS.SafeToString(ver), NS.SafeToString(schema), NS.SafeToString(profile))
     end,
 

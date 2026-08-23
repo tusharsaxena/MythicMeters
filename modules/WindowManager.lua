@@ -13,7 +13,7 @@
 -- sub-table is the classic profile-aliasing bug, where editing window 2's bar
 -- color silently edits window 1's.
 --
--- THE SOLE SENDER of Ka0s_MythicMeters_WINDOWS_CHANGED (architecture-§4). That
+-- THE SOLE SENDER of Ka0s_MultiMeters_WINDOWS_CHANGED (architecture-§4). That
 -- message means the registry changed SHAPE — a window created, deleted, renamed
 -- or duplicated — and is deliberately distinct from CONFIG_CHANGED, which is a
 -- setting moving inside a window that already exists. The settings panel

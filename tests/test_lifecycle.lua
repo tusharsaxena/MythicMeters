@@ -1,4 +1,4 @@
--- tests/test_lifecycle.lua — core/MythicMeters.lua: the AceAddon bootstrap, the
+-- tests/test_lifecycle.lua — core/MultiMeters.lua: the AceAddon bootstrap, the
 -- addon's SINGLE game-event listener, and the show ladder.
 --
 -- A load-only harness runs to the bottom of the TOC and stops, which is the
@@ -14,7 +14,7 @@
 -- one reviewable file. A module that grew its own RegisterEvent would be a
 -- second answer to the same question, invisible until the two disagreed.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS = T.NS
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
@@ -30,7 +30,7 @@ local MODULES = {
     "DrillDown", "Visibility",
 }
 
--- Every game event core/MythicMeters.lua claims, and the handler it names.
+-- Every game event core/MultiMeters.lua claims, and the handler it names.
 local EVENTS = {
     PLAYER_ENTERING_WORLD                = "OnEnteringWorld",
     GROUP_ROSTER_UPDATE                  = "OnRosterUpdate",
@@ -56,7 +56,7 @@ end
 -- ── the bootstrap ───────────────────────────────────────────────────────────
 
 test("Lifecycle: NS IS the AceAddon object, promoted in place", function()
-    -- NewAddon promotes the table it is handed, so there is no _G.MythicMeters
+    -- NewAddon promotes the table it is handed, so there is no _G.MultiMeters
     -- rebind and there never will be: the namespace stays private
     -- (architecture-§1). NS.addon is published anyway so a caller has a name for
     -- "the AceAddon object" that does not assume the promotion.
@@ -64,7 +64,7 @@ test("Lifecycle: NS IS the AceAddon object, promoted in place", function()
     assertTrue(inst.NS.addon == inst.NS, "NS.addon must be the same table as NS")
     assertEqual(type(inst.NS.SendMessage), "function", "AceEvent must be embedded")
     assertEqual(type(inst.NS.ScheduleTimer), "function", "AceTimer must be embedded")
-    assertNil(_G.MythicMeters, "the namespace must not be rebound to a global")
+    assertNil(_G.MultiMeters, "the namespace must not be rebound to a global")
 end)
 
 test("Lifecycle: every module registers, and the enable cascade runs them all", function()
@@ -116,7 +116,7 @@ test("Lifecycle: OnInitialize builds the database FIRST", function()
     -- NS.db.profile.minimap and registering earlier would hand it a table that
     -- is thrown away on the next profile swap.
     -- red under: moving the InitDB call below the Minimap.Init call.
-    local src = assert(io.open(ROOT .. "/core/MythicMeters.lua", "r")):read("*a")
+    local src = assert(io.open(ROOT .. "/core/MultiMeters.lua", "r")):read("*a")
     local body = src:match("function NS:OnInitialize%(%)(.-)\nend")
     assertTrue(body ~= nil, "could not find OnInitialize")
     local dbAt      = body:find("self:InitDB()", 1, true)
@@ -149,7 +149,7 @@ test("Lifecycle: with the settings layer gone, `/mm` is claimed anyway and says 
     end
     inst.NS:OnInitialize()
     assertTrue(claimed.mm ~= nil, "/mm was not claimed")
-    assertTrue(claimed.mythicmeters ~= nil, "/mythicmeters was not claimed")
+    assertTrue(claimed.multimeters ~= nil, "/multimeters was not claimed")
 
     local before = #inst.mocks.__chat
     claimed.mm("")
@@ -172,7 +172,7 @@ test("Lifecycle: OnEnable registers exactly the events the fan-out handles", fun
     end
     table.sort(extra)
     assertEqual(table.concat(extra, ", "), "",
-        "core/MythicMeters.lua registered an event with no case covering it")
+        "core/MultiMeters.lua registered an event with no case covering it")
 end)
 
 test("Lifecycle: no module registers a game event of its own", function()
@@ -185,12 +185,12 @@ test("Lifecycle: no module registers a game event of its own", function()
         local src = fh and fh:read("*a"):gsub("%-%-[^\r\n]*", "") or ""
         if fh then fh:close() end
         local low = rel:lower()
-        -- core/MythicMeters.lua owns the addon's events; core/LSMPatch.lua owns
+        -- core/MultiMeters.lua owns the addon's events; core/LSMPatch.lua owns
         -- its own one-shot PLAYER_LOGIN frame, which is a widget hook rather
         -- than an addon event and is documented as such in its header.
-        if low ~= "core/mythicmeters.lua" and low ~= "core/lsmpatch.lua" then
+        if low ~= "core/multimeters.lua" and low ~= "core/lsmpatch.lua" then
             assertNil(src:match("[^%w]RegisterEvent%s*%("),
-                rel .. " registers a game event — the fan-out in core/MythicMeters.lua owns them")
+                rel .. " registers a game event — the fan-out in core/MultiMeters.lua owns them")
         end
     end
 end)

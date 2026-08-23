@@ -21,7 +21,7 @@
 -- rather than sharing one: a suite whose cases can only pass in the order they
 -- happen to be declared in is a suite that will fail for the wrong reason later.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test = T.test
 local assertEqual, assertTrue, assertFalse = T.assertEqual, T.assertTrue, T.assertFalse
 

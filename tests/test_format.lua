@@ -9,7 +9,7 @@
 -- a secret through Number / Rate / Duration / Percent is therefore a live probe
 -- for that regression rather than a restatement of the header.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test         = T.test
 local assertEqual  = T.assertEqual

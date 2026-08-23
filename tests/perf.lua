@@ -37,9 +37,9 @@ local mockmod = assert(loadfile(root .. "/tests/wow_mock.lua"))(root)
 
 -- Each dofile of the kit loader returns a FRESH table, so this runner sets its
 -- own addonName rather than inheriting one from tests/run.lua. Chunks are called
--- as ("MythicMeters", NS) to match the client's `local addonName, NS = ...`
+-- as ("MultiMeters", NS) to match the client's `local addonName, NS = ...`
 -- header — core/PerfSetup.lua reads that first argument.
-Loader.addonName = "MythicMeters"
+Loader.addonName = "MultiMeters"
 
 -- ── arguments ───────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ mocks._G = Loader.makeEnv(mocks)
 local NS = {}
 Loader.loadAll(Loader.xmlFiles(root .. "/libs/LibKa0s/LibKa0s.xml"), NS, mocks)
 do
-    local toc = Loader.tocFiles(root .. "/MythicMeters.toc")
+    local toc = Loader.tocFiles(root .. "/MultiMeters.toc")
     for i, rel in ipairs(toc) do toc[i] = root .. "/" .. rel end
     Loader.loadAll(toc, NS, mocks)
 end
@@ -398,7 +398,7 @@ local throttle = measure("throttleBurst", 1, function()
     inst.dirty = false
 
     -- The burst. Every one of these is a full bus dispatch through
-    -- core/MythicMeters.lua's fan-out, exactly as a busy pull produces it.
+    -- core/MultiMeters.lua's fan-out, exactly as a busy pull produces it.
     for _ = 1, BURST do
         NS:SendMessage(MSG.METER_UPDATED)
     end
@@ -595,7 +595,7 @@ assert_(suspended.apiPerIter == 0,
 
 -- ── report ──────────────────────────────────────────────────────────────────
 
-print(("Ka0s Mythic Meters \226\128\148 offline perf  (v%s, label '%s')")
+print(("Ka0s Multi Meters \226\128\148 offline perf  (v%s, label '%s')")
     :format(tostring(NS.version), opts.label))
 print(("%d group members, %d columns, throttle %.2fs, %d events per burst")
     :format(MEMBERS, COLUMNS, inst.throttle, BURST))
@@ -649,7 +649,7 @@ if opts.out then
 
     local record = {
         schema    = NS.Perf.SCHEMA,
-        addon     = "MythicMeters",
+        addon     = "MultiMeters",
         source    = "offline",
         version   = NS.version,
         interface = 0,          -- no client involved

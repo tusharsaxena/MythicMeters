@@ -6,7 +6,7 @@
 -- run to completion on a hostile client, print rather than raise, and never be
 -- the reason a player cannot describe what they are seeing.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

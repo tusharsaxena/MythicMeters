@@ -56,7 +56,7 @@ local Const = NS.Constants
 local WINDOW_TEMPLATE = {
     -- Display name, shown in the window picker and (optionally) in the header.
     -- NS.DefaultWindow overwrites this for windows after the first.
-    name = "Mythic Meters",
+    name = "Multi Meters",
 
     -- -----------------------------------------------------------------------
     -- frame — the standalone window itself

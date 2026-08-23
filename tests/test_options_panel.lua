@@ -23,7 +23,7 @@
 --   the first show only — which looks identical until a page is re-shown after a
 --   rebuild, and then the button is simply gone.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local test = T.test
 local assertEqual, assertTrue, assertFalse = T.assertEqual, T.assertTrue, T.assertFalse
 
@@ -43,19 +43,19 @@ local PAGES = {
 -- failing test that pins the underlying defect); every other case in this suite
 -- is about something else and should not be blocked behind it.
 local PANEL_NAME = {
-    windows    = "MythicMetersWindowsPanel",
-    frame      = "MythicMetersFramePanel",
-    header     = "MythicMetersHeaderPanel",
-    rows       = "MythicMetersRowsPanel",
-    bars       = "MythicMetersBarsPanel",
-    text       = "MythicMetersTextPanel",
-    icons      = "MythicMetersIconsPanel",
-    tooltip    = "MythicMetersTooltipPanel",
-    visibility = "MythicMetersVisibilityPanel",
-    columns    = "MythicMetersColumnsPanel",
-    data       = "MythicMetersDataPanel",
-    general    = "MythicMetersGeneralPanel",
-    profiles   = "MythicMetersProfilesPanel",
+    windows    = "MultiMetersWindowsPanel",
+    frame      = "MultiMetersFramePanel",
+    header     = "MultiMetersHeaderPanel",
+    rows       = "MultiMetersRowsPanel",
+    bars       = "MultiMetersBarsPanel",
+    text       = "MultiMetersTextPanel",
+    icons      = "MultiMetersIconsPanel",
+    tooltip    = "MultiMetersTooltipPanel",
+    visibility = "MultiMetersVisibilityPanel",
+    columns    = "MultiMetersColumnsPanel",
+    data       = "MultiMetersDataPanel",
+    general    = "MultiMetersGeneralPanel",
+    profiles   = "MultiMetersProfilesPanel",
 }
 
 local function aceGUI(inst) return inst.mocks.__libs["AceGUI-3.0"] end
@@ -104,7 +104,7 @@ end
 
 test("Options: the parent category is registered at CreateOptionsPanel time", function()
     assertTrue(T.mocks.__mainPanel ~= nil, "no canvas category was registered")
-    assertEqual(T.mocks.__mainPanel:GetName(), "MythicMetersMainPanel",
+    assertEqual(T.mocks.__mainPanel:GetName(), "MultiMetersMainPanel",
         "the main panel is NAMED so /framestack attributes it to this addon")
 end)
 

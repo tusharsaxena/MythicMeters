@@ -10,14 +10,14 @@
 -- is why the ladder exists at all; this is the first version of it that can be
 -- caught out of game.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
 local assertTrue  = T.assertTrue
 local assertNil   = T.assertNil
 
-local VENDORED = "Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\"
+local VENDORED = "Interface\\AddOns\\MultiMeters\\libs\\LibKa0s\\media\\"
 
 -- ---------------------------------------------------------------------------
 -- The seam

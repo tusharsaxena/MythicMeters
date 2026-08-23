@@ -10,7 +10,7 @@
 --
 --   * the PRINTER, which has to survive AceConsole's embed. AceAddon:NewAddon
 --     stamps AceConsole's own `:Print` over NS.Print during the call in
---     core/MythicMeters.lua — green, trailing colon, no cyan tag, no error and
+--     core/MultiMeters.lua — green, trailing colon, no cyan tag, no error and
 --     nothing to say so. The reclaim on the next line only restores the LIBRARY
 --     printer because NS.Print and NS.Util.print hold one identical function
 --     object rather than two wrappers around it.
@@ -19,7 +19,7 @@
 --     carrying one is not an edge case — it is Tuesday.
 --   * the STORED-COLOR reader, whose whole job is that a stored 0 survives as 0.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 local NS, mocks = T.NS, T.mocks
 local test, assertEqual, assertTrue, assertFalse, assertNil, assertNear =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil, T.assertNear
@@ -67,7 +67,7 @@ test("CoreSetup: the TOC-derived addon list leaks no libs/ entry", function()
     assertTrue(#T.loadedAddonFiles > 0, "the TOC-derived addon list is empty")
     -- Only meaningful while the TOC actually declares a `.lua` under `libs\` for
     -- the skip to skip. It declares several today.
-    local fh = assert(io.open(T.root .. "/MythicMeters.toc", "r"))
+    local fh = assert(io.open(T.root .. "/MultiMeters.toc", "r"))
     local toc = fh:read("*a")
     fh:close()
     assertTrue(toc:lower():match("[\r\n]%s*libs[\\/][^\r\n]*%.lua") ~= nil,
@@ -88,7 +88,7 @@ end)
 
 test("CoreSetup: NS.Print and NS.Util.print are the SAME function object", function()
     -- Not two wrappers that render alike. The AceConsole reclaim in
-    -- core/MythicMeters.lua restores NS.Print by reading NS.Util.print back, and
+    -- core/MultiMeters.lua restores NS.Print by reading NS.Util.print back, and
     -- it only restores the library printer because of this identity.
     -- red under: `Util.print = function(...) return NS.Print(...) end`.
     assertEqual(type(NS.Print), "function")
@@ -100,7 +100,7 @@ test("CoreSetup: the printer survives AceConsole's embed", function()
     -- runs on the very next line, so by the time any suite sees NS it must be
     -- the library printer again — and the way to tell is the cyan tag, which
     -- AceConsole's never emits.
-    -- red under: deleting the reclaim block from core/MythicMeters.lua.
+    -- red under: deleting the reclaim block from core/MultiMeters.lua.
     local inst = T.load{}
     inst.NS.Print("hello")
     local line = inst.mocks.__chat[#inst.mocks.__chat]
@@ -248,7 +248,7 @@ test("CoreSetup: the close button is the library's, told which addon is asking",
     NS.MakeCloseButton(mocks.__stubFrame("Frame"), function() end)
     lib.MakeCloseButton = real
 
-    assertEqual(seen, "MythicMeters",
+    assertEqual(seen, "MultiMeters",
         "the library was not told which addon folder to build the path from")
 end)
 

@@ -1206,7 +1206,7 @@ function Diagnostics.Report()
         end
     end
 
-    out("|cffffd100Ka0s Mythic Meters — diagnostics|r  v" .. tostring(NS.version))
+    out("|cffffd100Ka0s Multi Meters — diagnostics|r  v" .. tostring(NS.version))
 
     for _, section in ipairs({
         reportAtlases, reportFormatter, reportVisibility, reportHeader,

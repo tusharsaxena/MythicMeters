@@ -11,7 +11,7 @@
 --        concatenation and indexing, so an inspection is a raise rather than a
 --        subtly wrong answer.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual

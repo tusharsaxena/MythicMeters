@@ -45,7 +45,7 @@ local H = NS.Helpers or {}
 -- command cannot drift into resetting different things — and so the Profiles
 -- veto (settings/OptionsSetup.lua's skipRestoreAll) applies to all three
 -- rather than to whichever path someone remembered.
-StaticPopupDialogs["MYTHICMETERS_RESET_ALL"] = {
+StaticPopupDialogs["MULTIMETERS_RESET_ALL"] = {
     text         = L["Reset every window and every setting to the addon defaults? The active profile is the only one affected."],
     button1      = L["Yes"],
     button2      = L["No"],
@@ -65,7 +65,7 @@ local function Build(mainCategory)
     if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return nil end
     if not (H and H.CreatePanel) then return nil end
 
-    local ctx = H.CreatePanel("MythicMetersGeneralPanel", L["General"], {
+    local ctx = H.CreatePanel("MultiMetersGeneralPanel", L["General"], {
         pageKey        = PAGE,
         defaultsButton = true,
     })
@@ -82,7 +82,7 @@ local function Build(mainCategory)
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
             tooltip = L["Reset every setting on every page, for every window, back to the addon defaults. Profiles are left alone."],
-            onClick = function() StaticPopup_Show("MYTHICMETERS_RESET_ALL") end,
+            onClick = function() StaticPopup_Show("MULTIMETERS_RESET_ALL") end,
         }, nil)
 
         if H.Relayout then H.Relayout(c) end

@@ -1,6 +1,6 @@
 # Scope
 
-What Ka0s Mythic Meters is, what is in scope, and what is deliberately not. This doc records the
+What Ka0s Multi Meters is, what is in scope, and what is deliberately not. This doc records the
 *boundary* decisions, so a fresh contributor can tell whether a feature request is in or out without
 re-litigating it — and, for the two entries that matter most, so nobody re-proposes something the
 data source cannot express.
@@ -11,15 +11,15 @@ A single-frame, multi-column group meter for Retail (Midnight, 12.x). One row pe
 column per statistic, each cell a `StatusBar` with its text on it.
 
 Every other meter shows one statistic per window. Answering "who kicked, who dispelled, who stood in
-things, who died" means four windows or four mode switches. Mythic Meters shows all of them as
+things, who died" means four windows or four mode switches. Multi Meters shows all of them as
 columns of one grid.
 
 **Every number comes from Blizzard's built-in damage meter through `C_DamageMeter`.** The addon never
 parses the combat log, never maintains its own event accumulator, and never persists a number. That
 is the single largest scope decision in the project and everything below follows from it.
 
-Identity: folder `MythicMeters` · TOC `MythicMeters.toc` · display name `Ka0s Mythic Meters` ·
-`/mm` with a `/mythicmeters` alias · SavedVariables `MythicMetersDB` + `MythicMetersPerfDB` · MIT ·
+Identity: folder `MultiMeters` · TOC `MultiMeters.toc` · display name `Ka0s Multi Meters` ·
+`/mm` with a `/multimeters` alias · SavedVariables `MultiMetersDB` + `MultiMetersPerfDB` · MIT ·
 Retail only · English only.
 
 ## In scope
@@ -137,7 +137,7 @@ These have been considered and explicitly declined.
   player already has, and both costs that kept a shipped texture out are now paid by the library
   rather than by this repo — a license notice beside the bytes, and one registry key for the whole
   collection. What is left is a default-value decision nobody has made, which is
-  [issue #4](https://github.com/tusharsaxena/MythicMeters/issues/4)'s to make; a player who wants the
+  [issue #4](https://github.com/tusharsaxena/MultiMeters/issues/4)'s to make; a player who wants the
   Ka0s look can already pick it out of the dropdown.
 
 ## Known caveats, not scope decisions

@@ -14,7 +14,7 @@ badge and any count quoted in the docs must agree with it.
 - loadorder: no file captures an NS symbol a later file publishes
 - loadorder: locales/ loads ahead of every file that captures NS.L
 - loadorder: the five LibKa0s seams load in the order their headers pin
-- loadorder: core/MythicMeters.lua loads after every core/ setup file
+- loadorder: core/MultiMeters.lua loads after every core/ setup file
 
 ### test_constants.lua (21)
 
@@ -120,7 +120,7 @@ badge and any count quoted in the docs must agree with it.
 - State: the SavedVariables globals never carry a state flag after a full load
 - State: SetRestricted normalizes to a plain boolean
 - State: core/Secrets.lua stays the authority, and State is only its mirror
-- State: only core/MythicMeters.lua writes the restriction mirror
+- State: only core/MultiMeters.lua writes the restriction mirror
 - State: SetTestMode flips the flag and publishes TEST_MODE_CHANGED once
 - State: SetTestMode no-ops when the flag is already in the requested state
 - State: SetTestMode coerces truthy values to a boolean before comparing

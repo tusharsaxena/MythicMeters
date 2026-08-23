@@ -455,7 +455,7 @@ NS.Schema = {
     -- control are BESPOKE (settings/Windows.lua): they act on the registry, not on
     -- a leaf, so they have no path. The window's NAME is a leaf and is here.
     {
-        path = "window.name", type = "string", default = "Mythic Meters",
+        path = "window.name", type = "string", default = "Multi Meters",
         dialogControl = "EditBox", maxLetters = 32,
         page = "windows", group = L["Active window"],
         label = L["Window name"], desc = L["Name shown in this picker and, optionally, in the window's own header."],
@@ -1219,7 +1219,7 @@ NS.Schema = {
     {
         path = "enabled", type = "bool", default = true,
         page = "general", group = L["Master controls"],
-        label = L["Enable Mythic Meters"],
+        label = L["Enable Multi Meters"],
         desc = L["Master switch for the addon. When off, no window is drawn and no data is read."],
         onChange = refreshVisibility,
     },

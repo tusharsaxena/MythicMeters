@@ -7,7 +7,7 @@
 -- unit API in the right ORDER, and that pet attribution is honest about what it
 -- cannot know.
 
-local T = _G.MYTHICMETERS_TEST
+local T = _G.MULTIMETERS_TEST
 
 local test        = T.test
 local assertEqual = T.assertEqual
@@ -311,7 +311,7 @@ test("Roster subscribes to the roster message; it never sends one", function()
 end)
 
 test("modules/Roster.lua registers no game event of its own", function()
-    -- core/MythicMeters.lua is the addon's single game-event listener
+    -- core/MultiMeters.lua is the addon's single game-event listener
     -- (architecture-§4). A second GROUP_ROSTER_UPDATE registration here would be
     -- a second source of truth for one transition.
     local fh = assert(io.open(T.root .. "/modules/Roster.lua", "r"))

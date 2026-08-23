@@ -541,7 +541,7 @@ function Export.ChatLines(result, statKey, limit, session)
     -- string a meter value can reach: concat raises on a secret where `..` is on
     -- the permitted list, and a formatter can hand back a handle rather than a
     -- string on a client we have not met yet.
-    local head = L["Mythic Meters"] .. EM_DASH .. (L[stat.label] or stat.label)
+    local head = L["Multi Meters"] .. EM_DASH .. (L[stat.label] or stat.label)
     -- `type()` is permitted on a secret and `..` is permitted on one; asking
     -- whether it is the empty string is not. Window never answers "" anyway.
     if type(session) == "string" then
@@ -791,8 +791,8 @@ end
 -- LootHistory and the one in LibKa0s' debug log — the third in the collection,
 -- recorded as a harvest candidate for the library rather than fixed here.
 
-local MODAL_NAME = "MythicMetersExportWindow"
-local COPY_NAME  = "MythicMetersExportCopyWindow"
+local MODAL_NAME = "MultiMetersExportWindow"
+local COPY_NAME  = "MultiMetersExportCopyWindow"
 
 local MODAL_WIDTH  = 372
 local MODAL_HEIGHT = 236

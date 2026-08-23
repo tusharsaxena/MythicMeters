@@ -1,6 +1,6 @@
 -- tests/wow_mock.lua
 --
--- Ka0s Mythic Meters' half of the WoW-API mock, layered over the shared base in
+-- Ka0s Multi Meters' half of the WoW-API mock, layered over the shared base in
 -- tests/_kit/mock_base.lua (testing-§1).
 --
 -- Returns a BUILDER — `mockmod.build()` — so every instance gets a fresh, fully
@@ -740,7 +740,7 @@ function makeFrame(objectType, parent, name)
     frameSeq = frameSeq + 1
     local f = {
         __objectType = objectType or "Frame",
-        __name       = name or ("MythicMetersMockFrame" .. frameSeq),
+        __name       = name or ("MultiMetersMockFrame" .. frameSeq),
         __parent     = parent,
         __shown      = true,   -- CreateFrame'd frames start shown
         __points     = {},
@@ -1598,7 +1598,7 @@ local function build()
     -- deprecated-global fallback; `mocks._G` resolves through this table.
     M.__toc = {
         Version = "0.1.0",
-        Title   = "Ka0s Mythic Meters",
+        Title   = "Ka0s Multi Meters",
         Notes   = "One grid, one row per group member, one column per stat.",
     }
     M.C_AddOns = {
@@ -1654,7 +1654,7 @@ local function build()
     --
     -- Every frame this run creates, in creation order, plus a by-name index. The
     -- window's frames are NAMED (modules/Window.lua names them so they can go into
-    -- UISpecialFrames), so a suite can reach "MythicMetersWindow1" without holding
+    -- UISpecialFrames), so a suite can reach "MultiMetersWindow1" without holding
     -- the instance.
     M.__frames      = {}
     M.__frameByName = {}
@@ -1685,7 +1685,7 @@ local function build()
     --
     -- Measured in game: `GameTooltipTextLeft5:GetStringWidth()` answers a SECRET
     -- number even when every value on the line is plainly readable — the error
-    -- reads "while execution tainted by 'MythicMeters'". So it is not our own
+    -- reads "while execution tainted by 'MultiMeters'". So it is not our own
     -- secrets propagating; it is that tainted code may not measure inside a
     -- shared Blizzard frame at all, whatever is in it.
     --
@@ -1836,7 +1836,7 @@ local function build()
             for target, cb in pairs(targets) do snapshot[#snapshot + 1] = { target, cb } end
             for _, entry in ipairs(snapshot) do entry[2](message, ...) end
         end
-        -- Game events are the addon object's, and core/MythicMeters.lua is the only
+        -- Game events are the addon object's, and core/MultiMeters.lua is the only
         -- registrant. Recorded so a suite can fire one; see __fireEvent below.
         obj.__events = obj.__events or {}
         obj.RegisterEvent = function(self, event, handler)
@@ -1904,7 +1904,7 @@ local function build()
 
             --- Fire a game event at the addon object, exactly as the client would.
             --- Handlers are registered by NAME (`"OnMeterUpdated"`), so this is the
-            --- only way a suite can drive core/MythicMeters.lua's fan-out.
+            --- only way a suite can drive core/MultiMeters.lua's fan-out.
             addon.__fireEvent = function(host, event, ...)
                 local handler = host.__events[event]
                 if handler == nil then return false end

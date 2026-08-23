@@ -107,7 +107,7 @@ local ENEMY_LIMIT = 64
 --- The built map, and the session it was built from.
 ---
 --- In `State.Cache` rather than a file-local table so it is wiped by the same
---- machinery every other cache here is: core/MythicMeters.lua wipes the lot on
+--- machinery every other cache here is: core/MultiMeters.lua wipes the lot on
 --- the events that invalidate everything, and the bus subscription at the foot
 --- of this file wipes this one on the two that invalidate only it.
 ---

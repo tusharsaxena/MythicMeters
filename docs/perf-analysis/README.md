@@ -62,7 +62,7 @@ and that document is the source of truth. The sketch below is for orientation on
 ```jsonc
 {
   "schema": 2,
-  "addon": "MythicMeters",
+  "addon": "MultiMeters",
   "source": "ingame",           // or "offline" for a tests/perf.lua record
   "version": "0.1.0",           // addon version, read from the TOC manifest
   "interface": 0,               // the CLIENT's build TOC — see the field notes
@@ -140,7 +140,7 @@ calls `Perf.Note(key, ms)` with **two** arguments and no `parentKey`:
 
 | Bucket | Call sites |
 |---|---|
-| `meterEvent` | `core/MythicMeters.lua:200`, `:210`, `:218` |
+| `meterEvent` | `core/MultiMeters.lua:200`, `:210`, `:218` |
 | `refresh` | `modules/Window.lua:699`, `:709`, `:731`, `:746` |
 | `providerRead` | `modules/Provider.lua:255` |
 | `aggregate` | `modules/Aggregator.lua:509`, `modules/DrillDown.lua:417` |
@@ -148,7 +148,7 @@ calls `Perf.Note(key, ms)` with **two** arguments and no `parentKey`:
 | `renderRow` | `modules/Row.lua:835` |
 | `tooltip` | `modules/Tooltip.lua:464`, `:503`, `:547` |
 
-So `observedWithin` is **never populated** in a Ka0s Mythic Meters record, and every report prints
+So `observedWithin` is **never populated** in a Ka0s Multi Meters record, and every report prints
 the *"`<bucket>` declares itself within `<parent>` — not observed"* form for the four nested buckets.
 
 The declared tree in `core/PerfSetup.lua` — `providerRead`, `aggregate` and `render` within
@@ -179,18 +179,18 @@ holding zone, group state, the open window layout and the loaded addon set fixed
 
 Then press **Copy** on the debug-log window (`Ctrl+C`, `Esc`). One paste carries the report, the dump
 and the run's lifecycle lines — all three artifacts' raw material. `/mm` is the addon's slash
-command; `/mythicmeters` is the long form and works identically. `/mm perf show` opens the clickable
+command; `/multimeters` is the long form and works identically. `/mm perf show` opens the clickable
 step panel, which runs the identical code path as the typed verbs.
 
-The same record is also on disk after a `/reload`, in the `MythicMetersPerfDB` global — a ring of the
+The same record is also on disk after a `/reload`, in the `MultiMetersPerfDB` global — a ring of the
 last 10 runs — inside the addon's SavedVariables file:
 
 ```
-_retail_/WTF/Account/<ACCOUNT>/SavedVariables/MythicMeters.lua
+_retail_/WTF/Account/<ACCOUNT>/SavedVariables/MultiMeters.lua
 ```
 
 Note the filename: WoW names the file after the **addon**, not after the saved-variable globals it
-declares, so both `MythicMetersDB` and `MythicMetersPerfDB` live in `MythicMeters.lua`. `/reload` (or
+declares, so both `MultiMetersDB` and `MultiMetersPerfDB` live in `MultiMeters.lua`. `/reload` (or
 a clean logout) is what flushes a finished run to disk.
 
 The perf ring is deliberately a separate top-level global rather than part of the AceDB tree, so it
