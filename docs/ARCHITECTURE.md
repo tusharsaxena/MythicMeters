@@ -43,7 +43,12 @@ meter window, the debug console and the perf step panel wear the same Ka0s edge 
 addon. Six LibKa0s seams are adopted — Core, Media, Perf, DebugLog, Slash, Options — one setup file
 each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Two of them pass the
 addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
-`core/DebugLogSetup.lua`'s descriptor), because a texture path is absolute from `Interface\AddOns\`
+`core/DebugLogSetup.lua`'s descriptor), and a third gets there by accident of its own descriptor —
+`core/PerfSetup.lua` passes the folder name as `name`, which is what the perf panel's own close
+control is built from (`PerfPanel.lua` minor 4). This is why that file passes **no** `decorate` hook:
+the one it used to carry drew a close button with the name dropped, so the panel wore a
+multiplication sign beside a console wearing the mark. The name matters because a texture path is
+absolute from `Interface\AddOns\`
 and a vendored library cannot know which folder it was copied into — that is what lets the library's
 own windows wear the same close, copy and clear marks the meter window's header draws. Five explain the
 absence through the one shared cause clause `NS.LIBKA0S_MISSING`; **Media is deliberately silent**,

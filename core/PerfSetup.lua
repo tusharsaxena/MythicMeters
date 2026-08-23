@@ -205,19 +205,25 @@ NS.Perf = lib:New({
     -- game. This addon has no perf translations, so it passes nothing and lets
     -- the library's English through.
 
-    -- Built by the console's own close-button factory rather than a lookalike, so
-    -- the two windows cannot drift apart. Resolved HERE and not into a load-time
-    -- local: decorate fires at frame-build time, long after every file has
-    -- loaded, which is the only reason this file may reach for a member of a
-    -- module that loads after it.
-    decorate = function(frame, api)
-        if not (NS.DebugLog and NS.DebugLog.MakeCloseButton) then return end
-        local close = NS.DebugLog.MakeCloseButton(frame, api.Hide)
-        -- The factory answers nil where CreateFrame is unavailable — a close
-        -- button is worth degrading over, not erroring over.
-        if close then
-            close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -(api.TITLE_H - 18) / 2)
-            frame.closeButton = close
-        end
-    end,
+    -- NO `decorate`, DELIBERATELY, and its absence is the fix rather than an
+    -- omission.
+    --
+    -- This addon shipped one, and its entire body was a close button. It called
+    -- `NS.DebugLog.MakeCloseButton(frame, api.Hide)` — two arguments onto a
+    -- three-argument function — so the panel drew a multiplication sign while the
+    -- console two inches away wore the collection's mark. The dropped third
+    -- argument is the addon folder name, and a texture path that is never built
+    -- draws nothing and raises nothing: luacheck was clean, 1,206 tests were green,
+    -- and the only witness was a screenshot.
+    --
+    -- From PerfPanel minor 4 (LibKa0s v1.10.2) the library builds that control
+    -- itself, from `addonName or name` — and `name` above IS this file's first
+    -- vararg — at the same 18px inset from the same corner. So the hook was a
+    -- second copy of library behavior that could fall behind it, and had; deleting
+    -- it is what the standard now asks for (performance-§4, debug-logging-§12,
+    -- anti-pattern #65).
+    --
+    -- Add one back only for chrome the library does not draw, and build its close
+    -- control through `NS.MakeCloseButton` (core/CoreSetup.lua) — the one wrapper
+    -- that carries the folder name — never with a bare call to any factory.
 })
