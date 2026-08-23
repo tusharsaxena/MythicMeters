@@ -19,7 +19,7 @@
 - **The library never resolves host art.** `Media.Icon` takes the consuming addon's name and a vendored copy cannot know which folder it was copied into. Every texture path and font path the widget draws arrives as a parameter.
 - **Green gate before any version bump, in every repo:** `luacheck .` at 0/0 (scoped by that repo's `.luacheckrc`) and `lua tests/run.lua` all-pass. MultiMeters and BankLedger additionally run `tests/perf.lua` and `lizard` with zero functions above CCN 15 before a release bump.
 - **Repo versions at plan time:** LibKa0s `v1.10.2` (Core 6, Media 3, DebugLog 10, Slash 7, Options 8, OptionsWidgets 7, OptionsScroll 3, Perf 7, PerfPanel 4, kit revision 11). BankLedger `1.0.0`, MultiMeters `0.1.0`. Both consumers bundle LibKa0s **v1.10.2**. The release cut by this plan is **v1.11.0** (new major ⇒ minor semver bump).
-- **Scope is LibKa0s, BankLedger and MultiMeters, and nothing else.** Six other addons in the collection (AbsorbTracker, ConsumableMaster, KickCD, LootHistory, PanelMaster, PrettyChat, WhatGroup) vendor LibKa0s and several draw their own dropdowns. **Do not touch them.** They adopt later, from the prompt Task 10 produces. The only thing this plan writes about them is the Consumers table in `LibKa0s/docs/releasing.md`, which is a record of who vendors what — updating it is not adopting them.
+- **Scope is LibKa0s, BankLedger and MultiMeters, and nothing else.** Seven other addons in the collection (AbsorbTracker, ConsumableMaster, KickCD, LootHistory, PanelMaster, PrettyChat, WhatGroup) vendor LibKa0s and several draw their own dropdowns. **Do not touch them.** They adopt later, from the prompt Task 10 produces. The only thing this plan writes about them is the Consumers table in `LibKa0s/docs/releasing.md`, which is a record of who vendors what — updating it is not adopting them.
 - **Comments are the deliverable here as much as the code.** Both codebases carry long "why" headers, and several of them state reasoning this plan reverses. Where a task says a comment is rewritten, rewriting it is part of the task's definition of done — deleting it is not.
 
 ---
@@ -618,7 +618,7 @@ Replace the `whisperLabel` FontString and the `InputBoxTemplate` EditBox (`:1343
 
     -- The caption INSIDE the row, as a prefix, so this reads "Whisper to: …" in
     -- the same shape as "Metric: …" above it. It was a separate FontString above
-    -- the box, in the 12px of空 the old layout did not actually have.
+    -- the box, in 12px of room the old layout did not actually have.
     local whisperCaption = whisperRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     whisperCaption:SetPoint("LEFT", 8, 0)
     whisperCaption:SetText(L["Whisper to:"] .. " ")
@@ -642,8 +642,6 @@ Replace the `whisperLabel` FontString and the `InputBoxTemplate` EditBox (`:1343
     end)
     whisperBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 ```
-
-Note the literal `空` above is a typo guard — replace that comment line with `-- the 12px of room the old layout did not actually have.` when transcribing.
 
 `SetFontObject` is required: an `EditBox` built without a template has no font and draws nothing at all, which would be a worse version of the bug being fixed.
 
