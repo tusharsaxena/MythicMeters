@@ -81,14 +81,34 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythi
   are drawn from this addon's own art — white glyphs that take the header's text colour. A control
   that is a plain letter (`*`, `#`, `>`) means the art AND the atlas both failed: the ladder is
   working, but say so, because it means a texture did not load.
+- **The close button is ours too**, drawn from `media/textures/icons/close.tga` at the same size and
+  weight as its six neighbours. A thin grey multiplication sign there is LibKa0s' close button —
+  which is what the strip used to end in, and what the art replaced.
+- **The icons sit inside their slots.** Each is drawn at 72% of `Control size`, so there is visible
+  air between two neighbours and the strip does not read heavier than the title beside it. Icons
+  touching each other means the inset was lost and the art is filling its whole click target.
 - **Turning one off closes the gap.** Hide the lock and everything to its left moves right by
   exactly one slot; nothing to its right moves. A hole where a control was is the indexed layout
   failing, and it is the whole point of the rewrite.
 - **The title never runs under a control**, at any `Control size` from 10 to 32 and with any
   combination hidden.
-- **Hover fades the whole strip at once**, not per button — moving between two controls must not
-  flicker. **Check this on a LOCKED window**: locking used to disable the title bar's mouse, which
-  killed the reveal in the one case a player most wants it.
+- **The strip is centred in the title bar**, on the same line as the window name and the session
+  line beside it, with the gap above the row matching the gap below it down to the divider. All three
+  are placed from `Window:TitleRowTop`, so check it again after changing **Header → Height**,
+  **Header → Size** and **Control size**: any of those moving one of the three off the shared line
+  means something is back on a hand-picked offset. A row that hugs the divider with clear space above
+  it means the centring is using the tinted band rather than the frame's top edge.
+- **Exactly one control reveals** — the one under the pointer comes up to full alpha and turns gold;
+  the other six do not move. Two lit at once is the reveal having gone back to being strip-wide, and
+  a control left bright after the pointer has moved on is the leave handler clearing a hover that has
+  already moved. **Sweep along the strip**: the bright one must follow the pointer control by
+  control, without a flicker in the gaps and without the whole set coming up as you cross the title
+  bar. **Check this on a LOCKED window too**: locking used to disable the title bar's mouse.
+- **The colours are both settings.** Frame → Header controls → **Control color** (white by default)
+  and **Control hover color** (gold). Change either and the strip must follow immediately, at rest
+  and under the pointer.
+- **`Reveal controls on hover` OFF keeps every control at full alpha** — and the hover **colour**
+  must still say which one the pointer is on, because it is the only channel left.
 - **Minimise collapses to the title bar** and the plus/minus flips. The column headers, the rows,
   the "Waiting for combat data…" notice and the resize grip all go — anything still drawn over a
   collapsed window is parented to the frame rather than the body.
@@ -97,8 +117,15 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythi
 - **Expanding restores the exact height** the window had, including after a `/reload` — a collapsed
   window comes back collapsed, and expands to the size you chose rather than to a default.
 - **Reset asks first.** It must open the confirmation, not clear anything, and the dialog must warn
-  that it wipes the game's own meter data too. Cancelling must leave the sessions intact.
-- **Segment opens the same menu the session line does.** Both routes, same list.
+  that it wipes the game's own meter data too. Cancelling must leave the sessions intact. **The
+  dialog opens in the middle of the screen**, not up at the top where the popup stack puts it. It is
+  re-anchored once, as it is shown: a SECOND popup opening on top of it re-stacks every dialog and
+  can pull this one back up, which is accepted rather than fixed — a confirmation that is up at the
+  same moment as another popup is rare, and following the stack means hooking Blizzard's own
+  positioning.
+- **Segment opens the selector**, and it is the ONLY route to it. The session line beside it takes no
+  mouse: hovering the empty header to the left of "Overall" must produce no red glow, and clicking
+  there must open nothing. That invisible 220px click target is what the control replaced.
 
 **Pass.**
 - Login completes with no Lua errors.
@@ -742,8 +769,10 @@ this change set.
 ### 21. The header segment selector
 
 1. Run two or three pulls so the client is holding several stored sessions.
-2. **Click the header's session line.** A menu opens: the stored fights with their durations, a
-   divider, then `Current` and `Overall`.
+2. **Click the segment control in the header strip** (the three horizontal lines). A menu opens:
+   the stored fights with their durations, a divider, then `Current` and `Overall`. It anchors to the
+   session line, which is where the menu has always come out. **The session line itself is not a
+   click target** — that 220px invisible button was removed.
 3. Pick a stored fight. **The grid changes to that fight's numbers and the header names it** rather
    than saying "Current".
 4. Hover a cell and drill into a row. **Both describe the pinned fight**, not the live pull. This is
@@ -852,32 +881,30 @@ answers a *secret string* rather than raising, which then poisons the quoting lo
 is why the whole serializer refuses in combat instead of degrading, and why "it produced a file with
 odd-looking cells mid-pull" would be a much worse outcome than "it said no".
 
-#### The glyph in the title bar
+#### The export control in the title bar
 
-**Steps.** Look at any window's title bar, right to left.
+**Steps.** Look at the header strip, right to left, and hover the export control.
 
 **Pass.**
-- **Four buttons, in this order right to left: close · gear · lock · export.** The export button sits
-  one slot left of the padlock, at the same size and the same vertical line as the other three.
-- **What it draws is almost certainly `>`.** The three atlas names in `modules/Window.lua`
-  (`poi-scrollofresonance`, `communities-icon-chat`, `UI-HUD-MicroMenu-Questlog-Up`) are
-  **candidates and have never been confirmed on a live client** — which is exactly the mistake the
-  header-art note in that file records happening twice before. `Compat.FirstAtlas` walks them in
-  order and takes the first the client admits to; when none resolves, the ASCII fallback `>` is drawn
-  in the header font and header color. **That is the shipped appearance, not a failure.**
-- **A replacement box, an empty slot or a stretched icon is the failure.** Any of those means an
-  atlas resolved and is the wrong shape for a 14px header button.
-- **`/mm debug diag` answers this for you.** All three candidates are in its atlas probe list and the
-  export button is in its header dump, so one command reports both what the client has and what the
-  button actually drew. **A confirmed `yes` for one of them is a deliverable** — it is what lets the
-  ASCII fallback stop being what ships.
-- **Hovering it shows a tooltip** reading *Export a segment to CSV or to chat*. It is the only header
-  button with one, and deliberately: a gear and a padlock say what they are, and a bare `>` does not.
-- **Turn the title bar off** (Frame → Title bar). The export button disappears with the gear and the
-  lock — there is nothing to hang it on. Turn it back on and all three return.
-- Turn the **close button** off and confirm the remaining three slide right by one slot together. The
-  gap between gear, lock and export must stay even; a widened seam means the header's offsets were
-  turned into an accumulator.
+- **It is the leftmost of the seven**, at the same size, the same centre line and the same colour as
+  the six beside it. The whole strip is covered by *The header's controls (issues #6, #7)* near the
+  top of this file — what is checked here is only the export end of it.
+- **It draws this addon's own art** (`media/textures/icons/export.tga`). A plain `>` means BOTH our
+  texture and every atlas candidate failed: the ladder is working as designed, but say so, because a
+  shipped TGA that does not load is a packaging bug rather than a fallback.
+- **The atlas rung is still unconfirmed.** `poi-scrollofresonance` and `UI-HUD-MicroMenu-Questlog-Up`
+  are candidates that have **never been seen resolving on a live client**, which is the mistake the
+  art-ladder note in `modules/HeaderControls.lua` records happening twice before. They are only
+  reachable now on a client that cannot load our TGA, so confirming one is a `/mm debug diag` job,
+  not something a normal run will show you.
+- **`/mm debug diag` answers this for you.** Both candidates are in its atlas probe list and the
+  export control is in its header dump, so one command reports what the client has and what the
+  control actually drew.
+- **Hovering it shows a tooltip** reading *Export a segment to CSV or to chat*. It is the only
+  control in the strip with one, and deliberately: a gear and a padlock say what they are, and the
+  export glyph is the one whose meaning is not obvious.
+- **Turn the title bar off** (Frame → Title bar). The whole strip goes with it, export included —
+  there is nothing to hang it on. Turn it back on and all seven return.
 - **Clicking it opens the modal centered over that window** — see below.
 
 #### The modal

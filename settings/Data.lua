@@ -59,6 +59,39 @@ StaticPopupDialogs["MYTHICMETERS_RESET_METER_DATA"] = {
     end,
 }
 
+--- Open the reset confirmation, CENTRED ON THE SCREEN.
+---
+--- WHY IT IS NOT LEFT WHERE BLIZZARD PUTS IT. A StaticPopup is anchored into the
+--- popup STACK -- centred horizontally, pinned near the top of the screen -- so
+--- the one dialog in this addon that asks before it destroys data appeared
+--- nowhere near where the player was looking when they clicked, which for a
+--- header control is the middle of the screen at most. Re-anchoring is the
+--- narrowest fix: the dialog is still Blizzard's, still `hideOnEscape`, still in
+--- the stack it registered into.
+---
+--- The frame is repositioned and nothing else: a StaticPopup is not a protected
+--- frame, so moving one taints no secure code path.
+---
+--- ONCE, AS IT IS SHOWN. Blizzard re-stacks every dialog when another popup opens
+--- or closes, so a second popup arriving on top of this one can pull it back up
+--- to the stack. That is accepted rather than fixed: following the stack means
+--- hooking `StaticPopup_SetUpPosition` for a case -- two dialogs up at once --
+--- that this addon can produce only by accident.
+---
+--- Answers the dialog frame, or nil when every popup slot is already in use --
+--- which is a legitimate outcome of StaticPopup_Show and not an error here.
+function NS.ShowResetMeterData()
+    local show = _G.StaticPopup_Show
+    if not show then return nil end
+
+    local dialog = show("MYTHICMETERS_RESET_METER_DATA")
+    if dialog and dialog.SetPoint and _G.UIParent then
+        dialog:ClearAllPoints()
+        dialog:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+    end
+    return dialog
+end
+
 local function Build(mainCategory)
     if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return nil end
 
@@ -79,7 +112,7 @@ local function Build(mainCategory)
         H.InlineButtonPair(c, {
             text    = L["Reset meter data"],
             tooltip = L["Clear every combat session the game is holding. This affects Blizzard's built-in meter too."],
-            onClick = function() StaticPopup_Show("MYTHICMETERS_RESET_METER_DATA") end,
+            onClick = function() NS.ShowResetMeterData() end,
         }, nil)
 
         if H.Relayout then H.Relayout(c) end

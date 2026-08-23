@@ -601,7 +601,7 @@ NS.Schema = {
     {
         path = "window.frame.hoverReveal", type = "bool", default = true,
         page = "frame", group = L["Header controls"],
-        label = L["Reveal controls on hover"], desc = L["Fade the controls until the pointer is over the title bar. Off keeps them always visible."],
+        label = L["Reveal controls on hover"], desc = L["Fade every control except the one under the pointer. Off keeps them all visible."],
     },
     {
         path = "window.frame.minimised", type = "bool", default = false,
@@ -609,7 +609,20 @@ NS.Schema = {
         label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
     },
     {
-        path = "window.frame.controlSize", type = "number", default = 18,
+        path = "window.frame.controlColor", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "frame", group = L["Header controls"],
+        label = L["Control color"], desc = L["Color the header controls are drawn in."],
+    },
+    {
+        path = "window.frame.controlHoverColor", type = "color",
+        default = { r = 1, g = 0.82, b = 0, a = 1 },
+        page = "frame", group = L["Header controls"],
+        label = L["Control hover color"],
+        desc = L["Color the control under the pointer is drawn in."],
+    },
+    {
+        path = "window.frame.controlSize", type = "number", default = 16,
         min = 10, max = 32, step = 1,
         page = "frame", group = L["Header controls"],
         label = L["Control size"], desc = L["How large each header control is drawn, in pixels."],

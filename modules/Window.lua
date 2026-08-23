@@ -74,11 +74,16 @@ local COLUMN_GAP = Const.COLUMN_GAP
 -- row height keeps the grid on one rhythm when a player changes it.
 local HEADER_ROW_FACTOR = 1.0
 
--- Width of the clickable session line in the header — the segment selector's
--- hit box. A constant rather than a measurement of the text inside it: this file
--- never measures a widget (rule R3), and a click target that resized every time
--- the group total crossed a magnitude would move under the cursor mid-pull.
-local SESSION_BUTTON_WIDTH = 220
+-- How far up from the bottom of the tinted title band the divider hairline is
+-- drawn. Named because two things depend on it agreeing: the divider itself, and
+-- `TitleRowTop`, which centres the whole title row in the space ABOVE it.
+local DIVIDER_INSET = 2
+
+-- How much of the header the session line is allowed to run across, right to
+-- left. A constant rather than a measurement of the text inside it: this file
+-- never measures a widget (rule R3), and the line is right-justified inside it,
+-- so the number only has to be wide enough for the longest string it can hold.
+local SESSION_LINE_WIDTH = 220
 
 -- ---------------------------------------------------------------------------
 -- HEADER ART, AND THE TWO WAYS IT ALREADY FAILED
@@ -356,16 +361,6 @@ local function onColumnClick(button)
     if inst then inst:SortByColumn(button.mmKey) end
 end
 
---- Click on the header's session line: open the segment dropdown.
----
---- Reads the window back off the frame rather than closing over it, the same way
---- modules/Row.lua's cell scripts do, so the handler is created once and never
---- rebuilt when the window is re-applied.
-local function onSessionClick(button)
-    local inst = button.mmWindow
-    if inst then inst:OpenSegmentMenu() end
-end
-
 --- Build the two frames, the header and the body. Runs once per window per
 --- session; everything after it is re-application, never reconstruction.
 function WindowProto:BuildFrame()
@@ -462,23 +457,25 @@ function WindowProto:BuildFrame()
     -- for it -- the group total for the sort column, folded into one string
     -- because every piece may be a secret and only `..` may join those.
     --
-    -- IT IS A BUTTON, and the FontString is its child rather than the frame's.
-    -- Clicking the session line opens the segment dropdown, and parenting the
-    -- text to the button is what lets both be placed by ONE SetPoint in
-    -- ApplyHeader: a click target positioned separately from the text it claims
-    -- to cover is a click target that drifts the first time either moves.
+    -- IT TAKES NO MOUSE, and that is a deliberate removal. It used to be a
+    -- Button carrying the segment dropdown, sized to a fixed 220px so the text
+    -- could be right-justified inside it — which put an INVISIBLE CLICK TARGET
+    -- across the middle of the header. It glowed red on hover, it opened a menu
+    -- from a patch of empty title bar, and nothing on screen said it was there.
+    -- Sizing it to its own text instead is not available: this file may not
+    -- measure a widget (rule R3).
     --
-    -- No value ever reaches this button, so unlike a cell it keeps readable
-    -- geometry — but nothing reads it anyway (rule R3), and the size below is
-    -- computed from config like every other coordinate in this file.
-    self.sessionButton = CreateFrame("Button", nil, frame)
-    self.sessionButton:SetHighlightTexture([[Interface\Buttons\UI-Panel-Button-Highlight]])
-    self.sessionButton.mmWindow = self
-    self.sessionButton:SetScript("OnClick", onSessionClick)
+    -- The dropdown did not go anywhere. The strip's segment control opens the
+    -- same menu (modules/HeaderControls.lua), and it is a control a player can
+    -- see, which the session line never was.
+    --
+    -- The FontString stays a child of this frame rather than of `frame`, because
+    -- that is what lets ONE SetPoint in ApplyHeader place both.
+    self.sessionLine = CreateFrame("Frame", nil, frame)
 
-    self.sessionText = self.sessionButton:CreateFontString(nil, "OVERLAY")
+    self.sessionText = self.sessionLine:CreateFontString(nil, "OVERLAY")
     self.sessionText:SetJustifyH("RIGHT")
-    self.sessionText:SetAllPoints(self.sessionButton)
+    self.sessionText:SetAllPoints(self.sessionLine)
 
     self.body = CreateFrame("Frame", nil, frame)
 
@@ -667,6 +664,26 @@ local function headerColor(header)
     return RGBA(header.color, 1, 0.82, 0, 1)
 end
 
+--- The header's font and colour, in the one shape modules/HeaderControls.lua
+--- asks for it.
+---
+--- THE SEAM EXISTED BEFORE ANYTHING FILLED IT. `HeaderControls.Style` has always
+--- read `NS.HeaderStyle` and always fallen through to a white 12px fallback,
+--- because nothing published the function — so every comment saying the controls
+--- take the header's colour described something that had never run. Published
+--- here rather than computed there for the reason `headerFont` is one reader for
+--- three lines: a second opinion about what the header looks like is how the
+--- title and the strip below it end up on different fonts.
+---
+--- @param window table
+--- @return table  { path, size, flags, r, g, b }
+function NS.HeaderStyle(window)
+    local header = (window.config or {}).header or {}
+    local path, size, flags = headerFont(header)
+    local r, g, b = headerColor(header)
+    return { path = path, size = size, flags = flags, r = r, g = g, b = b }
+end
+
 --- The column-header strip's own font, size and flags.
 ---
 --- Its OWN group, and that is the point of it existing. These used to come from
@@ -676,6 +693,42 @@ end
 local function columnHeaderFont(colHeader)
     local flags = (colHeader.outline ~= "NONE") and colHeader.outline or nil
     return fontPath(colHeader.font), colHeader.size or 11, flags
+end
+
+--- Where something `h` pixels tall sits so it is CENTRED in the title bar.
+---
+--- WHY EVERY LINE OF THE TITLE BAR ASKS THIS. The title and the session line were
+--- pinned 5px below the frame's top edge — a constant that predates the title bar
+--- having a configurable height and had nothing to do with the band it draws in.
+--- Nobody noticed until the header grew a strip of icons and the two disagreed.
+--- One centre for the text, the session line and the controls means the row
+--- cannot drift again when the bar's height, the font size or the control size
+--- changes.
+---
+--- WHICH BAND IT CENTRES IN, AND WHY IT IS NOT THE TITLE BAR'S OWN. What a player
+--- sees as the title bar runs from the frame's TOP EDGE down to the divider — the
+--- padding above it is not a margin to anyone looking at the window, because the
+--- backdrop is drawn behind it and there is no seam. Centring in the tinted band
+--- alone (`padding` .. `padding + titleHeight`) is arithmetically centred and
+--- optically wrong: it leaves the padding as dead space above the row and lands
+--- the text hard against the divider, which is exactly what "everything is
+--- anchored to the bottom" meant when it was reported.
+---
+--- COMPUTED, NEVER MEASURED (rule R3): `h` is the caller's own configured size,
+--- not something read back off a widget. Clamped at the frame's top edge so a
+--- control larger than the bar it sits in overflows downward rather than off the
+--- window.
+---
+--- @param h number  the height of the thing being placed
+--- @return number y  the offset to anchor its TOP at, relative to the frame's top
+function WindowProto:TitleRowTop(h)
+    local layout = self.layout
+    -- The divider sits 2px up from the bottom of the tinted band; see
+    -- ApplyHeaderStrip, which draws it at exactly this offset.
+    local visible = layout.padding + layout.titleHeight - DIVIDER_INSET
+    local inset = (visible - (h or 0)) / 2
+    if inset < 0 then inset = 0 end
+    return -inset
 end
 
 --- Where the header's two text lines must stop on the right: the frame padding,
@@ -709,9 +762,10 @@ function WindowProto:ApplyTitle()
     -- the close button, and the session line keeps its own RIGHT anchor — the
     -- two halves of the strip are placed from opposite ends, so aligning one can
     -- never push the other off the frame.
+    local y = self:TitleRowTop(size)
     frame.title:ClearAllPoints()
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -5)
-    frame.title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -self:HeaderRightInset(), -5)
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, y)
+    frame.title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -self:HeaderRightInset(), y)
     frame.title:SetJustifyH(header.align or "LEFT")
     frame.title:SetFont(path, size, flags)
     -- THE TEST-MODE MARKER RIDES ON THE TITLE, in red, the way Loot History
@@ -754,8 +808,9 @@ function WindowProto:ApplyHeaderStrip()
 
     if frame.divider then
         frame.divider:ClearAllPoints()
-        frame.divider:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, -(pad + layout.titleHeight - 2))
-        frame.divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, -(pad + layout.titleHeight - 2))
+        local dy = -(pad + layout.titleHeight - DIVIDER_INSET)
+        frame.divider:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, dy)
+        frame.divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, dy)
         frame.divider:SetShown(layout.titleHeight > 0)
     end
 end
@@ -774,10 +829,12 @@ function WindowProto:ApplySessionLine()
     -- because measuring is the one thing this file never does — and a fixed click
     -- target is also steadier for the player than one that changes size every
     -- time the group total ticks over a magnitude.
-    self.sessionButton:ClearAllPoints()
-    self.sessionButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -self:HeaderRightInset(), -5)
-    self.sessionButton:SetSize(SESSION_BUTTON_WIDTH, math.max(size + 4, 12))
-    self.sessionButton:SetShown(shown)
+    self.sessionLine:ClearAllPoints()
+    local height = math.max(size + 4, 12)
+    self.sessionLine:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT",
+        -self:HeaderRightInset(), self:TitleRowTop(height))
+    self.sessionLine:SetSize(SESSION_LINE_WIDTH, height)
+    self.sessionLine:SetShown(shown)
 
     self.sessionText:SetFont(path, size, flags)
     self.sessionText:SetTextColor(headerColor(header))
@@ -1641,7 +1698,7 @@ function WindowProto:OpenSegmentMenu()
     local sessions = Provider.GetAvailableSessions()
     local data = self.config.data or {}
 
-    return NS.Compat.OpenContextMenu(self.sessionButton, function(_, root)
+    return NS.Compat.OpenContextMenu(self.sessionLine, function(_, root)
         root:CreateTitle(L["Segment"])
 
         for _, entry in ipairs(sessions) do

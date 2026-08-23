@@ -946,14 +946,22 @@ test("Segment: with no provider the pin is left alone rather than rewritten", fu
     assertEqual(cfg.data.sessionID, 4)
 end)
 
-test("Segment: the session line is a BUTTON and the text rides on it", function()
-    -- A click target positioned separately from the text it claims to cover is a
-    -- click target that drifts the first time either moves.
+test("Segment: the session line takes NO mouse", function()
+    -- It used to be a 220px Button so its text could be right-justified inside
+    -- it, which put an invisible click target across the middle of the header: it
+    -- glowed red on hover and opened the segment menu from a patch of empty title
+    -- bar. The strip's segment control is the visible route to the same menu.
+    -- red under: CreateFrame("Button") with an OnClick and a highlight texture.
     local _, window = withSegments()
-    assertTrue(window.sessionButton ~= nil)
-    assertEqual(window.sessionButton.mmWindow, window)
-    assertTrue(window.sessionButton:GetScript("OnClick") ~= nil,
-        "the header line has to be clickable for the selector to be reachable")
+    assertTrue(window.sessionLine ~= nil)
+    assertTrue(window.sessionLine.GetScript == nil
+        or window.sessionLine:GetScript("OnClick") == nil,
+        "the session line is clickable again")
+    assertTrue(window.sessionLine.__highlightTexture == nil,
+        "the session line still carries a hover highlight")
+    -- The text still rides on it: a line positioned separately from the frame it
+    -- is justified inside drifts the first time either moves.
+    assertEqual(window.sessionText.__allPoints, window.sessionLine)
 end)
 
 -- ---------------------------------------------------------------------------

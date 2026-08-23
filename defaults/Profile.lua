@@ -108,10 +108,20 @@ local WINDOW_TEMPLATE = {
         -- Collapsed to the title bar. Persisted like every other window fact, so
         -- a window left collapsed comes back collapsed.
         minimised       = false,
-        -- What a control is drawn at. The art ships at 64px and is scaled down
-        -- to this; 18 is what the header has always used, so nothing moves on
-        -- upgrade.
-        controlSize     = 18,
+        -- TWO COLOURS, BECAUSE HOVER IS THE ONLY FEEDBACK A CONTROL GIVES. The
+        -- art ships white and is tinted by a multiply, so white is the identity
+        -- and the icons read as chrome against any header colour a player picks;
+        -- the pointer turns one of them the gold the rest of the header text
+        -- uses. Both are pickers rather than a "match the header" switch: the
+        -- strip is the only part of the window whose two states a player sees
+        -- constantly, and one of them being unconfigurable was the complaint.
+        controlColor      = { r = 1, g = 1, b = 1, a = 1 },
+        controlHoverColor = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- The SLOT a control occupies -- its click target and the strip's layout
+        -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
+        -- 11px icon on the same line as a 12px title and the strip stops
+        -- outweighing the text beside it.
+        controlSize     = 16,
         resizeGrip     = true,
         -- Position is stored, never read back off the frame. Rule R3: a cell
         -- that has been handed a secret value makes its own geometry secret and

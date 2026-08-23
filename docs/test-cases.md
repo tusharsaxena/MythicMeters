@@ -658,7 +658,7 @@ badge and any count quoted in the docs must agree with it.
 - Segment: a stale pin is dropped on the next refresh
 - Segment: a LIVE pin survives the staleness check
 - Segment: with no provider the pin is left alone rather than rewritten
-- Segment: the session line is a BUTTON and the text rides on it
+- Segment: the session line takes NO mouse
 - Column headers are BUTTONS carrying the full stat label, left-aligned
 - The sort column shows an arrow and the others do not
 - The arrow flips with the direction
@@ -700,12 +700,18 @@ badge and any count quoted in the docs must agree with it.
 - Unlocking does not resurrect the grip on a collapsed window
 - A profile written before minimise existed is not collapsed
 
-### test_headercontrols.lua (32)
+### test_headercontrols.lua (43)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
 - HeaderControls: a hidden control YIELDS its slot
 - HeaderControls: hiding the LAST control moves nothing
+- HeaderControls: the strip is CENTRED in the title bar
+- HeaderControls: the strip and the title share one centre line
+- HeaderControls: a control taller than its bar overflows DOWNWARD
+- HeaderControls: a control at rest takes the control colour
+- HeaderControls: the control under the pointer takes the HOVER colour
+- HeaderControls: both colours come from config
 - HeaderControls: control size comes from config
 - HeaderControls: the width reserved equals the width occupied
 - HeaderControls: no title bar means no strip and no reservation
@@ -715,10 +721,13 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: minimise shows the opposite of the state it is in
 - HeaderControls: a glyph is never given text before a font
 - HeaderControls: reset asks before it wipes anything
+- HeaderControls: the reset confirmation opens in the CENTRE of the screen
 - HeaderControls: minimise writes through the settings seam
 - HeaderControls: the lock button toggles this window only
-- HeaderControls: the strip fades until the pointer is on the title bar
-- HeaderControls: one hover moves the WHOLE strip
+- HeaderControls: only the control under the pointer is revealed
+- HeaderControls: the title bar itself reveals nothing
+- HeaderControls: the reveal moves rather than accumulating
+- HeaderControls: with the reveal off, hover is colour alone
 - HeaderControls: hover reveal off means always visible
 - HeaderControls: hooking hover does not unseat the drag
 - HeaderControls: a locked window can still reveal its controls
@@ -729,8 +738,10 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the gear points the panel at its own window
 - HeaderControls: the padlock's ASCII rung differs between states
 - HeaderControls: the strip fits at every size the schema allows
-- HeaderControls: a degraded install reserves no room for a button it lacks
-- HeaderControls: reaching a control does not fade the strip
+- HeaderControls: a degraded install still gets its close button
+- HeaderControls: the close button closes the window
+- HeaderControls: the art is drawn INSIDE its slot, not across it
+- HeaderControls: a control keeps its reveal as the pointer arrives
 - HeaderControls: the segment button opens the same menu the session line does
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
@@ -1325,7 +1336,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 91 |
-| test_headercontrols.lua | 32 |
+| test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1340,4 +1351,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1186** |
+| **Total** | **1197** |

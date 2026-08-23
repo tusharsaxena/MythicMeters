@@ -72,11 +72,19 @@ NS.HeaderControls = HeaderControls
 -- buys: spacing is derived, so it cannot drift per button.
 local GAP = 4
 
--- What LibKa0s draws its close button at, fixed by that library rather than by
--- this addon's `controlSize` (libs/LibKa0s/Core.lua). The strip has to know,
--- because a slot pitch that assumes every control is `controlSize` wide puts the
--- close button on top of its neighbour at any size below 14.
-local EXTERNAL_SIZE = 18
+-- How much of a control's slot the art actually fills. The slot is the click
+-- target and the layout pitch; the icon is drawn centred inside it.
+--
+-- WHY THE TWO ARE NOT THE SAME NUMBER. The art ships as a solid 64px glyph that
+-- reaches its own edges, so an icon drawn at the full slot has no breathing room
+-- and reads a great deal heavier than the header text beside it -- which was the
+-- first thing anyone said about it in game. A font glyph in an 18px button is
+-- about this fraction of it, which is why LibKa0s' close never looked oversized
+-- at the same size ours did. Insetting the art rather than shrinking the slot
+-- keeps `controlSize` meaning what the schema says it means, keeps the click
+-- target where a player's cursor expects it, and fixes the look for a profile
+-- that already stored a size.
+local ART_SCALE = 0.72
 
 -- Where our own art lives. Extensionless on purpose -- the client appends it,
 -- and a path carrying `.tga` is one of the two spellings that silently draws
@@ -99,11 +107,14 @@ local ART = "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\"
 -- `art` / `atlas` / `ascii` are the three rungs. `state` marks a control whose
 -- icon IS its state, resolved per draw rather than at attach.
 local CONTROLS = {
-    -- NOT OURS TO BUILD. LibKa0s owns the close button and its degraded stub
-    -- answers nil (core/CoreSetup.lua:163), so index 0 is genuinely ABSENT on a
-    -- degraded install rather than merely hidden. Everything below tolerates a
-    -- nil control for that reason, and a test drives the degraded case.
-    { key = "close",    setting = "closeButton",   art = "close", external = true,
+    -- OURS, AND IT DID NOT USE TO BE. This was LibKa0s' close button for as long
+    -- as the window has had one, which meant one control in the strip ignored
+    -- our art, ignored `controlSize` and drew a font-string multiplication sign
+    -- while its six neighbours drew shipped icons -- visibly the odd one out the
+    -- moment the other six became art. It is a plain control now, on the same
+    -- three-rung ladder as the rest. LibKa0s still closes the Export modal
+    -- (modules/Export.lua); this is about a strip that has to look like a set.
+    { key = "close",    setting = "closeButton",   art = "close",
       atlas = { "common-icon-redx" },           ascii = "X" },
     -- TWO STATES, TWO CHARACTERS. The atlas rung distinguishes a two-state icon
     -- by desaturating it, but the ASCII rung has no such trick -- so a control
@@ -133,6 +144,25 @@ local function enabled(frameCfg, control)
     return frameCfg[control.setting] ~= false
 end
 
+--- A configured colour as three numbers, defaulted.
+---
+--- Through `NS.RGBA` (LibKa0s' reader) because this collection persists colours
+--- in BOTH a keyed and a positional shape and neither can be retired without
+--- migrating everyone's SavedVariables. The hand-rolled branch under it is the
+--- degraded install, where the library is not there to ask.
+local function color(stored, dr, dg, db)
+    local RGBA = NS.RGBA
+    if RGBA then
+        local r, g, b = RGBA(stored, dr, dg, db, 1)
+        return r, g, b
+    end
+    if type(stored) == "table" then
+        return stored.r or stored[1] or dr, stored.g or stored[2] or dg,
+               stored.b or stored[3] or db
+    end
+    return dr, dg, db
+end
+
 --- The size one control is drawn at, from config.
 local function controlSize(frameCfg)
     local size = frameCfg.controlSize
@@ -153,24 +183,21 @@ function HeaderControls.WidthUsed(window)
     local frameCfg = (window.config or {}).frame or {}
     if frameCfg.titleBar == false then return 0 end
 
-    -- THE EXTERNAL CONTROL IS NOT OUR SIZE AND MAY NOT EXIST. LibKa0s fixes the
-    -- close button at 18x18 whatever `controlSize` says, and its degraded stub
-    -- builds nothing at all -- so counting it as `size`, or counting it when it
-    -- was never created, reserves room that does not match the strip. Both were
-    -- real: at controlSize 10 the title ran under the X, and on a degraded
-    -- install 22px of header was reserved for a button that is not there.
-    local size, total, shown = controlSize(frameCfg), 0, 0
+    -- COUNTED, NOT ASSUMED BUILT. Every control in the strip is now ours and
+    -- every one is `controlSize` wide, so the reservation is one multiplication
+    -- -- but it still counts only what `window.controls` actually holds when the
+    -- window has been built, because a strip that reserves room for a button
+    -- that is not there clips the title by that much for the life of a session.
+    local size, shown = controlSize(frameCfg), 0
     local built = window.controls
     for i = 1, #CONTROLS do
         local control = CONTROLS[i]
-        if enabled(frameCfg, control)
-            and (not control.external or not built or built[control.key]) then
-            total = total + (control.external and EXTERNAL_SIZE or size)
+        if enabled(frameCfg, control) and (not built or built[control.key]) then
             shown = shown + 1
         end
     end
     if shown == 0 then return 0 end
-    return total + (shown - 1) * GAP
+    return shown * size + (shown - 1) * GAP
 end
 
 -- ---------------------------------------------------------------------------
@@ -309,8 +336,16 @@ local function onClick(frame)
         -- and wipes what Blizzard's own meter is showing, not just ours. A
         -- second copy of that sentence is a second place for it to go stale,
         -- and the more dangerous the warning the worse that is.
-        local show = _G.StaticPopup_Show
-        if show then show("MYTHICMETERS_RESET_METER_DATA") end
+        -- Through settings/Data.lua, which owns the dialog and centres it on
+        -- the screen. Resolved at call time because settings/ loads ahead of
+        -- modules/; the bare StaticPopup_Show behind it is the degraded path,
+        -- where an uncentred confirmation still beats no confirmation.
+        if NS.ShowResetMeterData then
+            NS.ShowResetMeterData()
+        else
+            local show = _G.StaticPopup_Show
+            if show then show("MYTHICMETERS_RESET_METER_DATA") end
+        end
     elseif control == "export" then
         -- The WINDOW, not its config: Export.Open reads the instance to centre
         -- its modal on the window it was opened from.
@@ -331,34 +366,24 @@ function HeaderControls:Attach(window)
     window.controls = {}
     for i = 1, #CONTROLS do
         local control = CONTROLS[i]
-        local button
+        local button = CreateFrame("Button", nil, frame)
 
-        if control.external then
-            -- LibKa0s builds it, or answers nil on a degraded install. Either is
-            -- a legitimate outcome and neither is an error here.
-            if NS.MakeCloseButton then
-                button = NS.MakeCloseButton(frame, function() window:Hide("closed") end)
-            end
-            if button then
-                window.controls[control.key] = button
-            end
-        else
-            button = CreateFrame("Button", nil, frame)
-
+        -- CENTRED, NOT SetAllPoints. The art is inset inside its slot (ART_SCALE)
+        -- and the size that inset produces is only known at layout time, so the
+        -- texture is anchored once here and sized in Apply.
         button.tex = button:CreateTexture(nil, "OVERLAY")
-        button.tex:SetAllPoints(button)
+        button.tex:SetPoint("CENTER")
         button.tex:Hide()
 
         button.glyph = button:CreateFontString(nil, "OVERLAY")
         button.glyph:SetAllPoints(button)
         button.glyph:SetJustifyH("CENTER")
 
-            button.mmWindow = window
-            button.mmControl = control.key
-            button:SetScript("OnClick", onClick)
+        button.mmWindow = window
+        button.mmControl = control.key
+        button:SetScript("OnClick", onClick)
 
-            window.controls[control.key] = button
-        end
+        window.controls[control.key] = button
     end
 end
 
@@ -386,7 +411,11 @@ function HeaderControls:Apply(window)
     -- itself.
     local level = window.dragBar and (window.dragBar:GetFrameLevel() + 5) or nil
 
-    local y = -(layout.padding - 1)
+    -- ONE CENTRE FOR THE WHOLE TITLE ROW. modules/Window.lua owns it, because the
+    -- title and the session line are placed against the same number: the strip
+    -- used to be pinned a pixel under the frame padding, which put it 3px below
+    -- the text beside it and read as the icons hanging off the bottom of the bar.
+    local y = window.TitleRowTop and window:TitleRowTop(size) or -(layout.padding - 1)
     local used = 0
 
     for i = 1, #CONTROLS do
@@ -402,32 +431,32 @@ function HeaderControls:Apply(window)
                 -- actually drawn, so turning one off closes the gap rather than
                 -- leaving a hole, and the controls past it move by exactly one
                 -- step. That is the whole reason the placement is indexed.
-                -- `used` accumulates the widths ACTUALLY placed, rather than
-                -- multiplying an index by one assumed size: the close button is
-                -- 18 whatever `controlSize` says, so an index-times-size step
-                -- overlapped it with its neighbour below 14 and left a hole
-                -- above 18.
-                local width = control.external and EXTERNAL_SIZE or size
+                -- `used` accumulates the widths ACTUALLY placed rather than
+                -- multiplying an index by one assumed size. Every control is the
+                -- same width today, and this stays an accumulator anyway: it is
+                -- the shape that survived a control that was not, and it costs
+                -- one addition.
                 local dx = -(layout.padding + used)
                 button:ClearAllPoints()
                 button:SetPoint("TOPRIGHT", window.frame, "TOPRIGHT", dx, y)
-                if not control.external then button:SetSize(size, size) end
-                used = used + width + GAP
+                button:SetSize(size, size)
+                -- The art, inset inside the slot. Floored rather than rounded so
+                -- a texture can never come out a pixel wider than the box it is
+                -- centred in.
+                local art = math.floor(size * ART_SCALE)
+                button.tex:SetSize(art, art)
+                used = used + size + GAP
                 if level then button:SetFrameLevel(level) end
                 -- The hit rect is grown past the art: 18px is a small target and
                 -- the only thing behind these is a drag handle.
                 if button.SetHitRectInsets then button:SetHitRectInsets(-3, -3, -3, -3) end
 
-                -- AN EXTERNAL CONTROL KEEPS ITS OWN LOOK. LibKa0s builds the
-                -- close button and draws it; it carries none of the `.tex` /
-                -- `.glyph` pair the ladder writes into, so it is placed and
-                -- sized here and nothing else. Reaching into another library's
-                -- widget to restyle it is how a re-vendor silently reverts your
-                -- art.
-                if not control.external then
-                    local art, dimmed, ascii = artFor(control, frameCfg)
-                    drawIcon(button, control, art, style, dimmed, ascii)
-                end
+                local icon, dimmed, ascii = artFor(control, frameCfg)
+                -- WHICH RUNG TOOK, remembered: the hover highlight recolours a
+                -- control without redrawing it, and what may be recoloured
+                -- depends on whether it is our white art, a finished atlas icon
+                -- or a character.
+                button.mmRung = drawIcon(button, control, icon, style, dimmed, ascii)
             end
         end
     end
@@ -441,34 +470,96 @@ end
 --- this file growing a second opinion about what the header looks like.
 function HeaderControls.Style(window)
     local resolve = NS.HeaderStyle
-    if resolve then return resolve(window) end
-    return { path = nil, size = 12, flags = "", r = 1, g = 1, b = 1 }
+    local style = resolve and resolve(window)
+        or { path = nil, size = 12, flags = "", r = 1, g = 1, b = 1 }
+
+    -- THE FONT IS THE HEADER'S, THE COLOUR IS THE STRIP'S OWN. The ASCII rung is
+    -- text and has no business being on a different face from the title, but the
+    -- controls are chrome rather than a line of the header: they carry two
+    -- colours, one at rest and one under the pointer, and neither is the colour
+    -- the header text is drawn in.
+    local frameCfg = (window.config or {}).frame or {}
+    style.r, style.g, style.b = color(frameCfg.controlColor, 1, 1, 1)
+    return style
 end
 
 -- ---------------------------------------------------------------------------
--- Hover reveal
+-- Hover
 -- ---------------------------------------------------------------------------
 --
--- HOOKED TO THE STRIP, NOT TO THE BUTTONS. A per-button OnEnter/OnLeave fires a
--- leave every time the pointer crosses the gap between two of them, and the set
--- flickers. `dragBar` already spans the whole title strip and already has the
--- mouse, so one enter and one leave covers every control and costs nothing.
+-- ONE CONTROL AT A TIME. The reveal used to be a property of the STRIP: the
+-- pointer touching the title bar anywhere brought all seven controls up
+-- together, and the control actually under the pointer was told apart by a
+-- highlight drawn behind it. That is two pieces of feedback answering one
+-- question, and the loud one answered it wrong -- six controls lighting up says
+-- "the header is live", when what a player wants to know is "which of these am I
+-- about to click".
+--
+-- So the reveal IS the feedback now, and it is per control: the one under the
+-- pointer comes up to full alpha and takes the hover colour, and the other six
+-- stay exactly as they were. There is no highlight behind it, because a control
+-- that is the only bright thing in the strip needs nothing behind it to be
+-- found.
+--
+-- THE HOOKS STAY ON BOTH. `dragBar` no longer drives the alpha, but it is still
+-- hooked: a control sits five frame levels above it, so leaving a control for
+-- the bar and leaving the header entirely are different events and only the
+-- second one clears the hover.
 
---- What alpha the strip should be at right now.
-local function hoverAlpha(window)
+--- What alpha a control that is NOT under the pointer sits at.
+local function restAlpha(window)
     local frameCfg = (window.config or {}).frame or {}
     if frameCfg.hoverReveal == false then return 1 end
-    return window.headerHovered and 1 or 0.25
+    return 0.25
 end
 
---- Push the current alpha onto every control.
+--- Colour one control for its current hover state.
+---
+--- WHICHEVER REGION DREW IT. Our art and an atlas icon are both textures and
+--- take a vertex multiply; the ASCII rung is text and takes a text colour. The
+--- rung is remembered at draw time (`button.mmRung`) so a hover can recolour a
+--- control without walking the ladder again -- a hover fires far more often than
+--- a config change, and re-resolving a texture path on every pointer move is
+--- work nobody asked for.
+local function applyTint(button, control, window, frameCfg)
+    local hovered = (window.hoveredControl == control.key)
+    local _, dimmed = artFor(control, frameCfg)
+
+    local r, g, b
+    if hovered then
+        r, g, b = color(frameCfg.controlHoverColor, 1, 0.82, 0)
+    else
+        r, g, b = color(frameCfg.controlColor, 1, 1, 1)
+    end
+
+    -- The "off" half of a two-state icon stays dimmed against its own state,
+    -- and the pointer still lifts it clear so a click target is never faint.
+    local alpha = (hovered or not dimmed) and 1 or 0.45
+    if button.mmRung == "ascii" then
+        button.glyph:SetTextColor(r, g, b)
+        button.glyph:SetAlpha(alpha)
+    else
+        button.tex:SetVertexColor(r, g, b)
+        button.tex:SetAlpha(alpha)
+    end
+end
+
+--- Push the current hover state onto every control.
+---
+--- Named for the reveal because that is what it started as, and kept that way
+--- because modules/Window.lua calls it by this name on every header refresh.
 function HeaderControls.ApplyHoverAlpha(window)
     local controls = window.controls
     if not controls then return end
-    local alpha = hoverAlpha(window)
+    local rest     = restAlpha(window)
+    local frameCfg = (window.config or {}).frame or {}
     for i = 1, #CONTROLS do
-        local button = controls[CONTROLS[i].key]
-        if button then button:SetAlpha(alpha) end
+        local control = CONTROLS[i]
+        local button = controls[control.key]
+        if button then
+            button:SetAlpha((window.hoveredControl == control.key) and 1 or rest)
+            if button.mmRung then applyTint(button, control, window, frameCfg) end
+        end
     end
 end
 
@@ -477,22 +568,25 @@ function HeaderControls:HookHover(window)
     local bar = window.dragBar
     if not bar then return end
 
-    -- THE CONTROLS THEMSELVES HAVE TO BE HOOKED TOO, and this is not belt and
-    -- braces. They sit FIVE FRAME LEVELS ABOVE dragBar so they win the click --
-    -- which also means the pointer reaching a control leaves dragBar, firing its
-    -- OnLeave and fading the strip at the exact moment the player went for it.
-    --
-    -- Hooking both and treating hover as "the pointer is on the strip OR on one
-    -- of its controls" is what makes the reveal survive its own frame ordering.
+    -- THE CONTROLS CARRY THE REVEAL. Each one knows only itself: its enter names
+    -- it as the hovered control and its leave un-names it, and nothing else in
+    -- the strip moves either way. dragBar is hooked below only to record whether
+    -- the pointer is still on the header at all.
     for i = 1, #CONTROLS do
         local button = window.controls and window.controls[CONTROLS[i].key]
         if button and button.HookScript then
+            local key = CONTROLS[i].key
             button:HookScript("OnEnter", function()
                 window.headerHovered = true
+                window.hoveredControl = key
                 HeaderControls.ApplyHoverAlpha(window)
             end)
             button:HookScript("OnLeave", function()
                 window.headerHovered = bar.IsMouseOver and bar:IsMouseOver() or false
+                -- ONLY IF IT IS STILL OURS. Frames leave in no guaranteed order,
+                -- so a leave arriving after the next control's enter would clear
+                -- a reveal that has already moved on.
+                if window.hoveredControl == key then window.hoveredControl = nil end
                 HeaderControls.ApplyHoverAlpha(window)
             end)
         end
@@ -507,14 +601,22 @@ function HeaderControls:HookHover(window)
     bar[hook](bar, "OnEnter", function(frame)
         local w = frame.mmWindow
         if not w then return end
+        -- Recorded, not acted on: the pointer being on the bar is what a
+        -- control's OnLeave asks about to tell "moved to the bar beside it" from
+        -- "left the header". It no longer reveals anything by itself.
         w.headerHovered = true
-        HeaderControls.ApplyHoverAlpha(w)
     end)
 
     bar[hook](bar, "OnLeave", function(frame)
         local w = frame.mmWindow
         if not w then return end
         w.headerHovered = false
+        -- THE HOVER IS NOT CLEARED HERE. A control sits five frame levels above
+        -- the bar, so the pointer crossing from the bar onto a control fires this
+        -- leave -- and on a live client it can arrive AFTER that control's enter.
+        -- Clearing here took the reveal straight back off the control the player
+        -- had just reached. Each control clears its own on its own leave, which
+        -- is the only event that actually means "the pointer is off it".
         HeaderControls.ApplyHoverAlpha(w)
     end)
 end

@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1186%2F1186_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1197%2F1197_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -133,7 +133,8 @@ so those cells are left blank rather than showing a number that might be the oth
 header says so, and everything fills back in the moment the fight ends.
 
 **Can I look back at an earlier fight?**
-Yes. Click the session line in the window's header and pick the fight out of the list — it shows each
+Yes. Click the segment control in the window's header — the three horizontal lines — and pick the
+fight out of the list — it shows each
 one's name and how long it ran, with Current and Overall at the bottom. The window stays on that fight
 until you pick another, and remembers your choice across a reload. If the game discards the fight, the
 window falls back to Current on its own.

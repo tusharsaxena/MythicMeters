@@ -72,7 +72,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **113 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **115 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -325,9 +325,11 @@ The second is why the scoring feature is deferred — [scope.md](scope.md#deferr
 
 ## The segment selector
 
-A window's header line is a **button**. Clicking it opens a context menu of every session the client
-is still holding — name and duration, newest first as the API returns them — then a divider, then the
-two synthetic entries `Current` and `Overall`.
+The **segment control** in the header strip — the three horizontal lines — opens a context menu of
+every session the client is still holding — name and duration, newest first as the API returns them — then a divider, then the
+two synthetic entries `Current` and `Overall`. The menu anchors to the header's session line, which
+is where it has always come out; that line used to be a 220px Button and opened the menu itself,
+which put an invisible click target across the middle of the title bar and was removed.
 
 The choice is stored in `window.data.sessionID`, which **overrides `sessionType` when set** and is
 `nil` when no segment is pinned. It has no schema row: it is not a settings-panel control and its
@@ -530,6 +532,7 @@ The directory carries no `.md` and so registers no row.
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
 | `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
+| `superpowers/specs/2026-08-23-header-controls-design.md` | Tier 3 planning history — the approved header control strip (issues #6, #7) |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 

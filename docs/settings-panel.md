@@ -28,17 +28,17 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | # | Page | Panel key | Rows | Defaults button | What is on it |
 |---|---|---|---|---|---|
 | 1 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
-| 2 | Frame | `frame` | 24 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip, the seven header controls and their size, hover reveal, minimised · **Reset position** button |
+| 2 | Frame | `frame` | 26 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip, the seven header controls with their size and their two colours, hover reveal, minimised · **Reset position** button |
 | 3 | Header | `header` | 16 | yes | Title text, session name / duration / totals, font, alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own font, size, outline, colour and background |
-| 4 | Rows | `rows` | 8 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
-| 5 | Bars | `bars` | 8 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |
+| 4 | Rows | `rows` | 10 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
+| 5 | Bars | `bars` | 9 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |
 | 6 | Text | `text` | 11 | yes | Left slot, right slot, number format, death timestamps, max name length, font, size, outline, shadow, color, opacity |
 | 7 | Icons | `icons` | 3 | yes | One icon per row — spec where known, class otherwise, never a role — plus its size and which side of the name it sits on |
 | 8 | Tooltip | `tooltip` | 18 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own font/size/outline, and the Targets section |
 | 9 | Visibility | `visibility` | 7 | yes | Dungeon / raid / arena / battleground / world, hide when solo, hide in vehicle |
 | 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
-| 11 | Data | `data` | 4 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |
-| 12 | General | `general` | 4 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |
+| 11 | Data | `data` | 6 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |
+| 12 | General | `general` | 8 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |
 | 13 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
 
 Seven of the thirteen — Header, Rows, Bars, Text, Icons, Tooltip, Visibility — are one

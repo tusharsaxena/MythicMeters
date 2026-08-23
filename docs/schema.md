@@ -262,15 +262,36 @@ bar grows rightward (`SetReverseFill(false)`).
 
 ### The header's controls
 
+The whole title row — name, session line and controls — is centred on one line through
+`Window:TitleRowTop`, computed from the padding, `header.height` and each item's own configured size.
+The band it centres in runs from the frame's **top edge** down to the divider, not the tinted band
+alone: the padding above is not a margin to anyone looking at the window, so centring in the band
+leaves it as dead space above the row and lands the text against the divider. Nothing in the title
+bar is anchored to a hand-picked offset any more.
+
 `showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
 `true`. Six of the seven controls; `closeButton` above is the seventh and deliberately keeps its
 older name, because renaming it to `showClose` for symmetry would migrate every stored profile in
 exchange for a consistency nobody can see.
 
-`hoverReveal = true` fades the strip until the pointer is over the title bar. `minimised = false`
+`hoverReveal = true` fades every control except the one under the pointer — the reveal is per
+control, not per strip, so it *is* the "which one am I about to click" feedback rather than a
+separate highlight drawn behind it. `minimised = false`
 collapses the window to that bar — the stored `frame.height` is untouched, so expanding restores it
-exactly. `controlSize = 18` is what each control is drawn at; the art ships at 64px and is scaled
-down to this, the same rule `icons.size` follows for the row icons.
+exactly. `controlColor = { r=1, g=1, b=1, a=1 }` and `controlHoverColor = { r=1, g=0.82, b=0, a=1 }` — two
+colours, because hover is the only feedback a control gives. The art ships white and is tinted by a
+**multiply**, so the shipped `controlColor` is the identity rather than a recolour: the icons read as
+chrome, and the pointer turns exactly one of them the gold the rest of the header uses. Both are
+pickers rather than a "match the header text" switch — one of the two states being unconfigurable was
+the complaint that produced them. (The tint had never run at all before: `HeaderControls.Style` read
+`NS.HeaderStyle`, which nothing published, so it fell through to a white fallback every time.
+`modules/Window.lua` publishes it now, and the controls take the header's **font** from it while
+carrying their own colours.)
+
+`controlSize = 16` is the *slot* each control occupies — its click target and the strip's layout
+pitch. The art is drawn centred inside that slot at 72% of it, so a 64px icon lands at 11px in a 16px
+box, on the same line as a 12px title; a glyph that reaches its own edges reads much heavier than the
+header text beside it when it fills the slot outright.
 
 **A collapsed window does not poll.** That is a real clause in `ShouldPoll`, not an emergent
 property of hiding: `OnUpdate` is installed on the frame, and the frame stays shown while collapsed
