@@ -356,10 +356,15 @@ end)
 -- ResolveMetric — which column the chat dump ranks by
 -- ---------------------------------------------------------------------------
 --
--- `export.metric` ships as "", which is a CHOICE ("match the window") rather than
--- an absent value. An earlier draft shipped "DamageDone" and seeded the stored
--- value on open, which made the follow-the-window path unreachable; these cases
--- are what keep it reachable.
+-- `export.metric` used to ship as "", which was a CHOICE ("match the window")
+-- rather than an absent value, resolved fresh against the invoking window at
+-- every use. That choice is gone: the label was unreadable, and a control whose
+-- value is "whatever something else says" cannot show you what it will do.
+--
+-- What replaced it is SEEDING — Export.Open writes the invoking window's sort
+-- column into the profile — so the useful half survives and is visible in the
+-- selector. These cases pin the narrowed contract: ResolveMetric always answers
+-- a key the catalog holds, and "" is now just an unrecognized stored value.
 
 --- Store one export preference the way the modal does.
 ---
@@ -371,50 +376,59 @@ local function storeMetric(inst, value)
     profile.export.metric = value
 end
 
-test("Export.ResolveMetric follows the window's sort column when nothing is pinned", function()
-    local inst = T.load()
-    storeMetric(inst, "")
-    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }),
-        "HealingDone")
-end)
-
-test("Export.ResolveMetric ships following the window, not pinned to damage", function()
-    -- red under: a non-empty `export.metric` default, which pins every export to
-    -- one stat and makes the branch above dead code.
-    local inst = T.load()
-    assertEqual(inst.NS.defaults.profile.export.metric, "")
-    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "Interrupts" } }),
-        "Interrupts")
-end)
-
-test("Export.ResolveMetric lets a pinned stat beat the window", function()
+test("Export.ResolveMetric answers the pinned stat", function()
     local inst = T.load()
     storeMetric(inst, "Deaths")
     assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }), "Deaths")
 end)
 
-test("Export.ResolveMetric falls back to the first catalog stat", function()
+test("Export.ResolveMetric ships pinned to a real stat, never to the empty string", function()
+    -- red under: the old FOLLOW_WINDOW default surviving the removal. A profile
+    -- default of "" would now be an unrecognized value on every fresh install.
     local inst = T.load()
-    storeMetric(inst, "")
-    -- A window that has never been sorted, and a window with no data group at all.
-    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
-    assertEqual(inst.NS.Export.ResolveMetric({}), Const.STATS[1].key)
-    assertEqual(inst.NS.Export.ResolveMetric(nil), Const.STATS[1].key)
+    local shipped = inst.NS.defaults.profile.export.metric
+    assertTrue(Const.STAT_BY_KEY[shipped] ~= nil,
+        "the shipped default is a key the catalog answers for, not a sentinel")
+    assertEqual(shipped, Const.STATS[1].key)
 end)
 
-test("Export.ResolveMetric treats a stat this build does not offer as unpinned", function()
-    -- A profile written by a build that carried a stat this one dropped. Falling
-    -- through to the window is the same reading settings/Schema.lua's sortColumn
-    -- row gets, and it beats exporting a column that resolves to nothing.
+test("Export.ResolveMetric treats the old empty-string choice as unset", function()
+    -- A profile written by the build that shipped FOLLOW_WINDOW. It degrades to
+    -- the window's column and then to the first catalog stat, with no migration
+    -- step — which is the whole reason no migration step was written.
+    local inst = T.load()
+    storeMetric(inst, "")
+    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }),
+        "HealingDone")
+    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
+end)
+
+test("Export.ResolveMetric treats a stat this build does not offer as unset", function()
     local inst = T.load()
     storeMetric(inst, "AbsorbsFromTheFuture")
     assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "Dispels" } }), "Dispels")
+end)
+
+test("Export.ResolveMetric falls back to the first catalog stat", function()
+    local inst = T.load()
+    storeMetric(inst, nil)
+    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
+    assertEqual(inst.NS.Export.ResolveMetric({}), Const.STATS[1].key)
+    assertEqual(inst.NS.Export.ResolveMetric(nil), Const.STATS[1].key)
 end)
 
 test("Export.ResolveMetric is callable through the colon form", function()
     local inst = T.load()
     storeMetric(inst, "Deaths")
     assertEqual(inst.NS.Export:ResolveMetric(), "Deaths")
+end)
+
+test("The Metric selector offers exactly the catalog, with no sentinel entry", function()
+    -- red under: "Match the window" surviving as a menu entry after the stored
+    -- choice behind it was removed, which would write a value nothing resolves.
+    local inst = T.load()
+    assertNil(rawget(inst.NS.L, "Match the window"),
+        "the string is gone from the locale, not just from the menu")
 end)
 
 -- ---------------------------------------------------------------------------

@@ -84,12 +84,6 @@ local EM_DASH = " \226\128\148 "
 -- so a change to MAX_ROWS moves both.
 local LINE_CHOICES = { 3, 5, 10, 20, Const.MAX_ROWS }
 
--- The stored `export.metric` that means "not a fixed stat — whichever column the
--- window I was opened from is sorted by". The empty string rather than nil
--- because a profile stores it: nil is what an absent key reads as, and the two
--- have to be told apart to know whether a player has ever chosen at all.
-local FOLLOW_WINDOW = ""
-
 -- Seconds between two lines of a chat dump. Roughly three a second, which is
 -- under every flood threshold the server enforces and still fast enough that a
 -- five-line ranking is on screen before anybody has read the first line. A
@@ -1085,7 +1079,7 @@ end
 --- @param statKey string|nil
 --- @return string
 local function metricLabel(statKey)
-    if statKey == nil or statKey == FOLLOW_WINDOW then return L["Match the window"] end
+    if statKey == nil then return L["Unknown"] end
     local stat = Const.STAT_BY_KEY[statKey]
     if not stat then return L["Unknown"] end
     return L[stat.label] or stat.label
@@ -1093,35 +1087,27 @@ end
 
 --- Which stat the chat dump actually ranks by, right now.
 ---
---- The stored choice, unless it is the empty string — which is not "unset" but a
---- CHOICE, the one that says "whatever the window I clicked is sorted by". It is
---- what a fresh profile ships with, because the column a player sorted their
---- meter by is the column they are thinking about, and it is reachable again from
---- the Metric menu after picking a fixed stat.
+--- The stored choice, when the catalog still answers for it. It always does on a
+--- profile this build wrote: Export.Open SEEDS the invoking window's sort column
+--- on the way in, so the selector shows a real stat before anyone has touched it.
 ---
---- Resolved at every use rather than written into the profile when the modal
---- opens. An earlier draft seeded the stored value instead, which meant the
---- follow-the-window behavior could happen exactly once per profile and never
---- again — and, with a non-empty default shipped, never at all.
+--- The two fallbacks below are for the profiles that predate that. `""` was once
+--- a deliberate choice meaning "match whichever column the window is sorted by",
+--- and a build that offered a stat this one dropped leaves a key the catalog has
+--- never heard of. Both read as unset, both land on the window's own column, and
+--- neither needs a migration step — which is why there is not one.
 ---
 --- Public and window-taking rather than a local reading the modal's `invoker`,
 --- because a rule this easy to get wrong belongs where the harness can reach it;
 --- the UI passes nothing and gets the window it was opened from.
----
---- A stored key the catalog does not answer for is treated as the follow choice
---- rather than exported as a blank column: it is a profile written by a build
---- that offered a stat this one does not, which is the same reading
---- settings/Schema.lua's sortColumn row gets.
 ---
 --- @param win table|nil  a Window instance or config; the invoking window if nil
 --- @return string  a key that Const.STAT_BY_KEY answers for
 function Export.ResolveMetric(win)
     if win == Export then win = nil end
 
-    local stored = readExport("metric", FOLLOW_WINDOW)
-    if stored ~= nil and stored ~= FOLLOW_WINDOW and Const.STAT_BY_KEY[stored] then
-        return stored
-    end
+    local stored = readExport("metric", nil)
+    if stored ~= nil and Const.STAT_BY_KEY[stored] then return stored end
 
     local data = cfgOf(win or invoker).data or {}
     local sortColumn = data.sortColumn
@@ -1186,12 +1172,6 @@ end
 local function openMetricMenu(button)
     return NS.Compat.OpenContextMenu(button, function(_, root)
         root:CreateTitle(L["Metric"])
-        -- First, and above a divider: it is the default, and it is the only entry
-        -- that is not a stat.
-        root:CreateButton(L["Match the window"], function()
-            chooseExport("metric", FOLLOW_WINDOW)
-        end)
-        root:CreateDivider()
         for _, stat in ipairs(Const.STATS) do
             local key = stat.key
             root:CreateButton(L[stat.label] or stat.label, function()
@@ -1447,10 +1427,21 @@ function Export.Open(a, b)
     local frame = EnsureFrame()
     if not frame then return nil end
 
-    -- No metric seeding here. `export.metric` ships as FOLLOW_WINDOW and
-    -- Export.ResolveMetric answers it against `invoker` at every use, so an export from
-    -- a window sorted by Healing ranks healing without a write, and a deliberate
-    -- choice made last time still wins over both.
+    -- SEEDED, and this reverses a decision this file used to argue for. The old
+    -- shape stored "" — "match whichever column the window is sorted by" — and
+    -- resolved it fresh at every use, which meant the Metric button showed a
+    -- label naming a rule instead of naming a stat. The rule was right and
+    -- unreadable; seeding keeps the behaviour and puts the answer in the control.
+    --
+    -- It is also what makes the settings panel's "Default metric" row removable:
+    -- a preference every open overwrites is a preference in name only.
+    --
+    -- Only from a column the catalog answers for. A window that has never been
+    -- sorted leaves whatever was chosen last time, which is the better of the
+    -- two wrong answers.
+    local seed = (cfgOf(win).data or {}).sortColumn
+    if seed and Const.STAT_BY_KEY[seed] then writeExport("metric", seed) end
+
     refreshModal()
     centerOnWindow(frame, win)
     frame:Show()

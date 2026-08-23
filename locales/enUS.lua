@@ -545,12 +545,6 @@ L["Defaults"] = "Defaults"
 -- are two views of one setting rather than two settings that drift apart.
 L["Export"] = "Export"
 L["Default metric"] = "Default metric"
--- Also the Metric menu's first entry. "" is a choice rather than an absent value:
--- it ranks by whichever column the exporting window is sorted by, which is what a
--- fresh profile ships with.
-L["Match the window"] = "Match the window"
-L["Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."] =
-    "Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."
 L["Default channel"] = "Default channel"
 L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."] =
     "Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."
