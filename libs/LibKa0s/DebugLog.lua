@@ -24,7 +24,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-DebugLog-1.0", 9
+local MAJOR, MINOR = "LibKa0s-DebugLog-1.0", 10
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -51,8 +51,13 @@ lib.MAX_BUFFER = 500
 -- console drawing the older Core's button while lib.MODULES.Core truthfully reports the newer minor.
 -- Resolving through the table at CALL time keeps the two halves honest, and costs one call frame
 -- once per window built. Same shape PerfPanel.lua already uses.
-function lib.MakeCloseButton(parent, onClick)
-  return core.MakeCloseButton(parent, onClick)
+--- THE THIRD ARGUMENT IS THE WHOLE POINT OF MINOR 10. This forwarder took two arguments and Core's
+--- gained a third at Core minor 6 -- so minor 9 shipped a console whose copy and clear drew the
+--- collection's art while its close, which goes through here, silently fell back to the
+--- multiplication sign. A dropped argument is not a failure anything can report: Core simply saw no
+--- addon name and did what it does without one.
+function lib.MakeCloseButton(parent, onClick, addonName)
+  return core.MakeCloseButton(parent, onClick, addonName)
 end
 
 -- ── strings ────────────────────────────────────────────────────────────────────────────────
@@ -150,11 +155,12 @@ end
 --- install missing the art gets -- one path, exercised by every one of those cases, rather than a
 --- degraded branch that only runs on installs nobody tests on.
 ---
---- IT CARRIES A TOOLTIP, and the text button does not need one. Dropping a word for a mark buys
---- room and costs the one thing the word was doing: saying what the button is. `Copy` and `Clear`
---- are not universally legible glyphs -- one is a clipboard and the other a bin -- so the label
---- moves into the tooltip rather than disappearing.
-local function makeIconButton(parent, addonName, icon, label, onClick)
+--- NO TOOLTIP, AND NO LABEL TO PUT IN ONE. Minor 9 took a label and showed it under the control,
+--- which put it on top of the first line of the log -- the thing the window exists to show -- every
+--- time the pointer crossed the title bar. Anchoring it elsewhere trades one overlap for another on
+--- a window that is 700px of text, and the two marks sit beside a close button that has never needed
+--- one. The word still exists where it is still drawn: the text-button fallback in the caller.
+local function makeIconButton(parent, addonName, icon, onClick)
   if not addonName then return nil end
   local media = LibStub and LibStub("LibKa0s-Media-1.0", true)
   local path = media and media.Icon and media.Icon(addonName, icon)
@@ -168,20 +174,9 @@ local function makeIconButton(parent, addonName, icon, label, onClick)
   tex:SetTexture(path)
   tex:SetVertexColor(REST[1], REST[2], REST[3])
   b.icon = tex
-  b.tooltipText = label
 
-  b:SetScript("OnEnter", function(self)
-    tex:SetVertexColor(HOT[1], HOT[2], HOT[3])
-    if GameTooltip and self.tooltipText then
-      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-      GameTooltip:SetText(self.tooltipText, 1, 1, 1)
-      GameTooltip:Show()
-    end
-  end)
-  b:SetScript("OnLeave", function()
-    tex:SetVertexColor(REST[1], REST[2], REST[3])
-    if GameTooltip then GameTooltip:Hide() end
-  end)
+  b:SetScript("OnEnter", function() tex:SetVertexColor(HOT[1], HOT[2], HOT[3]) end)
+  b:SetScript("OnLeave", function() tex:SetVertexColor(REST[1], REST[2], REST[3]) end)
   b:SetScript("OnClick", onClick)
   return b
 end
@@ -216,8 +211,8 @@ local function buildTitleControls(titleBar, spec)
   -- ICONS ARE NARROWER THAN WORDS. Each control is built as art first and falls back to its label,
   -- and the offsets are derived from what was ACTUALLY built -- so the three end up one size and one
   -- pitch where the art is there, and exactly where they were at minor 8 where it is not.
-  local clear = makeIconButton(titleBar, spec.addonName, "clear", spec.clearLabel, spec.onClear)
-  local copy  = makeIconButton(titleBar, spec.addonName, "copy", spec.copyLabel, spec.onCopy)
+  local clear = makeIconButton(titleBar, spec.addonName, "clear", spec.onClear)
+  local copy  = makeIconButton(titleBar, spec.addonName, "copy", spec.onCopy)
   -- Only CLEAR's width feeds an offset. Copy is the leftmost control and nothing is placed to the
   -- left of it, so its own width has never entered the arithmetic -- it is a size, not a measurement.
   local clearW = CLEAR_W

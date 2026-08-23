@@ -637,9 +637,9 @@ is why the popup exists. Every open drill-down closes and this module's caches a
   there (`Copy`, `Clear`) or a multiplication sign mean `core/DebugLogSetup.lua` stopped passing
   `addonName`, or the art is missing from the vendored payload; the console still works either way,
   which is why nothing errors to tell you.
-- **Hover copy and clear.** Each shows a tooltip naming what it does. That tooltip is not decoration
-  — it is where the word went when the button became a mark, and a clipboard and a bin are not
-  universally legible.
+- **Hover copy and clear: each brightens to gold, and NOTHING pops up.** They carried a tooltip for
+  one release; it anchored under the control, on top of the first line of the log. A tooltip
+  reappearing there is a regression, not a nicety.
 - **Clear empties the log; copy opens the copy window**, whose own title bar carries the same close
   icon. Ctrl+C then Esc still works there.
 
