@@ -312,6 +312,16 @@ NS.DebugLog = lib:New({
     -- MythicMetersDebugCopyScroll. Two hosts sharing a name would clobber each
     -- other's globals and each other's Esc handler.
     name  = addonName,
+    -- THE FOLDER NAME, which is a different question from the one above even though
+    -- this addon answers both with the same string. `name` seeds frame globals;
+    -- `addonName` is what the library builds a texture path from, so its own close,
+    -- copy and clear controls can draw this collection's art instead of a
+    -- multiplication sign and two words. A vendored library cannot work that out for
+    -- itself -- there is no one path to it -- and a host where the two strings
+    -- diverge would hand it a path into nowhere, which draws nothing and raises
+    -- nothing. Passed explicitly for that reason rather than left to the library to
+    -- infer from `name`.
+    addonName = addonName,
     -- The library appends its own " — Debug", giving "Ka0s Mythic Meters — Debug".
     title = "Ka0s Mythic Meters",
     font  = NS.Constants and NS.Constants.FONT_MONO,

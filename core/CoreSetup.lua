@@ -193,7 +193,20 @@ NS.RGBA = lib.RGBA or fallbackRGBA
 -- highlight) must read it from here, not guess it.
 NS.SKIN            = lib.SKIN
 NS.ApplySkin       = lib.ApplySkin
-NS.MakeCloseButton = lib.MakeCloseButton
+-- WRAPPED, TO SAY WHO IS ASKING. LibKa0s draws its own `close` icon when it is
+-- told which addon folder to build a texture path from, and the library cannot
+-- work that out for itself: it is vendored, so there is no one path to it and a
+-- copy cannot know which folder it was copied into. `addonName` is that answer,
+-- and this file has it as its first vararg.
+--
+-- Every close control in this addon comes through here -- the export modal, its
+-- copy window -- so one wrapper puts the same mark on all of them, and the
+-- header strip's own close (modules/HeaderControls.lua, which builds its own)
+-- already drew it. Without the name the library falls back to a multiplication
+-- sign, which is exactly what a degraded install should get.
+NS.MakeCloseButton = function(parent, onClick)
+    return lib.MakeCloseButton(parent, onClick, addonName)
+end
 
 -- The prefix is handed over as a FUNCTION rather than as the value of NS.PREFIX.
 -- It reads the same here, where core/Constants.lua has already run — but the

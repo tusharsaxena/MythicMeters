@@ -632,6 +632,16 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 - `/mm debug` toggles the console **window**; `/mm debug on|off` sets the logging **flag**. They are
   separate on purpose: logging runs with the console closed so a bug can be reproduced first and the
   log read afterwards.
+- **The console's title bar draws three icons, right to left: close, clear, copy** — the same art the
+  meter window's header uses, one size and one pitch, gray at rest and gold under the pointer. Words
+  there (`Copy`, `Clear`) or a multiplication sign mean `core/DebugLogSetup.lua` stopped passing
+  `addonName`, or the art is missing from the vendored payload; the console still works either way,
+  which is why nothing errors to tell you.
+- **Hover copy and clear.** Each shows a tooltip naming what it does. That tooltip is not decoration
+  — it is where the word went when the button became a mark, and a clipboard and a bin are not
+  universally legible.
+- **Clear empties the log; copy opens the copy window**, whose own title bar carries the same close
+  icon. Ctrl+C then Esc still works there.
 
 ### 15. Profiles
 
@@ -916,13 +926,22 @@ its export glyph.
 - The modal opens **centered on the window it was clicked from**, wherever that window has been
   dragged to. It is anchored to the window's invisible anchor frame rather than to the visible frame
   (rule R3), so this must hold for a window that has been showing live numbers all fight.
-- Its title bar reads **Export**, drags the modal, and carries the addon's usual close button.
+- Its title bar reads **Export**, drags the modal, and carries the addon's usual close button — the
+  **same icon the window header draws**, gray at rest and red under the pointer. A thin gray
+  multiplication sign there means LibKa0s was not told which addon is asking (`core/CoreSetup.lua`
+  wraps `MakeCloseButton` to pass the folder name), or the art is missing from the vendored payload.
 - Three selector buttons stacked top to bottom — **Metric**, **Channel**, **Lines** — each reading
   `Label: value`, and two action buttons across the bottom: **Export to CSV** and **Print to Chat**.
+- **Each action button carries an icon to the left of its label** — a spreadsheet on Export to CSV, a
+  speech bubble on Print to Chat — and **the words are still there**. The mark says where the export
+  lands; the label says what the button does, and it stays centered whether or not the art resolves,
+  so a missing icon leaves the button looking exactly as it did before.
 - **The modal is one frame, reused.** Open it from window 1, close it, open it from window 2: it
   re-centers on window 2 and exports window 2's segment. A modal that exported the *first* window's
   segment from then on is the invoker not being re-stamped.
 - **Esc closes it** (it is registered in `UISpecialFrames`), and so does the close button.
+- **The copy window that opens from Export to CSV** carries the same close icon in its own title bar,
+  and its text is the bundled monospace face — a CSV is columns of digits and only lines up in one.
 - **Each selector opens a context menu** — the same `MenuUtil` mechanism the header's segment
   selector uses. Metric lists **Match the window**, a divider, then all **nine** catalog stats;
   Channel lists the **eight** entries of `Constants.EXPORT_CHANNELS` (Auto · Say · Party · Raid ·

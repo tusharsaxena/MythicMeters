@@ -160,6 +160,18 @@ function()
     assertEqual(table.concat(askers, ", "), "core/MediaSetup.lua")
 end)
 
+test("DebugLogSetup: the library is told the FOLDER name, not just the frame name", function()
+    -- Two fields, two questions, one string in this addon: `name` seeds the frame
+    -- globals, `addonName` is what the library builds a texture path from so its own
+    -- close, copy and clear draw this collection's art. A host where the two diverge
+    -- would hand the library a path into nowhere -- which draws nothing and raises
+    -- nothing -- so this is passed explicitly rather than inferred.
+    -- red under: dropping `addonName` and letting the console keep its glyph and words.
+    local src = source("core/DebugLogSetup.lua"):gsub("%-%-[^\r\n]*", "")
+    assertTrue(src:match("addonName%s*=%s*addonName") ~= nil,
+        "the descriptor does not pass addonName, so the console draws the minor-8 title bar")
+end)
+
 test("DebugLogSetup: the frame names are seeded from the addon name", function()
     -- Two hosts sharing a name would clobber each other's globals and each
     -- other's Esc handler.

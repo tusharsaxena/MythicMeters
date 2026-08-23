@@ -261,7 +261,7 @@ badge and any count quoted in the docs must agree with it.
 - Defaults: NS.C aliases the profile defaults rather than copying them
 - Defaults: the debug flag is NOT a profile default
 
-### test_coresetup.lua (22)
+### test_coresetup.lua (23)
 
 - CoreSetup: the harness loads the vendored LibKa0s majors, so nothing measures a stub
 - CoreSetup: the runner FEEDS the derived library list, and it is not empty
@@ -282,6 +282,7 @@ badge and any count quoted in the docs must agree with it.
 - CoreSetup: RGBA answers the four defaults for a non-table
 - CoreSetup: the fallback color reader stands behind the library's
 - CoreSetup: the window edge comes from the library, never from a private lookalike
+- CoreSetup: the close button is the library's, told which addon is asking
 - CoreSetup: no addon file restates a Core.SKIN value
 - CoreSetup: NS.LIBKA0S_MISSING is set on BOTH paths, not only the degraded one
 - CoreSetup: all five seams append to the shared clause rather than re-spelling it
@@ -308,7 +309,7 @@ badge and any count quoted in the docs must agree with it.
 - PerfSetup: with LibKa0s absent the stub answers every member the addon reaches
 - PerfSetup: the degraded `/mm perf` answers with the shared cause and its own consequence
 
-### test_debuglogsetup.lua (29)
+### test_debuglogsetup.lua (30)
 
 - DebugLogSetup: NS.DebugLog is the library instance and NS.Debug is its bare sink
 - DebugLogSetup: the sink is gated on the flag and costs nothing when it is off
@@ -319,6 +320,7 @@ badge and any count quoted in the docs must agree with it.
 - DebugLogSetup: the [Init] summary names the version, the schema and the profile
 - DebugLogSetup: the console takes the shipped monospace font by PATH
 - DebugLogSetup: the font is registered with LSM exactly once, and not from this file
+- DebugLogSetup: the library is told the FOLDER name, not just the frame name
 - DebugLogSetup: the frame names are seeded from the addon name
 - DebugLogSetup: the console's visibility change refreshes an open settings panel
 - DebugLogSetup degraded: the stub carries the WHOLE live surface
@@ -1334,9 +1336,9 @@ badge and any count quoted in the docs must agree with it.
 | test_database.lua | 38 |
 | test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
-| test_coresetup.lua | 22 |
+| test_coresetup.lua | 23 |
 | test_perfsetup.lua | 19 |
-| test_debuglogsetup.lua | 29 |
+| test_debuglogsetup.lua | 30 |
 | test_mediasetup.lua | 7 |
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
@@ -1362,4 +1364,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1204** |
+| **Total** | **1206** |

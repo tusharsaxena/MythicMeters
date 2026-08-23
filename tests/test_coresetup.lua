@@ -232,7 +232,24 @@ test("CoreSetup: the window edge comes from the library, never from a private lo
     local lib = mocks.LibStub("LibKa0s-Core-1.0", true)
     assertTrue(NS.SKIN == lib.SKIN, "NS.SKIN must BE the library's table")
     assertTrue(NS.ApplySkin == lib.ApplySkin)
-    assertTrue(NS.MakeCloseButton == lib.MakeCloseButton)
+end)
+
+test("CoreSetup: the close button is the library's, told which addon is asking", function()
+    -- The one seam here that is WRAPPED rather than handed over. LibKa0s draws this
+    -- collection's own close icon when it can build a texture path, and it cannot
+    -- work that out itself: it is vendored, so there is no one path to it and a copy
+    -- cannot know which folder it was copied into. The wrapper supplies the answer,
+    -- once, for every close control in this addon.
+    -- red under: NS.MakeCloseButton = lib.MakeCloseButton, which draws the glyph.
+    local seen
+    local lib = mocks.LibStub("LibKa0s-Core-1.0", true)
+    local real = lib.MakeCloseButton
+    lib.MakeCloseButton = function(_, _, name) seen = name; return nil end
+    NS.MakeCloseButton(mocks.__stubFrame("Frame"), function() end)
+    lib.MakeCloseButton = real
+
+    assertEqual(seen, "MythicMeters",
+        "the library was not told which addon folder to build the path from")
 end)
 
 test("CoreSetup: no addon file restates a Core.SKIN value", function()

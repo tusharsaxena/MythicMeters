@@ -888,8 +888,9 @@ end
 --- @param parent table
 --- @param text string
 --- @param onClick function
+--- @param icon string  optional. A LibKa0s-Media icon name drawn to the left of the label.
 --- @return table  the button, with `.text` for later relabelling
-local function makeButton(parent, text, onClick)
+local function makeButton(parent, text, onClick, icon)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetHeight(ROW_H)
 
@@ -902,6 +903,22 @@ local function makeButton(parent, text, onClick)
         })
         button:SetBackdropColor(skinColor("bg", 0.1, 0.1, 0.12, 0.9))
         button:SetBackdropBorderColor(skinColor("innerBorder", 0.24, 0.24, 0.27, 0.9))
+    end
+
+    -- THE ICON IS BESIDE THE LABEL, NEVER INSTEAD OF IT. These two buttons are the
+    -- only irreversible-ish things in the modal -- one opens a copy window, the
+    -- other writes to a chat channel other people read -- and a mark alone would
+    -- make "which one sends to guild?" a question answered by hovering. The label
+    -- stays centred whether or not the art resolves, so a missing icon leaves the
+    -- button exactly as it was rather than off-centre.
+    local path = icon and NS.Icon and NS.Icon(icon)
+    if path then
+        local art = button:CreateTexture(nil, "OVERLAY")
+        art:SetPoint("LEFT", button, "LEFT", 10, 0)
+        art:SetSize(14, 14)
+        art:SetTexture(path)
+        art:SetVertexColor(1, 1, 1)
+        button.icon = art
     end
 
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1353,11 +1370,13 @@ local function EnsureFrame()
     -- the sentence is a refusal, and the skin has no "this is refused" accent.
     warning:SetTextColor(0.9, 0.25, 0.25)
 
-    local csvButton = makeButton(modal, L["Export to CSV"], onExportCsv)
+    -- A spreadsheet for the CSV and a speech bubble for chat: the two icons say
+    -- WHERE the export lands, which is the only difference between these buttons.
+    local csvButton = makeButton(modal, L["Export to CSV"], onExportCsv, "spreadsheet")
     csvButton:SetWidth(160)
     csvButton:SetPoint("BOTTOMLEFT", 16, 14)
 
-    local chatButton = makeButton(modal, L["Print to Chat"], onPrintToChat)
+    local chatButton = makeButton(modal, L["Print to Chat"], onPrintToChat, "chat")
     chatButton:SetWidth(160)
     chatButton:SetPoint("BOTTOMRIGHT", -16, 14)
 

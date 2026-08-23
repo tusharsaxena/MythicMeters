@@ -41,7 +41,11 @@ header all read the same table.
 Chrome comes from LibKa0s-Core-1.0's shared `SKIN` / `ApplySkin`, never a private lookalike, so the
 meter window, the debug console and the perf step panel wear the same Ka0s edge as every sibling
 addon. Six LibKa0s seams are adopted — Core, Media, Perf, DebugLog, Slash, Options — one setup file
-each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Five explain the
+each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Two of them pass the
+addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
+`core/DebugLogSetup.lua`'s descriptor), because a texture path is absolute from `Interface\AddOns\`
+and a vendored library cannot know which folder it was copied into — that is what lets the library's
+own windows wear the same close, copy and clear marks the meter window's header draws. Five explain the
 absence through the one shared cause clause `NS.LIBKA0S_MISSING`; **Media is deliberately silent**,
 because what it degrades is chrome. The icons this window draws and its monospace face ship inside the
 LibKa0s payload (`LibKa0s-Media-1.0`), so a missing library takes the art with it — the header walks
