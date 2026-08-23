@@ -942,13 +942,17 @@ its export glyph.
 - **Esc closes it** (it is registered in `UISpecialFrames`), and so does the close button.
 - **The copy window that opens from Export to CSV** carries the same close icon in its own title bar,
   and its text is the bundled monospace face — a CSV is columns of digits and only lines up in one.
-- **Each selector opens a context menu** — the same `MenuUtil` mechanism the header's segment
-  selector uses. Metric lists **Match the window**, a divider, then all **nine** catalog stats;
-  Channel lists the **eight** entries of `Constants.EXPORT_CHANNELS` (Auto · Say · Party · Raid ·
-  Instance · Guild · Whisper · Self only); Lines offers **3 / 5 / 10 / 20 / 40**, the last being
-  `Constants.MAX_ROWS` rather than a literal.
-- **A click outside an open menu closes the menu, not the modal.** The modal sits at `DIALOG` strata,
-  below the menu's own click-catcher, which is what makes that work.
+- Click **Metric**. A flat menu drops **directly under the button, left-aligned
+  with it** — dark panel, no gold title bar. The current metric's row is **gold**;
+  the rest are light gray. It looks like Bank Ledger's Data Set menu, not like a
+  Blizzard right-click menu.
+- Click outside the menu. It closes and the click does **not** land on the modal
+  behind it.
+- Pick a different metric. The menu closes, the button reads `Metric: <that one>`.
+- Repeat for **Channel** and **Lines**. Same skin, same behaviour, in all three.
+- Open the modal from a window sorted by **Healing**. Metric reads
+  **`Metric: Healing`** before you touch anything — there is no
+  "Match the window" entry any more, and there should not be one.
 - **Picking anything repaints the modal immediately** — the button's label changes to what you picked
   before the menu has finished closing.
 - **On a fresh profile the Metric follows the window it was opened from.** `defaults/Profile.lua`

@@ -47,6 +47,18 @@
 -- for exactly this), and `NS.MediaFont` answers nil, which core/Constants.lua
 -- turns into the client's own STANDARD_TEXT_FONT. Neither is an error: chrome
 -- degrades, and the numbers stay readable in a proportional face.
+--
+-- ---------------------------------------------------------------------------
+-- CONSUMER NOTES — who asks for which name
+-- ---------------------------------------------------------------------------
+--
+-- Not a full catalog (the library's own ICONS table is that); just the names
+-- whose consumer would not be obvious from the call site alone.
+--
+--   "chevron-down" — modules/Export.lua's three modal selectors (Metric,
+--   Channel, Lines), each passed as `opts.chevron` to LibKa0s-Widgets-1.0's
+--   Dropdown constructor. NS.Icon degrading to nil there is exactly the
+--   Dropdown's own fallback: the widget draws Blizzard's own arrow instead.
 
 local addonName, NS = ...
 

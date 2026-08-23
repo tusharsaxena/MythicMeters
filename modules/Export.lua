@@ -74,6 +74,12 @@ local Const = NS.Constants
 local L     = NS.L
 local MSG   = Const.MSG
 
+-- The modal's three selectors are LibKa0s-Widgets-1.0 dropdowns; see "The
+-- modal's three selectors" below for why. Soft-optionaled like every other
+-- LibKa0s seam this addon carries: `Export.Open` refuses rather than building a
+-- modal with three dead controls when this is nil.
+local W = LibStub and LibStub("LibKa0s-Widgets-1.0", true)
+
 -- U+2014 EM DASH, spelled in bytes. The source files in this addon are read and
 -- edited by tools whose encoding cannot be assumed; the escape always survives.
 local EM_DASH = " \226\128\148 "
@@ -1090,11 +1096,20 @@ end
 -- The modal's three selectors
 -- ---------------------------------------------------------------------------
 --
--- Plain buttons that open a MenuUtil context menu, which is the same mechanism
--- the window header's segment selector uses. No new widget: a dropdown of our
--- own would be a second menu vocabulary to keep in step with Blizzard's, and it
--- would degrade differently on a client with no MenuUtil (there, these buttons
--- do nothing, exactly as the segment selector does nothing).
+-- LibKa0s-Widgets-1.0 dropdowns, and this REVERSES what this file used to argue.
+-- The old reasoning was that a dropdown of our own would be a second menu
+-- vocabulary to keep in step with Blizzard's, so these were plain buttons opening
+-- a MenuUtil context menu — the mechanism the window header's segment selector
+-- still uses.
+--
+-- What changed is whose dropdown it is. It is not ours: it is the collection's,
+-- shared with Bank Ledger's filter bar and specified by a suite in the library's
+-- own repo. Against that, MenuUtil is the second vocabulary — a menu with
+-- Blizzard's gold title and no selected-row mark, dropped from a button wearing
+-- this addon's flat skin.
+--
+-- The header's segment selector is deliberately NOT converted here. It is a
+-- different control in a different frame and its own change.
 
 --- The label for a stat key, localized at the use site.
 --- @param statKey string|nil
@@ -1163,9 +1178,11 @@ local function refreshModal()
     -- Shows the RESOLVED stat even when the stored choice is "match the window",
     -- because the question the player is asking of this button is "what will it
     -- print", not "what is in my profile".
-    modal.metricButton.text:SetText(L["Metric: %s"]:format(metricLabel(Export.ResolveMetric())))
-    modal.channelButton.text:SetText(L["Channel: %s"]:format(channelLabel(channel)))
-    modal.linesButton.text:SetText(L["Lines: %s"]:format(tostring(readExport("lines", 5))))
+    modal.metricDD:SetValue(Export.ResolveMetric(),
+        L["Metric: %s"]:format(metricLabel(Export.ResolveMetric())))
+    modal.channelDD:SetValue(channel, L["Channel: %s"]:format(channelLabel(channel)))
+    local lines = readExport("lines", 5)
+    modal.linesDD:SetValue(lines, L["Lines: %s"]:format(tostring(lines)))
 
     local whispering = channel == "WHISPER"
     if whispering then
@@ -1192,46 +1209,38 @@ local function chooseExport(key, value)
     refreshModal()
 end
 
---- Open the Metric menu.
-local function openMetricMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Metric"])
-        for _, stat in ipairs(Const.STATS) do
-            local key = stat.key
-            root:CreateButton(L[stat.label] or stat.label, function()
-                chooseExport("metric", key)
-            end)
-        end
-    end)
+--- The Metric selector's options: the catalog, in catalog order.
+--- @return table
+local function metricOptions()
+    local out = {}
+    for i, stat in ipairs(Const.STATS) do
+        out[i] = { value = stat.key, label = L[stat.label] or stat.label }
+    end
+    return out
 end
 
---- Open the Channel menu.
+--- The Channel selector's options.
 ---
 --- The catalog is core/Constants.lua's and only core/Constants.lua's. Restating
 --- the channel list here would be two lists to keep in step, and the settings
 --- panel reads the same one.
-local function openChannelMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Channel"])
-        for _, row in ipairs(Const.EXPORT_CHANNELS or {}) do
-            local key = row.key
-            root:CreateButton(L[row.label] or row.label, function()
-                chooseExport("channel", key)
-            end)
-        end
-    end)
+--- @return table
+local function channelOptions()
+    local out = {}
+    for i, row in ipairs(Const.EXPORT_CHANNELS or {}) do
+        out[i] = { value = row.key, label = L[row.label] or row.label }
+    end
+    return out
 end
 
---- Open the Lines menu.
-local function openLinesMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Lines"])
-        for _, count in ipairs(LINE_CHOICES) do
-            root:CreateButton(tostring(count), function()
-                chooseExport("lines", count)
-            end)
-        end
-    end)
+--- The Lines selector's options.
+--- @return table
+local function linesOptions()
+    local out = {}
+    for i, count in ipairs(LINE_CHOICES) do
+        out[i] = { value = count, label = tostring(count) }
+    end
+    return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -1316,10 +1325,12 @@ local function EnsureFrame()
     modal = CreateFrame("Frame", MODAL_NAME, UIParent, "BackdropTemplate")
     modal:SetSize(MODAL_WIDTH, MODAL_HEIGHT)
     modal:SetPoint("CENTER")
-    -- DIALOG, which is BELOW the FULLSCREEN strata a MenuUtil menu puts its
-    -- click-catcher on. That ordering is what lets a click outside an open
-    -- selector menu close the menu instead of landing on the modal — and the
-    -- copy window, also FULLSCREEN, still opens above this.
+    -- DIALOG, which is BELOW the FULLSCREEN strata the shared dropdown menu puts
+    -- its click-catcher on (FULLSCREEN_DIALOG for the menu itself, FULLSCREEN for
+    -- the catcher beneath it — LibKa0s-Widgets-1.0's own popup, one instance
+    -- shared by every dropdown in the process). That ordering is what lets a
+    -- click outside an open selector menu close the menu instead of landing on
+    -- the modal — and the copy window, also FULLSCREEN, still opens above this.
     modal:SetFrameStrata("DIALOG")
     modal:EnableMouse(true)
     modal:SetMovable(true)
@@ -1327,17 +1338,26 @@ local function EnsureFrame()
 
     makeTitleBar(modal, L["Export"])
 
-    local metricButton = makeButton(modal, "", function(self) openMetricMenu(self) end)
-    metricButton:SetPoint("TOPLEFT", 16, -GEOM.metricTop)
-    metricButton:SetPoint("TOPRIGHT", -16, -GEOM.metricTop)
+    local metricDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    metricDD:SetHeight(GEOM.rowHeight)
+    metricDD:SetPoint("TOPLEFT", 16, -GEOM.metricTop)
+    metricDD:SetPoint("TOPRIGHT", -16, -GEOM.metricTop)
+    metricDD:SetOptions(metricOptions())
+    metricDD.onSelect = function(v) chooseExport("metric", v) end
 
-    local channelButton = makeButton(modal, "", function(self) openChannelMenu(self) end)
-    channelButton:SetPoint("TOPLEFT", 16, -GEOM.channelTop)
-    channelButton:SetPoint("TOPRIGHT", -16, -GEOM.channelTop)
+    local channelDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    channelDD:SetHeight(GEOM.rowHeight)
+    channelDD:SetPoint("TOPLEFT", 16, -GEOM.channelTop)
+    channelDD:SetPoint("TOPRIGHT", -16, -GEOM.channelTop)
+    channelDD:SetOptions(channelOptions())
+    channelDD.onSelect = function(v) chooseExport("channel", v) end
 
-    local linesButton = makeButton(modal, "", function(self) openLinesMenu(self) end)
-    linesButton:SetPoint("TOPLEFT", 16, -GEOM.linesTop)
-    linesButton:SetPoint("TOPRIGHT", -16, -GEOM.linesTop)
+    local linesDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    linesDD:SetHeight(GEOM.rowHeight)
+    linesDD:SetPoint("TOPLEFT", 16, -GEOM.linesTop)
+    linesDD:SetPoint("TOPRIGHT", -16, -GEOM.linesTop)
+    linesDD:SetOptions(linesOptions())
+    linesDD.onSelect = function(v) chooseExport("lines", v) end
 
     -- Shown only while the channel is WHISPER. Hidden rather than disabled: a
     -- greyed-out name box on a raid-channel export is a control asking to be
@@ -1408,14 +1428,14 @@ local function EnsureFrame()
     chatButton:SetWidth(160)
     chatButton:SetPoint("BOTTOMRIGHT", -16, 14)
 
-    modal.metricButton  = metricButton
-    modal.channelButton = channelButton
-    modal.linesButton   = linesButton
-    modal.whisperBox    = whisperBox
-    modal.whisperRow    = whisperRow
-    modal.warning       = warning
-    modal.csvButton     = csvButton
-    modal.chatButton    = chatButton
+    modal.metricDD   = metricDD
+    modal.channelDD  = channelDD
+    modal.linesDD    = linesDD
+    modal.whisperBox = whisperBox
+    modal.whisperRow = whisperRow
+    modal.warning    = warning
+    modal.csvButton  = csvButton
+    modal.chatButton = chatButton
 
     NS.ApplySkin(modal)
     modal:Hide()
@@ -1471,6 +1491,14 @@ function Export.Open(a, b)
     end
 
     invoker = win
+
+    -- SPEC §10. No widget, no modal. Three labels that open nothing look like a
+    -- broken addon; a sentence looks like a missing library, which is what it is.
+    -- Same shape as the combat refusal above, for the same reason.
+    if not W then
+        if NS.Print then NS.Print(L["The export window needs LibKa0s."]) end
+        return nil
+    end
 
     local frame = EnsureFrame()
     if not frame then return nil end

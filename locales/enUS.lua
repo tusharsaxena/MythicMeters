@@ -597,6 +597,12 @@ L["TEST MODE"] = "TEST MODE"
 -- The tooltip on the header glyph that opens the modal, left of the lock.
 L["Export a segment to CSV or to chat"] = "Export a segment to CSV or to chat"
 
+-- SPEC §10. Printed instead of opening the modal when LibKa0s-Widgets-1.0 is
+-- absent: the modal's three selectors need it to draw at all, and a modal with
+-- three labels that open nothing reads as a broken addon rather than as a
+-- missing library.
+L["The export window needs LibKa0s."] = "The export window needs LibKa0s."
+
 -- The three selector buttons render "Label: value", composed here rather than in
 -- the module so a translation can move the colon or drop it entirely.
 L["Metric: %s"] = "Metric: %s"
