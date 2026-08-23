@@ -120,6 +120,25 @@ local SORT_ATLAS_UP   = { "auctionhouse-ui-sortarrow" }
 local SORT_ASCII_DOWN = "v"
 local SORT_ASCII_UP   = "^"
 
+-- THE TOP RUNG, above both of the above, and the reason it is not simply the
+-- only rung is the paragraph above: art that is NAMED at authoring time and
+-- never checked is how this header failed twice. `NS.Icon` answers nil for an
+-- absent library AND for a name the catalog does not ship, so the check is the
+-- same call that produces the path — there is no window in which a name is
+-- believed and not verified.
+--
+-- Two assets, not one flipped. The atlas rung flips `auctionhouse-ui-sortarrow`
+-- with SetTexCoord because the client ships one arrow; the collection ships
+-- both, and flipping one of a matched pair would draw an inverted glyph that
+-- looks right today and stops looking right the moment the art is redrawn.
+--
+-- Tinted with the HEADER colour rather than shipped gold, exactly as
+-- BankLedger's LedgerTable.lua tints the same two marks: the art is near-white
+-- by contract, and near-white beside a gold label reads as a second colour
+-- inside one string rather than as one control.
+local SORT_MARK_DOWN = "sort-down"
+local SORT_MARK_UP   = "sort-up"
+
 -- The gear, padlock and export art moved to modules/HeaderControls.lua with the
 -- controls themselves. SORT_* above stays: ApplyColumnHeaders draws the sort
 -- arrow and that is this file's own, not a header control.
@@ -924,10 +943,22 @@ function WindowProto:ApplyColumnHeaders()
             -- of a FontString this window OWNS and that has never held a value —
             -- rule R3 is about cells that have, and this is neither.
             local after = button.text:GetStringWidth() + 3
-            local atlas = NS.Compat.FirstAtlas(
+            local mark = NS.Icon and NS.Icon(
+                data.sortAscending and SORT_MARK_UP or SORT_MARK_DOWN)
+            local atlas = not mark and NS.Compat.FirstAtlas(
                 data.sortAscending and SORT_ATLAS_UP or SORT_ATLAS_DOWN)
 
-            if atlas then
+            if mark then
+                button.arrowTex:ClearAllPoints()
+                button.arrowTex:SetPoint("LEFT", button.text, "LEFT", after, 0)
+                button.arrowTex:SetTexture(mark)
+                -- No SetTexCoord: two assets, not one flipped. The atlas branch
+                -- below flips because it has only one arrow to flip.
+                button.arrowTex:SetTexCoord(0, 1, 0, 1)
+                button.arrowTex:SetVertexColor(hr, hg, hb)
+                button.arrowTex:Show()
+                button.arrow:Hide()
+            elseif atlas then
                 button.arrowTex:ClearAllPoints()
                 button.arrowTex:SetPoint("LEFT", button.text, "LEFT", after, 0)
                 button.arrowTex:SetAtlas(atlas)

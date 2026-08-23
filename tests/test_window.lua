@@ -1018,8 +1018,15 @@ test("The arrow flips with the direction", function()
     -- red under: SetTexture on a path that does not resolve.
     -- The shipped arrow points DOWN; ascending is the same texture flipped, which
     -- is one SetTexCoord rather than a second asset to go missing.
+    --
+    -- Covers the arrowTex's texture AND atlas along with the ASCII glyph and its
+    -- coord, because which of those three rungs answers depends on what is
+    -- registered in the environment the test runs in — the top mark rung wins
+    -- here, and it differs by TEXTURE rather than by flipping a coord.
     local function arrowState(button)
         return tostring(button.arrow:GetText()) .. "/" ..
+            tostring(button.arrowTex.__texture) .. "/" ..
+            tostring(button.arrowTex.__atlas) .. "/" ..
             table.concat({ button.arrowTex:GetTexCoord() }, ",")
     end
 
@@ -1031,6 +1038,62 @@ test("The arrow flips with the direction", function()
     window:ApplyColumnHeaders()
     assertFalse(arrowState(window.columnHeaders[2]) == down,
         "ascending and descending must not draw the same arrow")
+end)
+
+test("The sort arrow prefers the collection's own art over the Blizzard atlas", function()
+    -- The ladder's top rung. Red under: a build that still reaches straight for
+    -- `auctionhouse-ui-sortarrow` while `sort-down.tga` sits unused in the payload.
+    local inst, window, cfg = scene{ sortMode = "value" }
+    cfg.data.sortColumn = "DamageDone"
+    window:ApplyColumnHeaders()
+
+    local marked = window.columnHeaders[2]
+    assertEqual(marked.arrowTex.__texture, inst.NS.Icon("sort-down"),
+        "the descending arrow is the shipped mark, not an atlas")
+    assertTrue(marked.arrowTex:IsShown(), "and it is the rung actually drawn")
+end)
+
+test("The sort arrow's two directions are two assets, never one flipped", function()
+    -- The atlas rung flips one texture with SetTexCoord because it has only one.
+    -- The mark rung has both, so a flip here would draw an upside-down glyph that
+    -- happens to look right and breaks the moment the art is redrawn.
+    local inst, window, cfg = scene{ sortMode = "value" }
+    cfg.data.sortColumn = "DamageDone"
+
+    cfg.data.sortAscending = false
+    window:ApplyColumnHeaders()
+    local down = window.columnHeaders[2].arrowTex.__texture
+
+    cfg.data.sortAscending = true
+    window:ApplyColumnHeaders()
+    local up = window.columnHeaders[2].arrowTex.__texture
+
+    assertEqual(down, inst.NS.Icon("sort-down"))
+    assertEqual(up, inst.NS.Icon("sort-up"))
+    assertFalse(down == up, "ascending and descending are distinct assets")
+end)
+
+test("The sort arrow falls to the Blizzard atlas with no LibKa0s art", function()
+    -- The rung below. Red under: a top rung that concatenates a nil path, or one
+    -- that shows an empty texture rather than standing aside for the atlas.
+    local inst, window, cfg = scene{ sortMode = "value" }
+    cfg.data.sortColumn = "DamageDone"
+    local realIcon = inst.NS.Icon
+    inst.NS.Icon = function() return nil end
+
+    window:ApplyColumnHeaders()
+    local marked = window.columnHeaders[2]
+    assertTrue(marked.arrowTex:IsShown() or marked.arrow:IsShown(),
+        "the column still says which way it is sorted")
+    -- The atlas rung legitimately leaves __texture nil (SetAtlas clears it, per
+    -- the mock's "a texture is either a file or an atlas, never both") — so the
+    -- failure this guards is arrowTex shown with NEITHER a texture NOR an atlas,
+    -- not the atlas rung's ordinary shape.
+    assertFalse(marked.arrowTex:IsShown() and marked.arrowTex.__texture == nil
+        and marked.arrowTex.__atlas == nil,
+        "and never shows a texture it failed to resolve")
+
+    inst.NS.Icon = realIcon
 end)
 
 test("Clicking a header sorts by it; clicking again reverses", function()
