@@ -3,7 +3,7 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MythicMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`,
+Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`,
 16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
@@ -103,7 +103,7 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (104 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (115 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
@@ -167,7 +167,8 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Feign.lua` | AceAddon | The set of GUIDs believed to be feigning rather than dead. `C_DamageMeter` hands a Feign Death a valid `deathRecapID`, so the Deaths column counts it. **Cannot run while restricted**: it joins a plain GUID against `sourceGUID`, which is secret for the whole of a pull | `NS.Feign` — `Note`, `IsFeigned`, `Prune`, `Clear` | the unit API through `_G` at call time, `NS.Roster.GetGroup`, `NS.Secrets`. Subscribes `METER_RESET`, `ENTERING_WORLD`, `ROSTER_CHANGED`. Fed by `core/MythicMeters.lua`'s `UNIT_SPELLCAST_SUCCEEDED` handler, which owns the only game event |
 | `Aggregator.lua` | AceAddon | **Two builds**: the exact GUID join (filter, pet folding, ordering) and the identity build that replaces it while `sourceGUID` is secret. Plus the row cap and `percent` | `NS.Aggregator` — `Build`, `ApplyRowLimit`, `TestGroup` / `TestColumn` / `TestSourceDetail` | `NS.Provider`, `NS.Roster`, `NS.Secrets`, `NS.State.Cache("Aggregator")`. Subscribes `METER_RESET`, `PROFILE_CHANGED` |
 | `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetPreview` / `IsPreview`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
-| `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)` and the `WindowProto` methods | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 10 messages on **its own** private bus target |
+| `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)`, `NS.HeaderStyle(window)` (the header's font and colour, read by `modules/HeaderControls.lua`), and the `WindowProto` methods — including `TitleRowTop(h)`, the one centre line the title, the session line and the control strip are all placed against | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 10 messages on **its own** private bus target |
+| `HeaderControls.lua` | plain table | The window's own control strip: which controls exist, where each sits (right-to-left, indexed, a hidden one yields its slot), what art each draws from (our TGA -> Blizzard atlas -> ASCII) and when the set fades | `NS.HeaderControls` — `Attach`, `Apply`, `HookHover`, `WidthUsed` | `NS.Compat.FirstTexture` / `FirstAtlas`, `NS.SetByPath`, `NS.HeaderStyle`, `NS.ShowResetMeterData`. Every control in the strip is built here, close included, so the strip is the same seven controls with or without LibKa0s. Owns no state and registers no event |
 | `Row.lua` | plain table + prototype | Row and cell widgets, the cell descriptor, bar colors, icon placement, the mouse hand-off | `NS.Row.New(window)`, `NS.Row.OffsetFor(layout, index)` | `NS.Constants`, `NS.RGBA`, `NS.Format` / `NS.NumberFormat`, and `NS.Tooltip` / `NS.DrillDown` resolved at call time |
 | `Targets.lua` | plain table | The enemy cross-reference. One walk over every `EnemyDamageTaken` source's spells builds **every** player's target list at once, keyed on `combatSpellDetails.unitName` and cached per session. **All-or-nothing**: one unreadable amount abandons the whole build | `NS.Targets` — `ForPlayer`, `Total`, `Invalidate` | `NS.Provider.GetColumn` / `GetSourceDetail`, `NS.Secrets`, `NS.State.Cache("Targets")`. Subscribes `METER_RESET`, `METER_SESSION`, `METER_UPDATED`, `PROFILE_CHANGED` on a private bus target |
 | `Tooltip.lua` | AceAddon | Both tooltip builders, the legal-only spell sort, the "and N more" line, the Targets section, and the tooltip's own bar/font styling (including restoring the SHARED line FontStrings) | `NS.Tooltip` — `CellTooltip`, `NameTooltip`, `Hide` | `NS.Provider`, `NS.Secrets`, `NS.Numbers`, `NS.Compat.GetSpellInfo`, `NS.WINDOW_TEMPLATE`, `NS.Database.FindWindow` |
@@ -180,11 +181,11 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 103-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Schema.lua` | The 115-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema`, `NS.ResetPositions` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
 | `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the six host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, `NS.Export`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
-| `Frame.lua` | The Frame page (15 rows) plus the bespoke "Reset position" button | a page registration | `NS.Helpers`, `NS.WindowManager.ResetPosition` |
+| `Frame.lua` | The Frame page (26 rows) plus the bespoke "Reset position" button | a page registration | `NS.Helpers`, `NS.WindowManager.ResetPosition` |
 | `Header.lua` | The Header page (16 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Rows.lua` | The Rows page (10 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Bars.lua` | The Bars page (9 rows). Pure schema | a page registration | `NS.Helpers` |

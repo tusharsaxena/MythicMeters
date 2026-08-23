@@ -869,3 +869,32 @@ test("Diagnostics: the recap probe reports why a death is dated the way it is", 
         assertTrue(text:find(style, 1, true) ~= nil, "missing style: " .. style)
     end
 end)
+
+test("Diagnostics: the header section covers every control, by walking them", function()
+    -- IT HAS ALREADY FAILED SILENTLY ONCE HERE. The previous version named three
+    -- button fields inside `if button then`, so when the controls moved to
+    -- modules/HeaderControls.lua the loop printed nothing at all: no error, just
+    -- a report that had quietly stopped covering the header. Walking the
+    -- registry is what makes a control added later appear without anyone
+    -- remembering to add it.
+    -- red under: naming fields instead of walking window.controls.
+    local inst = T.load{ enable = true }
+    local text = report(inst)
+    for _, key in ipairs({ "close", "minimise", "lock", "settings",
+                           "segment", "reset", "export" }) do
+        assertTrue(text:find(key, 1, true) ~= nil,
+            "the header section never mentions " .. key)
+    end
+end)
+
+test("Diagnostics: a window with no controls says so rather than printing nothing", function()
+    -- The failure mode that hid the last one: an empty section reads exactly
+    -- like a section with nothing to report.
+    local inst = T.load{ enable = true }
+    local win = inst.NS.WindowManager.All()[1]
+    if win then win.controls = nil end
+
+    local text = report(inst)
+    assertTrue(text:find("none built", 1, true) ~= nil,
+        "an absent control set printed silence")
+end)

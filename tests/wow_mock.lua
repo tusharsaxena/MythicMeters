@@ -525,9 +525,49 @@ function FRAME.SetShadowColor(self, r, g, b, a) self.__shadowColor = { r, g, b, 
 function FRAME.SetWordWrap(self, v) self.__wordWrap = v; return self end
 
 -- ── textures ───────────────────────────────────────────────────────────────
-function FRAME.SetTexture(self, t) self.__texture = t; return self end
-function FRAME.GetTexture(self) return self.__texture end
-function FRAME.SetAtlas(self, a) self.__atlas = a; return self end
+--
+-- SetTexture/GetTexture used to be a total round-trip: whatever went in came
+-- back out, for every path ever passed. That models a client where no texture
+-- can fail to load, which is the one thing this addon has repeatedly been
+-- bitten by -- a path that does not exist draws nothing and RAISES NOTHING.
+--
+-- With a total round-trip, a `SetTexture(p); if GetTexture() then` probe
+-- resolves for every path, so the addon's art ladder would take its first rung
+-- every time and the atlas and ASCII rungs below it would become unreachable in
+-- tests while still being the live behaviour on a client missing the file.
+--
+-- `mocks.setTextureLoadable(path, false)` is how a case says "this file is not
+-- there". Unlisted paths still load, so every existing case is unaffected.
+-- File scope because FRAME is, but WIPED PER BUILD below -- an instance that
+-- marked a path missing must not leave it missing for the next one.
+local unloadable = {}
+
+function FRAME.SetTexture(self, t)
+    self.__texture = t
+    if t ~= nil then self.__atlas = nil end
+    return self
+end
+function FRAME.GetTexture(self)
+    local t = self.__texture
+    if type(t) == "string" and unloadable[t] then return nil end
+    return t
+end
+--- A texture is EITHER a file or an atlas, never both, and the mock has to say
+--- so: the addon's art ladder tries a file and then an atlas on the SAME
+--- texture, and if setting one did not clear the other a test could not tell
+--- which rung had won.
+---
+--- `GetAtlas` used to be undefined, which meant the PascalCase catch-all
+--- answered the texture object itself -- truthy, so `assertTrue(t:GetAtlas())`
+--- passed whatever happened, and `assertEqual(t:GetAtlas(), "name")` failed with
+--- `<table>`. core/Diagnostics.lua prints this value, so a live report was
+--- carrying `table: 0x...` where an atlas name belonged.
+function FRAME.SetAtlas(self, a)
+    self.__atlas = a
+    self.__texture = nil
+    return self
+end
+function FRAME.GetAtlas(self) return self.__atlas end
 function FRAME.SetTexCoord(self, ...) self.__texCoord = { ... }; return self end
 function FRAME.GetTexCoord(self)
     local c = self.__texCoord
@@ -1483,6 +1523,15 @@ local function build()
         ["GM-icon-settings"]          = true,
         ["Garr_LockedBuilding"]       = true,
     }
+    -- Wiped per build; see the note beside `unloadable`.
+    for k in pairs(unloadable) do unloadable[k] = nil end
+
+    --- Mark a texture path as failing to load, the way a missing file does on a
+    --- live client: SetTexture takes it and GetTexture answers nil.
+    function M.setTextureLoadable(path, loadable)
+        unloadable[path] = (loadable == false) or nil
+    end
+
     function M.setAtlases(set) M.__atlases = set or {} end
     M.C_Texture = {
         GetAtlasInfo = function(name)

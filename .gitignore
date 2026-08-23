@@ -1,0 +1,5 @@
+
+# The icon tool's download cache. Regenerable from tools/artwork/icon_cleaner.py
+# --fetch, and the TGAs it produces are what ships -- the PNGs are an
+# intermediate, not a source of truth.
+tools/artwork/.cache/

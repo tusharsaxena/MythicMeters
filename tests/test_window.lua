@@ -124,12 +124,14 @@ test("Closing HIDES the window; it never deletes it", function()
 end)
 
 test("The header carries a lock and a gear, and the padlock shows the state", function()
-    local _, window, cfg = scene()
+    local inst, window, cfg = scene()
 
-    assertTrue(window.lockButton ~= nil)
-    assertTrue(window.configButton ~= nil)
-    assertTrue(window.lockButton:GetScript("OnClick") ~= nil)
-    assertTrue(window.configButton:GetScript("OnClick") ~= nil)
+    -- The controls live on window.controls now, built by
+    -- modules/HeaderControls.lua. Same widgets, same clicks, one owner.
+    assertTrue(window.controls.lock ~= nil)
+    assertTrue(window.controls.settings ~= nil)
+    assertTrue(window.controls.lock:GetScript("OnClick") ~= nil)
+    assertTrue(window.controls.settings:GetScript("OnClick") ~= nil)
 
     -- The padlock's art is whatever resolved: an atlas where the client has one,
     -- an ASCII character where it does not. Either way the two states must not
@@ -148,12 +150,12 @@ test("The header carries a lock and a gear, and the padlock shows the state", fu
     end
 
     cfg.frame.locked = true
-    window:ApplyHeaderButtons()
-    local lockedArt = art(window.lockButton)
+    inst.NS.HeaderControls:Apply(window)
+    local lockedArt = art(window.controls.lock)
 
     cfg.frame.locked = false
-    window:ApplyHeaderButtons()
-    assertFalse(art(window.lockButton) == lockedArt,
+    inst.NS.HeaderControls:Apply(window)
+    assertFalse(art(window.controls.lock) == lockedArt,
         "an open padlock and a closed one must not draw the same art")
 end)
 
@@ -166,7 +168,7 @@ test("The padlock toggles THIS window only", function()
     other.frame.locked = true
     cfg.frame.locked = true
 
-    window.lockButton:_run("OnClick")
+    window.controls.lock:_run("OnClick")
     assertEqual(cfg.frame.locked, false)
     assertEqual(other.frame.locked, true, "the other window did not move")
 end)
@@ -944,14 +946,22 @@ test("Segment: with no provider the pin is left alone rather than rewritten", fu
     assertEqual(cfg.data.sessionID, 4)
 end)
 
-test("Segment: the session line is a BUTTON and the text rides on it", function()
-    -- A click target positioned separately from the text it claims to cover is a
-    -- click target that drifts the first time either moves.
+test("Segment: the session line takes NO mouse", function()
+    -- It used to be a 220px Button so its text could be right-justified inside
+    -- it, which put an invisible click target across the middle of the header: it
+    -- glowed red on hover and opened the segment menu from a patch of empty title
+    -- bar. The strip's segment control is the visible route to the same menu.
+    -- red under: CreateFrame("Button") with an OnClick and a highlight texture.
     local _, window = withSegments()
-    assertTrue(window.sessionButton ~= nil)
-    assertEqual(window.sessionButton.mmWindow, window)
-    assertTrue(window.sessionButton:GetScript("OnClick") ~= nil,
-        "the header line has to be clickable for the selector to be reachable")
+    assertTrue(window.sessionLine ~= nil)
+    assertTrue(window.sessionLine.GetScript == nil
+        or window.sessionLine:GetScript("OnClick") == nil,
+        "the session line is clickable again")
+    assertTrue(window.sessionLine.__highlightTexture == nil,
+        "the session line still carries a hover highlight")
+    -- The text still rides on it: a line positioned separately from the frame it
+    -- is justified inside drifts the first time either moves.
+    assertEqual(window.sessionText.__allPoints, window.sessionLine)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -1201,7 +1211,7 @@ test("Building a window sets no text on a fontless FontString", function()
     -- at BuildFrame, which took the whole addon down before a single window
     -- existed. The harness models the client's rule now, so this case is the
     -- whole build path run under it.
-    -- red under: SetText on a glyph in BuildFrame, before ApplyHeaderButtons.
+    -- red under: SetText on a glyph in Attach, before the first Apply.
     local inst = T.load()
     local cfg = inst.NS.Database.GetWindows()[1]
 
@@ -1210,12 +1220,12 @@ test("Building a window sets no text on a fontless FontString", function()
 
     -- And the glyphs did get their text, once they had a font to draw it with.
     local window = inst.NS.Window.New(cfg)
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
     -- One of the two draws, never neither: an atlas if the client has one, an
     -- ASCII character if it does not.
-    assertTrue(window.configButton.tex:IsShown() or window.configButton.glyph:IsShown(),
+    assertTrue(window.controls.settings.tex:IsShown() or window.controls.settings.glyph:IsShown(),
         "the gear must draw something")
-    assertTrue(window.lockButton.tex:IsShown() or window.lockButton.glyph:IsShown(),
+    assertTrue(window.controls.lock.tex:IsShown() or window.controls.lock.glyph:IsShown(),
         "and the padlock too")
 end)
 
@@ -1226,13 +1236,19 @@ test("Header art falls back to ASCII on a client with none of the atlases", func
     -- art was named at authoring time and never asked about.
     -- red under: SetAtlas / SetText with no existence check.
     local inst = T.load()
+    -- Our own art goes first in the ladder, so it has to be taken away before
+    -- the rung under test is reachable at all. tests/test_headercontrols.lua
+    -- covers the ladder in full; this case stays because it is the one that
+    -- names the two failures the ladder exists for.
+    inst.mocks.setTextureLoadable(
+        "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\settings", false)
     inst.mocks.setAtlases({})          -- a client with no matching atlas at all
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
 
-    assertFalse(window.configButton.tex:IsShown(), "no atlas resolved")
-    assertTrue(window.configButton.glyph:IsShown(), "so the ASCII fallback draws")
-    local text = window.configButton.glyph:GetText()
+    assertFalse(window.controls.settings.tex:IsShown(), "no atlas resolved")
+    assertTrue(window.controls.settings.glyph:IsShown(), "so the ASCII fallback draws")
+    local text = window.controls.settings.glyph:GetText()
     assertTrue(text ~= nil and text ~= "", "and it is not empty")
 end)
 
@@ -1240,10 +1256,10 @@ test("Header art prefers an atlas where the client has one", function()
     local inst = T.load()
     inst.mocks.setAtlases({ ["GM-icon-settings"] = true })
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
-    window:ApplyHeaderButtons()
+    inst.NS.HeaderControls:Apply(window)
 
-    assertTrue(window.configButton.tex:IsShown(), "the atlas wins when it exists")
-    assertFalse(window.configButton.glyph:IsShown())
+    assertTrue(window.controls.settings.tex:IsShown(), "the atlas wins when it exists")
+    assertFalse(window.controls.settings.glyph:IsShown())
 end)
 
 test("Changing a setting does not close a window the player asked for", function()
@@ -1519,4 +1535,135 @@ test("Column headers have their own colour and background", function()
     local bg = window.headerBg.__colorTexture
     assertTrue(bg ~= nil, "the header strip has no backdrop texture")
     assertEqual(bg[3], 1, "the backdrop did not take the configured colour")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Minimise (issue #6)
+-- ---------------------------------------------------------------------------
+--
+-- Review found this had ZERO behavioural coverage: ApplyMinimised could be made
+-- a no-op and the suite stayed green, on the headline addition of the change.
+-- Everything below is a property somebody would notice in game and nothing
+-- offline was checking.
+
+test("Minimise hides everything below the title bar", function()
+    -- Four things hang there, not one. The body carries the rows, but the
+    -- column-header strip, the notice and the grip are parented to the FRAME --
+    -- so hiding the body alone leaves three of them drawn over a collapsed
+    -- window.
+    -- red under: hiding self.body and nothing else.
+    local _, window, cfg = scene()
+    cfg.frame.minimised = true
+    window:ApplyConfig()
+
+    assertEqual(window.body:IsShown(), false, "the rows are still there")
+    if window.headerFrame then
+        assertEqual(window.headerFrame:IsShown(), false, "the column headers are still there")
+    end
+    if window.grip then assertEqual(window.grip:IsShown(), false, "the grip is still there") end
+end)
+
+test("Minimise actually shrinks the window", function()
+    -- Hiding the children left a full-height empty frame sitting there, which is
+    -- not what "collapse to the title bar" means to anyone looking at it.
+    -- red under: hiding children without changing the frame's height.
+    local _, window, cfg = scene()
+    window:ApplyConfig()
+
+    -- Expanded, the visible frame takes its height by being pinned to BOTH
+    -- corners of the anchor -- it is never explicitly sized, which is why its
+    -- recorded height is 0 and cannot be the thing asserted on.
+    local function pinnedToBottom(frame)
+        for _, p in ipairs(frame.__points or {}) do
+            if p.point == "BOTTOMRIGHT" then return true end
+        end
+        return false
+    end
+    assertTrue(pinnedToBottom(window.frame), "expanded, the frame spans the anchor")
+
+    cfg.frame.minimised = true
+    window:ApplyConfig()
+    assertFalse(pinnedToBottom(window.frame),
+        "collapsed, the frame must stop spanning the anchor")
+    assertTrue((window.frame.__h or 0) > 0, "and take the title bar's height instead")
+
+    cfg.frame.minimised = false
+    window:ApplyConfig()
+    assertTrue(pinnedToBottom(window.frame), "expanding re-pins it")
+end)
+
+test("Minimise leaves the STORED height alone, so expanding restores it", function()
+    -- The anchor is deliberately not resized: doing so fires onSizeChanged,
+    -- which writes pendingWidth/pendingHeight, and SaveSize persists whatever is
+    -- pending on the next resize-stop -- so a collapsed height would leak into
+    -- frame.height and the window would never come back to the size chosen.
+    -- red under: collapsing by resizing self.anchor.
+    local _, window, cfg = scene()
+    local stored = cfg.frame.height
+
+    cfg.frame.minimised = true
+    window:ApplyConfig()
+    assertEqual(cfg.frame.height, stored, "the collapse rewrote the stored height")
+
+    cfg.frame.minimised = false
+    window:ApplyConfig()
+    assertEqual(cfg.frame.height, stored)
+    assertEqual(window.body:IsShown(), true, "expanding did not bring the rows back")
+end)
+
+test("A collapsed window does not aggregate or render", function()
+    -- THE COST CLAIM, and it needed two clauses rather than one. ShouldPoll
+    -- covers the polling half of the tick; onUpdate takes an early branch on
+    -- `dirty`, and every meter message sets that flag -- so without the guard in
+    -- Refresh the whole aggregate-and-render ran for a hidden body all fight.
+    -- red under: removing either clause.
+    local inst, window, cfg = scene()
+    cfg.frame.minimised = true
+    window:ApplyConfig()
+
+    local built = 0
+    local realBuild = inst.NS.Aggregator.Build
+    inst.NS.Aggregator.Build = function(...) built = built + 1 return realBuild(...) end
+
+    window:MarkDirty()
+    window:Refresh()
+    assertEqual(window:ShouldPoll(), false, "a collapsed window still polls")
+    assertEqual(built, 0, "a collapsed window still aggregated")
+
+    inst.NS.Aggregator.Build = realBuild
+end)
+
+test("A collapsed window keeps the notice hidden", function()
+    -- Refresh puts the "waiting for combat data" line back whenever there is
+    -- nothing to draw, so hiding it once at collapse time was not enough.
+    local _, window, cfg = scene()
+    cfg.frame.minimised = true
+    window:ApplyConfig()
+    window:Refresh()
+    assertEqual(window.notice:IsShown(), false, "the notice came back over a collapsed window")
+end)
+
+test("Unlocking does not resurrect the grip on a collapsed window", function()
+    -- ApplyLock and ApplyMinimised are two authors of one property, so whichever
+    -- runs last wins unless they ask the same question. `/mm lock off` was the
+    -- path that put the grip back.
+    -- red under: ApplyLock doing grip:SetShown(not locked).
+    local _, window, cfg = scene()
+    cfg.frame.minimised = true
+    cfg.frame.locked = false
+    window:ApplyConfig()
+    window:ApplyLock()
+    if window.grip then
+        assertEqual(window.grip:IsShown(), false, "unlocking put the grip back")
+    end
+end)
+
+test("A profile written before minimise existed is not collapsed", function()
+    -- `~= false` would collapse every stored profile on upgrade, because none of
+    -- them has the key at all.
+    -- red under: `local down = frameCfg.minimised ~= false`.
+    local _, window, cfg = scene()
+    cfg.frame.minimised = nil
+    window:ApplyConfig()
+    assertEqual(window.body:IsShown(), true, "an upgraded profile came back collapsed")
 end)

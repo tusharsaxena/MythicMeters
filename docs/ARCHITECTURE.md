@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-four non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 14 `modules/`, 16 `settings/`.
+Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MythicMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -62,7 +62,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
-| `modules/` display | `WindowManager`, `Window`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
+| `modules/` display | `WindowManager`, `Window`, `HeaderControls`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
 | `settings/` | `Schema`, `Slash`, `OptionsSetup` + 13 pages | One schema drives the panel, the CLI and the defaults reset. |
 
@@ -72,7 +72,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **104 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **115 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -325,9 +325,11 @@ The second is why the scoring feature is deferred — [scope.md](scope.md#deferr
 
 ## The segment selector
 
-A window's header line is a **button**. Clicking it opens a context menu of every session the client
-is still holding — name and duration, newest first as the API returns them — then a divider, then the
-two synthetic entries `Current` and `Overall`.
+The **segment control** in the header strip — the three horizontal lines — opens a context menu of
+every session the client is still holding — name and duration, newest first as the API returns them — then a divider, then the
+two synthetic entries `Current` and `Overall`. The menu anchors to the header's session line, which
+is where it has always come out; that line used to be a 220px Button and opened the menu itself,
+which put an invisible click target across the middle of the title bar and was removed.
 
 The choice is stored in `window.data.sessionID`, which **overrides `sessionType` when set** and is
 `nil` when no segment is pinned. It has no schema row: it is not a settings-panel control and its
@@ -530,6 +532,7 @@ The directory carries no `.md` and so registers no row.
 | `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
 | `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
+| `superpowers/specs/2026-08-23-header-controls-design.md` | Tier 3 planning history — the approved header control strip (issues #6, #7) |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 

@@ -89,6 +89,39 @@ local WINDOW_TEMPLATE = {
         clampToScreen  = true,
         titleBar       = true,
         closeButton    = true,
+        -- ── The header's controls (issue #6) ──
+        --
+        -- Six show* keys, one per control that this addon builds. `closeButton`
+        -- above is the seventh and deliberately keeps its old name: renaming it
+        -- to `showClose` for symmetry would migrate every stored profile in
+        -- exchange for a consistency nobody can see.
+        showMinimise    = true,
+        showLock        = true,
+        showSettings    = true,
+        showSegment     = true,
+        showReset       = true,
+        showExport      = true,
+        -- Chrome fades until the pointer is over the title strip. Off is the
+        -- behaviour every version before this one had, so it is the honest
+        -- fallback rather than a degraded one.
+        hoverReveal     = true,
+        -- Collapsed to the title bar. Persisted like every other window fact, so
+        -- a window left collapsed comes back collapsed.
+        minimised       = false,
+        -- TWO COLOURS, BECAUSE HOVER IS THE ONLY FEEDBACK A CONTROL GIVES. The
+        -- art ships white and is tinted by a multiply, so white is the identity
+        -- and the icons read as chrome against any header colour a player picks;
+        -- the pointer turns one of them the gold the rest of the header text
+        -- uses. Both are pickers rather than a "match the header" switch: the
+        -- strip is the only part of the window whose two states a player sees
+        -- constantly, and one of them being unconfigurable was the complaint.
+        controlColor      = { r = 1, g = 1, b = 1, a = 1 },
+        controlHoverColor = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- The SLOT a control occupies -- its click target and the strip's layout
+        -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
+        -- 11px icon on the same line as a 12px title and the strip stops
+        -- outweighing the text beside it.
+        controlSize     = 16,
         resizeGrip     = true,
         -- Position is stored, never read back off the frame. Rule R3: a cell
         -- that has been handed a secret value makes its own geometry secret and

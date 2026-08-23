@@ -188,7 +188,7 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
 
-### test_diagnostics.lua (41)
+### test_diagnostics.lua (43)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -231,6 +231,8 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: a slot with no death is not counted as a slot that refused
 - Diagnostics: a slot that WAS probed and refused still raises the warning
 - Diagnostics: the recap probe reports why a death is dated the way it is
+- Diagnostics: the header section covers every control, by walking them
+- Diagnostics: a window with no controls says so rather than printing nothing
 
 ### test_defaults.lua (24)
 
@@ -604,7 +606,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (84)
+### test_window.lua (91)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -656,7 +658,7 @@ badge and any count quoted in the docs must agree with it.
 - Segment: a stale pin is dropped on the next refresh
 - Segment: a LIVE pin survives the staleness check
 - Segment: with no provider the pin is left alone rather than rewritten
-- Segment: the session line is a BUTTON and the text rides on it
+- Segment: the session line takes NO mouse
 - Column headers are BUTTONS carrying the full stat label, left-aligned
 - The sort column shows an arrow and the others do not
 - The arrow flips with the direction
@@ -690,6 +692,59 @@ badge and any count quoted in the docs must agree with it.
 - The body claims the mouse only while a breakdown is open
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
+- Minimise hides everything below the title bar
+- Minimise actually shrinks the window
+- Minimise leaves the STORED height alone, so expanding restores it
+- A collapsed window does not aggregate or render
+- A collapsed window keeps the notice hidden
+- Unlocking does not resurrect the grip on a collapsed window
+- A profile written before minimise existed is not collapsed
+
+### test_headercontrols.lua (43)
+
+- HeaderControls: every control this addon builds is attached
+- HeaderControls: a control turned off is not placed at all
+- HeaderControls: a hidden control YIELDS its slot
+- HeaderControls: hiding the LAST control moves nothing
+- HeaderControls: the strip is CENTRED in the title bar
+- HeaderControls: the strip and the title share one centre line
+- HeaderControls: a control taller than its bar overflows DOWNWARD
+- HeaderControls: a control at rest takes the control colour
+- HeaderControls: the control under the pointer takes the HOVER colour
+- HeaderControls: both colours come from config
+- HeaderControls: control size comes from config
+- HeaderControls: the width reserved equals the width occupied
+- HeaderControls: no title bar means no strip and no reservation
+- HeaderControls: with no atlas the ASCII rung draws
+- HeaderControls: an atlas beats the ASCII rung
+- HeaderControls: the padlock's two states do not draw the same
+- HeaderControls: minimise shows the opposite of the state it is in
+- HeaderControls: a glyph is never given text before a font
+- HeaderControls: reset asks before it wipes anything
+- HeaderControls: the reset confirmation opens in the CENTRE of the screen
+- HeaderControls: minimise writes through the settings seam
+- HeaderControls: the lock button toggles this window only
+- HeaderControls: only the control under the pointer is revealed
+- HeaderControls: the title bar itself reveals nothing
+- HeaderControls: the reveal moves rather than accumulating
+- HeaderControls: with the reveal off, hover is colour alone
+- HeaderControls: hover reveal off means always visible
+- HeaderControls: hooking hover does not unseat the drag
+- HeaderControls: a locked window can still reveal its controls
+- HeaderControls: our own art is the FIRST rung
+- HeaderControls: a missing TGA falls through to the atlas
+- HeaderControls: a failed path is not left set under the next rung
+- HeaderControls: a click writes to the window it was clicked ON
+- HeaderControls: the gear points the panel at its own window
+- HeaderControls: the padlock's ASCII rung differs between states
+- HeaderControls: the strip fits at every size the schema allows
+- HeaderControls: a degraded install still gets its close button
+- HeaderControls: the close button closes the window
+- HeaderControls: the art is drawn INSIDE its slot, not across it
+- HeaderControls: a control keeps its reveal as the pointer arrives
+- HeaderControls: the segment button opens the same menu the session line does
+- HeaderControls: the export button hands Export the WINDOW
+- HeaderControls: the gear opens the panel
 
 ### test_row.lua (66)
 
@@ -1267,7 +1322,7 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
-| test_diagnostics.lua | 41 |
+| test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
@@ -1280,7 +1335,8 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 84 |
+| test_window.lua | 91 |
+| test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1295,4 +1351,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1145** |
+| **Total** | **1197** |
