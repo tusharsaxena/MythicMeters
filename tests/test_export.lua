@@ -1048,3 +1048,65 @@ test("The modal's whisper row is a row, not an overlap", function()
     assertEqual(geom.heightWithWhisper - geom.height, geom.rowHeight + geom.rowGap,
         "and the modal grows by exactly one row when it appears")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The shared dropdown menu must not outlive the modal that opened it
+-- ---------------------------------------------------------------------------
+--
+-- LibKa0s-Widgets-1.0's popup is a process-wide singleton parented to UIParent at
+-- FULLSCREEN_DIALOG (docs/api/Widgets/version-2-docs.md, "Behavior a host must
+-- know", in the LibKa0s repo) — not to this modal, so the modal's own Hide() does
+-- not reach it. This modal is in UISpecialFrames, so Escape hides it without going
+-- through onExportCsv/onPrintToChat or any other click handler this file controls;
+-- an open Metric/Channel/Lines menu would be left orphaned above the game with the
+-- modal that owned it already gone. modules/Export.lua's EnsureFrame wires
+-- modal:SetScript("OnHide", function() W.CloseMenu() end) to close it.
+--
+-- The shared menu is a file-local inside Widgets.lua with no getter, so the only
+-- way to observe it is the way LibKa0s's own test_widgets.lua does: capture the
+-- first frame CreateFrame makes once a dropdown's OnClick lazily builds it.
+test("Hiding the export modal closes an open dropdown menu (LibKa0s-Widgets-1.0)", function()
+    local inst = T.load()
+    local modal = inst.NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    -- Emptied rather than left at the real metric list: LibKa0s-Widgets-1.0's
+    -- Populate paints every row's optional glyph FontString unconditionally
+    -- (paintMenuRow, Widgets.lua), and this harness's mock enforces the real
+    -- client's "FontString:SetText(): Font not set" rule (tests/wow_mock.lua,
+    -- see test_window.lua's "Building a window sets no text on a fontless
+    -- FontString") on a glyph column no export dropdown ever gives a
+    -- glyphFont for. That row-painting behavior is the library's, not this
+    -- hook's, and unrelated to what this case is pinning — closing the menu
+    -- on OnHide — so this case opens the menu with nothing to paint.
+    local made, savedCreateFrame = {}, inst.mocks.CreateFrame
+    inst.mocks.CreateFrame = function(...)
+        local f = savedCreateFrame(...)
+        made[#made + 1] = f
+        return f
+    end
+    modal.metricDD:SetOptions({})
+    modal.metricDD:__fire("OnClick")
+    inst.mocks.CreateFrame = savedCreateFrame
+
+    local menu = made[1]
+    assertTrue(type(menu) == "table", "the dropdown's click lazily built the shared menu")
+    assertTrue(menu:IsShown(), "opening the Metric dropdown showed the shared menu")
+
+    -- The mock's Hide() does not auto-invoke OnHide the way the real client does
+    -- (see LibKa0s's test_widgets.lua, "CloseMenu hides the click-catcher too") —
+    -- Escape hiding a UISpecialFrames frame does fire OnHide in the real client,
+    -- so firing it here is what stands in for Escape.
+    modal:__fire("OnHide")
+    assertEqual(menu:IsShown(), false,
+        "OnHide closed the shared menu instead of leaving it orphaned")
+end)
+
+test("Hiding the export modal with no menu ever opened is a safe no-op", function()
+    local inst = T.load()
+    local modal = inst.NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    local ok = pcall(function() modal:__fire("OnHide") end)
+    assertTrue(ok, "closing the modal before any dropdown was clicked must not raise")
+end)

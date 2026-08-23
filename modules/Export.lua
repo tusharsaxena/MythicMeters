@@ -1440,6 +1440,21 @@ local function EnsureFrame()
     NS.ApplySkin(modal)
     modal:Hide()
 
+    -- The modal is in UISpecialFrames (below), so Escape hides it directly —
+    -- never through onHide/a click handler this file controls. An open Metric,
+    -- Channel or Lines menu is the shared LibKa0s-Widgets-1.0 popup: a
+    -- process-wide singleton parented to UIParent at FULLSCREEN_DIALOG, not to
+    -- this modal, so the modal's own Hide() does not reach it (see the
+    -- FrameStrata comment above and Widgets version-2-docs.md, "Behavior a host
+    -- must know"). Without this, Escape would leave the menu orphaned above the
+    -- game with the modal that owned it already gone. CloseMenu() is a safe
+    -- no-op when no dropdown here has ever opened the menu, or when it is
+    -- already closed, so this needs no extra guard beyond W itself, which is
+    -- already resolved as a file-local and nil on a degraded load.
+    if W then
+        modal:SetScript("OnHide", function() W.CloseMenu() end)
+    end
+
     -- THE RESTRICTION ARRIVES WHILE THE MODAL IS OPEN, and that is the ordinary
     -- case rather than the exotic one: a player opens this between pulls and the
     -- tank pulls. Nothing else on screen would repaint it, so the two action

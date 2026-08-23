@@ -940,6 +940,11 @@ its export glyph.
   re-centers on window 2 and exports window 2's segment. A modal that exported the *first* window's
   segment from then on is the invoker not being re-stamped.
 - **Esc closes it** (it is registered in `UISpecialFrames`), and so does the close button.
+- **Open a selector (Metric, Channel or Lines), then press Esc instead of picking a row.** The modal
+  closes AND the dropped menu closes with it — it must not stay floating over the game. The shared
+  `LibKa0s-Widgets-1.0` popup is a process-wide singleton parented to `UIParent`, not to this modal,
+  so `modules/Export.lua`'s `EnsureFrame` hooks the modal's `OnHide` to call `W.CloseMenu()` for
+  exactly this path; a menu left behind here means that hook regressed.
 - **The copy window that opens from Export to CSV** carries the same close icon in its own title bar,
   and its text is the bundled monospace face — a CSV is columns of digits and only lines up in one.
 - Click **Metric**. A flat menu drops **directly under the button, left-aligned
