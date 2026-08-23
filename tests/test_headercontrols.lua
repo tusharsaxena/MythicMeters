@@ -138,6 +138,11 @@ test("HeaderControls: the width reserved equals the width occupied", function()
     local reserved = window:HeaderRightInset()
     assertTrue(reserved >= occupied,
         "the title reserves " .. reserved .. " but the strip reaches " .. occupied)
+    -- BOTH SIDES, or the name is a lie: under-reservation runs the title under a
+    -- control, and arbitrary over-reservation truncates it for no reason. One
+    -- padding of slack is the placement's own leading offset.
+    assertTrue(reserved <= occupied + window.layout.padding * 2,
+        "the title reserves " .. reserved .. " for a strip only " .. occupied .. " wide")
 end)
 
 test("HeaderControls: no title bar means no strip and no reservation", function()
@@ -216,15 +221,13 @@ end)
 test("HeaderControls: a glyph is never given text before a font", function()
     -- This took the whole addon down once, before a single window existed:
     -- SetText on a FontString with no font raises. Attach must set no text.
-    local inst = T.load()
-    local raised = false
-    local ok = pcall(function()
-        local _, window = scene()
-        raised = window == nil
-    end)
-    assertTrue(ok, "building a window raised")
-    assertFalse(raised)
-    assertTrue(inst ~= nil)
+    -- The mock raises on SetText before SetFont, exactly as the client does, so
+    -- the whole assertion is that building a window does not throw. The earlier
+    -- version wrapped that in two further checks which could not fail: T.load
+    -- either returns an instance or raises, and scene() cannot hand back a nil
+    -- window without having raised first.
+    local ok, err = pcall(scene)
+    assertTrue(ok, "building a window raised: " .. tostring(err))
 end)
 
 -- ---------------------------------------------------------------------------
@@ -301,12 +304,26 @@ test("HeaderControls: hover reveal off means always visible", function()
 end)
 
 test("HeaderControls: hooking hover does not unseat the drag", function()
-    -- dragBar already carries OnDragStart/OnDragStop. GetScript answers only the
-    -- first handler while HookScript appends, so assigning would silently take
-    -- the window's dragging away with nothing to say why.
-    local _, window = scene()
+    -- dragBar already carries OnDragStart/OnDragStop, and hover is hooked onto
+    -- the SAME frame. The risk is a hook that replaces rather than appends.
+    --
+    -- Asserting the drag scripts are still present cannot catch that -- hover
+    -- only ever touches OnEnter/OnLeave, so the drag survives even a plain
+    -- SetScript and the assertion passes either way. What has to be pinned is
+    -- that hover did not blow away a PRE-EXISTING handler on the slot it uses,
+    -- so this puts one there first and checks it still runs.
+    -- red under: SetScript in HookHover.
+    local inst = T.load()
+    local cfg = inst.NS.Database.GetWindows()[1]
+    local window = inst.NS.Window.New(cfg)
+
+    local ours = 0
+    window.dragBar:HookScript("OnEnter", function() ours = ours + 1 end)
+    inst.NS.HeaderControls:HookHover(window)
+
+    window.dragBar:_run("OnEnter")
+    assertEqual(ours, 1, "hover replaced a handler that was already on OnEnter")
     assertTrue(window.dragBar:GetScript("OnDragStart") ~= nil, "the drag was replaced")
-    assertTrue(window.dragBar:GetScript("OnDragStop") ~= nil)
 end)
 
 test("HeaderControls: a locked window can still reveal its controls", function()
@@ -484,4 +501,37 @@ test("HeaderControls: reaching a control does not fade the strip", function()
     window.controls.settings:_run("OnEnter")
     assertEqual(window.controls.settings:GetAlpha(), 1,
         "the strip faded as the pointer reached a control")
+end)
+
+test("HeaderControls: the segment button opens the same menu the session line does", function()
+    -- Two routes to one menu. The button is the discoverable one; the label
+    -- stays clickable because that is muscle memory.
+    -- red under: a dead branch in onClick.
+    local _, window = scene()
+    local opened = 0
+    window.OpenSegmentMenu = function() opened = opened + 1 end
+
+    window.controls.segment:_run("OnClick")
+    assertEqual(opened, 1, "the segment button opened nothing")
+end)
+
+test("HeaderControls: the export button hands Export the WINDOW", function()
+    -- Not its config: Export.Open reads the instance to place its modal over the
+    -- window it was opened from, and a config table has no frame to measure.
+    -- red under: E:Open(window.config).
+    local inst, window = scene()
+    local got
+    inst.NS.Export.Open = function(a, b) got = (a == inst.NS.Export) and b or a end
+
+    window.controls.export:_run("OnClick")
+    assertTrue(got == window, "export was handed something other than the window")
+end)
+
+test("HeaderControls: the gear opens the panel", function()
+    local inst, window = scene()
+    local opened = 0
+    inst.NS.OpenOptionsPanel = function() opened = opened + 1 end
+
+    window.controls.settings:_run("OnClick")
+    assertEqual(opened, 1, "the gear opened nothing")
 end)

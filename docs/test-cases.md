@@ -188,7 +188,7 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
 
-### test_diagnostics.lua (41)
+### test_diagnostics.lua (43)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -231,6 +231,8 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: a slot with no death is not counted as a slot that refused
 - Diagnostics: a slot that WAS probed and refused still raises the warning
 - Diagnostics: the recap probe reports why a death is dated the way it is
+- Diagnostics: the header section covers every control, by walking them
+- Diagnostics: a window with no controls says so rather than printing nothing
 
 ### test_defaults.lua (24)
 
@@ -698,7 +700,7 @@ badge and any count quoted in the docs must agree with it.
 - Unlocking does not resurrect the grip on a collapsed window
 - A profile written before minimise existed is not collapsed
 
-### test_headercontrols.lua (29)
+### test_headercontrols.lua (32)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -729,6 +731,9 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the strip fits at every size the schema allows
 - HeaderControls: a degraded install reserves no room for a button it lacks
 - HeaderControls: reaching a control does not fade the strip
+- HeaderControls: the segment button opens the same menu the session line does
+- HeaderControls: the export button hands Export the WINDOW
+- HeaderControls: the gear opens the panel
 
 ### test_row.lua (66)
 
@@ -1306,7 +1311,7 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
-| test_diagnostics.lua | 41 |
+| test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
@@ -1320,7 +1325,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 91 |
-| test_headercontrols.lua | 29 |
+| test_headercontrols.lua | 32 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
@@ -1335,4 +1340,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1181** |
+| **Total** | **1186** |
