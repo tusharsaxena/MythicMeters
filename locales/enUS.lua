@@ -608,7 +608,7 @@ L["Print to Chat"] = "Print to Chat"
 L["Metric"] = "Metric"
 L["Channel"] = "Channel"
 L["Lines"] = "Lines"
-L["Whisper to"] = "Whisper to"
+L["Whisper to:"] = "Whisper to:"
 
 -- The copy window's title IS its instructions: there is no file I/O in WoW, so
 -- the only way out of the addon is the player's own clipboard. Em dash written

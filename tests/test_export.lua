@@ -1033,3 +1033,18 @@ test("Export.Build answers nil when there is no aggregator to ask", function()
     assertTrue(ok, "a missing aggregator must not raise")
     assertNil(result)
 end)
+
+test("The modal's whisper row is a row, not an overlap", function()
+    -- red under: the InputBoxTemplate layout, where the box sat at -126 and the
+    -- warning line at -154 with a 20px box between them and a fixed modal height
+    -- that accounted for neither. The numbers are read off the module rather than
+    -- restated, so this fails if a later edit moves one and not the others.
+    local inst = T.load()
+    local geom = inst.NS.Export.__geometry
+    assertTrue(type(geom) == "table", "the modal's geometry is inspectable")
+
+    assertTrue(geom.whisperTop + geom.rowHeight <= geom.warningTop,
+        "the whisper row clears the warning line rather than drawing over it")
+    assertEqual(geom.heightWithWhisper - geom.height, geom.rowHeight + geom.rowGap,
+        "and the modal grows by exactly one row when it appears")
+end)

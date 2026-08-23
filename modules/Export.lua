@@ -788,12 +788,33 @@ end
 local MODAL_NAME = "MultiMetersExportWindow"
 local COPY_NAME  = "MultiMetersExportCopyWindow"
 
+local ROW_H        = 24
+
+-- The modal's vertical grid, as one table rather than as eight literals scattered
+-- through EnsureFrame. It is published on the module (`Export.__geometry`) for the
+-- one reason a private constant ever should be: the whisper row's arithmetic is
+-- the thing that was wrong — a 20px box at -126 under a warning line at -154 in a
+-- frame 236 tall that accounted for neither — and out of game the arithmetic is
+-- all there is to check. The modal itself is smoke-tested.
+local GEOM = {
+    rowHeight         = ROW_H,
+    rowGap            = 6,
+    metricTop         = 36,
+    channelTop        = 66,
+    linesTop          = 96,
+    whisperTop        = 126,
+    warningTop        = 158,
+    height            = 236,
+}
+GEOM.heightWithWhisper = GEOM.height + GEOM.rowHeight + GEOM.rowGap
+
+Export.__geometry = GEOM
+
 local MODAL_WIDTH  = 372
-local MODAL_HEIGHT = 236
+local MODAL_HEIGHT = GEOM.height
 local COPY_WIDTH   = 640
 local COPY_HEIGHT  = 420
 local TITLEBAR_H   = 26
-local ROW_H        = 24
 local EDIT_FALLBACK_WIDTH = 590
 
 -- Built lazily, kept forever.
@@ -1146,14 +1167,17 @@ local function refreshModal()
     modal.channelButton.text:SetText(L["Channel: %s"]:format(channelLabel(channel)))
     modal.linesButton.text:SetText(L["Lines: %s"]:format(tostring(readExport("lines", 5))))
 
-    if channel == "WHISPER" then
+    local whispering = channel == "WHISPER"
+    if whispering then
         modal.whisperBox:SetText(readExport("whisperTo", "") or "")
-        modal.whisperBox:Show()
-        modal.whisperLabel:Show()
-    else
-        modal.whisperBox:Hide()
-        modal.whisperLabel:Hide()
     end
+    modal.whisperRow:SetShown(whispering)
+
+    local warningTop = GEOM.warningTop + (whispering and (GEOM.rowHeight + GEOM.rowGap) or 0)
+    modal.warning:ClearAllPoints()
+    modal.warning:SetPoint("TOPLEFT", 16, -warningTop)
+    modal.warning:SetPoint("TOPRIGHT", -16, -warningTop)
+    modal:SetHeight(whispering and GEOM.heightWithWhisper or GEOM.height)
 
     modal.warning:SetText(available and "" or (reason or ""))
     setEnabled(modal.csvButton, available)
@@ -1304,31 +1328,55 @@ local function EnsureFrame()
     makeTitleBar(modal, L["Export"])
 
     local metricButton = makeButton(modal, "", function(self) openMetricMenu(self) end)
-    metricButton:SetPoint("TOPLEFT", 16, -36)
-    metricButton:SetPoint("TOPRIGHT", -16, -36)
+    metricButton:SetPoint("TOPLEFT", 16, -GEOM.metricTop)
+    metricButton:SetPoint("TOPRIGHT", -16, -GEOM.metricTop)
 
     local channelButton = makeButton(modal, "", function(self) openChannelMenu(self) end)
-    channelButton:SetPoint("TOPLEFT", 16, -66)
-    channelButton:SetPoint("TOPRIGHT", -16, -66)
+    channelButton:SetPoint("TOPLEFT", 16, -GEOM.channelTop)
+    channelButton:SetPoint("TOPRIGHT", -16, -GEOM.channelTop)
 
     local linesButton = makeButton(modal, "", function(self) openLinesMenu(self) end)
-    linesButton:SetPoint("TOPLEFT", 16, -96)
-    linesButton:SetPoint("TOPRIGHT", -16, -96)
+    linesButton:SetPoint("TOPLEFT", 16, -GEOM.linesTop)
+    linesButton:SetPoint("TOPRIGHT", -16, -GEOM.linesTop)
 
     -- Shown only while the channel is WHISPER. Hidden rather than disabled: a
     -- greyed-out name box on a raid-channel export is a control asking to be
     -- filled in for no reason.
-    -- The box is bare otherwise: it appears only for one channel, and an unlabeled
-    -- text field that materializes next to a Channel button is a field whose
-    -- purpose has to be guessed.
-    local whisperLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    whisperLabel:SetPoint("TOPLEFT", 18, -114)
-    whisperLabel:SetText(L["Whisper to"])
+    --
+    -- NOT InputBoxTemplate, and that is the fix rather than a preference. The
+    -- template carries its own rounded, gold-edged art and its own text insets;
+    -- beside three flat selectors it read as a control borrowed from another
+    -- addon, and its insets are what clipped the name. This is the same backdrop
+    -- the selectors above it wear, so the four rows are one column.
+    local whisperRow = CreateFrame("Frame", nil, modal, "BackdropTemplate")
+    whisperRow:SetHeight(GEOM.rowHeight)
+    whisperRow:SetPoint("TOPLEFT", 16, -GEOM.whisperTop)
+    whisperRow:SetPoint("TOPRIGHT", -16, -GEOM.whisperTop)
+    if whisperRow.SetBackdrop then
+        whisperRow:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        whisperRow:SetBackdropColor(skinColor("bg", 0.1, 0.1, 0.12, 0.9))
+        whisperRow:SetBackdropBorderColor(skinColor("innerBorder", 0.24, 0.24, 0.27, 0.9))
+    end
 
-    local whisperBox = CreateFrame("EditBox", nil, modal, "InputBoxTemplate")
-    whisperBox:SetHeight(20)
-    whisperBox:SetPoint("TOPLEFT", 22, -126)
-    whisperBox:SetPoint("TOPRIGHT", -18, -126)
+    -- The caption INSIDE the row, as a prefix, so this reads "Whisper to: …" in
+    -- the same shape as "Metric: …" above it. It was a separate FontString above
+    -- the box, in 12px of room the old layout did not actually have.
+    local whisperCaption = whisperRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    whisperCaption:SetPoint("LEFT", 8, 0)
+    whisperCaption:SetText(L["Whisper to:"] .. " ")
+    whisperCaption:SetTextColor(skinColor("title", 1, 0.82, 0))
+
+    local whisperBox = CreateFrame("EditBox", nil, whisperRow)
+    whisperBox:SetPoint("LEFT", whisperCaption, "RIGHT", 2, 0)
+    whisperBox:SetPoint("RIGHT", -8, 0)
+    whisperBox:SetPoint("TOP", 0, 0)
+    whisperBox:SetPoint("BOTTOM", 0, 0)
+    whisperBox:SetFontObject("GameFontHighlightSmall")
     whisperBox:SetAutoFocus(false)
     whisperBox:SetScript("OnEnterPressed", function(self)
         chooseExport("whisperTo", self:GetText() or "")
@@ -1342,8 +1390,8 @@ local function EnsureFrame()
     whisperBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
     local warning = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    warning:SetPoint("TOPLEFT", 16, -154)
-    warning:SetPoint("TOPRIGHT", -16, -154)
+    warning:SetPoint("TOPLEFT", 16, -GEOM.warningTop)
+    warning:SetPoint("TOPRIGHT", -16, -GEOM.warningTop)
     warning:SetJustifyH("CENTER")
     warning:SetWordWrap(true)
     -- The one hand-set color in this file, and it is a state rather than a style:
@@ -1364,7 +1412,7 @@ local function EnsureFrame()
     modal.channelButton = channelButton
     modal.linesButton   = linesButton
     modal.whisperBox    = whisperBox
-    modal.whisperLabel  = whisperLabel
+    modal.whisperRow    = whisperRow
     modal.warning       = warning
     modal.csvButton     = csvButton
     modal.chatButton    = chatButton

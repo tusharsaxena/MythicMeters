@@ -969,6 +969,15 @@ its export glyph.
 - **The name box exists only while Channel is Whisper.** Every other channel hides it outright — it
   is hidden rather than greyed, because a disabled name box on a Raid export is a control asking to
   be filled in for no reason.
+- Set **Channel: Whisper**. A fourth row appears below Lines, in the same flat
+  box as the three above it, reading `Whisper to: ` in gold with an editable
+  field beside it. **The modal grows by one row** — the red warning line and the
+  two buttons move down with it, and nothing overlaps.
+- Type a full name. The text is fully visible, not clipped at either end, and
+  sits on the same baseline as the caption.
+- Click **Print to Chat** without pressing Enter first. The dump is whispered:
+  focus loss stores the name.
+- Switch back to **Self only**. The row disappears and the modal shrinks back.
 - Type a name and press **Enter**: it is stored, and the box loses focus.
 - Type a name and **click away without pressing Enter**: it is stored anyway (`OnEditFocusLost`).
   This is the one that catches people — nobody expects to have to press Enter in a box directly above
@@ -1092,11 +1101,12 @@ misclick.
 `/reload`. Re-open it. Then open **Settings → General**.
 
 **Pass.**
-- All four choices come back exactly as you left them. They live at `export.*` in the **profile** and
-  are **addon-wide**, not per window — "I print the top five to party" is a habit rather than a
-  window's appearance.
-- **The General page shows the same four values** under an **Export** group: Default metric, Default
-  channel, Whisper target, Chat lines. The panel and the modal are two views of one preference, so
+- Channel, Lines and the whisper name come back exactly as you left them. They live at `export.*` in
+  the **profile** and are **addon-wide**, not per window — "I print the top five to party" is a habit
+  rather than a window's appearance. Metric is not among them: the modal always seeds it from the
+  window it was opened from, so there is nothing to remember there.
+- **The General page shows the same three values** under an **Export** group: Default channel,
+  Whisper target, Chat lines. The panel and the modal are two views of one preference, so
   changing one must move the other — change Chat lines to 10 on the panel with the modal closed, then
   re-open the modal and confirm it reads `Lines: 10`.
 - `/mm get export.channel` and `/mm set export.lines 10` work on the same rows, as they do for any
