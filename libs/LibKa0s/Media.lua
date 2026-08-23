@@ -53,7 +53,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Media-1.0", 2
+local MAJOR, MINOR = "LibKa0s-Media-1.0", 3
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -70,8 +70,9 @@ lib.MODULES.Media = MINOR
 -- one `docs/releasing.md` documents; `Icon`/`Font` take an override for a repo that differs.
 lib.VENDOR_PATH = "libs\\LibKa0s"
 
-local ICON_DIR = "media\\icons"
-local FONT_DIR = "media\\fonts"
+local ICON_DIR    = "media\\icons"
+local FONT_DIR    = "media\\fonts"
+local TEXTURE_DIR = "media\\textures"
 
 -- ── the catalog ──────────────────────────────────────────────────────────────────────────
 
@@ -89,22 +90,50 @@ local FONT_DIR = "media\\fonts"
 -- substitute would be the one icon in the set that looks foreign: `save` (no floppy; `confirm`
 -- carries the meaning) and `hidden` (no crossed-out eye; `eye` drawn dimmed is the state).
 lib.ICONS = {
-  -- window chrome
-  "close", "minimise", "expand", "lock", "unlock", "settings", "segment", "reset",
-  -- actions
-  "add", "cancel", "clear", "confirm", "copy", "edit", "export", "import", "redo", "search", "undo",
-  -- status
-  "ban", "bug", "help", "info", "warning",
+  -- the window header strip
+  "close", "minimise", "expand", "lock", "unlock", "settings", "segment", "reset", "export",
+  "sort-up", "sort-down",
+  -- core actions
+  "copy", "clear", "add", "edit", "confirm", "cancel", "search", "undo", "redo", "import",
+  -- status and feedback
+  "info", "warning", "help", "ban", "bug",
   -- state
-  "eye", "pin", "star",
+  "pin", "eye", "star",
   -- layout
-  "fullscreen-enter", "fullscreen-exit", "grid", "layers", "list", "move", "resize",
+  "move", "resize", "fullscreen-enter", "fullscreen-exit", "grid", "list", "layers",
   -- navigation
-  "chevron-down", "chevron-left", "chevron-right", "chevron-up", "sort-down", "sort-up",
+  "chevron-left", "chevron-right", "chevron-up", "chevron-down",
   -- data
-  "chart", "clock", "graph", "spreadsheet", "timer",
+  "chart", "graph", "spreadsheet", "timer", "clock",
+  -- arrows: the up/down family, every weight the set offers
+  "arrow-up", "arrow-down", "arrow-thick-up", "arrow-thick-down", "arrow-circle-up",
+  "arrow-circle-down", "collapse-up", "collapse-down", "expand-up", "expand-down", "align-top",
+  "align-bottom",
+  -- arrows: the marks that draw TWO of them
+  "sort-asc", "sort-desc", "transfer", "elevator",
+  -- talking
+  "chat", "speech-bubble",
+  -- arrows: left and right, matching the up/down family above
+  "arrow-left", "arrow-right", "arrow-thick-left", "arrow-thick-right", "arrow-circle-left",
+  "arrow-circle-right", "caret-left", "caret-right", "expand-left", "expand-right",
+  -- text alignment
+  "align-left", "align-center", "align-right", "justify-left", "justify-center", "justify-right",
+  -- layout, continued
+  "grid-two-up", "grid-four-up", "resize-height", "resize-width",
+  -- status and state, continued
+  "circle-check", "task", "thumb-up", "thumb-down", "heart", "bookmark",
+  -- place and navigation
+  "home", "location", "map-marker", "external-link", "link-intact",
+  -- tools and devices
+  "wrench", "terminal", "monitor", "video", "aperture", "zoom-in", "zoom-out",
+  -- sound
+  "volume-high", "volume-low", "volume-off",
+  -- documents and labels
+  "document", "tag", "tags",
+  -- session
+  "account-login", "account-logout",
   -- entities
-  "people", "person", "shield", "target",
+  "person", "people", "target", "shield",
 }
 
 -- Every font in `media/fonts/`, keyed by the LSM name it registers under. `file` is the basename;
@@ -117,6 +146,31 @@ lib.ICONS = {
 -- different one.
 lib.FONTS = {
   ["JetBrains Mono"] = { file = "JetBrainsMono-Regular.ttf", license = "JetBrainsMono-OFL.txt" },
+}
+
+-- Every statusbar texture in `media/textures/`, keyed by the LSM name it registers under -- which is
+-- also the name a player sees in a bar-texture dropdown and the string a profile stores. `file` is
+-- the basename; there is no per-file license row because unlike the icons and the font, nothing here
+-- came from anywhere: `tools/artwork/bar_textures.py` synthesizes every pixel, and that file is both
+-- the provenance record and the license answer.
+--
+-- WHY THE KEYS LOOK LIKE LABELS AND THE FILES LOOK LIKE CODE. A dropdown reads "Ka0s Underline 2";
+-- a path reads `underline-2`. They are the same thing said twice for two different readers, and the
+-- pairing lives here so neither has to be derived from the other by string surgery.
+--
+-- UNDERLINE AND OVERLINE, not bottom and top: the pair names where the line SITS relative to the bar
+-- the way type does. The number is a multiple of the base band (2px of 32), so `4` is four times the
+-- line and NOT four pixels -- a name carrying a pixel count would be wrong the moment the canvas
+-- changed. Every one of them is the same 256x32 canvas, so a frame sized for one is sized for all
+-- seven and a player switching between them gets a different line, never a different-shaped widget.
+lib.TEXTURES = {
+  ["Ka0s Gradient"]    = { file = "gradient.tga" },
+  ["Ka0s Underline 1"] = { file = "underline-1.tga" },
+  ["Ka0s Underline 2"] = { file = "underline-2.tga" },
+  ["Ka0s Underline 4"] = { file = "underline-4.tga" },
+  ["Ka0s Overline 1"]  = { file = "overline-1.tga" },
+  ["Ka0s Overline 2"]  = { file = "overline-2.tga" },
+  ["Ka0s Overline 4"]  = { file = "overline-4.tga" },
 }
 
 -- Answering a lookup with a set rather than a linear scan of ICONS. Built once, from the array, so
@@ -152,6 +206,24 @@ function lib.Icon(addonName, name, vendorPath)
   return base .. ICON_DIR .. "\\" .. name
 end
 
+--- The path of one shipped statusbar texture, or nil when the name is not in `TEXTURES`.
+---
+--- EXTENSIONLESS, like `Icon` and for the same recorded reason. LSM stores whatever string it is
+--- handed and hands it back untouched, so the convention costs nothing there, and one rule for every
+--- path this module answers is worth more than matching what other addons happen to register.
+---
+--- @param addonName string  the consumer's own addon folder name
+--- @param name string       a key of `lib.TEXTURES`, e.g. "Ka0s Underline 2"
+--- @param vendorPath string optional
+--- @return string|nil
+function lib.Texture(addonName, name, vendorPath)
+  local entry = lib.TEXTURES[name]
+  if not entry then return nil end
+  local base = root(addonName, vendorPath)
+  if not base then return nil end
+  return base .. TEXTURE_DIR .. "\\" .. (entry.file:gsub("%.tga$", ""))
+end
+
 --- The font path for one registered face, or nil when the name is not in `FONTS`.
 ---
 --- @param addonName string  the consumer's own addon folder name
@@ -168,7 +240,7 @@ end
 
 -- ── LibSharedMedia ─────────────────────────────────────────────────────────────────────────
 
---- Put every shipped font into LibSharedMedia under its catalog name.
+--- Put every shipped font AND statusbar texture into LibSharedMedia under its catalog name.
 ---
 --- WHY REGISTERING MATTERS AND A PATH DOES NOT. A host can draw with `Font(...)` and never touch
 --- LSM. What registration buys is the settings panel: an LSM-registered face appears in the font
@@ -187,18 +259,35 @@ end
 ---
 --- @param addonName string  the consumer's own addon folder name
 --- @param vendorPath string optional
---- @return number  how many faces were registered; 0 when LSM is absent, which is not an error
+--- @return number fonts, number statusbars  how many of each registered; 0, 0 when LSM is absent,
+---         which is not an error
 function lib.RegisterLSM(addonName, vendorPath)
   local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-  if not LSM then return 0 end
+  if not LSM then return 0, 0 end
 
-  local n = 0
+  local mt = LSM.MediaType or {}
+
+  local fonts = 0
   for name in pairs(lib.FONTS) do
     local path = lib.Font(addonName, name, vendorPath)
     if path then
-      LSM:Register(LSM.MediaType and LSM.MediaType.FONT or "font", name, path)
-      n = n + 1
+      LSM:Register(mt.FONT or "font", name, path)
+      fonts = fonts + 1
     end
   end
-  return n
+
+  -- STATUSBAR, and it is the same bargain the fonts strike. A registered texture is what a player
+  -- picks out of a bar-texture dropdown by name, and a NAME is what their profile then stores --
+  -- portable between installs, where a path is pinned to one addon's folder and breaks the moment
+  -- the folder is renamed.
+  local bars = 0
+  for name in pairs(lib.TEXTURES) do
+    local path = lib.Texture(addonName, name, vendorPath)
+    if path then
+      LSM:Register(mt.STATUSBAR or "statusbar", name, path)
+      bars = bars + 1
+    end
+  end
+
+  return fonts, bars
 end

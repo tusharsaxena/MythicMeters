@@ -129,13 +129,16 @@ These have been considered and explicitly declined.
   `amountPerSecond` ships on the same source row as `totalAmount`, so one `DamageDone` read fills
   both halves of the Damage column. A separate Dps column would be a second session read for a number
   already in hand.
-- **A shipped bar texture.** The addon draws one font and 49 icons (JetBrains Mono under the OFL,
-  Open Iconic under MIT — a meter is a grid of numbers, and proportional digits make a column shiver
-  as it ticks), and both come from the bundled LibKa0s payload rather than from this repo. Bars still
-  use LSM statusbar textures the player already has. The two costs that kept a bar texture out are
-  smaller now that the library ships media — a license notice beside the bytes, and one registry key
-  for the whole collection — so if it ever ships it should ship the way the font did: in LibKa0s, not
-  here. Until then a player picks the look anyway.
+- **A shipped bar texture — still not drawn here, but no longer for want of one.** The font and the
+  icons this addon draws (JetBrains Mono under the OFL, Open Iconic under MIT) come from the bundled
+  LibKa0s payload rather than from this repo, and since LibKa0s v1.9.2 that payload also carries
+  seven statusbar textures registered with LSM as `Ka0s Gradient` and `Ka0s Underline` / `Overline`
+  1, 2 and 4. **This addon does not select any of them.** Bars still default to an LSM statusbar the
+  player already has, and both costs that kept a shipped texture out are now paid by the library
+  rather than by this repo — a license notice beside the bytes, and one registry key for the whole
+  collection. What is left is a default-value decision nobody has made, which is
+  [issue #4](https://github.com/tusharsaxena/MythicMeters/issues/4)'s to make; a player who wants the
+  Ka0s look can already pick it out of the dropdown.
 
 ## Known caveats, not scope decisions
 

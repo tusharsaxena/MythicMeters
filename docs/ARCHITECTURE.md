@@ -43,7 +43,7 @@ meter window, the debug console and the perf step panel wear the same Ka0s edge 
 addon. Six LibKa0s seams are adopted — Core, Media, Perf, DebugLog, Slash, Options — one setup file
 each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Five explain the
 absence through the one shared cause clause `NS.LIBKA0S_MISSING`; **Media is deliberately silent**,
-because what it degrades is chrome. The window's 49 icons and its monospace face ship inside the
+because what it degrades is chrome. The icons this window draws and its monospace face ship inside the
 LibKa0s payload (`LibKa0s-Media-1.0`), so a missing library takes the art with it — the header walks
 down its own atlas-then-ASCII ladder, the numbers fall back to the client font, and neither wants a
 line of chat about it.
