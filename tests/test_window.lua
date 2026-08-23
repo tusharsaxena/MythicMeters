@@ -1241,7 +1241,7 @@ test("Header art falls back to ASCII on a client with none of the atlases", func
     -- covers the ladder in full; this case stays because it is the one that
     -- names the two failures the ladder exists for.
     inst.mocks.setTextureLoadable(
-        "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\settings", false)
+        "Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\icons\\settings", false)
     inst.mocks.setAtlases({})          -- a client with no matching atlas at all
     local window = inst.NS.Window.New(inst.NS.Database.GetWindows()[1])
     inst.NS.HeaderControls:Apply(window)

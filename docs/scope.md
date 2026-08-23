@@ -129,10 +129,13 @@ These have been considered and explicitly declined.
   `amountPerSecond` ships on the same source row as `totalAmount`, so one `DamageDone` read fills
   both halves of the Damage column. A separate Dps column would be a second session read for a number
   already in hand.
-- **A shipped bar texture.** The addon ships one font (JetBrains Mono, OFL — a meter is a grid of
-  numbers, and proportional digits make a column shiver as it ticks) and no textures. Bars use LSM
-  statusbar textures the player already has. A shipped texture is one more file to license and one
-  more name to collide in a shared registry, in exchange for a look the player can pick anyway.
+- **A shipped bar texture.** The addon draws one font and 49 icons (JetBrains Mono under the OFL,
+  Open Iconic under MIT — a meter is a grid of numbers, and proportional digits make a column shiver
+  as it ticks), and both come from the bundled LibKa0s payload rather than from this repo. Bars still
+  use LSM statusbar textures the player already has. The two costs that kept a bar texture out are
+  smaller now that the library ships media — a license notice beside the bytes, and one registry key
+  for the whole collection — so if it ever ships it should ship the way the font did: in LibKa0s, not
+  here. Until then a player picks the look anyway.
 
 ## Known caveats, not scope decisions
 

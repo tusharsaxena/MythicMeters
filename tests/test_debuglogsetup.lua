@@ -140,16 +140,24 @@ test("DebugLogSetup: the font is registered with LSM exactly once, and not from 
 function()
     -- A second Register call added the same path under a hardcoded name — a
     -- second LSM key for one face, so the font dropdown listed it twice and a
-    -- profile could store a name core/LSMPatch.lua does not ship.
+    -- profile could store a name nothing ships.
     -- red under: adding an LSM:Register back into core/DebugLogSetup.lua.
     assertNil(source("core/DebugLogSetup.lua"):match("LSM[^\r\n]*:Register"),
         "core/DebugLogSetup.lua registers the font a second time")
-    local registrars = {}
+
+    -- AND NO FILE HERE REGISTERS A FONT AT ALL ANY MORE. The face ships inside
+    -- the LibKa0s payload (v1.9.0), so the LIBRARY registers it -- one key, one
+    -- path, agreed across every Ka0s addon -- and core/MediaSetup.lua is the one
+    -- place that asks it to. An LSM:Register reappearing anywhere in this addon
+    -- is this addon naming the library's bytes under a second key.
+    local registrars, askers = {}, {}
     for _, rel in ipairs(T.loadedAddonFiles) do
         local src = source(rel):gsub("%-%-[^\r\n]*", "")
         if src:match("Register%(%s*LSM%.MediaType") then registrars[#registrars + 1] = rel end
+        if src:find("RegisterLSM", 1, true) then askers[#askers + 1] = rel end
     end
-    assertEqual(table.concat(registrars, ", "), "core/LSMPatch.lua")
+    assertEqual(table.concat(registrars, ", "), "")
+    assertEqual(table.concat(askers, ", "), "core/MediaSetup.lua")
 end)
 
 test("DebugLogSetup: the frame names are seeded from the addon name", function()

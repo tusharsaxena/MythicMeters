@@ -43,19 +43,26 @@ end)
 
 -- ── shipped media ───────────────────────────────────────────────────────────
 
-test("Constants: the shipped monospace font path points into this addon's media", function()
-    assertTrue(Const.FONT_MONO:find("Interface\\AddOns\\MythicMeters\\media\\fonts\\", 1, true) == 1,
-        "FONT_MONO must be an in-addon path: " .. tostring(Const.FONT_MONO))
+test("Constants: the monospace font comes from the LibKa0s payload", function()
+    -- The face moved into the library at LibKa0s v1.9.0 so that every Ka0s addon
+    -- prints its numbers in one face rather than in one copy of it each. The path
+    -- is still absolute from this addon's own folder, because a vendored library
+    -- lives inside it.
+    -- red under: a path into this addon's own media/fonts/, which no longer exists.
+    assertTrue(Const.FONT_MONO:find("Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\fonts\\",
+        1, true) == 1,
+        "FONT_MONO must come from the vendored payload: " .. tostring(Const.FONT_MONO))
     assertTrue(Const.FONT_MONO:lower():match("%.ttf$") ~= nil, "FONT_MONO must name a TTF")
 end)
 
-test("Constants: the shipped font exists on disk under media/fonts/", function()
+test("Constants: the font it names exists in the vendored payload", function()
     -- A default that names a font the package does not carry renders as
     -- Blizzard's fallback face, silently — the exact thing shipping a monospace
-    -- font was meant to avoid.
+    -- font was meant to avoid. It is now the LIBRARY's job to ship the bytes and
+    -- this addon's job to carry the vendored copy, so the file has to be there.
     local rel = Const.FONT_MONO:gsub("\\", "/"):gsub("^Interface/AddOns/MythicMeters/", "")
     local fh = io.open((T.root or ".") .. "/" .. rel, "rb")
-    assertTrue(fh ~= nil, "the shipped font is missing from the repo: " .. rel)
+    assertTrue(fh ~= nil, "the vendored font is missing from the repo: " .. rel)
     if fh then fh:close() end
 end)
 

@@ -64,27 +64,17 @@ Versions are pinned only where a version matters: `lua5.1` is hard, `luacheck` a
 
 ## Release / assets
 
-Needed only to REGENERATE the header-control icons. Nothing here is required to run the addon, run
-its tests, or ship it -- the TGAs are committed, and `tools/artwork/icon_cleaner.py` exists so the
-art can be rebuilt at another size or replaced from another source without guessing at where the
-current ones came from.
+**Nothing.** There is no packaging step here that needs a tool, and no asset in this repo is
+generated at build time.
 
-| Tool | Version | Used by | Evidence |
-|---|---|---|---|
-| `python3` | 3.8+ | `tools/artwork/icon_cleaner.py` | the script's shebang |
-| `Pillow` | any recent | reading the source PNGs and writing 32-bit TGA | `from PIL import Image` |
-| `numpy` | any recent | the solidify and normalize stages | `import numpy as np` |
-| `gh` | any recent | fetching the sources from `iconic/open-iconic` | `_gh_file()` shells out to it |
+The header-control icons and the monospace face used to need a graphics stack -- Python, Pillow,
+numpy and `gh`, for `tools/artwork/icon_cleaner.py`. **Both the art and the tool moved into LibKa0s**
+(v1.9.1, `LibKa0s-Media-1.0`), so this addon carries them as part of the vendored payload and
+regenerating them is that repo's job and that repo's toolchain -- see
+[LibKa0s' own DEPENDENCIES.md](https://github.com/tusharsaxena/LibKa0s/blob/master/DEPENDENCIES.md).
+Nothing here reads a PNG or writes a TGA any more.
 
-```bash
-sudo apt-get install -y python3 pipx
-# Pillow and numpy via the distro, which is what Ubuntu 24.04's PEP 668 marker
-# wants -- `pip install` into the system Python fails with EXTERNALLY-MANAGED.
-sudo apt-get install -y python3-pil python3-numpy
-```
-
-Verify: `python3 -c "import PIL, numpy; print('ok')"` prints `ok`, and `gh auth status` reports a
-logged-in account.
+The one asset still in this repo, `media/textures/Default.tga`, is committed and unused (issue #4).
 
 ## Am I set up correctly?
 

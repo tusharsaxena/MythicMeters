@@ -40,9 +40,13 @@ header all read the same table.
 
 Chrome comes from LibKa0s-Core-1.0's shared `SKIN` / `ApplySkin`, never a private lookalike, so the
 meter window, the debug console and the perf step panel wear the same Ka0s edge as every sibling
-addon. Five LibKa0s seams are adopted — Core, Perf, DebugLog, Slash, Options — one setup file each,
-and every one of them degrades to a stub rather than erroring when `libs/LibKa0s` is absent, all five
-explaining the absence through the one shared cause clause `NS.LIBKA0S_MISSING`.
+addon. Six LibKa0s seams are adopted — Core, Media, Perf, DebugLog, Slash, Options — one setup file
+each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Five explain the
+absence through the one shared cause clause `NS.LIBKA0S_MISSING`; **Media is deliberately silent**,
+because what it degrades is chrome. The window's 49 icons and its monospace face ship inside the
+LibKa0s payload (`LibKa0s-Media-1.0`), so a missing library takes the art with it — the header walks
+down its own atlas-then-ASCII ladder, the numbers fall back to the client font, and neither wants a
+line of chat about it.
 
 Full scope boundaries, including the two features that are structurally impossible rather than merely
 unbuilt, in [scope.md](scope.md).
@@ -58,7 +62,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` boundary | `Compat.lua` | All 15 cross-patch shims, including the eight `C_DamageMeter` reads. No logic. |
 | `core/` values | `Constants.lua`, `Namespace.lua`, `State.lua` | The stat catalog, the bus catalog, identity, session-only flags and the shared cache. |
 | `core/` the rule | `Secrets.lua` | **The only file that inspects a meter value.** |
-| `core/` seams | `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring and shipped-media registration. |
+| `core/` seams | `MediaSetup`, `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring, the art and font seam, and one AceGUI widget fixup. |
 | `core/` runtime | `MythicMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
@@ -602,17 +606,21 @@ per-file reasoning in [module-map.md](module-map.md#load-order). The binding con
 2. `locales/enUS.lua` — first, so `NS.L` exists for every declaration below.
 3. `core/Compat.lua` **first** in the core block: `core/Namespace.lua` reads the TOC manifest through
    it on the next line.
-4. `core/CoreSetup.lua` before `core/MythicMeters.lua`, whose AceConsole reclaim reads
-   `NS.Util.print`; and **first of the five LibKa0s seams**, because it defines `NS.LIBKA0S_MISSING`.
-5. `core/PerfSetup.lua` after `core/Namespace.lua` (a nil `version` stamps every capture record `v?`)
+4. `core/MediaSetup.lua` **before `core/Constants.lua`**, which resolves `FONT_MONO` from the
+   `NS.MediaFont` it publishes. It is the one seam outside the cause clause, so it is free to load
+   first and has to.
+5. `core/CoreSetup.lua` before `core/MythicMeters.lua`, whose AceConsole reclaim reads
+   `NS.Util.print`; and **first of the five seams that share the cause clause**, because it defines
+   `NS.LIBKA0S_MISSING`.
+6. `core/PerfSetup.lua` after `core/Namespace.lua` (a nil `version` stamps every capture record `v?`)
    and **before every `modules/` file that takes `local Perf = NS.Perf` as a load-time upvalue**.
-6. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
-7. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
+7. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
+8. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
    `DrillDown` at *call* time because both load after it. `modules/Targets.lua` loads before
    `modules/Tooltip.lua`, its only caller. `modules/Export.lua` sits after `modules/DrillDown.lua`
    and is the one file in the block whose position carries no constraint at all: it captures no
    sibling at load and resolves every one of them — `Aggregator`, `Format`, `Secrets` — at call
    time, because `modules/Window.lua` loads *before* it and holds the button that calls it.
-8. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
+9. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
    their seams at `NS.SetByPath` / `NS.GetSetting` at load — and `settings/OptionsSetup.lua` before
    every page file, which call `NS.Helpers` members inside schema-row literals at file load.

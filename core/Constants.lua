@@ -33,16 +33,29 @@ NS.Const = Constants
 -- Shipped media
 -- ---------------------------------------------------------------------------
 
--- Monospace TTF shipped under media/fonts/ (JetBrains Mono, OFL — license text
--- in media/fonts/JetBrainsMono-OFL.txt). A meter is a grid of numbers, and
--- proportional digits make columns of numbers jitter as they tick; a monospace
--- face is what makes a column of "12.4M / 9.87M / 240K" line up on the decimal.
--- Registered with LibSharedMedia at load in core/LSMPatch.lua so the settings
--- panel's font dropdown can offer it by name.
-Constants.FONT_MONO = [[Interface\AddOns\MythicMeters\media\fonts\JetBrainsMono-Regular.ttf]]
+-- The monospace face, from LibKa0s rather than from this addon. A meter is a grid
+-- of numbers, and proportional digits make a column jitter as it ticks; a
+-- monospace face is what makes "12.4M / 9.87M / 240K" line up on the decimal.
+--
+-- IT USED TO BE OURS, under media/fonts/. It ships inside the LibKa0s payload now
+-- (v1.9.0, `LibKa0s-Media-1.0`) so that every Ka0s addon prints its numbers in
+-- one face rather than in one copy of it each — see core/MediaSetup.lua, which
+-- publishes this seam and registers the face with LibSharedMedia.
+--
+-- THE FALLBACK IS A REAL CLIENT FONT, NOT NIL. A degraded install has no LibKa0s
+-- and therefore no face, and every reader of this constant uses it as the last
+-- rung of a `path or FONT_MONO or STANDARD_TEXT_FONT` chain — so a nil here would
+-- fall through, but a path to a file that is not there would NOT: SetFont takes
+-- it, fails to load it, and the text simply does not draw. Resolving to the
+-- client's own font means a degraded install loses the monospace grid and keeps
+-- every number on screen.
+Constants.FONT_MONO = NS.MediaFont and NS.MediaFont("JetBrains Mono")
+    or _G.STANDARD_TEXT_FONT
 
--- The LibSharedMedia key the font is registered under. Kept beside the path so
--- the registration and every default that names the font cannot drift apart.
+-- The LibSharedMedia key the font is registered under — by the LIBRARY, whose
+-- catalog spells it this way (`LibKa0s-Media-1.0`'s `FONTS`). Kept beside the
+-- path so this addon's defaults, which name the font by key, cannot drift from
+-- what was registered.
 Constants.FONT_MONO_NAME = "JetBrains Mono"
 
 -- ---------------------------------------------------------------------------

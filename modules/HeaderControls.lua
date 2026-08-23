@@ -86,10 +86,14 @@ local GAP = 4
 -- that already stored a size.
 local ART_SCALE = 0.72
 
--- Where our own art lives. Extensionless on purpose -- the client appends it,
--- and a path carrying `.tga` is one of the two spellings that silently draws
--- nothing.
-local ART = "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\"
+-- WHERE THE ART LIVES IS NOT THIS FILE'S BUSINESS ANY MORE. The 49 icons moved
+-- into the LibKa0s payload (v1.9.0, `LibKa0s-Media-1.0`) so that every Ka0s addon
+-- draws the same marks from one set of bytes, and core/MediaSetup.lua is the seam
+-- that knows this addon's own folder name -- which is the one thing a vendored
+-- library cannot work out for itself.
+--
+-- `NS.Icon` answers nil twice over: no library, or no such icon. Both mean the
+-- same thing here, and the ladder below already knows what to do with it.
 
 -- ---------------------------------------------------------------------------
 -- The controls
@@ -214,9 +218,10 @@ end
 local function drawIcon(button, control, art, style, dimmed, ascii)
     local Compat = NS.Compat
 
-    -- RUNG ONE: our own texture.
-    if Compat and Compat.FirstTexture then
-        local path = Compat.FirstTexture(button.tex, ART .. art)
+    -- RUNG ONE: the library's texture, which is this collection's own art.
+    local shipped = NS.Icon and NS.Icon(art)
+    if shipped and Compat and Compat.FirstTexture then
+        local path = Compat.FirstTexture(button.tex, shipped)
         if path then
             -- Tinted rather than recoloured: the art ships WHITE precisely so a
             -- multiply lands on whatever the header's text colour is, and the

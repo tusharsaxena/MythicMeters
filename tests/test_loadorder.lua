@@ -200,6 +200,18 @@ test("loadorder: the five LibKa0s seams load in the order their headers pin", fu
 
     local core = index["core/coresetup.lua"]
     assertTrue(core ~= nil, "core/CoreSetup.lua is not in the TOC")
+
+    -- THE SIXTH SEAM IS THE ODD ONE, AND ITS POSITION IS LOAD-BEARING THE OTHER
+    -- WAY. core/MediaSetup.lua touches NS.LIBKA0S_MISSING not at all -- missing
+    -- art degrades silently down the header's own ladder rather than explaining
+    -- itself -- so it is free to load before CoreSetup, and it MUST: core/
+    -- Constants.lua resolves FONT_MONO from the NS.MediaFont it publishes, and a
+    -- Constants that loaded first would resolve it to the fallback on a perfectly
+    -- healthy install.
+    local media = index["core/mediasetup.lua"]
+    assertTrue(media ~= nil, "core/MediaSetup.lua is not in the TOC")
+    assertTrue(media < index["core/constants.lua"],
+        "core/MediaSetup.lua must load before core/Constants.lua, which reads NS.MediaFont")
     for _, rel in ipairs({
         "core/perfsetup.lua", "core/debuglogsetup.lua",
         "settings/slash.lua", "settings/optionssetup.lua",

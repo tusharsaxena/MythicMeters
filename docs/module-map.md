@@ -46,9 +46,12 @@ MythicMeters (AceAddon; the private NS table is promoted in place — no _G.Myth
 │   ├── DebugLogSetup.lua — LibKa0s-DebugLog-1.0 seam: NS.DebugLog, the bare
 │                         NS.Debug(tag, fmt, …) sink, and NS.DebugSteady — the
 │                         same sink for a pass that repeats on a timer
-│   ├── LSMPatch.lua    — registers the shipped JetBrains Mono face with LSM at file
-│                         load, and the PLAYER_LOGIN fixup that hides the vendored
-│                         LSM30_Border widget's 42×42 preview tile
+│   ├── MediaSetup.lua  — the LibKa0s-Media seam: NS.Icon / NS.MediaFont, and the one
+│   │                     call that registers the library's font with LSM. Loads BEFORE
+│   │                     Constants, which resolves FONT_MONO from it
+│   ├── LSMPatch.lua    — the PLAYER_LOGIN fixup that hides the vendored LSM30_Border
+│                         widget's 42×42 preview tile. It registered the shipped font
+│                         too until the face moved into the LibKa0s payload
 │   ├── MythicMeters.lua — AceAddon bootstrap, the AceConsole printer reclaim, THE
 │                         SINGLE GAME-EVENT LISTENER (7 events fanned onto the bus),
 │                         and NS.ShouldShow — the one show ladder
@@ -132,14 +135,15 @@ own strings entirely.
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
 | `Compat.lua` | All 15 cross-patch shims. Never inspects a meter value; reading a field off a session table and passing it on is not inspection | `NS.Compat` | `_G` only |
-| `Constants.lua` | The stat catalog, enum resolutions, the `MSG` catalog, timing and pool bounds, the shipped font path and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum` |
+| `Constants.lua` | The stat catalog, enum resolutions, the `MSG` catalog, timing and pool bounds, the monospace font path (resolved from the LibKa0s payload, falling back to the client font) and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum`, `NS.MediaFont` |
 | `Namespace.lua` | Addon identity and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.NewBusTarget` | `NS.Compat.GetAddOnMetadata` |
 | `State.lua` | The four session flags, each with exactly one named writer, and `State.Cache` / `State.WipeCache` (wipes **in place**, so a module may hold its sub-table as an upvalue) | `NS.State` | `NS.Constants.MSG` |
 | `Secrets.lua` | Restriction state, per-value and per-table inspection, and the two bounded walks. Correct when the whole secrets system is absent | `NS.Secrets` | `_G.C_RestrictedActions`, `_G.issecretvalue` and friends |
+| `MediaSetup.lua` | The LibKa0s-Media seam: where the icons and the monospace face come from, and the one call that registers the face with LibSharedMedia. Answers `nil` for both on a degraded install, which is what sends the header down its art ladder | `NS.Icon`, `NS.MediaFont` | `LibKa0s-Media-1.0`, LibSharedMedia. Owns no state and registers no event |
 | `CoreSetup.lua` | The LibKa0s-Core seam and the shared "library missing" cause clause | `NS.Util.print` / `NS.Print`, `NS.Format` (printer, later rebound), `NS.IsConcatSafe`, `NS.SafeToString`, `NS.RGBA`, `NS.SKIN`, `NS.ApplySkin`, `NS.MakeCloseButton`, `NS.LIBKA0S_MISSING` | `NS.PREFIX` |
 | `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.version`, `NS.Compat`, and `Provider` / `WindowManager` / `Visibility` at call time |
 | `DebugLogSetup.lua` | The console descriptor, the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
-| `LSMPatch.lua` | Shipped-media registration and the `LSM30_Border` widget fixup | nothing — side effects only | `NS.Constants.FONT_MONO*`, LibSharedMedia, AceGUI |
+| `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
 | `MythicMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |
 | `Diagnostics.lua` | The `/mm debug diag` report: atlas probes, the formatter ladder, visibility, header, name column, cells, tooltip font and width, the Targets cross-reference, and the provider-order probe. Every section is `pcall`-wrapped, and nothing here inspects a meter value | `NS.Diagnostics` (`Report`) | `NS.DebugLog`, `NS.Print`, `NS.Provider`, `NS.Constants.STATS`, `NS.Database`, `NS.Secrets`, `NS.WindowManager` |
@@ -222,11 +226,14 @@ both are bespoke by necessity, and both say why in their file headers.
    7. `PerfSetup.lua` — after `Namespace` (a nil `version` stamps every capture record `v?`) and
       **before every `modules/` file that takes `local Perf = NS.Perf` at load**.
    8. `DebugLogSetup.lua` — after `Constants`, `State` and `CoreSetup`.
-   9. `LSMPatch.lua` — before `defaults/Profile.lua` names the font at load.
-   10. `MythicMeters.lua` — after all five setup files; promotes `NS` into the AceAddon object.
-   11. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
+   9. `MediaSetup.lua` — **before `Constants.lua`**, which resolves `FONT_MONO` from `NS.MediaFont`,
+      and therefore before `defaults/Profile.lua` names the font at load. This is one of the few
+      TOC positions in `core/` that is load-bearing rather than conventional.
+   10. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
+   11. `MythicMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
+   12. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
        time, because `defaults/` loads later.
-   12. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
+   13. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
        module at *call* time and owns no state, so nothing depends on where it loads.
 4. **`defaults/Profile.lua`** — after `core/Constants.lua`, whose stat catalog it captures at load.
 5. **`modules/`** — `Format` first (nothing reads another module, and `Row` and `Tooltip` both format

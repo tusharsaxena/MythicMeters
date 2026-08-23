@@ -81,7 +81,7 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Mythi
   are drawn from this addon's own art — white glyphs that take the header's text colour. A control
   that is a plain letter (`*`, `#`, `>`) means the art AND the atlas both failed: the ladder is
   working, but say so, because it means a texture did not load.
-- **The close button is ours too**, drawn from `media/textures/icons/close.tga` at the same size and
+- **The close button is ours too**, drawn from `libs/LibKa0s/media/icons/close.tga` at the same size and
   weight as its six neighbours. A thin grey multiplication sign there is LibKa0s' close button —
   which is what the strip used to end in, and what the art replaced.
 - **The icons sit inside their slots.** Each is drawn at 72% of `Control size`, so there is visible
@@ -889,7 +889,7 @@ odd-looking cells mid-pull" would be a much worse outcome than "it said no".
 - **It is the leftmost of the seven**, at the same size, the same centre line and the same colour as
   the six beside it. The whole strip is covered by *The header's controls (issues #6, #7)* near the
   top of this file — what is checked here is only the export end of it.
-- **It draws this addon's own art** (`media/textures/icons/export.tga`). A plain `>` means BOTH our
+- **It draws the collection's own art** (`libs/LibKa0s/media/icons/export.tga`). A plain `>` means BOTH our
   texture and every atlas candidate failed: the ladder is working as designed, but say so, because a
   shipped TGA that does not load is a packaging bug rather than a fallback.
 - **The atlas rung is still unconfirmed.** `poi-scrollofresonance` and `UI-HUD-MicroMenu-Questlog-Up`

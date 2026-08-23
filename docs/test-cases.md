@@ -21,8 +21,8 @@ badge and any count quoted in the docs must agree with it.
 - Constants: NS.Const and NS.Constants are the same table
 - Constants: the chat prefix is the cyan [MM] tag and closes its color code
 - Constants: the notice gray is a bare color opener with no closer
-- Constants: the shipped monospace font path points into this addon's media
-- Constants: the shipped font exists on disk under media/fonts/
+- Constants: the monospace font comes from the LibKa0s payload
+- Constants: the font it names exists in the vendored payload
 - Constants: the LSM font key is a name, not the path
 - Constants: every STATS row is fully populated and correctly typed
 - Constants: no two STATS rows share a key or an enum value
@@ -339,6 +339,16 @@ badge and any count quoted in the docs must agree with it.
 - DebugSteady: a reset makes the next pass speak again
 - DebugSteady: toggling the flag forgets every run
 - DebugSteady: two call sites under ONE tag do not defeat each other
+
+### test_mediasetup.lua (7)
+
+- MediaSetup: NS.Icon answers the vendored path, extensionless
+- MediaSetup: an icon the library does not ship answers nil
+- MediaSetup: NS.MediaFont answers the vendored face
+- MediaSetup: the font this addon names is the face the library registers
+- MediaSetup: every icon the header strip draws is one the library ships
+- MediaSetup: every name the library ships has a file in the vendored copy
+- MediaSetup: with no library there is no art, and that is not an error
 
 ### test_lifecycle.lua (23)
 
@@ -1327,6 +1337,7 @@ badge and any count quoted in the docs must agree with it.
 | test_coresetup.lua | 22 |
 | test_perfsetup.lua | 19 |
 | test_debuglogsetup.lua | 29 |
+| test_mediasetup.lua | 7 |
 | test_lifecycle.lua | 23 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 29 |
@@ -1351,4 +1362,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 26 |
-| **Total** | **1197** |
+| **Total** | **1204** |

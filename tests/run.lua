@@ -201,6 +201,7 @@ local SUITES = {
     "test_coresetup",
     "test_perfsetup",
     "test_debuglogsetup",
+    "test_mediasetup",
     "test_lifecycle",
     "test_vendor_sync",
     -- the data path

@@ -46,7 +46,7 @@ end
 --- and ASCII rungs below it become unreachable in a test while remaining the
 --- live behaviour on any client missing the file. Both of those rungs exist
 --- because this addon has already shipped invisible controls twice.
-local ICON_PATH = "Interface\\AddOns\\MythicMeters\\media\\textures\\icons\\"
+local ICON_PATH = "Interface\\AddOns\\MythicMeters\\libs\\LibKa0s\\media\\icons\\"
 local function withoutOurArt(inst)
     for _, name in ipairs({ "close", "minimise", "expand", "lock", "unlock",
                             "settings", "segment", "reset", "export" }) do

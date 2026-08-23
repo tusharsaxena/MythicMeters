@@ -35,6 +35,9 @@ locales\enUS.lua
 
 # Core
 core\Compat.lua
+# Before Constants, deliberately: Constants.FONT_MONO is resolved from the seam this file
+# publishes, so a Constants that loaded first would resolve it to nil.
+core\MediaSetup.lua
 core\Constants.lua
 core\Namespace.lua
 core\State.lua

@@ -1,58 +1,46 @@
 -- core/LSMPatch.lua
 --
--- Two pieces of LibSharedMedia housekeeping that belong to the addon rather than
--- to any one module: registering the media we SHIP, and fixing up a third-party
--- widget that renders LSM choices badly inside our settings panel.
+-- One piece of LibSharedMedia housekeeping that belongs to the addon rather than
+-- to any one module: fixing up a third-party widget that renders LSM choices
+-- badly inside our settings panel.
 --
--- Both live in core/ (addon code) and not in libs/, so a future refresh of the
--- vendored libraries cannot blow them away.
+-- It lives in core/ (addon code) and not in libs/, so a future refresh of the
+-- vendored libraries cannot blow it away.
 --
 -- ---------------------------------------------------------------------------
--- 1. The shipped monospace font
+-- WHAT USED TO BE HERE, AND WHERE IT WENT
 -- ---------------------------------------------------------------------------
 --
--- A meter is a grid of numbers that changes several times a second. In a
--- proportional face the digits have different widths, so "1.11M" and "9.99M"
--- occupy different amounts of space and a column of numbers visibly shivers as
--- it ticks. A monospace face pins the digits to a grid and the column stops
--- moving. That is why the addon ships one rather than relying on whatever the
--- player has installed.
---
--- Registering it with LSM (rather than only naming the path in a default) is
--- what puts it in the settings panel's font dropdown alongside every other
--- font on the player's system, and what lets a profile store it as a NAME —
--- portable across installs — instead of as a path.
---
--- Registration happens at FILE LOAD, not at PLAYER_LOGIN: LibSharedMedia is
--- vendored under libs/ and has therefore already run by the time the TOC reaches
--- this file, and defaults/Profile.lua names the font at load time too. Deferring
--- would open a window in which a default named a font LSM had never heard of.
+-- This file also registered the monospace font this addon shipped. Both the font
+-- and the registration moved to core/MediaSetup.lua when the face itself moved
+-- into the LibKa0s payload (v1.9.0, `LibKa0s-Media-1.0`): the library owns the
+-- bytes, so the library's own `RegisterLSM` is what names them — one key, one
+-- path, agreed across every Ka0s addon rather than registered per addon from a
+-- per-addon copy. Nothing about WHY it is registered at file load changed; that
+-- reasoning is in MediaSetup now, beside the call.
 
-local addonName, NS = ...
+-- The namespace is not needed here any more -- the font registration that used it moved to
+-- core/MediaSetup.lua -- but the vararg header stays, because every file in this addon has one and
+-- a file that silently differs is a file somebody has to read to find out why.
+local _ = ...
 
-local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-
-if LSM then
-    -- LSM:Register is idempotent for an identical (mediatype, key, path) triple,
-    -- so a double-load — two copies of the addon, or a test harness that runs
-    -- the file twice — costs nothing.
-    LSM:Register(LSM.MediaType.FONT, NS.Constants.FONT_MONO_NAME, NS.Constants.FONT_MONO)
-end
-
--- No bar textures are REGISTERED here. The addon now ships one —
+-- No bar textures are REGISTERED anywhere. The addon still ships one —
 -- media/textures/Default.tga, 256x32 RGBA, the shape a statusbar wants — but it
 -- is not in the registry and nothing reads it yet, so the bars still use LSM
 -- statusbar textures the player already has, defaulting to a Blizzard one that
 -- exists on every install.
 --
--- The two costs that kept it out remain the two things to settle before it goes
--- in: it needs a license recorded beside it the way media/fonts/ records the
--- font's OFL, and it needs a registry key that will not collide in a namespace
--- every addon writes into. Until both are answered the file ships unused, which
--- costs 971 bytes and no behavior. See issue #4.
+-- The two costs that kept it out are both smaller now that LibKa0s ships media:
+-- the license question is answered the way the icons answered it (a notice
+-- beside the bytes), and the collision-proof registry key is what
+-- `LibKa0s-Media-1.0` already provides for fonts. If the texture is ever
+-- registered it should go the same way the font went — into the library, under
+-- one key for the whole collection — rather than being registered here. Until
+-- then the file ships unused, which costs 971 bytes and no behavior. See
+-- issue #4.
 
 -- ---------------------------------------------------------------------------
--- 2. AceGUI-3.0-SharedMediaWidgets: the LSM30_Border display tile
+-- AceGUI-3.0-SharedMediaWidgets: the LSM30_Border display tile
 -- ---------------------------------------------------------------------------
 --
 -- Upstream AceGUI-3.0-SharedMediaWidgets' LSM30_Border widget pins a 42x42

@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1197%2F1197_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1204%2F1204_passing-green)
 
 Every other meter shows you one number at a time. Mythic Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -192,4 +192,5 @@ Please raise them on GitHub:
 ## Credits
 
 The debug console uses [JetBrains Mono](https://www.jetbrains.com/lp/mono/), licensed under the SIL
-Open Font License 1.1. Its license text ships alongside it in `media/fonts/`.
+Open Font License 1.1, and the header controls draw [Open Iconic](https://github.com/iconic/open-iconic)
+(MIT). Both ship inside the bundled LibKa0s payload, with their license text beside them.
