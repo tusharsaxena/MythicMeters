@@ -544,7 +544,6 @@ L["Defaults"] = "Defaults"
 -- choice made in the modal writes straight back here, so the panel and the modal
 -- are two views of one setting rather than two settings that drift apart.
 L["Export"] = "Export"
-L["Default metric"] = "Default metric"
 L["Default channel"] = "Default channel"
 L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."] =
     "Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."
