@@ -366,9 +366,18 @@ never reused, so nothing is lost by forgetting one. With no provider module at a
 alone: that is a broken install, not a stale segment, and rewriting the player's setting because of
 our own load order would be the worse failure.
 
-`Compat.OpenContextMenu` wraps `MenuUtil.CreateContextMenu` and is the only menu API wired. The
-pre-11.0 alternatives are deliberately absent — they do not exist on any client this addon supports,
-and a fallback nobody can run is a fallback nobody has tested.
+`Compat.OpenContextMenu` wraps `MenuUtil.CreateContextMenu` and is the only Blizzard menu API
+wired. The pre-11.0 alternatives are deliberately absent — they do not exist on any client this
+addon supports, and a fallback nobody can run is a fallback nobody has tested.
+
+**It is no longer the only menu in the addon, and this control is deliberately the one that keeps
+it.** The export modal's three selectors are `LibKa0s-Widgets-1.0` dropdowns — a flat-skinned button
+that drops the library's own popup, shared process-wide with every other Ka0s addon's dropdowns.
+This control is not converted: it is a mark in a header strip rather than a labelled selector in a
+form, its list is built from live client state and carries a divider, and a dropdown button wide
+enough to show a session name would take back the title bar the removed 220px Button already cost.
+The two mechanisms coexist on purpose — see `modules/Export.lua`'s "The modal's three selectors"
+comment, which argues the same split from the other side.
 
 ## Known limitations
 
