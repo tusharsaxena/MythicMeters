@@ -940,15 +940,24 @@ its export glyph.
   re-centers on window 2 and exports window 2's segment. A modal that exported the *first* window's
   segment from then on is the invoker not being re-stamped.
 - **Esc closes it** (it is registered in `UISpecialFrames`), and so does the close button.
+- **Open a selector (Metric, Channel or Lines), then press Esc instead of picking a row.** The modal
+  closes AND the dropped menu closes with it — it must not stay floating over the game. The shared
+  `LibKa0s-Widgets-1.0` popup is a process-wide singleton parented to `UIParent`, not to this modal,
+  so `modules/Export.lua`'s `EnsureFrame` hooks the modal's `OnHide` to call `W.CloseMenu()` for
+  exactly this path; a menu left behind here means that hook regressed.
 - **The copy window that opens from Export to CSV** carries the same close icon in its own title bar,
   and its text is the bundled monospace face — a CSV is columns of digits and only lines up in one.
-- **Each selector opens a context menu** — the same `MenuUtil` mechanism the header's segment
-  selector uses. Metric lists **Match the window**, a divider, then all **nine** catalog stats;
-  Channel lists the **eight** entries of `Constants.EXPORT_CHANNELS` (Auto · Say · Party · Raid ·
-  Instance · Guild · Whisper · Self only); Lines offers **3 / 5 / 10 / 20 / 40**, the last being
-  `Constants.MAX_ROWS` rather than a literal.
-- **A click outside an open menu closes the menu, not the modal.** The modal sits at `DIALOG` strata,
-  below the menu's own click-catcher, which is what makes that work.
+- Click **Metric**. A flat menu drops **directly under the button, left-aligned
+  with it** — dark panel, no gold title bar. The current metric's row is **gold**;
+  the rest are light gray. It looks like Bank Ledger's Data Set menu, not like a
+  Blizzard right-click menu.
+- Click outside the menu. It closes and the click does **not** land on the modal
+  behind it.
+- Pick a different metric. The menu closes, the button reads `Metric: <that one>`.
+- Repeat for **Channel** and **Lines**. Same skin, same behaviour, in all three.
+- Open the modal from a window sorted by **Healing**. Metric reads
+  **`Metric: Healing`** before you touch anything — there is no
+  "Match the window" entry any more, and there should not be one.
 - **Picking anything repaints the modal immediately** — the button's label changes to what you picked
   before the menu has finished closing.
 - **On a fresh profile the Metric follows the window it was opened from.** `defaults/Profile.lua`
@@ -969,6 +978,15 @@ its export glyph.
 - **The name box exists only while Channel is Whisper.** Every other channel hides it outright — it
   is hidden rather than greyed, because a disabled name box on a Raid export is a control asking to
   be filled in for no reason.
+- Set **Channel: Whisper**. A fourth row appears below Lines, in the same flat
+  box as the three above it, reading `Whisper to: ` in gold with an editable
+  field beside it. **The modal grows by one row** — the red warning line and the
+  two buttons move down with it, and nothing overlaps.
+- Type a full name. The text is fully visible, not clipped at either end, and
+  sits on the same baseline as the caption.
+- Click **Print to Chat** without pressing Enter first. The dump is whispered:
+  focus loss stores the name.
+- Switch back to **Self only**. The row disappears and the modal shrinks back.
 - Type a name and press **Enter**: it is stored, and the box loses focus.
 - Type a name and **click away without pressing Enter**: it is stored anyway (`OnEditFocusLost`).
   This is the one that catches people — nobody expects to have to press Enter in a box directly above
@@ -1092,11 +1110,12 @@ misclick.
 `/reload`. Re-open it. Then open **Settings → General**.
 
 **Pass.**
-- All four choices come back exactly as you left them. They live at `export.*` in the **profile** and
-  are **addon-wide**, not per window — "I print the top five to party" is a habit rather than a
-  window's appearance.
-- **The General page shows the same four values** under an **Export** group: Default metric, Default
-  channel, Whisper target, Chat lines. The panel and the modal are two views of one preference, so
+- Channel, Lines and the whisper name come back exactly as you left them. They live at `export.*` in
+  the **profile** and are **addon-wide**, not per window — "I print the top five to party" is a habit
+  rather than a window's appearance. Metric is not among them: the modal always seeds it from the
+  window it was opened from, so there is nothing to remember there.
+- **The General page shows the same three values** under an **Export** group: Default channel,
+  Whisper target, Chat lines. The panel and the modal are two views of one preference, so
   changing one must move the other — change Chat lines to 10 on the panel with the modal closed, then
   re-open the modal and confirm it reads `Lines: 10`.
 - `/mm get export.channel` and `/mm set export.lines 10` work on the same rows, as they do for any

@@ -74,6 +74,12 @@ local Const = NS.Constants
 local L     = NS.L
 local MSG   = Const.MSG
 
+-- The modal's three selectors are LibKa0s-Widgets-1.0 dropdowns; see "The
+-- modal's three selectors" below for why. Soft-optionaled like every other
+-- LibKa0s seam this addon carries: `Export.Open` refuses rather than building a
+-- modal with three dead controls when this is nil.
+local W = LibStub and LibStub("LibKa0s-Widgets-1.0", true)
+
 -- U+2014 EM DASH, spelled in bytes. The source files in this addon are read and
 -- edited by tools whose encoding cannot be assumed; the escape always survives.
 local EM_DASH = " \226\128\148 "
@@ -83,12 +89,6 @@ local EM_DASH = " \226\128\148 "
 -- slider. The last one is the aggregator's own ceiling rather than a literal 40,
 -- so a change to MAX_ROWS moves both.
 local LINE_CHOICES = { 3, 5, 10, 20, Const.MAX_ROWS }
-
--- The stored `export.metric` that means "not a fixed stat — whichever column the
--- window I was opened from is sorted by". The empty string rather than nil
--- because a profile stores it: nil is what an absent key reads as, and the two
--- have to be told apart to know whether a player has ever chosen at all.
-local FOLLOW_WINDOW = ""
 
 -- Seconds between two lines of a chat dump. Roughly three a second, which is
 -- under every flood threshold the server enforces and still fast enough that a
@@ -794,12 +794,33 @@ end
 local MODAL_NAME = "MultiMetersExportWindow"
 local COPY_NAME  = "MultiMetersExportCopyWindow"
 
+local ROW_H        = 24
+
+-- The modal's vertical grid, as one table rather than as eight literals scattered
+-- through EnsureFrame. It is published on the module (`Export.__geometry`) for the
+-- one reason a private constant ever should be: the whisper row's arithmetic is
+-- the thing that was wrong — a 20px box at -126 under a warning line at -154 in a
+-- frame 236 tall that accounted for neither — and out of game the arithmetic is
+-- all there is to check. The modal itself is smoke-tested.
+local GEOM = {
+    rowHeight         = ROW_H,
+    rowGap            = 6,
+    metricTop         = 36,
+    channelTop        = 66,
+    linesTop          = 96,
+    whisperTop        = 126,
+    warningTop        = 158,
+    height            = 236,
+}
+GEOM.heightWithWhisper = GEOM.height + GEOM.rowHeight + GEOM.rowGap
+
+Export.__geometry = GEOM
+
 local MODAL_WIDTH  = 372
-local MODAL_HEIGHT = 236
+local MODAL_HEIGHT = GEOM.height
 local COPY_WIDTH   = 640
 local COPY_HEIGHT  = 420
 local TITLEBAR_H   = 26
-local ROW_H        = 24
 local EDIT_FALLBACK_WIDTH = 590
 
 -- Built lazily, kept forever.
@@ -1075,17 +1096,26 @@ end
 -- The modal's three selectors
 -- ---------------------------------------------------------------------------
 --
--- Plain buttons that open a MenuUtil context menu, which is the same mechanism
--- the window header's segment selector uses. No new widget: a dropdown of our
--- own would be a second menu vocabulary to keep in step with Blizzard's, and it
--- would degrade differently on a client with no MenuUtil (there, these buttons
--- do nothing, exactly as the segment selector does nothing).
+-- LibKa0s-Widgets-1.0 dropdowns, and this REVERSES what this file used to argue.
+-- The old reasoning was that a dropdown of our own would be a second menu
+-- vocabulary to keep in step with Blizzard's, so these were plain buttons opening
+-- a MenuUtil context menu — the mechanism the window header's segment selector
+-- still uses.
+--
+-- What changed is whose dropdown it is. It is not ours: it is the collection's,
+-- shared with Bank Ledger's filter bar and specified by a suite in the library's
+-- own repo. Against that, MenuUtil is the second vocabulary — a menu with
+-- Blizzard's gold title and no selected-row mark, dropped from a button wearing
+-- this addon's flat skin.
+--
+-- The header's segment selector is deliberately NOT converted here. It is a
+-- different control in a different frame and its own change.
 
 --- The label for a stat key, localized at the use site.
 --- @param statKey string|nil
 --- @return string
 local function metricLabel(statKey)
-    if statKey == nil or statKey == FOLLOW_WINDOW then return L["Match the window"] end
+    if statKey == nil then return L["Unknown"] end
     local stat = Const.STAT_BY_KEY[statKey]
     if not stat then return L["Unknown"] end
     return L[stat.label] or stat.label
@@ -1093,35 +1123,27 @@ end
 
 --- Which stat the chat dump actually ranks by, right now.
 ---
---- The stored choice, unless it is the empty string — which is not "unset" but a
---- CHOICE, the one that says "whatever the window I clicked is sorted by". It is
---- what a fresh profile ships with, because the column a player sorted their
---- meter by is the column they are thinking about, and it is reachable again from
---- the Metric menu after picking a fixed stat.
+--- The stored choice, when the catalog still answers for it. It always does on a
+--- profile this build wrote: Export.Open SEEDS the invoking window's sort column
+--- on the way in, so the selector shows a real stat before anyone has touched it.
 ---
---- Resolved at every use rather than written into the profile when the modal
---- opens. An earlier draft seeded the stored value instead, which meant the
---- follow-the-window behavior could happen exactly once per profile and never
---- again — and, with a non-empty default shipped, never at all.
+--- The two fallbacks below are for the profiles that predate that. `""` was once
+--- a deliberate choice meaning "match whichever column the window is sorted by",
+--- and a build that offered a stat this one dropped leaves a key the catalog has
+--- never heard of. Both read as unset, both land on the window's own column, and
+--- neither needs a migration step — which is why there is not one.
 ---
 --- Public and window-taking rather than a local reading the modal's `invoker`,
 --- because a rule this easy to get wrong belongs where the harness can reach it;
 --- the UI passes nothing and gets the window it was opened from.
----
---- A stored key the catalog does not answer for is treated as the follow choice
---- rather than exported as a blank column: it is a profile written by a build
---- that offered a stat this one does not, which is the same reading
---- settings/Schema.lua's sortColumn row gets.
 ---
 --- @param win table|nil  a Window instance or config; the invoking window if nil
 --- @return string  a key that Const.STAT_BY_KEY answers for
 function Export.ResolveMetric(win)
     if win == Export then win = nil end
 
-    local stored = readExport("metric", FOLLOW_WINDOW)
-    if stored ~= nil and stored ~= FOLLOW_WINDOW and Const.STAT_BY_KEY[stored] then
-        return stored
-    end
+    local stored = readExport("metric", nil)
+    if stored ~= nil and Const.STAT_BY_KEY[stored] then return stored end
 
     local data = cfgOf(win or invoker).data or {}
     local sortColumn = data.sortColumn
@@ -1156,18 +1178,23 @@ local function refreshModal()
     -- Shows the RESOLVED stat even when the stored choice is "match the window",
     -- because the question the player is asking of this button is "what will it
     -- print", not "what is in my profile".
-    modal.metricButton.text:SetText(L["Metric: %s"]:format(metricLabel(Export.ResolveMetric())))
-    modal.channelButton.text:SetText(L["Channel: %s"]:format(channelLabel(channel)))
-    modal.linesButton.text:SetText(L["Lines: %s"]:format(tostring(readExport("lines", 5))))
+    modal.metricDD:SetValue(Export.ResolveMetric(),
+        L["Metric: %s"]:format(metricLabel(Export.ResolveMetric())))
+    modal.channelDD:SetValue(channel, L["Channel: %s"]:format(channelLabel(channel)))
+    local lines = readExport("lines", 5)
+    modal.linesDD:SetValue(lines, L["Lines: %s"]:format(tostring(lines)))
 
-    if channel == "WHISPER" then
+    local whispering = channel == "WHISPER"
+    if whispering then
         modal.whisperBox:SetText(readExport("whisperTo", "") or "")
-        modal.whisperBox:Show()
-        modal.whisperLabel:Show()
-    else
-        modal.whisperBox:Hide()
-        modal.whisperLabel:Hide()
     end
+    modal.whisperRow:SetShown(whispering)
+
+    local warningTop = GEOM.warningTop + (whispering and (GEOM.rowHeight + GEOM.rowGap) or 0)
+    modal.warning:ClearAllPoints()
+    modal.warning:SetPoint("TOPLEFT", 16, -warningTop)
+    modal.warning:SetPoint("TOPRIGHT", -16, -warningTop)
+    modal:SetHeight(whispering and GEOM.heightWithWhisper or GEOM.height)
 
     modal.warning:SetText(available and "" or (reason or ""))
     setEnabled(modal.csvButton, available)
@@ -1182,52 +1209,38 @@ local function chooseExport(key, value)
     refreshModal()
 end
 
---- Open the Metric menu.
-local function openMetricMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Metric"])
-        -- First, and above a divider: it is the default, and it is the only entry
-        -- that is not a stat.
-        root:CreateButton(L["Match the window"], function()
-            chooseExport("metric", FOLLOW_WINDOW)
-        end)
-        root:CreateDivider()
-        for _, stat in ipairs(Const.STATS) do
-            local key = stat.key
-            root:CreateButton(L[stat.label] or stat.label, function()
-                chooseExport("metric", key)
-            end)
-        end
-    end)
+--- The Metric selector's options: the catalog, in catalog order.
+--- @return table
+local function metricOptions()
+    local out = {}
+    for i, stat in ipairs(Const.STATS) do
+        out[i] = { value = stat.key, label = L[stat.label] or stat.label }
+    end
+    return out
 end
 
---- Open the Channel menu.
+--- The Channel selector's options.
 ---
 --- The catalog is core/Constants.lua's and only core/Constants.lua's. Restating
 --- the channel list here would be two lists to keep in step, and the settings
 --- panel reads the same one.
-local function openChannelMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Channel"])
-        for _, row in ipairs(Const.EXPORT_CHANNELS or {}) do
-            local key = row.key
-            root:CreateButton(L[row.label] or row.label, function()
-                chooseExport("channel", key)
-            end)
-        end
-    end)
+--- @return table
+local function channelOptions()
+    local out = {}
+    for i, row in ipairs(Const.EXPORT_CHANNELS or {}) do
+        out[i] = { value = row.key, label = L[row.label] or row.label }
+    end
+    return out
 end
 
---- Open the Lines menu.
-local function openLinesMenu(button)
-    return NS.Compat.OpenContextMenu(button, function(_, root)
-        root:CreateTitle(L["Lines"])
-        for _, count in ipairs(LINE_CHOICES) do
-            root:CreateButton(tostring(count), function()
-                chooseExport("lines", count)
-            end)
-        end
-    end)
+--- The Lines selector's options.
+--- @return table
+local function linesOptions()
+    local out = {}
+    for i, count in ipairs(LINE_CHOICES) do
+        out[i] = { value = count, label = tostring(count) }
+    end
+    return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -1312,10 +1325,12 @@ local function EnsureFrame()
     modal = CreateFrame("Frame", MODAL_NAME, UIParent, "BackdropTemplate")
     modal:SetSize(MODAL_WIDTH, MODAL_HEIGHT)
     modal:SetPoint("CENTER")
-    -- DIALOG, which is BELOW the FULLSCREEN strata a MenuUtil menu puts its
-    -- click-catcher on. That ordering is what lets a click outside an open
-    -- selector menu close the menu instead of landing on the modal — and the
-    -- copy window, also FULLSCREEN, still opens above this.
+    -- DIALOG, which is BELOW the FULLSCREEN strata the shared dropdown menu puts
+    -- its click-catcher on (FULLSCREEN_DIALOG for the menu itself, FULLSCREEN for
+    -- the catcher beneath it — LibKa0s-Widgets-1.0's own popup, one instance
+    -- shared by every dropdown in the process). That ordering is what lets a
+    -- click outside an open selector menu close the menu instead of landing on
+    -- the modal — and the copy window, also FULLSCREEN, still opens above this.
     modal:SetFrameStrata("DIALOG")
     modal:EnableMouse(true)
     modal:SetMovable(true)
@@ -1323,32 +1338,65 @@ local function EnsureFrame()
 
     makeTitleBar(modal, L["Export"])
 
-    local metricButton = makeButton(modal, "", function(self) openMetricMenu(self) end)
-    metricButton:SetPoint("TOPLEFT", 16, -36)
-    metricButton:SetPoint("TOPRIGHT", -16, -36)
+    local metricDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    metricDD:SetHeight(GEOM.rowHeight)
+    metricDD:SetPoint("TOPLEFT", 16, -GEOM.metricTop)
+    metricDD:SetPoint("TOPRIGHT", -16, -GEOM.metricTop)
+    metricDD:SetOptions(metricOptions())
+    metricDD.onSelect = function(v) chooseExport("metric", v) end
 
-    local channelButton = makeButton(modal, "", function(self) openChannelMenu(self) end)
-    channelButton:SetPoint("TOPLEFT", 16, -66)
-    channelButton:SetPoint("TOPRIGHT", -16, -66)
+    local channelDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    channelDD:SetHeight(GEOM.rowHeight)
+    channelDD:SetPoint("TOPLEFT", 16, -GEOM.channelTop)
+    channelDD:SetPoint("TOPRIGHT", -16, -GEOM.channelTop)
+    channelDD:SetOptions(channelOptions())
+    channelDD.onSelect = function(v) chooseExport("channel", v) end
 
-    local linesButton = makeButton(modal, "", function(self) openLinesMenu(self) end)
-    linesButton:SetPoint("TOPLEFT", 16, -96)
-    linesButton:SetPoint("TOPRIGHT", -16, -96)
+    local linesDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    linesDD:SetHeight(GEOM.rowHeight)
+    linesDD:SetPoint("TOPLEFT", 16, -GEOM.linesTop)
+    linesDD:SetPoint("TOPRIGHT", -16, -GEOM.linesTop)
+    linesDD:SetOptions(linesOptions())
+    linesDD.onSelect = function(v) chooseExport("lines", v) end
 
     -- Shown only while the channel is WHISPER. Hidden rather than disabled: a
     -- greyed-out name box on a raid-channel export is a control asking to be
     -- filled in for no reason.
-    -- The box is bare otherwise: it appears only for one channel, and an unlabeled
-    -- text field that materializes next to a Channel button is a field whose
-    -- purpose has to be guessed.
-    local whisperLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    whisperLabel:SetPoint("TOPLEFT", 18, -114)
-    whisperLabel:SetText(L["Whisper to"])
+    --
+    -- NOT InputBoxTemplate, and that is the fix rather than a preference. The
+    -- template carries its own rounded, gold-edged art and its own text insets;
+    -- beside three flat selectors it read as a control borrowed from another
+    -- addon, and its insets are what clipped the name. This is the same backdrop
+    -- the selectors above it wear, so the four rows are one column.
+    local whisperRow = CreateFrame("Frame", nil, modal, "BackdropTemplate")
+    whisperRow:SetHeight(GEOM.rowHeight)
+    whisperRow:SetPoint("TOPLEFT", 16, -GEOM.whisperTop)
+    whisperRow:SetPoint("TOPRIGHT", -16, -GEOM.whisperTop)
+    if whisperRow.SetBackdrop then
+        whisperRow:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        whisperRow:SetBackdropColor(skinColor("bg", 0.1, 0.1, 0.12, 0.9))
+        whisperRow:SetBackdropBorderColor(skinColor("innerBorder", 0.24, 0.24, 0.27, 0.9))
+    end
 
-    local whisperBox = CreateFrame("EditBox", nil, modal, "InputBoxTemplate")
-    whisperBox:SetHeight(20)
-    whisperBox:SetPoint("TOPLEFT", 22, -126)
-    whisperBox:SetPoint("TOPRIGHT", -18, -126)
+    -- The caption INSIDE the row, as a prefix, so this reads "Whisper to: …" in
+    -- the same shape as "Metric: …" above it. It was a separate FontString above
+    -- the box, in 12px of room the old layout did not actually have.
+    local whisperCaption = whisperRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    whisperCaption:SetPoint("LEFT", 8, 0)
+    whisperCaption:SetText(L["Whisper to:"] .. " ")
+    whisperCaption:SetTextColor(skinColor("title", 1, 0.82, 0))
+
+    local whisperBox = CreateFrame("EditBox", nil, whisperRow)
+    whisperBox:SetPoint("LEFT", whisperCaption, "RIGHT", 2, 0)
+    whisperBox:SetPoint("RIGHT", -8, 0)
+    whisperBox:SetPoint("TOP", 0, 0)
+    whisperBox:SetPoint("BOTTOM", 0, 0)
+    whisperBox:SetFontObject("GameFontHighlightSmall")
     whisperBox:SetAutoFocus(false)
     whisperBox:SetScript("OnEnterPressed", function(self)
         chooseExport("whisperTo", self:GetText() or "")
@@ -1362,8 +1410,8 @@ local function EnsureFrame()
     whisperBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
     local warning = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    warning:SetPoint("TOPLEFT", 16, -154)
-    warning:SetPoint("TOPRIGHT", -16, -154)
+    warning:SetPoint("TOPLEFT", 16, -GEOM.warningTop)
+    warning:SetPoint("TOPRIGHT", -16, -GEOM.warningTop)
     warning:SetJustifyH("CENTER")
     warning:SetWordWrap(true)
     -- The one hand-set color in this file, and it is a state rather than a style:
@@ -1380,17 +1428,32 @@ local function EnsureFrame()
     chatButton:SetWidth(160)
     chatButton:SetPoint("BOTTOMRIGHT", -16, 14)
 
-    modal.metricButton  = metricButton
-    modal.channelButton = channelButton
-    modal.linesButton   = linesButton
-    modal.whisperBox    = whisperBox
-    modal.whisperLabel  = whisperLabel
-    modal.warning       = warning
-    modal.csvButton     = csvButton
-    modal.chatButton    = chatButton
+    modal.metricDD   = metricDD
+    modal.channelDD  = channelDD
+    modal.linesDD    = linesDD
+    modal.whisperBox = whisperBox
+    modal.whisperRow = whisperRow
+    modal.warning    = warning
+    modal.csvButton  = csvButton
+    modal.chatButton = chatButton
 
     NS.ApplySkin(modal)
     modal:Hide()
+
+    -- The modal is in UISpecialFrames (below), so Escape hides it directly —
+    -- never through onHide/a click handler this file controls. An open Metric,
+    -- Channel or Lines menu is the shared LibKa0s-Widgets-1.0 popup: a
+    -- process-wide singleton parented to UIParent at FULLSCREEN_DIALOG, not to
+    -- this modal, so the modal's own Hide() does not reach it (see the
+    -- FrameStrata comment above and Widgets version-2-docs.md, "Behavior a host
+    -- must know"). Without this, Escape would leave the menu orphaned above the
+    -- game with the modal that owned it already gone. CloseMenu() is a safe
+    -- no-op when no dropdown here has ever opened the menu, or when it is
+    -- already closed, so this needs no extra guard beyond W itself, which is
+    -- already resolved as a file-local and nil on a degraded load.
+    if W then
+        modal:SetScript("OnHide", function() W.CloseMenu() end)
+    end
 
     -- THE RESTRICTION ARRIVES WHILE THE MODAL IS OPEN, and that is the ordinary
     -- case rather than the exotic one: a player opens this between pulls and the
@@ -1444,13 +1507,32 @@ function Export.Open(a, b)
 
     invoker = win
 
+    -- SPEC §10. No widget, no modal. Three labels that open nothing look like a
+    -- broken addon; a sentence looks like a missing library, which is what it is.
+    -- Same shape as the combat refusal above, for the same reason.
+    if not W then
+        if NS.Print then NS.Print(L["The export window needs LibKa0s."]) end
+        return nil
+    end
+
     local frame = EnsureFrame()
     if not frame then return nil end
 
-    -- No metric seeding here. `export.metric` ships as FOLLOW_WINDOW and
-    -- Export.ResolveMetric answers it against `invoker` at every use, so an export from
-    -- a window sorted by Healing ranks healing without a write, and a deliberate
-    -- choice made last time still wins over both.
+    -- SEEDED, and this reverses a decision this file used to argue for. The old
+    -- shape stored "" — "match whichever column the window is sorted by" — and
+    -- resolved it fresh at every use, which meant the Metric button showed a
+    -- label naming a rule instead of naming a stat. The rule was right and
+    -- unreadable; seeding keeps the behaviour and puts the answer in the control.
+    --
+    -- It is also what makes the settings panel's "Default metric" row removable:
+    -- a preference every open overwrites is a preference in name only.
+    --
+    -- Only from a column the catalog answers for. A window that has never been
+    -- sorted leaves whatever was chosen last time, which is the better of the
+    -- two wrong answers.
+    local seed = (cfgOf(win).data or {}).sortColumn
+    if seed and Const.STAT_BY_KEY[seed] then writeExport("metric", seed) end
+
     refreshModal()
     centerOnWindow(frame, win)
     frame:Show()

@@ -368,17 +368,6 @@ for i, stat in ipairs(Const.STATS) do
     STATCOL_SORT[i] = stat.key
 end
 
--- The export metric list is the sort-column list plus one entry the sort column
--- has no use for: "" — match whichever column the exporting window is sorted by.
--- Derived from STATCOL_* rather than rebuilt, so a stat added to the catalog
--- reaches both lists at once.
-local EXPORTMETRIC_VALUES = { [""] = L["Match the window"] }
-local EXPORTMETRIC_SORT   = { "" }
-for i, key in ipairs(STATCOL_SORT) do
-    EXPORTMETRIC_VALUES[key] = STATCOL_VALUES[key]
-    EXPORTMETRIC_SORT[i + 1] = key
-end
-
 -- The export destinations, derived from the channel catalog the export module
 -- reads, for the same reason: one list, two consumers, and no chance of the
 -- dropdown offering a channel nothing knows how to send to. The catalog stores
@@ -1285,16 +1274,14 @@ NS.Schema = {
     -- that heading twice.
     --
     -- These are the REMEMBERED choices. The export modal has its own copies of
-    -- the same three dropdowns for a one-off send, and writes each choice back
-    -- here, so the panel and the modal are two views of one preference rather
-    -- than two preferences.
-    {
-        path = "export.metric", type = "string", default = "",
-        values = EXPORTMETRIC_VALUES, sorting = EXPORTMETRIC_SORT,
-        page = "general", group = L["Export"],
-        label = L["Default metric"],
-        desc = L["Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."],
-    },
+    -- the same dropdowns for a one-off send, and writes each choice back here,
+    -- so the panel and the modal are two views of one preference rather than two
+    -- preferences.
+    --
+    -- THE METRIC IS NOT AMONG THEM, and its absence is deliberate. It used to be,
+    -- with a "Match the window" entry the sort column had no use for. Export.Open
+    -- now seeds the metric from the window it was opened from, so a value set
+    -- here would be overwritten before it was ever read.
     {
         path = "export.channel", type = "string", default = "SELF",
         values = CHANNEL_VALUES, sorting = CHANNEL_SORT,

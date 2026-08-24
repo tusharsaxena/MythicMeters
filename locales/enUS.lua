@@ -544,13 +544,6 @@ L["Defaults"] = "Defaults"
 -- choice made in the modal writes straight back here, so the panel and the modal
 -- are two views of one setting rather than two settings that drift apart.
 L["Export"] = "Export"
-L["Default metric"] = "Default metric"
--- Also the Metric menu's first entry. "" is a choice rather than an absent value:
--- it ranks by whichever column the exporting window is sorted by, which is what a
--- fresh profile ships with.
-L["Match the window"] = "Match the window"
-L["Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."] =
-    "Which column 'Print to Chat' ranks by. Match the window follows whichever column the exporting window is sorted by; anything else pins every export to that one statistic."
 L["Default channel"] = "Default channel"
 L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."] =
     "Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."
@@ -604,6 +597,12 @@ L["TEST MODE"] = "TEST MODE"
 -- The tooltip on the header glyph that opens the modal, left of the lock.
 L["Export a segment to CSV or to chat"] = "Export a segment to CSV or to chat"
 
+-- SPEC §10. Printed instead of opening the modal when LibKa0s-Widgets-1.0 is
+-- absent: the modal's three selectors need it to draw at all, and a modal with
+-- three labels that open nothing reads as a broken addon rather than as a
+-- missing library.
+L["The export window needs LibKa0s."] = "The export window needs LibKa0s."
+
 -- The three selector buttons render "Label: value", composed here rather than in
 -- the module so a translation can move the colon or drop it entirely.
 L["Metric: %s"] = "Metric: %s"
@@ -615,7 +614,7 @@ L["Print to Chat"] = "Print to Chat"
 L["Metric"] = "Metric"
 L["Channel"] = "Channel"
 L["Lines"] = "Lines"
-L["Whisper to"] = "Whisper to"
+L["Whisper to:"] = "Whisper to:"
 
 -- The copy window's title IS its instructions: there is no file I/O in WoW, so
 -- the only way out of the addon is the player's own clipboard. Em dash written

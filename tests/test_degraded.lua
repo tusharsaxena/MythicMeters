@@ -1,11 +1,12 @@
 -- tests/test_degraded.lua — the whole addon, loaded with LibKa0s ABSENT.
 --
--- Five files in this addon reach for a LibKa0s major and each carries a
+-- Six files in this addon reach for a LibKa0s major and each carries a
 -- degradation branch: core/CoreSetup.lua, core/PerfSetup.lua,
--- core/DebugLogSetup.lua, settings/Slash.lua and settings/OptionsSetup.lua. This
--- suite is the only place all five are exercised, and it exercises them BY
--- ACTUALLY LOADING THE ADDON WITHOUT THE LIBRARY — `T.load{ libFiles = {} }` —
--- never by hand-stubbing the member under test (testing-§8).
+-- core/DebugLogSetup.lua, settings/Slash.lua, settings/OptionsSetup.lua and
+-- modules/Export.lua. This suite is the only place all six are exercised, and
+-- it exercises them BY ACTUALLY LOADING THE ADDON WITHOUT THE LIBRARY —
+-- `T.load{ libFiles = {} }` — never by hand-stubbing the member under test
+-- (testing-§8).
 --
 -- The difference matters. Hand-stubbing proves that the stub you just wrote
 -- answers the call you just made. A real load proves that thirty-odd files
@@ -43,6 +44,7 @@ local SEAMS = {
     { major = "LibKa0s-DebugLog-1.0", file = "core/DebugLogSetup.lua" },
     { major = "LibKa0s-Slash-1.0",    file = "settings/Slash.lua" },
     { major = "LibKa0s-Options-1.0",  file = "settings/OptionsSetup.lua" },
+    { major = "LibKa0s-Widgets-1.0",  file = "modules/Export.lua" },
 }
 
 --- The whole addon loaded with libs/LibKa0s NOT in the load list. The lifecycle
@@ -501,6 +503,18 @@ test("Degraded: every NS.Perf member the addon actually reaches exists on the st
             .. type(full.Perf[name]) .. " live and " .. type(degraded.Perf[name]) .. " degraded")
     end
     assertTrue(n >= 4, "the Perf member scan found only " .. n .. " members — it drifted")
+end)
+
+-- ── the sixth seam: modules/Export.lua ──────────────────────────────────────
+
+test("Degraded: the export modal refuses to open with no dropdown widget", function()
+    -- Spec §10. Three labels that open nothing is a worse answer than a
+    -- sentence: it looks like the addon is broken rather than like a library is
+    -- missing.
+    -- red under: an Open that builds the frame and lets the selectors be nil.
+    local inst = degradedInstance()
+    assertNil(inst.NS.Export.Open({}))
+    assertTrue(#inst.mocks.__chat > 0, "and it says why, in chat")
 end)
 
 test("Degraded: the addon still enables end to end with no library", function()

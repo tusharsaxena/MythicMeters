@@ -356,10 +356,15 @@ end)
 -- ResolveMetric — which column the chat dump ranks by
 -- ---------------------------------------------------------------------------
 --
--- `export.metric` ships as "", which is a CHOICE ("match the window") rather than
--- an absent value. An earlier draft shipped "DamageDone" and seeded the stored
--- value on open, which made the follow-the-window path unreachable; these cases
--- are what keep it reachable.
+-- `export.metric` used to ship as "", which was a CHOICE ("match the window")
+-- rather than an absent value, resolved fresh against the invoking window at
+-- every use. That choice is gone: the label was unreadable, and a control whose
+-- value is "whatever something else says" cannot show you what it will do.
+--
+-- What replaced it is SEEDING — Export.Open writes the invoking window's sort
+-- column into the profile — so the useful half survives and is visible in the
+-- selector. These cases pin the narrowed contract: ResolveMetric always answers
+-- a key the catalog holds, and "" is now just an unrecognized stored value.
 
 --- Store one export preference the way the modal does.
 ---
@@ -371,50 +376,59 @@ local function storeMetric(inst, value)
     profile.export.metric = value
 end
 
-test("Export.ResolveMetric follows the window's sort column when nothing is pinned", function()
-    local inst = T.load()
-    storeMetric(inst, "")
-    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }),
-        "HealingDone")
-end)
-
-test("Export.ResolveMetric ships following the window, not pinned to damage", function()
-    -- red under: a non-empty `export.metric` default, which pins every export to
-    -- one stat and makes the branch above dead code.
-    local inst = T.load()
-    assertEqual(inst.NS.defaults.profile.export.metric, "")
-    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "Interrupts" } }),
-        "Interrupts")
-end)
-
-test("Export.ResolveMetric lets a pinned stat beat the window", function()
+test("Export.ResolveMetric answers the pinned stat", function()
     local inst = T.load()
     storeMetric(inst, "Deaths")
     assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }), "Deaths")
 end)
 
-test("Export.ResolveMetric falls back to the first catalog stat", function()
+test("Export.ResolveMetric ships pinned to a real stat, never to the empty string", function()
+    -- red under: the old FOLLOW_WINDOW default surviving the removal. A profile
+    -- default of "" would now be an unrecognized value on every fresh install.
     local inst = T.load()
-    storeMetric(inst, "")
-    -- A window that has never been sorted, and a window with no data group at all.
-    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
-    assertEqual(inst.NS.Export.ResolveMetric({}), Const.STATS[1].key)
-    assertEqual(inst.NS.Export.ResolveMetric(nil), Const.STATS[1].key)
+    local shipped = inst.NS.defaults.profile.export.metric
+    assertTrue(Const.STAT_BY_KEY[shipped] ~= nil,
+        "the shipped default is a key the catalog answers for, not a sentinel")
+    assertEqual(shipped, Const.STATS[1].key)
 end)
 
-test("Export.ResolveMetric treats a stat this build does not offer as unpinned", function()
-    -- A profile written by a build that carried a stat this one dropped. Falling
-    -- through to the window is the same reading settings/Schema.lua's sortColumn
-    -- row gets, and it beats exporting a column that resolves to nothing.
+test("Export.ResolveMetric treats the old empty-string choice as unset", function()
+    -- A profile written by the build that shipped FOLLOW_WINDOW. It degrades to
+    -- the window's column and then to the first catalog stat, with no migration
+    -- step — which is the whole reason no migration step was written.
+    local inst = T.load()
+    storeMetric(inst, "")
+    assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "HealingDone" } }),
+        "HealingDone")
+    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
+end)
+
+test("Export.ResolveMetric treats a stat this build does not offer as unset", function()
     local inst = T.load()
     storeMetric(inst, "AbsorbsFromTheFuture")
     assertEqual(inst.NS.Export.ResolveMetric({ data = { sortColumn = "Dispels" } }), "Dispels")
+end)
+
+test("Export.ResolveMetric falls back to the first catalog stat", function()
+    local inst = T.load()
+    storeMetric(inst, nil)
+    assertEqual(inst.NS.Export.ResolveMetric({ data = {} }), Const.STATS[1].key)
+    assertEqual(inst.NS.Export.ResolveMetric({}), Const.STATS[1].key)
+    assertEqual(inst.NS.Export.ResolveMetric(nil), Const.STATS[1].key)
 end)
 
 test("Export.ResolveMetric is callable through the colon form", function()
     local inst = T.load()
     storeMetric(inst, "Deaths")
     assertEqual(inst.NS.Export:ResolveMetric(), "Deaths")
+end)
+
+test("The Metric selector offers exactly the catalog, with no sentinel entry", function()
+    -- red under: "Match the window" surviving as a menu entry after the stored
+    -- choice behind it was removed, which would write a value nothing resolves.
+    local inst = T.load()
+    assertNil(rawget(inst.NS.L, "Match the window"),
+        "the string is gone from the locale, not just from the menu")
 end)
 
 -- ---------------------------------------------------------------------------
@@ -1018,4 +1032,81 @@ test("Export.Build answers nil when there is no aggregator to ask", function()
     NS.Aggregator, NS.GetModule = savedTable, savedGetModule
     assertTrue(ok, "a missing aggregator must not raise")
     assertNil(result)
+end)
+
+test("The modal's whisper row is a row, not an overlap", function()
+    -- red under: the InputBoxTemplate layout, where the box sat at -126 and the
+    -- warning line at -154 with a 20px box between them and a fixed modal height
+    -- that accounted for neither. The numbers are read off the module rather than
+    -- restated, so this fails if a later edit moves one and not the others.
+    local inst = T.load()
+    local geom = inst.NS.Export.__geometry
+    assertTrue(type(geom) == "table", "the modal's geometry is inspectable")
+
+    assertTrue(geom.whisperTop + geom.rowHeight <= geom.warningTop,
+        "the whisper row clears the warning line rather than drawing over it")
+    assertEqual(geom.heightWithWhisper - geom.height, geom.rowHeight + geom.rowGap,
+        "and the modal grows by exactly one row when it appears")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The shared dropdown menu must not outlive the modal that opened it
+-- ---------------------------------------------------------------------------
+--
+-- LibKa0s-Widgets-1.0's popup is a process-wide singleton parented to UIParent at
+-- FULLSCREEN_DIALOG (docs/api/Widgets/version-2-docs.md, "Behavior a host must
+-- know", in the LibKa0s repo) — not to this modal, so the modal's own Hide() does
+-- not reach it. This modal is in UISpecialFrames, so Escape hides it without going
+-- through onExportCsv/onPrintToChat or any other click handler this file controls;
+-- an open Metric/Channel/Lines menu would be left orphaned above the game with the
+-- modal that owned it already gone. modules/Export.lua's EnsureFrame wires
+-- modal:SetScript("OnHide", function() W.CloseMenu() end) to close it.
+--
+-- The shared menu is a file-local inside Widgets.lua with no getter, so the only
+-- way to observe it is the way LibKa0s's own test_widgets.lua does: capture the
+-- first frame CreateFrame makes once a dropdown's OnClick lazily builds it.
+test("Hiding the export modal closes an open dropdown menu (LibKa0s-Widgets-1.0)", function()
+    local inst = T.load()
+    local modal = inst.NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    -- Emptied rather than left at the real metric list: LibKa0s-Widgets-1.0's
+    -- Populate paints every row's optional glyph FontString unconditionally
+    -- (paintMenuRow, Widgets.lua), and this harness's mock enforces the real
+    -- client's "FontString:SetText(): Font not set" rule (tests/wow_mock.lua,
+    -- see test_window.lua's "Building a window sets no text on a fontless
+    -- FontString") on a glyph column no export dropdown ever gives a
+    -- glyphFont for. That row-painting behavior is the library's, not this
+    -- hook's, and unrelated to what this case is pinning — closing the menu
+    -- on OnHide — so this case opens the menu with nothing to paint.
+    local made, savedCreateFrame = {}, inst.mocks.CreateFrame
+    inst.mocks.CreateFrame = function(...)
+        local f = savedCreateFrame(...)
+        made[#made + 1] = f
+        return f
+    end
+    modal.metricDD:SetOptions({})
+    modal.metricDD:__fire("OnClick")
+    inst.mocks.CreateFrame = savedCreateFrame
+
+    local menu = made[1]
+    assertTrue(type(menu) == "table", "the dropdown's click lazily built the shared menu")
+    assertTrue(menu:IsShown(), "opening the Metric dropdown showed the shared menu")
+
+    -- The mock's Hide() does not auto-invoke OnHide the way the real client does
+    -- (see LibKa0s's test_widgets.lua, "CloseMenu hides the click-catcher too") —
+    -- Escape hiding a UISpecialFrames frame does fire OnHide in the real client,
+    -- so firing it here is what stands in for Escape.
+    modal:__fire("OnHide")
+    assertEqual(menu:IsShown(), false,
+        "OnHide closed the shared menu instead of leaving it orphaned")
+end)
+
+test("Hiding the export modal with no menu ever opened is a safe no-op", function()
+    local inst = T.load()
+    local modal = inst.NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    local ok = pcall(function() modal:__fire("OnHide") end)
+    assertTrue(ok, "closing the modal before any dropdown was clicked must not raise")
 end)

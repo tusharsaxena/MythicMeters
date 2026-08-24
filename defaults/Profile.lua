@@ -488,11 +488,11 @@ NS.defaults = {
         -- the export surface is a glyph in a title bar and a misclick must not
         -- be able to put someone's numbers in front of a raid.
         export       = {
-            -- "" is a CHOICE, not an absent value: it means "whichever column the
-            -- window I was opened from is sorted by". A fixed Constants.STATS key
-            -- here pins every export to one stat instead, and the Metric menu
-            -- offers both.
-            metric    = "",
+            -- The first entry of core/Constants.lua's STATS catalog — a real stat,
+            -- not a sentinel. Export.Open reseeds this from the invoking window's
+            -- sort column on every open, so this value is only ever seen on a
+            -- profile whose export modal has never been opened.
+            metric    = Const.STATS[1].key,
             channel   = "SELF",        -- a Constants.EXPORT_CHANNELS key
             whisperTo = "",            -- meaningful only while channel is WHISPER
             lines     = 5,             -- ranked lines per chat export, 1..MAX_ROWS

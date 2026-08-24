@@ -32,6 +32,7 @@ local MAJORS = {
     "LibKa0s-Slash-1.0",
     "LibKa0s-Options-1.0",
     "LibKa0s-Perf-1.0",
+    "LibKa0s-Widgets-1.0",
 }
 
 -- ── the library is really loaded ────────────────────────────────────────────
