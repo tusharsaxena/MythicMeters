@@ -197,11 +197,12 @@ local SUITES = {
     "test_database",
     "test_diagnostics",
     "test_defaults",
-    -- the five LibKa0s seams and the addon lifecycle
+    -- the six LibKa0s seams and the addon lifecycle
     "test_coresetup",
     "test_perfsetup",
     "test_debuglogsetup",
     "test_mediasetup",
+    "test_envsetup",
     "test_lifecycle",
     "test_vendor_sync",
     -- the data path

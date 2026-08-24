@@ -13,11 +13,12 @@
 -- "what is this addon called" and a reader chasing "which stats can it show"
 -- never open the same file.
 --
--- TOC POSITION: third in the core block — Compat, then Constants, then this
--- file. The hard constraint is Compat FIRST, because resolveVersion() below runs
--- at load and reads the TOC manifest through Compat.GetAddOnMetadata rather than
--- touching C_AddOns directly (architecture-§1: every cross-patch call lives in
--- Compat). Constants sitting ahead of this file is fine in both directions:
+-- TOC POSITION: after Compat, EnvSetup, MediaSetup and Constants in the core
+-- block. The hard constraint is core/EnvSetup.lua FIRST, because resolveVersion()
+-- below runs at load and reads the TOC manifest through NS.Meta — the
+-- LibKa0s-Env-1.0 seam — rather than touching C_AddOns directly (architecture-§1:
+-- every cross-patch call lives behind a seam). Constants sitting ahead of this
+-- file is fine in both directions:
 -- Constants reads nothing this file publishes, and nothing here reads
 -- NS.Constants. Everything AFTER this point — State, Secrets, CoreSetup,
 -- PerfSetup, DebugLogSetup, LSMPatch, MultiMeters, Database, and all of
@@ -60,8 +61,7 @@ local FALLBACK_VERSION = "0.1.0"
 --- capture record "v?", which is unattributable the moment it leaves the session
 --- (performance-§8).
 local function resolveVersion()
-    local Compat = NS.Compat
-    local v = Compat and Compat.GetAddOnMetadata and Compat.GetAddOnMetadata(addonName, "Version")
+    local v = NS.Meta("Version")
     if type(v) == "string" and v ~= "" then return v end
     return FALLBACK_VERSION
 end

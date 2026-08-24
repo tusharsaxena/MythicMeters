@@ -17,9 +17,15 @@
 --     that mistake shows up.
 
 local T = _G.MULTIMETERS_TEST
-local NS, mocks = T.NS, T.mocks
+local NS = T.NS
 local test, assertEqual, assertTrue, assertFalse, assertNil =
     T.test, T.assertEqual, T.assertTrue, T.assertFalse, T.assertNil
+
+-- THE TOC-MANIFEST READER IS NOT HERE ANY MORE. Compat.GetAddOnMetadata moved to
+-- core/EnvSetup.lua, the seam over LibKa0s-Env-1.0, and its cases moved with it
+-- to tests/test_envsetup.lua. Nothing was dropped: the two that mattered — the
+-- deprecated-global rung and the no-reader-at-all rung, both asserted through
+-- core/Namespace.lua's load-time resolution — are asserted there against NS.Meta.
 
 local Compat = NS.Compat
 local Const  = NS.Constants
@@ -43,35 +49,6 @@ local function restrictedInstance()
     m.setRestricted(true)
     return inst
 end
-
--- ── the manifest reader ─────────────────────────────────────────────────────
-
-test("Compat: GetAddOnMetadata reads the TOC through C_AddOns", function()
-    assertEqual(Compat.GetAddOnMetadata("MultiMeters", "Version"), mocks.__toc.Version)
-    assertEqual(Compat.GetAddOnMetadata("MultiMeters", "Title"), mocks.__toc.Title)
-end)
-
-test("Compat: GetAddOnMetadata falls back to the deprecated bare global", function()
-    -- The pre-11.x seam. core/Namespace.lua, settings/Slash.lua and
-    -- core/PerfSetup.lua all resolve the version through this one shim, so
-    -- losing the fallback would stamp three separate surfaces "0.1.0" from the
-    -- in-code constant on an older client.
-    local inst = T.load{ mutate = function(m)
-        m.C_AddOns = nil
-        m.GetAddOnMetadata = function(_, field) return field == "Version" and "9.9.9" or nil end
-    end }
-    assertEqual(inst.NS.Compat.GetAddOnMetadata("MultiMeters", "Version"), "9.9.9")
-    assertEqual(inst.NS.version, "9.9.9",
-        "core/Namespace.lua resolves the version through the same fallback at load")
-end)
-
-test("Compat: GetAddOnMetadata answers nil — not a placeholder — with no reader at all", function()
-    -- nil is what lets core/Namespace.lua tell "no manifest" from "manifest says
-    -- empty" and apply FALLBACK_VERSION.
-    local inst = loadWithout("C_AddOns", "GetAddOnMetadata")
-    assertNil(inst.NS.Compat.GetAddOnMetadata("MultiMeters", "Version"))
-    assertEqual(inst.NS.version, inst.NS.FALLBACK_VERSION)
-end)
 
 -- ── spell APIs ──────────────────────────────────────────────────────────────
 

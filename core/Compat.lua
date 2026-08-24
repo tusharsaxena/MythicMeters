@@ -13,8 +13,10 @@
 -- modules/Provider.lua, the guards live here once and the provider reads like
 -- the data-flow it is.
 --
--- TOC POSITION: FIRST in the core block. core/Namespace.lua reads the TOC
--- manifest through Compat.GetAddOnMetadata on the very next line of the TOC.
+-- TOC POSITION: FIRST in the core block, though nothing now depends on that.
+-- The TOC-manifest reader that used to make it load-bearing has moved to
+-- core/EnvSetup.lua, which sits on the very next line of the TOC and wires
+-- core/Namespace.lua into LibKa0s-Env-1.0.
 --
 -- WHAT THIS FILE MUST NOT DO. It never inspects a meter value. Reading a field
 -- off a session table is not inspection — assigning it to a local and asking a
@@ -25,31 +27,6 @@ local addonName, NS = ...
 
 local Compat = {}
 NS.Compat = Compat
-
--- ---------------------------------------------------------------------------
--- Addon manifest
--- ---------------------------------------------------------------------------
-
---- A field from the addon's TOC manifest.
----
---- 12.0 exposes the reader under C_AddOns; the bare _G.GetAddOnMetadata is the
---- deprecated pre-11.x seam and is only reached when the namespace is absent.
---- Returns nil rather than a placeholder so callers can tell "no manifest" from
---- "manifest says empty" and apply their own fallback (core/Namespace.lua's
---- FALLBACK_VERSION).
----
---- @param name string  addon folder name
---- @param field string "Version", "Title", ...
---- @return string|nil
-function Compat.GetAddOnMetadata(name, field)
-    if _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata then
-        return _G.C_AddOns.GetAddOnMetadata(name, field)
-    end
-    if _G.GetAddOnMetadata then
-        return _G.GetAddOnMetadata(name, field)
-    end
-    return nil
-end
 
 -- ---------------------------------------------------------------------------
 -- Spell APIs

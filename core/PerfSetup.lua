@@ -89,16 +89,14 @@ NS.Perf = lib:New({
     sv      = "MultiMetersPerfDB",
     -- The TOC manifest is the better source than the in-code constant: it cannot
     -- drift from the packaged build (slash-commands-§3). NS.version remains the
-    -- fallback for a client without the metadata API, and settings/Slash.lua
-    -- resolves the same pair the same way, so `/mm version` and a capture record
-    -- cannot disagree.
+    -- fallback for a client without the metadata API.
     --
-    -- The manifest is read through NS.Compat, never by naming C_AddOns here:
-    -- core/Compat.lua owns the C_AddOns -> _G.GetAddOnMetadata fallback
-    -- (architecture-§1), and an inline re-spelling both duplicates the shim and
-    -- silently drops the pre-11.x seam.
-    version = (NS.Compat and NS.Compat.GetAddOnMetadata
-               and NS.Compat.GetAddOnMetadata(addonName, "Version")) or NS.version,
+    -- Both are resolved by NS.Version() — core/EnvSetup.lua's seam over
+    -- LibKa0s-Env-1.0 (architecture-§1) — rather than by an inline ladder here.
+    -- That inline ladder is what this file used to carry, and re-spelling it was
+    -- how a call site quietly dropped the pre-11.x rung. settings/Slash.lua asks
+    -- the same function, so `/mm version` and a capture record cannot disagree.
+    version = NS.Version(),
 
     -- Ordered for the report, with nesting declared. These keys are the contract
     -- the module layer brackets against — a bracket naming a key that is not here

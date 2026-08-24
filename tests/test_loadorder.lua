@@ -190,8 +190,8 @@ test("loadorder: locales/ loads ahead of every file that captures NS.L", functio
         "locales/ must load before the first `local L = NS.L`")
 end)
 
-test("loadorder: the five LibKa0s seams load in the order their headers pin", function()
-    -- core/CoreSetup.lua sets NS.LIBKA0S_MISSING, and the other four APPEND
+test("loadorder: the LibKa0s seams load in the order their headers pin", function()
+    -- core/CoreSetup.lua sets NS.LIBKA0S_MISSING, and four of the others APPEND
     -- their own consequence to it. A seam loading ahead of CoreSetup would
     -- concatenate a nil and take the whole file down at load, on exactly the
     -- degraded install the clause exists to explain.
@@ -201,8 +201,21 @@ test("loadorder: the five LibKa0s seams load in the order their headers pin", fu
     local core = index["core/coresetup.lua"]
     assertTrue(core ~= nil, "core/CoreSetup.lua is not in the TOC")
 
-    -- THE SIXTH SEAM IS THE ODD ONE, AND ITS POSITION IS LOAD-BEARING THE OTHER
-    -- WAY. core/MediaSetup.lua touches NS.LIBKA0S_MISSING not at all -- missing
+    -- TWO SEAMS ARE THE ODD ONES, AND THEIR POSITIONS ARE LOAD-BEARING THE OTHER
+    -- WAY: both publish something an EARLIER-numbered file resolves at load, so
+    -- both sit ahead of core/CoreSetup.lua rather than after it.
+    --
+    -- core/EnvSetup.lua is the sharper of the two. core/Namespace.lua calls the
+    -- NS.Meta it publishes at FILE SCOPE, and a seam that loaded later would not
+    -- raise and would not log -- NS.version would simply be the hardcoded
+    -- FALLBACK_VERSION for the session, stamped on every capture record and every
+    -- `/mm version`, and entirely plausible.
+    local env = index["core/envsetup.lua"]
+    assertTrue(env ~= nil, "core/EnvSetup.lua is not in the TOC")
+    assertTrue(env < index["core/namespace.lua"],
+        "core/EnvSetup.lua must load before core/Namespace.lua, which calls NS.Meta at file scope")
+
+    -- core/MediaSetup.lua touches NS.LIBKA0S_MISSING not at all -- missing
     -- art degrades silently down the header's own ladder rather than explaining
     -- itself -- so it is free to load before CoreSetup, and it MUST: core/
     -- Constants.lua resolves FONT_MONO from the NS.MediaFont it publishes, and a
@@ -251,6 +264,6 @@ test("loadorder: core/MultiMeters.lua loads after every core/ setup file", funct
     for i, rel in ipairs(T.loadedAddonFiles) do index[rel:lower()] = i end
     assertTrue(index["core/multimeters.lua"] > index["core/coresetup.lua"],
         "core/MultiMeters.lua must load after core/CoreSetup.lua or the printer reclaim is a no-op")
-    assertTrue(index["core/compat.lua"] < index["core/namespace.lua"],
-        "core/Namespace.lua reads the TOC manifest through Compat at LOAD time")
+    assertTrue(index["core/envsetup.lua"] < index["core/namespace.lua"],
+        "core/Namespace.lua reads the TOC manifest through NS.Meta at LOAD time")
 end)

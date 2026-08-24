@@ -106,15 +106,19 @@ test("PerfSetup: the capture record is stamped from the TOC manifest", function(
     assertEqual(inst.NS.version, "1.2.3")
 end)
 
-test("PerfSetup: the manifest is read through NS.Compat, never by naming C_AddOns", function()
-    -- architecture-§1: core/Compat.lua owns the C_AddOns -> _G.GetAddOnMetadata
-    -- fallback, and an inline re-spelling both duplicates the shim and silently
-    -- drops the pre-11.x seam.
+test("PerfSetup: the manifest is read through NS.Version, never by naming C_AddOns", function()
+    -- architecture-§1: core/EnvSetup.lua owns the seam over LibKa0s-Env-1.0, and
+    -- an inline re-spelling both duplicates the ladder and silently drops the
+    -- pre-11.x rung. This file carried exactly such a re-spelling until the seam
+    -- landed, which is why the assertion is on the SOURCE and not on the answer:
+    -- an inline copy gives the right answer right up until the day it does not.
     local fh = assert(io.open(ROOT .. "/core/PerfSetup.lua", "r"))
     local src = fh:read("*a"):gsub("%-%-[^\r\n]*", "")
     fh:close()
     assertNil(src:match("_G%.C_AddOns"), "core/PerfSetup.lua names C_AddOns directly")
-    assertTrue(src:find("NS.Compat.GetAddOnMetadata", 1, true) ~= nil)
+    assertNil(src:match("GetAddOnMetadata"),
+        "core/PerfSetup.lua has grown its own manifest ladder again")
+    assertTrue(src:find("NS.Version()", 1, true) ~= nil)
 end)
 
 test("PerfSetup: no locale table is handed to the library", function()

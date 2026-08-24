@@ -133,11 +133,12 @@ local descriptor = {
         if not (H and H.BuildLandingPage) then return end
         H.BuildLandingPage(ctx, {
             logo  = NS.Constants and NS.Constants.LOGO,
-            -- Through NS.Compat, never by naming C_AddOns here: core/Compat.lua
-            -- owns the C_AddOns -> _G.GetAddOnMetadata fallback (architecture-§1).
+            -- Through NS.Meta, never by naming C_AddOns here: core/EnvSetup.lua
+            -- owns the seam over LibKa0s-Env-1.0 (architecture-§1). The `or ""`
+            -- stays: NS.Meta answers nil for a TOC without a `## Notes` line, and
+            -- the landing page wants a string.
             notes = function()
-                local get = NS.Compat and NS.Compat.GetAddOnMetadata
-                return (get and get(addonName, "Notes")) or ""
+                return NS.Meta("Notes") or ""
             end,
             sections = {
                 {

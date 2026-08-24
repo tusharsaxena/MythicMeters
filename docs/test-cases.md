@@ -13,7 +13,7 @@ badge and any count quoted in the docs must agree with it.
 - loadorder: the TOC declares no duplicate file line
 - loadorder: no file captures an NS symbol a later file publishes
 - loadorder: locales/ loads ahead of every file that captures NS.L
-- loadorder: the five LibKa0s seams load in the order their headers pin
+- loadorder: the LibKa0s seams load in the order their headers pin
 - loadorder: core/MultiMeters.lua loads after every core/ setup file
 
 ### test_constants.lua (21)
@@ -81,11 +81,8 @@ badge and any count quoted in the docs must agree with it.
 - Secrets degraded: canaccessvalue alone missing still refuses a known secret
 - Secrets degraded: canaccesstable alone missing still refuses a secret table
 
-### test_compat.lua (36)
+### test_compat.lua (33)
 
-- Compat: GetAddOnMetadata reads the TOC through C_AddOns
-- Compat: GetAddOnMetadata falls back to the deprecated bare global
-- Compat: GetAddOnMetadata answers nil — not a placeholder — with no reader at all
 - Compat: GetSpellInfo flattens C_Spell's struct to the old multi-return
 - Compat: GetSpellInfo answers nil for an unknown spell rather than raising
 - Compat: GetSpellInfo and GetSpellTexture fall back to the bare globals
@@ -299,7 +296,7 @@ badge and any count quoted in the docs must agree with it.
 - PerfSetup: NS.Perf is the library instance, with the gate as a plain boolean field
 - PerfSetup: the capture ring is a SECOND SavedVariables global, outside the AceDB tree
 - PerfSetup: the capture record is stamped from the TOC manifest
-- PerfSetup: the manifest is read through NS.Compat, never by naming C_AddOns
+- PerfSetup: the manifest is read through NS.Version, never by naming C_AddOns
 - PerfSetup: no locale table is handed to the library
 - PerfSetup: every declared bucket is reached by a real bracket in the addon's source
 - PerfSetup: every bracket in the addon names a bucket the descriptor declares
@@ -358,6 +355,20 @@ badge and any count quoted in the docs must agree with it.
 - MediaSetup: every icon the header strip draws is one the library ships
 - MediaSetup: every name the library ships has a file in the vendored copy
 - MediaSetup: with no library there is no art, and that is not an error
+
+### test_envsetup.lua (11)
+
+- EnvSetup: the vendored library really did register, so the cases below mean something
+- EnvSetup: NS.Meta reads this addon's TOC
+- EnvSetup: NS.Meta asks about THIS addon's folder, not its title or its chat tag
+- EnvSetup: NS.Meta answers nil — not a placeholder — for a field the TOC does not carry
+- EnvSetup: NS.Version prefers the TOC over this addon's own constant
+- EnvSetup: NS.Version falls back to this addon's own constant
+- EnvSetup degraded: an install with no LibKa0s still reads its own TOC
+- EnvSetup: the deleted shim is gone from Compat
+- EnvSetup: the deprecated bare global is still a live rung, all the way to NS.version
+- EnvSetup: with no reader at all, core/Namespace.lua takes its own FALLBACK_VERSION
+- EnvSetup: the version was resolved at load, not deferred
 
 ### test_lifecycle.lua (26)
 
@@ -1370,7 +1381,7 @@ badge and any count quoted in the docs must agree with it.
 | test_loadorder.lua | 7 |
 | test_constants.lua | 21 |
 | test_secrets.lua | 38 |
-| test_compat.lua | 36 |
+| test_compat.lua | 33 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
@@ -1380,6 +1391,7 @@ badge and any count quoted in the docs must agree with it.
 | test_perfsetup.lua | 19 |
 | test_debuglogsetup.lua | 30 |
 | test_mediasetup.lua | 7 |
+| test_envsetup.lua | 11 |
 | test_lifecycle.lua | 26 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 29 |
@@ -1404,4 +1416,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1246** |
+| **Total** | **1254** |

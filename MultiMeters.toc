@@ -35,6 +35,11 @@ locales\enUS.lua
 
 # Core
 core\Compat.lua
+# The LibKa0s-Env seam. LOAD-BEARING POSITION, and not merely "after Compat, whose metadata
+# shim it replaced": core\Namespace.lua resolves the version at FILE SCOPE, so the seam has to
+# be published before it. A seam that loaded later would leave NS.version as the hardcoded
+# FALLBACK_VERSION for the life of the session, silently.
+core\EnvSetup.lua
 # Before Constants, deliberately: Constants.FONT_MONO is resolved from the seam this file
 # publishes, so a Constants that loaded first would resolve it to nil.
 core\MediaSetup.lua

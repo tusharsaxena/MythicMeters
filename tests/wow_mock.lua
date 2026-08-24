@@ -1708,8 +1708,8 @@ local function build()
     -- ── manifest ───────────────────────────────────────────────────────────
     --
     -- Stubbed HERE and not in the base (whose header explains why). Clear
-    -- `mocks.C_AddOns` — not `_G.C_AddOns` — to drive core/Compat.lua's
-    -- deprecated-global fallback; `mocks._G` resolves through this table.
+    -- `mocks.C_AddOns` — not `_G.C_AddOns` — to drive core/EnvSetup.lua's
+    -- deprecated-global rung; `mocks._G` resolves through this table.
     M.__toc = {
         Version = "0.1.0",
         Title   = "Ka0s Multi Meters",

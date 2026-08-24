@@ -23,9 +23,12 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │   └── enUS.lua        — NS.L, with the key-is-the-string metatable fallback.
 │                         Loads FIRST, ahead of core/, and bootstraps the namespace
 ├── core/
-│   ├── Compat.lua      — every cross-patch API call: C_AddOns, C_Spell,
+│   ├── Compat.lua      — every cross-patch API call: C_Spell,
 │                         C_SpecializationInfo, all eight C_DamageMeter reads and
-│                         C_StringUtil.CreateNumericRuleFormatter. 18 shims, no logic
+│                         C_StringUtil.CreateNumericRuleFormatter. 28 shims, no logic
+│   ├── EnvSetup.lua    — the LibKa0s-Env seam: NS.Meta / NS.Version, the TOC-manifest
+│                         reader Compat used to own. BEFORE Namespace.lua, which
+│                         resolves NS.version at file scope
 │   ├── Constants.lua   — NS.Constants / NS.Const: the STAT CATALOG (9 rows), the
 │                         enum resolutions, the MSG bus catalog (12 names), throttle
 │                         bounds, pool and row caps, the shipped mono font
@@ -134,14 +137,15 @@ own strings entirely.
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Compat.lua` | All 15 cross-patch shims. Never inspects a meter value; reading a field off a session table and passing it on is not inspection | `NS.Compat` | `_G` only |
+| `Compat.lua` | All 28 cross-patch shims — the TOC-manifest reader is no longer among them; it moved to `EnvSetup.lua`. Never inspects a meter value; reading a field off a session table and passing it on is not inspection | `NS.Compat` | `_G` only |
 | `Constants.lua` | The stat catalog, enum resolutions, the `MSG` catalog, timing and pool bounds, the monospace font path (resolved from the LibKa0s payload, falling back to the client font) and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum`, `NS.MediaFont` |
-| `Namespace.lua` | Addon identity and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.NewBusTarget` | `NS.Compat.GetAddOnMetadata` |
+| `EnvSetup.lua` | The LibKa0s-Env seam: this addon's TOC manifest, and the one place the manifest-then-constant version pair is resolved. Repeats the reader ladder itself on a degraded install, so an install missing LibKa0s still reports its packaged version | `NS.Meta`, `NS.Version` | `LibKa0s-Env-1.0`, `NS.version` at call time. Owns no state and registers no event |
+| `Namespace.lua` | Addon identity and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.NewBusTarget` | `NS.Meta` |
 | `State.lua` | The four session flags, each with exactly one named writer, and `State.Cache` / `State.WipeCache` (wipes **in place**, so a module may hold its sub-table as an upvalue) | `NS.State` | `NS.Constants.MSG` |
 | `Secrets.lua` | Restriction state, per-value and per-table inspection, and the two bounded walks. Correct when the whole secrets system is absent | `NS.Secrets` | `_G.C_RestrictedActions`, `_G.issecretvalue` and friends |
 | `MediaSetup.lua` | The LibKa0s-Media seam: where the icons and the monospace face come from, and the one call that registers the face with LibSharedMedia. Answers `nil` for both on a degraded install, which is what sends the header down its art ladder | `NS.Icon`, `NS.MediaFont` | `LibKa0s-Media-1.0`, LibSharedMedia. Owns no state and registers no event |
 | `CoreSetup.lua` | The LibKa0s-Core seam and the shared "library missing" cause clause. `NS.MakeCloseButton` is the one member WRAPPED rather than handed over: it supplies the addon folder name the library needs to build a texture path for its own close icon | `NS.Util.print` / `NS.Print`, `NS.Format` (printer, later rebound), `NS.IsConcatSafe`, `NS.SafeToString`, `NS.RGBA`, `NS.SKIN`, `NS.ApplySkin`, `NS.MakeCloseButton`, `NS.LIBKA0S_MISSING` | `NS.PREFIX` |
-| `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.version`, `NS.Compat`, and `Provider` / `WindowManager` / `Visibility` at call time |
+| `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.Version`, and `Provider` / `WindowManager` / `Visibility` at call time |
 | `DebugLogSetup.lua` | The console descriptor (including `addonName`, which is what makes the console's own close/copy/clear draw the collection's art), the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
 | `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
 | `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
@@ -213,25 +217,30 @@ both are bespoke by necessity, and both say why in their file headers.
    LibKa0s, LibSharedMedia, AceGUI-3.0-SharedMediaWidgets, LibDataBroker, LibDBIcon.
 2. **`locales/enUS.lua`** — first, so `NS.L` exists for every declaration below.
 3. **`core/`**, in this order and for these reasons:
-   1. `Compat.lua` — **first**, because `Namespace.lua` reads the TOC manifest through it on the very
-      next line.
-   2. `Constants.lua` — before everything that reads `NS.Constants.*` without an existence check.
+   1. `Compat.lua` — first in the block, though nothing now depends on that: the TOC-manifest
+      reader that used to make it load-bearing has moved to `EnvSetup.lua`.
+   2. `EnvSetup.lua` — **before `Namespace.lua`**, which calls the `NS.Meta` it publishes at file
+      scope. A seam loading later would neither raise nor log; `NS.version` would simply be the
+      hardcoded `FALLBACK_VERSION` for the session. Load-bearing, not conventional.
+   3. `Constants.lua` — before everything that reads `NS.Constants.*` without an existence check.
       Must stay free of logic.
-   3. `Namespace.lua` — resolves `NS.version` at load; everything after may read it.
-   4. `State.lua` — after `Constants` (the preview toggle names a message from the catalog).
-   5. `Secrets.lua` — before any consumer. Deliberately carries **no** perf bracket.
-   6. `CoreSetup.lua` — after `Constants` (for the prefix), before `MultiMeters.lua` (whose
-      AceConsole reclaim reads `NS.Util.print`), and **first of the five LibKa0s seams**, because
-      `NS.LIBKA0S_MISSING` is defined here.
-   7. `PerfSetup.lua` — after `Namespace` (a nil `version` stamps every capture record `v?`) and
+   4. `Namespace.lua` — resolves `NS.version` at load; everything after may read it.
+   5. `State.lua` — after `Constants` (the preview toggle names a message from the catalog).
+   6. `Secrets.lua` — before any consumer. Deliberately carries **no** perf bracket.
+   7. `CoreSetup.lua` — after `Constants` (for the prefix), before `MultiMeters.lua` (whose
+      AceConsole reclaim reads `NS.Util.print`), and **first of the LibKa0s seams that report a
+      degraded install**, because `NS.LIBKA0S_MISSING` is defined here. `EnvSetup.lua` and
+      `MediaSetup.lua` are exempt: neither touches the clause, and both are pinned earlier by a
+      file-scope reader.
+   8. `PerfSetup.lua` — after `Namespace` (a nil `version` stamps every capture record `v?`) and
       **before every `modules/` file that takes `local Perf = NS.Perf` at load**.
-   8. `DebugLogSetup.lua` — after `Constants`, `State` and `CoreSetup`.
-   9. `MediaSetup.lua` — **before `Constants.lua`**, which resolves `FONT_MONO` from `NS.MediaFont`,
+   9. `DebugLogSetup.lua` — after `Constants`, `State` and `CoreSetup`.
+   10. `MediaSetup.lua` — **before `Constants.lua`**, which resolves `FONT_MONO` from `NS.MediaFont`,
       and therefore before `defaults/Profile.lua` names the font at load. This is one of the few
       TOC positions in `core/` that is load-bearing rather than conventional.
-   10. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
-   11. `MultiMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
-   12. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
+   11. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
+   12. `MultiMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
+   13. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
        time, because `defaults/` loads later.
    13. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
        module at *call* time and owns no state, so nothing depends on where it loads.

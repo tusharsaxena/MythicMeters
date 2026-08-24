@@ -48,17 +48,12 @@ end
 --- without the metadata API. core/PerfSetup.lua resolves the same pair the same
 --- way, so a capture record and `/mm version` cannot disagree.
 ---
---- The manifest is read through NS.Compat rather than by naming C_AddOns here:
---- core/Compat.lua owns the C_AddOns -> _G.GetAddOnMetadata fallback
---- (architecture-§1), so an inline re-spelling would both duplicate the shim and
---- drop the pre-11.x seam it exists to keep.
-local function addonVersion()
-    local get = NS.Compat and NS.Compat.GetAddOnMetadata
-    local v = get and get(addonName, "Version")
-    if type(v) == "string" and v ~= "" then return v end
-    return NS.version or "?"
-end
-Sl.Version = addonVersion
+--- The manifest is read through NS.Meta rather than by naming C_AddOns here:
+--- core/EnvSetup.lua owns the seam over LibKa0s-Env-1.0 (architecture-§1), so an
+--- inline re-spelling would both duplicate the ladder and drop the pre-11.x rung
+--- it exists to keep. NS.Version() is that pair — manifest first, constant after
+--- — resolved once, in one place.
+Sl.Version = NS.Version
 
 -- Forward declarations. See "WHY THE HANDLERS RESOLVE LATE" above — every one of
 -- these is assigned below the verb table that references it.
@@ -180,7 +175,7 @@ cli = SlashLib:New({
     aliases      = { options = "config" },   -- back-compat with the collection's older spelling
 
     print   = function(line) out(line) end,
-    version = addonVersion,
+    version = NS.Version,
 
     -- ── The schema seams ──────────────────────────────────────────────────
     --

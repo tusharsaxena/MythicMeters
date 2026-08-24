@@ -68,7 +68,8 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | Layer | Files | Responsibility |
 |---|---|---|
 | `locales/` | `enUS.lua` | `NS.L`, with the key-is-the-string fallback. Loads first. |
-| `core/` boundary | `Compat.lua` | All 15 cross-patch shims, including the eight `C_DamageMeter` reads. No logic. |
+| `core/` boundary | `Compat.lua` | All 28 cross-patch shims, including the eight `C_DamageMeter` reads. No logic. |
+| `core/` boundary | `EnvSetup.lua` | The `LibKa0s-Env-1.0` seam: `NS.Meta` / `NS.Version`, the TOC-manifest reader `Compat.lua` used to own. |
 | `core/` values | `Constants.lua`, `Namespace.lua`, `State.lua` | The stat catalog, the bus catalog, identity, session-only flags and the shared cache. |
 | `core/` the rule | `Secrets.lua` | **The only file that inspects a meter value.** |
 | `core/` seams | `MediaSetup`, `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring, the art and font seam, and one AceGUI widget fixup. |
