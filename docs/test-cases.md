@@ -1012,7 +1012,7 @@ badge and any count quoted in the docs must agree with it.
 - Every death row has a distinct pool identity, id or no id
 - A death row wears the death icon
 
-### test_export.lua (73)
+### test_export.lua (74)
 
 - Export is a plain table on NS, not an AceAddon module
 - Export.Open refuses to open at all while restricted
@@ -1087,6 +1087,7 @@ badge and any count quoted in the docs must agree with it.
 - Hiding the export modal closes an open dropdown menu (LibKa0s-Widgets-1.0)
 - Hiding the export modal with no menu ever opened is a safe no-op
 - Clicking a Metric row builds a real menu row and stores that metric
+- Opening Channel after Metric repaints the pooled rows and stores a channel
 
 ### test_visibility.lua (22)
 
@@ -1363,7 +1364,7 @@ badge and any count quoted in the docs must agree with it.
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
 | test_drilldown.lua | 50 |
-| test_export.lua | 73 |
+| test_export.lua | 74 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
 | test_minimap.lua | 17 |
@@ -1373,4 +1374,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1215** |
+| **Total** | **1216** |

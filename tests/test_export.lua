@@ -1134,17 +1134,24 @@ end)
 -- being built and painted with no face named.
 --
 -- HOW THE FRAMES ARE OBSERVED. The shared menu is a file-local in Widgets.lua
--- with no getter, so this does what LibKa0s's own test_widgets.lua does:
--- captures what CreateFrame makes while the click runs. The order is the
--- library's own construction order — the menu, its click-catcher, then one
--- pooled Button per option — and counting them is how "a row was really built"
--- is asserted without reading anything back off a pooled row, which the
--- contract forbids a host to do.
+-- with no getter, so this does what LibKa0s's own test_widgets.lua does: it
+-- watches CreateFrame. What it records is the ARGUMENTS of each call — the
+-- frame type, the name and the parent, as they were passed — never anything
+-- read back off the frame afterwards, which for a pooled row the contract
+-- forbids a host to do (version-4-docs.md, "Rows are pooled across dropdowns").
+--
+-- It deliberately does NOT count frames or index them by position. Rows are
+-- pooled across every dropdown in the process and across addons, so "the menu,
+-- the catcher, then one Button per option" is only true of the very first
+-- dropdown ever opened in a given Lua state; a second selector opened in the
+-- same state, or a library that pre-warms the pool, builds fewer. So the watch
+-- is installed before the modal is even built and the row buttons are picked
+-- out by what they ARE — a Button parented to the popup — which holds however
+-- many of them already existed. Their creation order is the order Populate
+-- hands them to options, and that is the one ordering fact this leans on.
 test("Clicking a Metric row builds a real menu row and stores that metric", function()
     local inst = T.load()
     local NS = inst.NS
-    local modal = NS.Export.Open({})
-    assertTrue(type(modal) == "table", "the modal opened")
 
     local stats = NS.Constants.STATS
     assertTrue(#stats > 1, "the catalog offers more than one metric to pick between")
@@ -1158,32 +1165,119 @@ test("Clicking a Metric row builds a real menu row and stores that metric", func
     end
     assertTrue(target ~= nil, "the catalog offers a metric other than the current one")
 
-    local made, savedCreateFrame = {}, inst.mocks.CreateFrame
-    inst.mocks.CreateFrame = function(...)
-        local f = savedCreateFrame(...)
-        made[#made + 1] = f
+    local calls, savedCreateFrame = {}, inst.mocks.CreateFrame
+    inst.mocks.CreateFrame = function(ftype, name, parent, ...)
+        local f = savedCreateFrame(ftype, name, parent, ...)
+        calls[#calls + 1] = { frame = f, ftype = ftype, name = name, parent = parent }
         return f
     end
+
+    local modal = NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
     local ok, err = pcall(function() modal.metricDD:__fire("OnClick") end)
     inst.mocks.CreateFrame = savedCreateFrame
     assertTrue(ok, "the first click built the menu and its rows without raising: " .. tostring(err))
 
-    -- The menu, the catcher, and one pooled Button for every option in the list.
-    assertEqual(#made, #stats + 2,
-        "the first click built one real menu row per metric, not an empty menu")
-    local menu = made[1]
+    -- The shared popup is the one UNNAMED Frame parented straight to UIParent:
+    -- the modal is named (MODAL_NAME) and everything else this modal builds
+    -- hangs off the modal, not off UIParent.
+    local menu
+    for _, call in ipairs(calls) do
+        if call.ftype == "Frame" and call.name == nil and call.parent == inst.mocks.UIParent then
+            menu = call.frame
+            break
+        end
+    end
+    assertTrue(menu ~= nil, "the first click lazily built the shared popup menu")
     assertTrue(menu:IsShown(), "opening the Metric dropdown showed the shared menu")
+
+    -- Every pooled row Button that exists in this Lua state, in build order.
+    local rows = {}
+    for _, call in ipairs(calls) do
+        if call.ftype == "Button" and call.parent == menu then rows[#rows + 1] = call.frame end
+    end
+    assertTrue(#rows >= #stats,
+        ("the first click built one real menu row per metric, not an empty menu (%d rows for %d metrics)")
+            :format(#rows, #stats))
 
     -- Row i is the i-th option, in the order SetOptions was given them.
     local index
     for i, stat in ipairs(stats) do
         if stat.key == target.key then index = i break end
     end
-    made[index + 2]:__fire("OnClick")
+    rows[index]:__fire("OnClick")
 
     assertEqual(NS.GetSetting("export.metric"), target.key,
         "clicking the row stored that metric")
     assertEqual(menu:IsShown(), false, "and a single-select pick closed the menu behind it")
     assertTrue(tostring(modal.metricDD.text:GetText()):find(target.label, 1, true) ~= nil,
         "and the collapsed button repainted to the metric that was picked")
+end)
+
+-- ---------------------------------------------------------------------------
+-- A second selector, in the same Lua state, on the same pooled rows
+-- ---------------------------------------------------------------------------
+--
+-- The case above opens exactly one dropdown. This one opens Channel AFTER
+-- Metric, which is the state every real session is in from the second click
+-- onwards and the one the case above cannot reach: the popup already exists,
+-- its row buttons already exist, and Populate repaints the pooled rows rather
+-- than building new ones (version-4-docs.md, "Rows are pooled across
+-- dropdowns"). Nothing this addon owns may carry over between the two — the
+-- rows belong to the library and are shared with every other addon in the
+-- process, so the only thing this asserts is what the contract promises: the
+-- second dropdown's own onSelect fires with the second dropdown's own value.
+test("Opening Channel after Metric repaints the pooled rows and stores a channel", function()
+    local inst = T.load()
+    local NS = inst.NS
+
+    local calls, savedCreateFrame = {}, inst.mocks.CreateFrame
+    inst.mocks.CreateFrame = function(ftype, name, parent, ...)
+        local f = savedCreateFrame(ftype, name, parent, ...)
+        calls[#calls + 1] = { frame = f, ftype = ftype, name = name, parent = parent }
+        return f
+    end
+
+    local modal = NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    modal.metricDD:__fire("OnClick")
+    local ok, err = pcall(function() modal.channelDD:__fire("OnClick") end)
+    inst.mocks.CreateFrame = savedCreateFrame
+    assertTrue(ok, "opening a second selector over the first did not raise: " .. tostring(err))
+
+    local menu
+    for _, call in ipairs(calls) do
+        if call.ftype == "Frame" and call.name == nil and call.parent == inst.mocks.UIParent then
+            menu = call.frame
+            break
+        end
+    end
+    assertTrue(menu ~= nil and menu:IsShown(), "the one shared popup is open on the second selector")
+
+    local rows = {}
+    for _, call in ipairs(calls) do
+        if call.ftype == "Button" and call.parent == menu then rows[#rows + 1] = call.frame end
+    end
+
+    -- Whatever the Channel list is, its rows are the pooled ones the Metric
+    -- menu just used; the row at position i is its i-th option.
+    -- channelOptions() is file-local; it walks this catalog in this order, so
+    -- the catalog is the row order without a seam cut into the module for it.
+    local channels = NS.Constants.EXPORT_CHANNELS
+    assertTrue(type(channels) == "table" and #channels > 1,
+        "the catalog offers more than one channel to pick between")
+    assertTrue(#rows >= #channels, "the pooled rows cover the Channel list")
+
+    local before = NS.GetSetting("export.channel")
+    local index, target
+    for i, opt in ipairs(channels) do
+        if opt.key ~= before then index, target = i, opt.key break end
+    end
+    assertTrue(target ~= nil, "the modal offers a channel other than the current one")
+
+    rows[index]:__fire("OnClick")
+    assertEqual(NS.GetSetting("export.channel"), target,
+        "clicking a pooled row under the Channel dropdown stored a CHANNEL, not a metric")
 end)
