@@ -787,9 +787,14 @@ end
 --
 -- Two frames rather than one. The modal picks what to export; the copy window
 -- shows the result, at a higher strata so it sits ON TOP of the modal that
--- spawned it. That copy window is a deliberate local copy of the one in
--- LootHistory and the one in LibKa0s' debug log — the third in the collection,
--- recorded as a harvest candidate for the library rather than fixed here.
+-- spawned it.
+--
+-- The copy window is LibKa0s-Widgets-1.0's now. It used to be a deliberate local
+-- copy, and the comment here called itself "the third in the collection" — it
+-- was the fourth. BankLedger had one too, and the register that was supposed to
+-- be tracking them had never been written. Four copies of one frame is four
+-- skins to keep in step, and the collection stops reading as one author's work
+-- the first time one is restyled and the others are not.
 
 local MODAL_NAME = "MultiMetersExportWindow"
 local COPY_NAME  = "MultiMetersExportCopyWindow"
@@ -1004,93 +1009,72 @@ local function centerOnWindow(frame, win)
     end
 end
 
---- Build the copy window, once.
+-- The copy window belongs to LibKa0s-Widgets-1.0. What stays here is the
+-- DESCRIPTOR: the frame's global name, the size, the face, the title, the skin
+-- and the anchor — the things a vendored library cannot know about this addon.
+-- The build is lazy inside the library, so a session that never exports creates
+-- nothing.
+--
+-- The `scroll:GetWidth()` READ-BACK moved with the code it belongs to, and its
+-- note moves with it, because rule R3 (docs/data-flow.md) otherwise forbids
+-- reading geometry off a frame here. The exemption still applies and still for
+-- the same reason: this frame can never hold a meter value — its EditBox holds a
+-- plain CSV string, produced by a serializer that refuses to run at all while
+-- values can be secret. The read now happens inside the library's `Show`, with
+-- `editWidth` as the fallback for the first open, where the scroll frame has not
+-- been laid out yet and answers 0.
+
+--- Build the copy window handle, once.
 ---
---- @return table|nil  the frame, or nil with no client
-local function EnsureCopyFrame()
+--- @return table|nil  the handle, or nil with no client and no widget library
+local function ensureCopyWindow()
     if copyWindow then return copyWindow end
     if not hasUI() then return nil end
+    if not W or not W.CopyWindow then return nil end
 
-    copyWindow = CreateFrame("Frame", COPY_NAME, UIParent, "BackdropTemplate")
-    copyWindow:SetSize(COPY_WIDTH, COPY_HEIGHT)
-    copyWindow:SetPoint("CENTER")
-    -- FULLSCREEN so it sits above the DIALOG-strata modal that opened it. The
-    -- modal stays visible underneath, which is what makes "copy this, then pick
-    -- a different metric" one trip rather than two.
-    copyWindow:SetFrameStrata("FULLSCREEN")
-    copyWindow:EnableMouse(true)
-    copyWindow:SetMovable(true)
-    copyWindow:SetClampedToScreen(true)
+    copyWindow = W.CopyWindow({
+        addonName = addonName,
+        name      = COPY_NAME,
+        width     = COPY_WIDTH,
+        height    = COPY_HEIGHT,
+        title     = L["Export"] .. EM_DASH .. L["Ctrl+C, then Esc"],
+        font      = Const.FONT_MONO,
+        fontSize  = 10,
+        editWidth = EDIT_FALLBACK_WIDTH,
+        applySkin = NS.ApplySkin,
+        -- Consulted on every show, so the popup lands over the window that
+        -- spawned it wherever the user has since dragged it. The window's ANCHOR,
+        -- never its visible frame: the visible frame has held secret meter values
+        -- and anchoring to it would propagate that (rule R3), which is the same
+        -- reasoning centerOnWindow above carries for the modal.
+        anchorTo  = function()
+            return type(invoker) == "table" and invoker.anchor or nil
+        end,
+    })
 
-    makeTitleBar(copyWindow, L["Export"] .. EM_DASH .. L["Ctrl+C, then Esc"])
-
-    local scroll = CreateFrame("ScrollFrame", nil, copyWindow, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 8, -30)
-    scroll:SetPoint("BOTTOMRIGHT", -28, 10)
-
-    local edit = CreateFrame("EditBox", nil, scroll)
-    edit:SetMultiLine(true)
-    -- The bundled monospace face, by PATH — the LibSharedMedia name is a
-    -- different string and SetFont does not accept it. A CSV is columns of
-    -- digits and only lines up in a fixed-width font.
-    edit:SetFont(Const.FONT_MONO, 10, "")
-    edit:SetAutoFocus(false)
-    edit:SetWidth(EDIT_FALLBACK_WIDTH)
-    edit:SetScript("OnEscapePressed", function(self)
-        self:ClearFocus()
-        copyWindow:Hide()
-    end)
-    scroll:SetScrollChild(edit)
-    copyWindow.scroll, copyWindow.edit = scroll, edit
-
-    NS.ApplySkin(copyWindow)
-    -- Denser than the shared skin's 0.92. This frame is a wall of small
-    -- monospace text and the world behind it bleeding through costs legibility
-    -- in a way it does not on a frame showing four controls.
-    if copyWindow.SetBackdropColor then
-        copyWindow:SetBackdropColor(0.06, 0.06, 0.08, 0.95)
-    end
-
-    copyWindow:Hide()
-
-    -- By NAME, type-guarded: UISpecialFrames is a list of global frame names and
-    -- the table itself is not guaranteed to exist outside a real client.
-    if type(UISpecialFrames) == "table" then
-        table.insert(UISpecialFrames, COPY_NAME)
-    end
-
+    -- Published for the suite the moment it exists, not at file load: an EditBox
+    -- is write-only through the frame API as this module uses it, so the handle
+    -- is the only seam from which a headless case can assert what the window is
+    -- showing. Same reason as `Export.__geometry` above.
+    Export.__copyWindow = copyWindow
     return copyWindow
 end
 
 --- Show text in the copy window, selected and ready for Ctrl+C.
 ---
---- The order is load-bearing: width, then text, then cursor to the top, then
---- show, then focus, then highlight. Highlighting before the frame is shown
---- selects nothing, and focusing before the text is set leaves the cursor
---- wherever the last export left it.
----
---- The `scroll:GetWidth()` read-back deserves a note, because reading geometry
---- off a frame is otherwise forbidden here (rule R3). It is legal precisely
---- because this frame can never hold a meter value: its EditBox holds a plain
---- CSV string, produced by a serializer that refuses to run at all while values
---- can be secret. The fallback covers the first open, where the scroll frame has
---- not been laid out yet and answers 0.
+--- The ORDER inside the window — width, text, cursor, show, focus, highlight —
+--- is the library's now. It was load-bearing here and it is load-bearing there;
+--- what changed is that it is written down once instead of four times.
 ---
 --- @param text string
 local function showCopy(text)
-    local frame = EnsureCopyFrame()
-    if not frame then return end
-
-    centerOnWindow(frame, invoker)
-
-    local width = frame.scroll:GetWidth()
-    frame.edit:SetWidth((type(width) == "number" and width > 0) and width or EDIT_FALLBACK_WIDTH)
-    frame.edit:SetText(text)
-    frame.edit:SetCursorPosition(0)
-    frame:Show()
-    frame.edit:SetFocus()
-    frame.edit:HighlightText()
+    local win = ensureCopyWindow()
+    if not win then return end
+    win:Show(text)
 end
+
+-- See ensureCopyWindow for why the pair is published.
+Export.__showCopy = showCopy
 
 -- ---------------------------------------------------------------------------
 -- The modal's three selectors

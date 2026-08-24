@@ -1062,6 +1062,18 @@ its export glyph.
   when the scroll frame has not been laid out yet, so a first export whose lines wrap oddly and a
   second that does not is that fallback doing its job (report it, but it is cosmetic).
 
+**The copy window is LibKa0s-Widgets-1.0's now** — the frame is built by the library from
+a descriptor this addon passes, and the six steps below are the adoption check. Nothing above is
+meant to change; a difference between the two lists is the bug.
+
+1. `/mm` → open a meter window → Export → **Export to CSV**.
+2. The copy window opens **centred on the meter window**, above the modal, with the CSV **already
+   selected**.
+3. Ctrl+C, paste into a text editor: the whole CSV, with its line breaks.
+4. Esc closes the copy window and leaves the modal open.
+5. Drag the meter window somewhere else, export again: the copy window follows it.
+6. `/reload`, export again: still one window, still centred.
+
 **Now check the file itself**, in a text editor or by pasting into a spreadsheet:
 
 - **The header line is exactly 26 columns**, and it is:

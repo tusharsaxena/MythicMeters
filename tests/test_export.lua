@@ -1281,3 +1281,42 @@ test("Opening Channel after Metric repaints the pooled rows and stores a channel
     assertEqual(NS.GetSetting("export.channel"), target,
         "clicking a pooled row under the Channel dropdown stored a CHANNEL, not a metric")
 end)
+
+-- ---------------------------------------------------------------------------
+-- The copy window
+-- ---------------------------------------------------------------------------
+--
+-- This addon's copy frame described itself as "the third in the collection". It
+-- was the fourth — BankLedger had one too, and nobody was looking. It is now
+-- none of them: the frame belongs to LibKa0s-Widgets-1.0 and this file passes a
+-- descriptor.
+--
+-- The handle and the show call are published as `Export.__copyWindow` and
+-- `Export.__showCopy` because an EditBox is WRITE-ONLY through the frame API as
+-- this addon uses it — nothing else in the module ever reads the text back — so
+-- there is no other seam from which to assert what the window is showing.
+
+test("Export: the copy window comes from LibKa0s-Widgets-1.0", function()
+    local fh = assert(io.open((T.root or ".") .. "/modules/Export.lua", "r"))
+    local source = fh:read("*a")
+    fh:close()
+
+    local _, builders = source:gsub('CreateFrame%("EditBox"', "")
+    assertEqual(builders, 1,
+        "only the whisper box builds an EditBox here now; the copy window's belongs to the library")
+    assertTrue(source:find("CopyWindow", 1, true) ~= nil, "the descriptor call is present")
+end)
+
+test("Export: showing the copy window puts the text in it", function()
+    local text = "Metric,Value\r\nDPS,1234\r\n"
+    T.NS.Export.__showCopy(text)
+    assertEqual(T.NS.Export.__copyWindow:GetText(), text)
+end)
+
+test("Export: the copy window is built once and reused", function()
+    T.NS.Export.__showCopy("first")
+    local f = T.NS.Export.__copyWindow:GetFrame()
+    T.NS.Export.__showCopy("second")
+    assertTrue(T.NS.Export.__copyWindow:GetFrame() == f,
+        "a rebuild per open leaks a frame per open — frames are never destroyed in WoW")
+end)
