@@ -33,7 +33,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 4
+local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 5
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -184,13 +184,50 @@ local function EnsureMenu()
   menu:Hide()
   menu.buttons = {}
 
-  local catcher = CreateFrame("Button", nil, UIParent)
-  catcher:SetAllPoints(UIParent)
-  catcher:SetFrameStrata("FULLSCREEN")
-  catcher:Hide()
-  catcher:SetScript("OnClick", function() menu:Hide() end)
-  menu.catcher = catcher
-  menu:SetScript("OnHide", function() catcher:Hide() end)
+  -- ── HOW AN OUTSIDE CLICK CLOSES THIS, AND WHY IT IS NOT A CATCHER ──────────────────────────
+  --
+  -- Through minor 4 this was a full-screen `Button` at FULLSCREEN strata, shown alongside the menu,
+  -- whose OnClick hid it. That frame INTERCEPTED the click, and intercepting was the defect:
+  --
+  --   * A `Button` with no `RegisterForClicks` takes `LeftButtonUp` and nothing else. A right-click
+  --     anywhere while a menu was open landed on the catcher, found no handler for that button and
+  --     was SWALLOWED — the menu stayed open and whatever was underneath never heard the click. It
+  --     survived from minor 1 because neither shipped consumer had a right-click surface on the
+  --     same window as a dropdown; LootHistory was the first, and there a right-click on a history
+  --     row simply did nothing.
+  --   * Even the left-click it did handle was eaten. Dismissing the menu cost a click that did
+  --     nothing else, which is not how a menu should feel.
+  --
+  -- So the menu no longer intercepts anything. It LISTENS: `GLOBAL_MOUSE_DOWN` fires for a press
+  -- anywhere in the UI, on any button, whether or not something else consumed it — so the menu can
+  -- react to a click it never touched, and the click goes on to reach whatever is under the cursor.
+  -- One press now both dismisses the menu and does the thing the player pressed on.
+  --
+  -- Registered while shown and dropped on hide, rather than for the life of the process: this is a
+  -- handler that would otherwise run on every mouse press in the game for the rest of the session,
+  -- in every host that ever vendored this file, and no host agreed to that.
+  -- The button that was pressed arrives as the next argument and is deliberately not read: no
+  -- button is enumerated anywhere in this widget, so a mouse with more of them behaves the same.
+  menu:SetScript("OnEvent", function(self, event)
+    if event == "GLOBAL_MOUSE_DOWN" then self:__OutsideClick() end
+  end)
+  menu:SetScript("OnHide", function(self) self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
+
+  -- Two presses are NOT outside, and both exemptions are load-bearing:
+  --
+  --   * On the menu — otherwise the menu would close under the player's own row click, on the
+  --     press, before the release the row's OnClick needs.
+  --   * On the dropdown that dropped it — that button's own OnClick is the toggle. Close on the
+  --     press and the release finds the menu hidden and re-opens it, and the menu becomes
+  --     impossible to close by the button that opened it. Only the OWNER is exempt: a press on a
+  --     different dropdown closes this menu, and that dropdown's OnClick then opens its own, which
+  --     is how exactly one menu stays open across the process.
+  function menu:__OutsideClick()
+    if self:IsMouseOver() then return end
+    local owner = self._owner
+    if owner and owner.IsMouseOver and owner:IsMouseOver() then return end
+    self:Hide()
+  end
 
   function menu:Populate(dd)
     for _, b in ipairs(self.buttons) do b:Hide() end
@@ -351,8 +388,8 @@ local function MakeDropdown(parent, width, opts)
     m:Populate(self2)
     m:ClearAllPoints()
     m:SetPoint("TOPLEFT", self2, "BOTTOMLEFT", 0, -1)
-    m.catcher:Show()
     m:Show()
+    m:RegisterEvent("GLOBAL_MOUSE_DOWN")
   end)
   return dd
 end
@@ -377,13 +414,16 @@ end
 --- so no host holds a reference to it and no host's own Hide/OnHide reaches it — the widget kept
 --- that shape on purpose (see the header comment on `dd.__check`) precisely so that two addons'
 --- dropdowns can share one pool. `menu:Hide()` is enough on this end: the menu's own `OnHide`
---- script (set in EnsureMenu) already hides `menu.catcher`, so this function does not touch the
---- catcher directly.
+--- script (set in EnsureMenu) drops its `GLOBAL_MOUSE_DOWN` registration, so this function does not
+--- unregister anything itself.
 ---
 --- Without this, a host that closes its own window by any route that is not a click on the
---- dropdown — Escape, a slash command, anything that is not the click-catcher's own OnClick —
+--- dropdown — Escape, a slash command, anything that is not a mouse press at all —
 --- leaves the menu ORPHANED: still shown, still at FULLSCREEN_DIALOG, floating over the game with
---- no owner left to hide it. A host must call this from every non-click close path it has.
+--- no owner left to hide it. A host must call this from every non-click close path it has. Since
+--- minor 5 the menu closes itself on a mouse press anywhere outside it, which narrows the window
+--- but does not close it: a host window hidden by Escape or a slash command is hidden without any
+--- click at all.
 function lib.CloseMenu()
   if menu and menu:IsShown() then menu:Hide() end
 end

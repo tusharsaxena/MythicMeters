@@ -1,0 +1,24 @@
+Ka0s Multi Meters — offline perf  (v0.1.0, label 'offline')
+20 group members, 7 columns, throttle 0.25s, 200 events per burst
+
+scenario                  iters     ms/iter   api/iter   bytes/iter
+refresh20x7                 300     1.20846       9.00     351335.0
+refresh20x7Restricted       300     1.49255       9.00     447916.5
+throttleBurst                 1    32.71900       9.00     430612.0
+throttleIdle                300     0.00061       0.00          0.0
+drillOpenClose              300     0.02587       1.00      13098.2
+refreshWhileDrilled         300     0.18175       1.00      48571.4
+rosterRebuild               300     1.05469       9.00     369750.7
+rosterBurst                   1     1.66500       9.00     375867.0
+rosterCached                300     1.10155       9.00     351313.2
+applyConfig                 300     0.37622       0.00     154712.3
+probeOverheadOff            300     0.96704       9.00     351313.0
+probeOverheadOn             300     1.06435       9.00     351318.0
+suspended                   300     0.01103       0.00       5162.3
+
+timings are for orientation only — compare scenarios within a run, never across machines
+
+2 assertions FAILED:
+  - a restricted pass allocated 447916 bytes/iter, over the 436000-byte ceiling — identity correlation grew
+  - a dormant pass allocated 351313 bytes/iter, over the 336000-byte ceiling — one refresh of this window grew
+wrote docs/automated-tests/20260825-021705/perf.json
