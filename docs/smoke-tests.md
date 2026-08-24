@@ -955,6 +955,17 @@ its export glyph.
   behind it.
 - Pick a different metric. The menu closes, the button reads `Metric: <that one>`.
 - Repeat for **Channel** and **Lines**. Same skin, same behaviour, in all three.
+- **Open Metric, then click Channel without picking anything.** The Metric menu **closes** as the
+  Channel menu drops: exactly one menu on screen, never two stacked. There is one popup frame in the
+  whole client — `LibKa0s-Widgets-1.0`'s menu is a process-wide singleton shared by every dropdown
+  in every Ka0s addon loaded — so opening a second dropdown re-points that one frame the way a
+  native game menu does. Two menus at once would mean two popups exist, which no amount of exercising
+  the three selectors *one at a time* (the line above) can show.
+- **No row in any of these three menus carries a leading glyph**, and none should. `makeSelector` in
+  `modules/Export.lua` passes no `opts.glyphFont`, which is correct rather than an omission to
+  repair: the face is a precondition for an option that sets `glyph`, and none of this modal's
+  options does. A row here showing a box or a stray character in front of its label means one grew a
+  `glyph` without the mono face growing with it.
 - Open the modal from a window sorted by **Healing**. Metric reads
   **`Metric: Healing`** before you touch anything — there is no
   "Match the window" entry any more, and there should not be one.

@@ -56,9 +56,16 @@
 -- whose consumer would not be obvious from the call site alone.
 --
 --   "chevron-down" — modules/Export.lua's three modal selectors (Metric,
---   Channel, Lines), each passed as `opts.chevron` to LibKa0s-Widgets-1.0's
---   Dropdown constructor. NS.Icon degrading to nil there is exactly the
---   Dropdown's own fallback: the widget draws Blizzard's own arrow instead.
+--   Channel, Lines). Asked ONCE, in that file's `makeSelector` factory, and
+--   passed as `opts.chevron` to LibKa0s-Widgets-1.0's Dropdown constructor;
+--   three selectors resolving their own art is three skins to keep in step, so
+--   there is one place to change and this note names it. NS.Icon degrading to
+--   nil there is exactly the Dropdown's own fallback: the widget draws
+--   Blizzard's own arrow instead.
+--
+--   No FONT goes to that widget, and that is deliberate: `opts.glyphFont` is a
+--   precondition for an option row carrying a `glyph`, and no option this addon
+--   builds carries one. See `makeSelector` for what would have to change first.
 
 local addonName, NS = ...
 
