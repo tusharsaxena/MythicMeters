@@ -366,6 +366,17 @@ Constants.MSG = {
     ENTERING_WORLD      = "Ka0s_MultiMeters_ENTERING_WORLD",      -- login / reload / zone-in
     RESTRICTION_CHANGED = "Ka0s_MultiMeters_RESTRICTION_CHANGED", -- { type, state }
 
+    -- The player's own state, for modules/Visibility.lua's rules. Two messages
+    -- rather than one because they are two different kinds of transition:
+    -- COMBAT_CHANGED fires twice a pull and is the only one anything other than
+    -- visibility is ever likely to want, while PLAYER_STATE_CHANGED is the
+    -- catch-all edge for mounting, gliding, shapeshifting, boarding a taxi,
+    -- opening a pet battle and dying. Neither carries the state itself: the
+    -- rules read it live at the moment they are asked, so a payload here would
+    -- be a second answer that can disagree with the first.
+    COMBAT_CHANGED      = "Ka0s_MultiMeters_COMBAT_CHANGED",      -- entered or left combat
+    PLAYER_STATE_CHANGED = "Ka0s_MultiMeters_PLAYER_STATE_CHANGED", -- mount / glide / taxi / ...
+
     -- core/Database.lua, on an AceDB profile swap / copy / reset.
     PROFILE_CHANGED     = "Ka0s_MultiMeters_PROFILE_CHANGED",     -- { newProfileKey }
 
@@ -389,6 +400,21 @@ Constants.MSG = {
     -- exactly the pair this catalog exists to make impossible to mistype.
     DRILLDOWN_CHANGED   = "Ka0s_MultiMeters_DRILLDOWN_CHANGED",   -- { windowId, active }
 }
+
+--- How long to wait before asking the player-state rules a second time, in
+--- seconds.
+---
+--- SOME CLIENT STATE LAGS ITS OWN EVENT. IsMounted() has already flipped by the
+--- time PLAYER_MOUNT_DISPLAY_CHANGED arrives; C_PlayerInfo.GetGlidingInfo's
+--- canGlide has not always done so at its edge. Read at the edge alone, a
+--- lagging input answers with the state the player just left — and because a
+--- hidden window has no OnUpdate running, that stale answer is the last one
+--- anything takes until the next zone change or settings write.
+---
+--- So every player-state edge is answered twice: once immediately, and once
+--- after this delay. Long enough for the client to settle, short enough that a
+--- window coming back is not something the player waits on.
+Constants.PLAYER_STATE_SETTLE = 0.5
 
 -- ---------------------------------------------------------------------------
 -- Refresh timing

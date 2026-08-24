@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1216%2F1216_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1246%2F1246_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -94,7 +94,7 @@ are currently looking at, not all of them.
 | Text | Which text sits left and right, number format, max name length, font, size, outline, shadow, color |
 | Icons | Class, spec and role icons — which to show, how big, where |
 | Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
-| Visibility | Dungeon, raid, arena, battleground, open world; hide when solo or in a vehicle |
+| Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
 | Columns | Add, remove and reorder columns; per-column width and whether it draws a bar |
 | Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |
 | General | Minimap button, debug console, and what the export modal remembers — metric, channel, whisper target, chat lines |

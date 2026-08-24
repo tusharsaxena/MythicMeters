@@ -304,7 +304,7 @@ function Provider.GetColumn(a, b, c, d)
     local stat = STAT_BY_KEY[statKey]
     if not stat then
         -- A column configured against a build that offered more stats than this
-        -- one. Named rather than silently skipped so `/mm status` can say which.
+        -- one. Named rather than silently skipped so `/mm debug diag` can say which.
         column.reason = "unknown stat"
         return column
     end
@@ -721,7 +721,7 @@ function Provider:Resume()
     if State.debug then NS.Debug("Provider", "resumed") end
 end
 
---- Whether reads are currently inert. Published for `/mm status` and the tests.
+--- Whether reads are currently inert. Published for `/mm debug diag` and the tests.
 --- @return boolean
 function Provider.IsSuspended(_)
     return suspended

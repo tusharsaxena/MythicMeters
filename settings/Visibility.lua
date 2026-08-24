@@ -1,7 +1,8 @@
 -- settings/Visibility.lua
 --
--- The Visibility page: which contexts this window shows itself in, plus the two
--- extra rules (hide when solo, hide in vehicles).
+-- The Visibility page: which contexts this window shows itself in, the extra
+-- rules that override a context that already said yes, and the two combat
+-- rules.
 --
 -- Pure schema — every widget is a `window.visibility.*` row in NS.Schema.
 --
@@ -12,16 +13,27 @@
 -- joined, no row is laid out. A player who runs six windows and shows one of
 -- them in the open world pays for one.
 --
--- That is also why "Open world" ships OFF while the four instance contexts ship
--- ON. It is not a taste default. The open world is where a meter is noise and
--- where a player spends most of their time, so it is the context where a window
--- left on by accident costs the most for the least.
+-- IT IS ALSO WHY EVERYTHING SHIPS PERMISSIVE. Every context is on and every rule
+-- is off, so a fresh profile shows the meter wherever the player stands. The
+-- first version of this page argued the other way — the open world off, four
+-- rules on, on the reasoning that a meter in the open world is noise — and that
+-- reasoning was about somebody else's taste. The cost of being wrong about it is
+-- this feature's worst failure: a window that never appears, and seventeen
+-- checkboxes to read before you can tell which one took it away. A page that
+-- only ever shows until you ask it not to cannot fail that way.
 --
 -- Combat state here is read with UnitAffectingCombat("player"), never
 -- InCombatLockdown(). They are not interchangeable: lockdown is about whether
 -- the addon may touch a protected frame, and these rules are about what the
 -- player is doing. Using the wrong one gives a window that reappears a second
 -- late every pull.
+--
+-- EVERY RULE BELOW THE CONTEXT BLOCK IS HIDE-SHAPED, including the two combat
+-- rows, which is why the page offers "Hide in combat" rather than "Show in
+-- combat". A key missing from a stored window must read as "nothing objects",
+-- and a show-shaped key is false when absent — so a profile written before a
+-- rule existed would have every window hidden by a setting its owner never
+-- touched. See ShouldShow in modules/Visibility.lua.
 
 local addonName, NS = ...
 

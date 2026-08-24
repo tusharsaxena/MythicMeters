@@ -271,16 +271,28 @@ local function reportVisibility()
     if not inst then out("  no window") return end
 
     local v = inst.config.visibility or {}
-    out(string.format("  dungeon=%s raid=%s arena=%s bg=%s world=%s",
+    out(string.format("  dungeon=%s raid=%s arena=%s bg=%s delve=%s scenario=%s world=%s",
         tostring(v.dungeon), tostring(v.raid), tostring(v.arena),
-        tostring(v.battleground), tostring(v.world)))
-    out(string.format("  hideWhenSolo=%s hideInVehicle=%s",
-        tostring(v.hideWhenSolo), tostring(v.hideInVehicle)))
+        tostring(v.battleground), tostring(v.delve), tostring(v.scenario),
+        tostring(v.world)))
+    out(string.format("  hideWhenSolo=%s hideInVehicle=%s hideWhenMounted=%s hideWhenSkyriding=%s",
+        tostring(v.hideWhenSolo), tostring(v.hideInVehicle),
+        tostring(v.hideWhenMounted), tostring(v.hideWhenSkyriding)))
+    out(string.format("  hideOnTaxi=%s hideInHousing=%s hideInPetBattle=%s hideWhenDead=%s",
+        tostring(v.hideOnTaxi), tostring(v.hideInHousing),
+        tostring(v.hideInPetBattle), tostring(v.hideWhenDead)))
+    out(string.format("  hideInCombat=%s hideOutOfCombat=%s",
+        tostring(v.hideInCombat), tostring(v.hideOutOfCombat)))
 
     local inInstance, kind = false, "none"
     if _G.IsInInstance then inInstance, kind = _G.IsInInstance() end
-    out(string.format("  context: inInstance=%s type=%s inGroup=%s testMode=%s",
+    -- The resolved context as well as Blizzard's raw token, because the two stop
+    -- matching exactly where this report is most needed: a delve reports
+    -- "scenario" and resolves to `delve`.
+    local V = NS.Visibility
+    out(string.format("  context: inInstance=%s type=%s resolved=%s inGroup=%s testMode=%s",
         tostring(inInstance), tostring(kind),
+        tostring(V and V.GetContext and V.GetContext()),
         tostring(_G.IsInGroup and _G.IsInGroup()),
         tostring(NS.State and NS.State.testMode)))
 

@@ -81,7 +81,7 @@ badge and any count quoted in the docs must agree with it.
 - Secrets degraded: canaccessvalue alone missing still refuses a known secret
 - Secrets degraded: canaccesstable alone missing still refuses a secret table
 
-### test_compat.lua (29)
+### test_compat.lua (36)
 
 - Compat: GetAddOnMetadata reads the TOC through C_AddOns
 - Compat: GetAddOnMetadata falls back to the deprecated bare global
@@ -112,6 +112,13 @@ badge and any count quoted in the docs must agree with it.
 - Compat: HasRecapEvents is a PLAIN boolean, whatever the client returns
 - Compat: the recap shims never inspect what they carry
 - Compat.HasDeathRecap keys on the EVENTS, not on the namespace
+- Compat.IsInDelve answers on any ONE rung of the ladder
+- Compat.IsInDelve is false in an ordinary scenario
+- Compat.IsInDelve is false on a client with none of the delve APIs
+- Compat.IsSkyriding reads glide CAPABILITY, not altitude
+- Compat.IsSkyriding is a PLAIN boolean, and false with no C_PlayerInfo
+- Compat.IsInHousing follows C_Housing, and is false without it
+- Compat: a delve namespace present but missing its member does not raise
 
 ### test_state.lua (17)
 
@@ -352,7 +359,7 @@ badge and any count quoted in the docs must agree with it.
 - MediaSetup: every name the library ships has a file in the vendored copy
 - MediaSetup: with no library there is no art, and that is not an error
 
-### test_lifecycle.lua (23)
+### test_lifecycle.lua (26)
 
 - Lifecycle: NS IS the AceAddon object, promoted in place
 - Lifecycle: every module registers, and the enable cascade runs them all
@@ -363,6 +370,9 @@ badge and any count quoted in the docs must agree with it.
 - Lifecycle: with the settings layer gone, `/mm` is claimed anyway and says why
 - Lifecycle: OnEnable registers exactly the events the fan-out handles
 - Lifecycle: no module registers a game event of its own
+- Lifecycle: both combat edges fan out as one message carrying nothing
+- Lifecycle: every player-state edge fans out as PLAYER_STATE_CHANGED
+- Lifecycle: a client with no PLAYER_IS_GLIDING_CHANGED still enables
 - Lifecycle: PLAYER_ENTERING_WORLD is republished with its login/reload flags
 - Lifecycle: the roster cache is dropped BEFORE ROSTER_CHANGED goes out
 - Lifecycle: a meter reset wipes EVERY cache before publishing
@@ -618,7 +628,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (94)
+### test_window.lua (103)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -687,6 +697,15 @@ badge and any count quoted in the docs must agree with it.
 - The sort arrow moves to the Player header in name mode
 - Test mode is marked in RED in the title, and clears when it is off
 - Leaving test mode does not close the window
+- A player-state edge re-runs the show ladder on the window itself
+- A combat edge re-runs the show ladder on the window itself
+- The show ladder is re-run ONLY from a message, never from the refresh tick
+- Entering a vehicle hides the window on its own edge
+- A vehicle event about somebody else is not republished
+- A state that lags its own event is caught by the settle pass
+- The settle pass is scheduled once, however many edges land together
+- A glide event's boolean payload is not mistaken for a unit token
+- A filtered-out unit event schedules nothing
 - Building a window sets no text on a fontless FontString
 - Header art falls back to ASCII on a client with none of the atlases
 - Header art prefers an atlas where the client has one
@@ -1089,16 +1108,27 @@ badge and any count quoted in the docs must agree with it.
 - Clicking a Metric row builds a real menu row and stores that metric
 - Opening Channel after Metric repaints the pooled rows and stores a channel
 
-### test_visibility.lua (22)
+### test_visibility.lua (33)
 
 - GetContext translates Blizzard's instance token to the setting's name
+- A delve reads as `delve`, not as the scenario it reports itself to be
 - An instance type this build has never heard of resolves to world
-- The shipped matrix is dungeon / raid / arena / battleground on, world off
+- A fresh profile shows the window everywhere and hides it nowhere
 - The reason token is stable and unlocalized
 - hideWhenSolo hides a window whose context already said yes
 - hideInVehicle hides a window whose context already said yes
 - Context is decided BEFORE the two vetoes, so the reason is the real one
 - The vehicle answer is read live, because nothing on the bus announces it
+- Each player-state rule hides its own state, and only when switched on
+- A rule switched on with its state absent leaves the window alone
+- A window whose rules predate these keys is not hidden by them
+- Skyriding hides on capability, before the player has left the ground
+- A druid travel form counts as mounted; a combat form does not
+- hideInCombat and hideOutOfCombat each own one side of the pull
+- Both combat rules on is a window that never shows, and says which side
+- The combat answer is read live, with no latched flag to go stale
+- Not one rule ships switched on
+- Context is decided before EVERY veto, however many there are
 - A window with no rules at all is allowed, not hidden
 - A non-table window is refused by name
 - Allows() is the same implementation under the ladder's name
@@ -1110,7 +1140,7 @@ badge and any count quoted in the docs must agree with it.
 - A window that should not show never reaches the provider at all
 - The refusal lifts the moment the context does
 - modules/Visibility.lua never touches a frame
-- modules/Visibility.lua uses no combat rule, and no InCombatLockdown proxy
+- The combat rules use UnitAffectingCombat, never an InCombatLockdown proxy
 - Visibility listens on the bus and registers no game event
 - A profile change forgets the old answers and re-evaluates
 
@@ -1340,7 +1370,7 @@ badge and any count quoted in the docs must agree with it.
 | test_loadorder.lua | 7 |
 | test_constants.lua | 21 |
 | test_secrets.lua | 38 |
-| test_compat.lua | 29 |
+| test_compat.lua | 36 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 38 |
@@ -1350,7 +1380,7 @@ badge and any count quoted in the docs must agree with it.
 | test_perfsetup.lua | 19 |
 | test_debuglogsetup.lua | 30 |
 | test_mediasetup.lua | 7 |
-| test_lifecycle.lua | 23 |
+| test_lifecycle.lua | 26 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 29 |
 | test_provider.lua | 61 |
@@ -1358,14 +1388,14 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 94 |
+| test_window.lua | 103 |
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 74 |
-| test_visibility.lua | 22 |
+| test_visibility.lua | 33 |
 | test_windowmanager.lua | 31 |
 | test_minimap.lua | 17 |
 | test_schema.lua | 32 |
@@ -1374,4 +1404,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1216** |
+| **Total** | **1246** |

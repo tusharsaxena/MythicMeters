@@ -43,7 +43,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 | 4 | Settings panel | [Page sweep and panel/CLI parity](#4-settings-panel-sweep) |
 | 5 | Columns | [Column editor](#5-column-editor) |
 | 6 | Multi-window | [Second window, copy settings, independence](#6-multi-window) |
-| 7 | Visibility | [Context matrix](#7-visibility-matrix) |
+| 7 | Visibility | [Context matrix](#7-visibility-matrix) · [Hide rules and combat](#7b-hide-rules-and-combat) |
 | 8 | **Secret values** | [**Mythic+ pull — the secret-value path**](#8-mythic-pull--the-secret-value-path) |
 | 9 | **Sorting** | [**Live ranking mid-pull, and identity ambiguity**](#9-live-ranking-mid-pull-and-identity-ambiguity) |
 | 10 | **Interaction** | [**Tooltips, drill-down and death recap mid-pull**](#10-tooltips-drill-down-and-death-recap-mid-pull) |
@@ -133,8 +133,8 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
   one).
 - It shows the six default columns left to right after the name column: **Damage · Healing ·
   Interrupts · Dispels · Avoidable Damage · Deaths**.
-- Standing solo in the open world the window is **hidden** — `visibility.world` ships `false` and
-  `hideWhenSolo` ships `true`.
+- Standing solo in the open world the window is **shown**: every context ships on and every hide
+  rule ships off.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
 - Settings → AddOns shows a **Ka0s Multi Meters** parent with **thirteen** subcategories in this
   order: Windows · Frame · Header · Rows · Bars · Text · Icons · Tooltip · Visibility · Columns ·
@@ -257,19 +257,50 @@ is precisely what must not happen.
 
 ### 7. Visibility matrix
 
-**Steps.** With the shipped rules (dungeon / raid / arena / battleground on, world off,
-hide-when-solo on, hide-in-vehicle on), visit: solo open world · grouped open world · a five-player
-dungeon · a raid · a battleground · a vehicle (a quest turret or a Mythic+ dungeon vehicle
-encounter).
+**Steps.** A **fresh profile**, so nothing has been switched. Visit: solo open world · grouped open
+world · a five-player dungeon · a raid · a battleground · a delve · a vehicle (a quest turret or a
+Mythic+ dungeon vehicle encounter).
 
 **Pass.**
-- Solo open world → hidden. Grouped open world → still hidden (world is off).
-- Turn **Open world** on: grouped open world shows, solo still hides (`hideWhenSolo` is layered on
-  top of a context that already said yes).
-- Dungeon / raid / battleground → shown.
-- Entering a vehicle hides the window; leaving shows it again. This one may take up to one refresh
-  interval (0.25s default) because no bus message announces a vehicle transition — the predicate is
-  read live rather than cached, which is why it is right at all.
+- **The window is visible in every one of them.** Show everywhere, hide nowhere is the shipped
+  default: a fresh profile has all seven contexts on and all ten rules off, so nothing takes the
+  window away until the player asks. A window missing anywhere on a fresh profile is a bug.
+- Turn **Open world** off: it hides outdoors and still shows in the dungeon.
+- Turn **Hide when solo** on and drop group: it hides. Group up: it returns.
+- A **delve** → shown, and `/mm debug diag` reports `type=scenario resolved=delve`. This is the one
+  context where Blizzard's token and the addon's answer deliberately disagree: delves have no
+  instance type of their own. Turn **Delves** off and the window hides while **Scenarios** stays on —
+  if it hides in both, the delve probe is not firing and both contexts have collapsed into one.
+- An ordinary **scenario or follower dungeon** → shown, reported as `resolved=scenario`.
+- Entering a vehicle hides the window; leaving shows it again — **immediately**, on the vehicle
+  event itself. If it only hides after you next change zone, `UNIT_ENTERED_VEHICLE` is not reaching
+  the fan-out; that was the 0.1.0 behaviour and it is the shape every visibility rule fails in.
+
+### 7b. Hide rules and combat
+
+**Steps.** One rule at a time, with the window otherwise showing. Mount up · summon a skyriding
+mount and stand still on the ground · take a flight path · enter your house · start a pet battle ·
+die · pull a target dummy.
+
+**Pass.** Every rule below ships **off**, so each has to be switched on for its check.
+- **Hide in player housing / on flight paths / in pet battles**: switched on, the window goes in
+  your house, on a taxi and over a pet battle, and returns when you leave.
+- **Hide when mounted**: switched on, the window goes while mounted — and for a druid
+  it must also go in **Travel, Aquatic and Flight Form**, and must NOT go in Cat, Bear or Moonkin.
+- **Hide when skyriding** fires from the moment the skyriding bar appears, standing on the ground,
+  not only once airborne. A Dracthyr's Soar and a Haranir flight form count here even though
+  `IsMounted()` is false in them. **Test the dismount as carefully as the mount**: a ground mount and
+  a skyriding mount take different code paths — the ground one flips `IsMounted()` on its own edge,
+  the skyriding one depends on the glide events arriving *and* on the settle pass, because
+  `canGlide` can still read true at the dismount edge. A window that hides on mounting and never
+  returns is the signature failure.
+- **Hide while dead**: off by default so dying in a raid leaves the meter readable, which is most of
+  what it is for. Switched on, the window goes on death and comes back on release or resurrection.
+- **Hide in combat** / **Hide out of combat** are independent. Each hides on its own side of a pull
+  and the window returns on the other side, promptly rather than a refresh tick late — both edges
+  are announced on the bus. Ticking **both** is a window that never shows; `/mm debug diag` still
+  reports `ShouldShow -> false (in combat)` or `(out of combat)` depending on where you are standing.
+- After every one of these, `/mm debug diag` names the rule that decided in its `ShouldShow` line.
 - **Master enable off** (`/mm set enabled false`, or General → Enable Multi Meters) hides every
   window immediately and stops the addon reading the meter at all.
 - **Preview mode overrides context**: with preview on, the window shows wherever you are standing.

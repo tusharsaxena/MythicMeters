@@ -388,13 +388,47 @@ about the player, not about whether secure writes are currently legal.
 
 ### `visibility`
 
-`dungeon = true` · `raid = true` · `arena = true` · `battleground = true` · `world = false` ·
-`hideWhenSolo = true` · `hideInVehicle = true`.
+**Where to show this window** — every context `true`: `dungeon` · `raid` · `arena` ·
+`battleground` · `delve` · `scenario` · `world`.
+
+**When to hide this window** — every rule `false`: `hideWhenSolo` · `hideInVehicle` ·
+`hideWhenMounted` · `hideWhenSkyriding` · `hideOnTaxi` · `hideInHousing` · `hideInPetBattle` ·
+`hideWhenDead`.
+
+**Combat** — `hideInCombat = false` · `hideOutOfCombat = false`.
+
+**Show everywhere, hide nowhere.** A fresh profile draws the meter wherever the player stands and
+nothing takes it away until they ask for it. This reverses 0.1.0, which shipped the open world off
+and four rules on. That version was deciding on the player's behalf that a meter in the open world
+is noise, and the cost of being wrong is this feature's worst failure: a window that never appears,
+with seventeen checkboxes to read before you can tell which one did it. A default that only ever
+shows has no such failure mode.
 
 Refused **at the source** (`performance-§6`): a hidden window does not merely skip its draw, it
 stops asking the provider for data. `modules/Visibility.lua` maps Blizzard's `instanceType` to these
-keys, and anything it has never heard of resolves to `world` — which ships `false`, so an unknown
-context is deny-by-default.
+keys, and anything it has never heard of resolves to `world`. Note what that means now `world` ships `true`:
+an instance type a future patch invents **shows** rather than hides — the opposite of 0.1.0's
+deny-by-default fallthrough, and the deliberate trade. A context nobody has taught this addon about
+draws a meter the player can switch off, rather than silently withholding one they cannot find the
+switch for.
+
+**Delves resolve before the instance-type table**, because Blizzard has no delve instance type: a
+delve reports `"scenario"`, the same token an ordinary scenario and a follower dungeon report.
+`Compat.IsInDelve` owns the three-signal ladder that separates them — `C_PartyInfo.IsDelveInProgress`,
+scenario difficulty `208`, `C_DelvesUI.HasActiveDelve` — and takes ANY of them as authoritative,
+because outdoor delves do not light all three up together.
+
+**Every rule after the context block is hide-shaped**, and that is load-bearing rather than a naming
+habit. A key missing from a stored window has to read as "nothing objects"; a show-shaped key is
+`false` when absent, so a profile written before the rule existed would have every window hidden by
+a setting its owner never touched. `Database.EnsureWindowShape` backfills the shape, but on a
+schedule `modules/Visibility.lua` cannot see and must not depend on. `hideInCombat` and
+`hideOutOfCombat` are therefore two independent rules rather than one tri-state; ticking both is a
+window that never shows, and `/mm debug diag` still names the side of the pull that decided.
+
+The order of evaluation is context first, then every veto, then combat. Running it the other way
+round would report `solo` as the reason a window is hidden in the open world, when the real reason
+is that the player switched the open world off.
 
 ### `columns` — the ordered stat list
 

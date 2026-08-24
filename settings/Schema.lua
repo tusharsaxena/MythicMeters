@@ -1135,21 +1135,92 @@ NS.Schema = {
         onChange = refreshVisibility,
     },
     {
-        path = "window.visibility.world", type = "bool", default = false,
+        path = "window.visibility.delve", type = "bool", default = true,
+        page = "visibility", group = L["Where to show this window"],
+        label = L["Delves"], desc = L["Show this window inside delves."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.scenario", type = "bool", default = true,
+        page = "visibility", group = L["Where to show this window"],
+        label = L["Scenarios"],
+        desc = L["Show this window in scenarios and follower dungeons. Delves have their own setting."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.world", type = "bool", default = true,
         page = "visibility", group = L["Where to show this window"],
         label = L["Open world"], desc = L["Show this window outside instances."],
         onChange = refreshVisibility,
     },
+
+    -- Every rule below is HIDE-shaped, and deliberately so: a key missing from a
+    -- stored window must read as "nothing objects". See modules/Visibility.lua.
     {
-        path = "window.visibility.hideWhenSolo", type = "bool", default = true,
-        page = "visibility", group = L["Extra rules"],
+        path = "window.visibility.hideWhenSolo", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
         label = L["Hide when solo"], desc = L["Hide the window whenever you are not in a party or raid."],
         onChange = refreshVisibility,
     },
     {
-        path = "window.visibility.hideInVehicle", type = "bool", default = true,
-        page = "visibility", group = L["Extra rules"],
+        path = "window.visibility.hideInVehicle", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
         label = L["Hide in vehicles"], desc = L["Hide the window while you are controlling a vehicle."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideWhenMounted", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide when mounted"],
+        desc = L["Hide the window while you are mounted, including a druid's travel forms."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideWhenSkyriding", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide when skyriding"],
+        desc = L["Hide the window while you are on a skyriding mount, from the moment it can glide rather than once you are airborne."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideOnTaxi", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide on flight paths"], desc = L["Hide the window while you are riding a flight path."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideInHousing", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide in player housing"],
+        desc = L["Hide the window while you are inside your house or on your plot."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideInPetBattle", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide in pet battles"], desc = L["Hide the window while a pet battle is on screen."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideWhenDead", type = "bool", default = false,
+        page = "visibility", group = L["When to hide this window"],
+        label = L["Hide while dead"],
+        desc = L["Hide the window while you are dead or a ghost. Off by default: reading the meter while dead is most of what it is for."],
+        onChange = refreshVisibility,
+    },
+    -- Two independent rules rather than one tri-state control. Ticking both is a
+    -- window that never shows, which is the player's business; `/mm debug diag` still
+    -- names the side of the pull that decided.
+    {
+        path = "window.visibility.hideInCombat", type = "bool", default = false,
+        page = "visibility", group = L["Combat"],
+        label = L["Hide in combat"], desc = L["Hide the window while you are fighting."],
+        onChange = refreshVisibility,
+    },
+    {
+        path = "window.visibility.hideOutOfCombat", type = "bool", default = false,
+        page = "visibility", group = L["Combat"],
+        label = L["Hide out of combat"], desc = L["Hide the window whenever you are not fighting."],
         onChange = refreshVisibility,
     },
 

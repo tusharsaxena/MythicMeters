@@ -33,7 +33,12 @@ read_globals = {
   "InCombatLockdown", "UnitAffectingCombat",
   -- units / roster
   "UnitExists", "UnitGUID", "UnitName", "UnitClass", "UnitIsUnit", "UnitIsPlayer",
-  "UnitGroupRolesAssigned", "UnitInVehicle", "UnitIsDead",
+  "UnitGroupRolesAssigned", "UnitInVehicle", "UnitIsDead", "UnitIsDeadOrGhost",
+  -- player state, for the visibility rules (modules/Visibility.lua). The
+  -- namespaced probes those rules also need — C_PlayerInfo, C_Housing,
+  -- C_DelvesUI, C_PartyInfo — reach the client through core/Compat.lua and are
+  -- read off _G there, so they need no entry here.
+  "UnitOnTaxi", "IsMounted", "GetShapeshiftFormID",
   "IsInGroup", "IsInRaid", "IsInInstance", "GetNumGroupMembers", "GetRaidRosterInfo",
   "GetInstanceInfo", "IsLoggedIn",
   -- settings panel / frame plumbing

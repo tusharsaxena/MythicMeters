@@ -361,14 +361,40 @@ local WINDOW_TEMPLATE = {
     --
     -- Refused AT THE SOURCE (performance-§6): a hidden window does not just skip
     -- its draw, it stops asking the provider for data at all.
+    -- SHOW EVERYWHERE, HIDE NOWHERE. Every context ships on and every rule ships
+    -- off, so a fresh profile draws the meter wherever the player is standing and
+    -- nothing takes it away until they ask for it.
+    --
+    -- This is a deliberate reversal of the shape that shipped in 0.1.0, where the
+    -- open world was off and four rules were on. That version was arguing about
+    -- taste on the player's behalf — it decided a meter in the open world was
+    -- noise — and the cost of being wrong was the worst failure a visibility
+    -- feature has: a window that never appears, with seventeen checkboxes to read
+    -- before you can work out which one did it. A default that only ever shows
+    -- has no such failure. Every rule here is opt-in, and each one hides exactly
+    -- one thing the player went looking for.
+    --
+    -- Every rule is HIDE-shaped so that a key missing from a stored window reads
+    -- as "nothing objects" — see modules/Visibility.lua's ShouldShow.
     visibility = {
-        dungeon        = true,
-        raid           = true,
-        arena          = true,
-        battleground   = true,
-        world          = false,   -- off: the open world is where a meter is noise
-        hideWhenSolo   = true,
-        hideInVehicle  = true,
+        dungeon      = true,
+        raid         = true,
+        arena        = true,
+        battleground = true,
+        delve        = true,
+        scenario     = true,
+        world        = true,
+
+        hideWhenSolo      = false,
+        hideInVehicle     = false,
+        hideWhenMounted   = false,
+        hideWhenSkyriding = false,
+        hideOnTaxi        = false,
+        hideInHousing     = false,
+        hideInPetBattle   = false,
+        hideWhenDead      = false,
+        hideInCombat      = false,
+        hideOutOfCombat   = false,
     },
 
     -- -----------------------------------------------------------------------

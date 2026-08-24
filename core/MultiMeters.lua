@@ -109,6 +109,23 @@ function NS:OnInitialize()
     end
 end
 
+--- Register `event` only if this client has heard of it.
+---
+--- C_EventUtils.IsEventValid is the cheap ask; where even that is missing the
+--- registration is attempted under pcall, because the failure mode being avoided
+--- is a hard error at load on a client one patch behind, not a wrong answer.
+---
+--- @return boolean  whether the registration took
+local function registerIfValid(target, event, handler)
+    local utils = _G.C_EventUtils
+    if utils and utils.IsEventValid then
+        if not utils.IsEventValid(event) then return false end
+        target:RegisterEvent(event, handler)
+        return true
+    end
+    return pcall(target.RegisterEvent, target, event, handler)
+end
+
 function NS:OnEnable()
     -- Lifecycle and context. PLAYER_ENTERING_WORLD covers login, /reload and
     -- every zone-in; ZONE_CHANGED_NEW_AREA covers the sub-zone moves that change
@@ -122,6 +139,46 @@ function NS:OnEnable()
     -- alternative is a version check that would have to be kept in step with the
     -- one in core/Secrets.lua.
     self:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED", "OnRestrictionChanged")
+
+    -- The player's own state, for modules/Visibility.lua's rules. Registering
+    -- them here rather than in that module is architecture-§4: one place where
+    -- "the game said something" becomes "the addon knows". None of these carries
+    -- state onto the bus, because the rules read their inputs live.
+    --
+    -- THESE EDGES ARE LOAD-BEARING, NOT AN OPTIMISATION, and the first cut of
+    -- the player-state rules shipped believing otherwise. There is no fallback
+    -- poll: modules/Window.lua's onUpdate refreshes DATA and never re-asks
+    -- NS.ShouldShow, so a rule whose edge nothing announces takes effect on the
+    -- next zone change, group change or settings write and never on its own. A
+    -- missed edge here is a rule that looks broken.
+    self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatChanged")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED",  "OnCombatChanged")
+
+    self:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED", "OnPlayerStateChanged")
+    -- The vehicle pair. These arrived with the rest of the player-state block
+    -- rather than with `hideInVehicle` itself, which shipped in 0.1.0 with no
+    -- edge at all: the rule only ever took effect if a zone change happened to
+    -- follow the player into the turret. They fire for EVERY unit, so the
+    -- handler filters to the player.
+    self:RegisterEvent("UNIT_ENTERED_VEHICLE",         "OnPlayerStateChanged")
+    self:RegisterEvent("UNIT_EXITED_VEHICLE",          "OnPlayerStateChanged")
+    self:RegisterEvent("UPDATE_SHAPESHIFT_FORM",       "OnPlayerStateChanged")
+    self:RegisterEvent("PLAYER_CAN_GLIDE_CHANGED",     "OnPlayerStateChanged")
+    self:RegisterEvent("PET_BATTLE_OPENING_START",     "OnPlayerStateChanged")
+    self:RegisterEvent("PET_BATTLE_CLOSE",             "OnPlayerStateChanged")
+    self:RegisterEvent("PLAYER_DEAD",                  "OnPlayerStateChanged")
+    self:RegisterEvent("PLAYER_ALIVE",                 "OnPlayerStateChanged")
+    self:RegisterEvent("PLAYER_UNGHOST",               "OnPlayerStateChanged")
+
+    -- Taking off and landing while staying mounted is its own edge, and it is
+    -- PROBED rather than registered outright: it is newer than the rest and a
+    -- client that does not have it raises on RegisterEvent. Losing it is
+    -- survivable where losing the whole block is not: PLAYER_CAN_GLIDE_CHANGED
+    -- still fires when the mount itself changes, which is the edge the skyriding
+    -- rule actually turns on.
+    if registerIfValid(self, "PLAYER_IS_GLIDING_CHANGED", "OnPlayerStateChanged") then
+        NS.hasGlidingEvent = true
+    end
 
     -- Feign Death, and nothing else on this event. It is the busiest thing this
     -- addon listens to — every cast by every unit in a raid — and it is
@@ -174,6 +231,71 @@ end
 
 function NS:OnZoneChanged()
     self:SendMessage(MSG.ZONE_CHANGED)
+end
+
+-- The events in the player-state block whose first argument is a UNIT TOKEN.
+-- Everything else in that block either carries no argument or carries its own
+-- payload, and must not be measured against "player" — see OnPlayerStateChanged.
+local UNIT_STATE_EVENTS = {
+    UNIT_ENTERED_VEHICLE = true,
+    UNIT_EXITED_VEHICLE  = true,
+}
+
+-- Whether a deferred re-check is already booked.
+local statePending = false
+
+--- The deferred half of a player-state edge. A plain upvalue rather than a
+--- closure per event, because the busy case is a burst of edges arriving in one
+--- frame and each one allocating a closure it will not use.
+local function settlePlayerState()
+    statePending = false
+    NS:SendMessage(MSG.PLAYER_STATE_CHANGED)
+end
+
+--- PLAYER_REGEN_DISABLED / PLAYER_REGEN_ENABLED — entered or left combat.
+---
+--- One message for both edges, carrying nothing. Which edge it was is not worth
+--- publishing: the only subscriber reads UnitAffectingCombat("player") live, and
+--- a payload here would be a second answer that can disagree with the first
+--- across a death, where PLAYER_REGEN_ENABLED does not reliably fire.
+function NS:OnCombatChanged()
+    self:SendMessage(MSG.COMBAT_CHANGED)
+end
+
+--- Mounting, shapeshifting, gliding, boarding a vehicle, a pet battle opening or
+--- closing, dying and coming back. All one message, because every one of them
+--- asks its subscriber the same question — "re-check where this window is
+--- allowed to be" — and splitting them would be ten messages with one handler
+--- between them.
+---
+--- THE UNIT CHECK IS A FILTER, NOT A DECISION, which is what keeps this handler
+--- inside the section's rule. UNIT_ENTERED_VEHICLE fires for every unit, so in a
+--- raid it is one of the busier events this addon could listen to, and nothing
+--- about another player's vehicle can change where THIS player's window belongs.
+---
+--- IT IS KEYED ON THE EVENT NAME, AND THAT IS NOT DEFENSIVENESS. Its first
+--- version tested arg1 against "player" for every event in the block, which
+--- silently swallowed both skyriding edges: PLAYER_CAN_GLIDE_CHANGED and
+--- PLAYER_IS_GLIDING_CHANGED carry a BOOLEAN as arg1, not a unit token, so
+--- `arg1 ~= "player"` was true and the handler returned. Ground mounts kept
+--- working — PLAYER_MOUNT_DISPLAY_CHANGED carries no argument at all — which is
+--- what made the bug look like it belonged to skyriding.
+---
+--- @param event string
+--- @param arg1 string|boolean|nil  a unit token on the vehicle pair, otherwise
+---                                 the event's own payload, otherwise nothing
+function NS:OnPlayerStateChanged(event, arg1)
+    if UNIT_STATE_EVENTS[event] and arg1 ~= "player" then return end
+
+    self:SendMessage(MSG.PLAYER_STATE_CHANGED)
+
+    -- And again once the client has settled. See Constants.PLAYER_STATE_SETTLE
+    -- for why an edge is not the last word. One pass answers however many events
+    -- arrived together — mounting fires several — so the guard is a plain flag
+    -- rather than a timer handle to cancel.
+    if statePending then return end
+    statePending = true
+    self:ScheduleTimer(settlePlayerState, NS.Constants.PLAYER_STATE_SETTLE)
 end
 
 --- UNIT_SPELLCAST_SUCCEEDED(unit, castGUID, spellID) — Feign Death only.
@@ -278,7 +400,7 @@ end
 ---
 --- @param window table  a window config from the profile
 --- @return boolean show, string reason  the reason names the step that decided,
----   which is what `/mm status` prints and what a test asserts on.
+---   which is what `/mm debug diag` prints and what a test asserts on.
 function NS.ShouldShow(window)
     -- STEP 0 — perf suspend. FIRST, and above even the master enable, because a
     -- suspended capture must be inert: nothing — a combat transition, a zone-in,

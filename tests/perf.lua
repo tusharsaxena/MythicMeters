@@ -106,10 +106,11 @@ do
         }
     end
     mocks.setGroup(roster, { raid = true })
-    -- A dungeon: `visibility.world` ships false, so the open world would hide the
-    -- window and the whole refresh path would never run (performance-§6 —
-    -- refusal at the source is the behavior, and it would make this measure
-    -- nothing).
+    -- A dungeon, because a dungeon is what this is meant to measure: a raid-sized
+    -- group at meter event rate. The shipped defaults would allow the open world
+    -- too, but a context that is only allowed by default is one setting away from
+    -- refusing at the source (performance-§6), which would leave this measuring
+    -- nothing at all rather than measuring less.
     mocks.setInstance("party")
 end
 

@@ -35,7 +35,7 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | 6 | Text | `text` | 11 | yes | Left slot, right slot, number format, death timestamps, max name length, font, size, outline, shadow, color, opacity |
 | 7 | Icons | `icons` | 3 | yes | One icon per row — spec where known, class otherwise, never a role — plus its size and which side of the name it sits on |
 | 8 | Tooltip | `tooltip` | 18 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own font/size/outline, and the Targets section |
-| 9 | Visibility | `visibility` | 7 | yes | Dungeon / raid / arena / battleground / world, hide when solo, hide in vehicle |
+| 9 | Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
 | 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
 | 11 | Data | `data` | 6 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |
 | 12 | General | `general` | 8 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |

@@ -2050,6 +2050,22 @@ function WindowProto:RegisterBus()
         self:ClearForcedShow()
         self:RefreshVisibility()
     end)
+    -- The player's own state. These are the SAME shape as the roster case above
+    -- and they are here for the same reason: modules/Visibility.lua is a
+    -- predicate that publishes nothing, so a rule it owns takes effect only when
+    -- something re-runs the ladder — and there is no fallback, because onUpdate
+    -- refreshes DATA and never re-asks NS.ShouldShow. Without these two
+    -- subscriptions, "hide when skyriding" waits for the next zone change,
+    -- group change or settings write, which is indistinguishable from not
+    -- working. ClearForcedShow is deliberately NOT called: `/mm toggle` is an
+    -- explicit request about THIS window, and mounting up is not a reason to
+    -- forget it.
+    bus:RegisterMessage(MSG.PLAYER_STATE_CHANGED, function()
+        self:RefreshVisibility()
+    end)
+    bus:RegisterMessage(MSG.COMBAT_CHANGED, function()
+        self:RefreshVisibility()
+    end)
     bus:RegisterMessage(MSG.TEST_MODE_CHANGED, function()
         -- ApplyTitle as well as MarkDirty: the red TEST MODE marker lives in the
         -- title, and the title is only rewritten on a config change — so without

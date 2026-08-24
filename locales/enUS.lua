@@ -431,13 +431,42 @@ L["Battlegrounds"] = "Battlegrounds"
 L["Show this window in battlegrounds."] = "Show this window in battlegrounds."
 L["Open world"] = "Open world"
 L["Show this window outside instances."] = "Show this window outside instances."
-L["Extra rules"] = "Extra rules"
+L["When to hide this window"] = "When to hide this window"
 L["Hide when solo"] = "Hide when solo"
 L["Hide the window whenever you are not in a party or raid."] =
     "Hide the window whenever you are not in a party or raid."
 L["Hide in vehicles"] = "Hide in vehicles"
 L["Hide the window while you are controlling a vehicle."] =
     "Hide the window while you are controlling a vehicle."
+L["Delves"] = "Delves"
+L["Show this window inside delves."] = "Show this window inside delves."
+L["Scenarios"] = "Scenarios"
+L["Show this window in scenarios and follower dungeons. Delves have their own setting."] =
+    "Show this window in scenarios and follower dungeons. Delves have their own setting."
+L["Hide when mounted"] = "Hide when mounted"
+L["Hide the window while you are mounted, including a druid's travel forms."] =
+    "Hide the window while you are mounted, including a druid's travel forms."
+L["Hide when skyriding"] = "Hide when skyriding"
+L["Hide the window while you are on a skyriding mount, from the moment it can glide rather than once you are airborne."] =
+    "Hide the window while you are on a skyriding mount, from the moment it can glide rather than once you are airborne."
+L["Hide on flight paths"] = "Hide on flight paths"
+L["Hide the window while you are riding a flight path."] =
+    "Hide the window while you are riding a flight path."
+L["Hide in player housing"] = "Hide in player housing"
+L["Hide the window while you are inside your house or on your plot."] =
+    "Hide the window while you are inside your house or on your plot."
+L["Hide in pet battles"] = "Hide in pet battles"
+L["Hide the window while a pet battle is on screen."] =
+    "Hide the window while a pet battle is on screen."
+L["Hide while dead"] = "Hide while dead"
+L["Hide the window while you are dead or a ghost. Off by default: reading the meter while dead is most of what it is for."] =
+    "Hide the window while you are dead or a ghost. Off by default: reading the meter while dead is most of what it is for."
+L["Combat"] = "Combat"
+L["Hide in combat"] = "Hide in combat"
+L["Hide the window while you are fighting."] = "Hide the window while you are fighting."
+L["Hide out of combat"] = "Hide out of combat"
+L["Hide the window whenever you are not fighting."] =
+    "Hide the window whenever you are not fighting."
 
 -- ---------------------------------------------------------------------------
 -- Columns page

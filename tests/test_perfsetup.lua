@@ -50,9 +50,10 @@ end
 --- The two show-decision cases below need a context in which a default window is
 --- ALLOWED to be on screen, or they would be asserting that suspend hides a
 --- window that was already hidden — which is the vacuous version of the case.
---- The mock's default state is solo in the open world, and a default window
---- ships `world = false` and `hideWhenSolo = true`, so both of its own rules
---- would refuse it before suspend was ever consulted.
+--- The shipped defaults allow every context, so the mock's own solo-in-the-open-
+--- world state would do; a dungeon is used anyway, because a fixture that relies
+--- on a default staying permissive is one template edit away from going vacuous
+--- without failing.
 local function inDungeon(inst)
     inst.mocks.setInstance("party")
     inst.mocks.setGroup({ {}, {}, {}, {}, {} })

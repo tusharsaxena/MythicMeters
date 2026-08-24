@@ -40,6 +40,21 @@ local EVENTS = {
     DAMAGE_METER_COMBAT_SESSION_UPDATED  = "OnMeterSession",
     UNIT_SPELLCAST_SUCCEEDED       = "OnSpellSucceeded",
     DAMAGE_METER_RESET                   = "OnMeterReset",
+    -- Player state, for modules/Visibility.lua's rules. PLAYER_IS_GLIDING_CHANGED
+    -- is the probed one — see the case below that takes it away.
+    PLAYER_REGEN_DISABLED                = "OnCombatChanged",
+    PLAYER_REGEN_ENABLED                 = "OnCombatChanged",
+    PLAYER_MOUNT_DISPLAY_CHANGED         = "OnPlayerStateChanged",
+    UNIT_ENTERED_VEHICLE                 = "OnPlayerStateChanged",
+    UNIT_EXITED_VEHICLE                  = "OnPlayerStateChanged",
+    UPDATE_SHAPESHIFT_FORM               = "OnPlayerStateChanged",
+    PLAYER_CAN_GLIDE_CHANGED             = "OnPlayerStateChanged",
+    PLAYER_IS_GLIDING_CHANGED            = "OnPlayerStateChanged",
+    PET_BATTLE_OPENING_START             = "OnPlayerStateChanged",
+    PET_BATTLE_CLOSE                     = "OnPlayerStateChanged",
+    PLAYER_DEAD                          = "OnPlayerStateChanged",
+    PLAYER_ALIVE                         = "OnPlayerStateChanged",
+    PLAYER_UNGHOST                       = "OnPlayerStateChanged",
 }
 
 --- Count publications of `message` on an instance, capturing the last payload.
@@ -195,6 +210,57 @@ test("Lifecycle: no module registers a game event of its own", function()
     end
 end)
 
+test("Lifecycle: both combat edges fan out as one message carrying nothing", function()
+    local inst = T.load{ enable = true }
+    local seen = watch(inst, MSG.COMBAT_CHANGED)
+
+    -- Which edge it was is deliberately not published. The only subscriber reads
+    -- UnitAffectingCombat live, and a payload would be a second answer that can
+    -- disagree with the first across a death, where PLAYER_REGEN_ENABLED does not
+    -- reliably fire.
+    inst.NS:OnCombatChanged()
+    assertEqual(seen.n, 1)
+    assertNil(seen.last)
+end)
+
+test("Lifecycle: every player-state edge fans out as PLAYER_STATE_CHANGED", function()
+    local inst = T.load{ enable = true }
+    local seen = watch(inst, MSG.PLAYER_STATE_CHANGED)
+
+    -- Mounting, shapeshifting, gliding, a pet battle, dying and coming back all
+    -- ask the same question of the same subscriber: re-check where this window is
+    -- allowed to be. Eight messages with one handler between them would be eight
+    -- names to keep in step for no gain.
+    -- The two vehicle events are the only ones in the block whose arg1 is a unit
+    -- token, and they are filtered to the player; every other event carries no
+    -- argument or carries its own payload. Driving them all with the same bare
+    -- call would test the filter, not the fan-in.
+    local UNIT_ARG = { UNIT_ENTERED_VEHICLE = "player", UNIT_EXITED_VEHICLE = "player" }
+
+    local n = 0
+    for event, handler in pairs(EVENTS) do
+        if handler == "OnPlayerStateChanged" then
+            n = n + 1
+            inst.NS[handler](inst.NS, event, UNIT_ARG[event])
+        end
+    end
+    assertTrue(n >= 10, "the player-state fan-in lost its events")
+    assertEqual(seen.n, n)
+end)
+
+test("Lifecycle: a client with no PLAYER_IS_GLIDING_CHANGED still enables", function()
+    -- Taking off while staying mounted is the newest edge of the set, and a
+    -- client that has not got it raises on RegisterEvent. Losing it costs the
+    -- skyriding rule a refresh tick, not an answer, so the addon must load
+    -- straight past it rather than guard the whole feature behind it.
+    local inst = T.load{ enable = true, mutate = function(m)
+        m.setEventInvalid("PLAYER_IS_GLIDING_CHANGED")
+    end }
+    assertNil(inst.NS.__events["PLAYER_IS_GLIDING_CHANGED"])
+    assertEqual(inst.NS.__events["PLAYER_CAN_GLIDE_CHANGED"], "OnPlayerStateChanged",
+        "the rest of the set must still be registered")
+end)
+
 test("Lifecycle: PLAYER_ENTERING_WORLD is republished with its login/reload flags", function()
     local inst = T.load{ enable = true }
     local seen = watch(inst, MSG.ENTERING_WORLD)
@@ -312,7 +378,7 @@ end)
 -- ── the show ladder ─────────────────────────────────────────────────────────
 
 test("ShouldShow: the ladder answers a reason that names the step that decided", function()
-    -- `/mm status` prints it and these tests assert on it, so it is a stable
+    -- `/mm debug diag` prints it and these tests assert on it, so it is a stable
     -- unlocalized token rather than a sentence.
     local inst = T.load{ enable = true }
     inst.mocks.setInstance("party")
@@ -350,6 +416,7 @@ test("ShouldShow: test mode overrides context, so a window can be positioned any
     inst.mocks.setSolo()
     inst.mocks.setInstance("none")
     local window = inst.NS.Database.GetWindows()[1]
+    window.visibility.world = false   -- every context ships on; refuse one by hand
     assertFalse((inst.NS.ShouldShow(window)), "the fixture needs a context that refuses")
 
     inst.NS.State.SetTestMode(true)
@@ -364,6 +431,8 @@ function()
     -- answer "why is my window not showing" differently.
     local inst = T.load{ enable = true }
     local window = inst.NS.Database.GetWindows()[1]
+    window.visibility.world = false
+    window.visibility.hideWhenSolo = true
     inst.mocks.setInstance("none")
     inst.mocks.setSolo()
     local ok, reason = inst.NS.ShouldShow(window)
@@ -382,6 +451,7 @@ test("ShouldShow: a missing Visibility module fails OPEN", function()
     inst.mocks.setInstance("none")
     inst.mocks.setSolo()
     local window = inst.NS.Database.GetWindows()[1]
+    window.visibility.world = false
     assertFalse((inst.NS.ShouldShow(window)), "the fixture needs Visibility to be refusing first")
 
     inst.NS.__modules.Visibility = nil

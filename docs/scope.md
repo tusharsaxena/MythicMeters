@@ -41,10 +41,12 @@ Retail only · English only.
 - **Cell drill-down** into a player's per-spell breakdown, rendered through the same row path as the
   grid, plus a hand-off to Blizzard's own death recap from the Deaths column.
 - **Pet folding** into owners, best-effort — see the caveat below.
-- **A thirteen-page settings panel** driven by one 99-row schema, with full `/mm` CLI parity for every
+- **A thirteen-page settings panel** driven by one 124-row schema, with full `/mm` CLI parity for every
   schema-shaped operation.
-- **Visibility rules** per window: dungeon, raid, arena and battleground on by default, open world
-  off, plus hide-when-solo and hide-in-vehicle.
+- **Visibility rules** per window — **show everywhere, hide nowhere** out of the box. Seven contexts
+  (dungeon, raid, arena, battleground, delve, scenario, open world), all on by default; ten hide
+  rules (solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in
+  combat, out of combat), all off by default.
 - **AceDB profiles**, all characters starting on the shared `"Default"` profile.
 - **Preview mode** and an unlock/drag cycle, so a window can be laid out at a target dummy.
 - **A minimap button** and LDB launcher (left-click toggles the windows, right-click opens settings).
@@ -118,7 +120,7 @@ These have been considered and explicitly declined.
 
   This is **not** a license to be locale-*dependent*, which is a different thing. Nothing persisted
   or compared is derived from a localized string: stat keys are the English enum names, the visibility
-  contexts are unlocalized tokens, and `Visibility.ShouldShow`'s second return — which `/mm status`
+  contexts are unlocalized tokens, and `Visibility.ShouldShow`'s second return — which `/mm debug diag`
   prints and the tests assert on — is a stable token by design.
 - **Classic support.** A single `## Interface` line, targeting Midnight. `C_DamageMeter` does not
   exist on any Classic client, so there is nothing to read.

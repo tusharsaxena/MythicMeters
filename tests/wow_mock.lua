@@ -145,6 +145,11 @@
 -- Group        mocks.setGroup(spec) · mocks.setPet(unit, guid) · mocks.setSolo()
 --              mocks.setInstance(type) · mocks.setInCombat(b)
 --              mocks.setInVehicle(b) · mocks.__group
+-- Player state mocks.setDelve(b) · mocks.setDelveVia(which) · mocks.setMounted(b)
+--              mocks.setShapeshiftForm(id) · mocks.setCanGlide(b)
+--              mocks.setInHousing(b) · mocks.setOnTaxi(b)
+--              mocks.setInPetBattle(b) · mocks.setDeadOrGhost(b)
+--              mocks.setEventInvalid(name)
 -- Frames       mocks.__frames (creation order) · mocks.__frameByName
 --              mocks.__stubFrame(objectType, parent, name)
 -- Manifest     mocks.__toc (Version / Title / Notes)
@@ -1326,6 +1331,19 @@ local function build()
         instanceType = "none",
         inCombat     = false,
         inVehicle    = false,
+        -- The player-state axis the visibility rules read. Every one of these
+        -- ships false, which is the answer that keeps a window VISIBLE: a rule
+        -- that only ever hides must degrade towards showing.
+        difficultyID = 0,
+        delve        = false,
+        delveSignal  = nil,   -- one rung of the ladder, when a case drives just one
+        mounted      = false,
+        formID       = 0,
+        canGlide     = false,
+        housing      = false,
+        onTaxi       = false,
+        petBattle    = false,
+        deadOrGhost  = false,
         units        = {},   -- [unitToken] = { guid, name, class, classFile, role }
     }
     M.__group = group
@@ -1423,6 +1441,52 @@ local function build()
 
     function M.setInVehicle(v) group.inVehicle = v and true or false end
 
+    -- ── player state, for the visibility rules ─────────────────────────────
+    --
+    -- One setter per rule, each answering exactly the probe core/Compat.lua and
+    -- modules/Visibility.lua make and nothing else. They are separate rather
+    -- than one table so a case names the state it is driving in its own line.
+
+    --- Put the player in a delve. Drives all three rungs of Compat.IsInDelve's
+    --- ladder at once, because a live client can answer on any of them: a delve
+    --- reports instanceType "scenario" with difficulty 208, and the two delve
+    --- namespaces agree.
+    function M.setDelve(v)
+        group.delve = v and true or false
+        group.delveSignal = nil
+        if group.delve then
+            M.setInstance("scenario")
+            group.difficultyID = 208
+        elseif group.difficultyID == 208 then
+            group.difficultyID = 0
+        end
+    end
+
+    --- Answer only ONE rung of the delve ladder, to prove the other two are not
+    --- load-bearing. `which` is "party", "difficulty" or "delvesui".
+    function M.setDelveVia(which)
+        group.delve = false
+        M.setInstance("scenario")
+        group.difficultyID = (which == "difficulty") and 208 or 0
+        group.delveSignal = which
+    end
+
+    function M.setMounted(v) group.mounted = v and true or false end
+
+    --- The druid travel/aquatic/flight form ids (3, 4, 27) core/Compat.lua reads
+    --- as mount-like. Any other id, including 0, is not a mount.
+    function M.setShapeshiftForm(id) group.formID = tonumber(id) or 0 end
+
+    --- Skyriding capability — the second return of C_PlayerInfo.GetGlidingInfo.
+    --- Capability, not altitude: it is true on the ground the moment the
+    --- skyriding bar is available, which is what the rule is about.
+    function M.setCanGlide(v) group.canGlide = v and true or false end
+
+    function M.setInHousing(v) group.housing = v and true or false end
+    function M.setOnTaxi(v) group.onTaxi = v and true or false end
+    function M.setInPetBattle(v) group.petBattle = v and true or false end
+    function M.setDeadOrGhost(v) group.deadOrGhost = v and true or false end
+
     local function unit(token) return group.units[token] end
 
     M.UnitExists = function(token) return unit(token) ~= nil end
@@ -1495,6 +1559,56 @@ local function build()
     M.IsInRaid            = function() return group.inRaid end
     M.GetNumGroupMembers  = function() return group.size end
     M.IsInInstance        = function() return group.inInstance, group.instanceType end
+    -- name, instanceType, difficultyID, ... — only the three fields anything in
+    -- this addon reads are populated.
+    M.GetInstanceInfo     = function()
+        return "MockInstance", group.instanceType, group.difficultyID
+    end
+
+    -- ── the player-state APIs ──────────────────────────────────────────────
+
+    M.IsMounted             = function() return group.mounted end
+    M.GetShapeshiftFormID   = function() return group.formID end
+    M.UnitOnTaxi            = function(token) return token == "player" and group.onTaxi end
+    M.UnitIsDeadOrGhost     = function(token) return token == "player" and group.deadOrGhost end
+
+    -- isGliding, canGlide, forwardSpeed. Only canGlide is read: the rule fires on
+    -- capability, not on being airborne.
+    M.C_PlayerInfo = M.C_PlayerInfo or {}
+    M.C_PlayerInfo.GetGlidingInfo = function()
+        return group.canGlide, group.canGlide, 0
+    end
+
+    M.C_Housing = M.C_Housing or {}
+    M.C_Housing.IsInsideHouseOrPlot = function() return group.housing end
+
+    M.C_PetBattles = M.C_PetBattles or {}
+    M.C_PetBattles.IsInBattle = function() return group.petBattle end
+
+    -- The three delve signals, each answering independently so a case can drive
+    -- one rung of the ladder and leave the others silent.
+    M.C_PartyInfo = M.C_PartyInfo or {}
+    M.C_PartyInfo.IsDelveInProgress = function()
+        return group.delve or group.delveSignal == "party"
+    end
+
+    M.C_Map = M.C_Map or {}
+    M.C_Map.GetBestMapForUnit = function() return 2248 end
+
+    M.C_DelvesUI = M.C_DelvesUI or {}
+    M.C_DelvesUI.HasActiveDelve = function()
+        return group.delve or group.delveSignal == "delvesui"
+    end
+
+    -- Event-name validation, which core/MultiMeters.lua asks before registering
+    -- PLAYER_IS_GLIDING_CHANGED. Everything is valid unless a case says
+    -- otherwise, so the probe's failure path has to be opted into.
+    M.__invalidEvents = {}
+    function M.setEventInvalid(name) M.__invalidEvents[name] = true end
+    M.C_EventUtils = M.C_EventUtils or {}
+    M.C_EventUtils.IsEventValid = function(name)
+        return not M.__invalidEvents[name]
+    end
     M.IsLoggedIn          = function() return true end
 
     M.setSolo()

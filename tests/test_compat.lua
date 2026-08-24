@@ -435,3 +435,86 @@ test("Compat.HasDeathRecap keys on the EVENTS, not on the namespace", function()
     inst.mocks.setDeathRecap({ GetRecapEvents = function() return {} end })
     assertTrue(inst.NS.Compat.HasDeathRecap())
 end)
+
+-- ---------------------------------------------------------------------------
+-- Player context: delve, skyriding, housing
+-- ---------------------------------------------------------------------------
+--
+-- Three probes into namespaces that did not exist a patch or two ago, which is
+-- exactly what this file is for. All three answer FALSE when the namespace is
+-- absent, and that direction is deliberate: each one feeds a visibility rule
+-- that only ever HIDES a window, so "I cannot tell" has to mean "do not hide".
+-- The opposite default would make a window vanish on any client whose API
+-- surface this addon guessed wrong about.
+
+test("Compat.IsInDelve answers on any ONE rung of the ladder", function()
+    -- Outdoor delves disagree across APIs — the party-info flag, the scenario
+    -- difficulty and the delve namespace do not all light up together — so the
+    -- ladder takes any verified signal as authoritative rather than requiring
+    -- agreement.
+    for _, rung in ipairs{ "party", "difficulty", "delvesui" } do
+        local inst = T.load()
+        inst.mocks.setDelveVia(rung)
+        assertTrue(inst.NS.Compat.IsInDelve(), "rung " .. rung .. " must be enough on its own")
+    end
+end)
+
+test("Compat.IsInDelve is false in an ordinary scenario", function()
+    local inst = T.load()
+    -- A scenario reports the same instanceType a delve does. Difficulty 208 and
+    -- the two delve namespaces are the whole difference.
+    inst.mocks.setInstance("scenario")
+    assertFalse(inst.NS.Compat.IsInDelve())
+end)
+
+test("Compat.IsInDelve is false on a client with none of the delve APIs", function()
+    local inst = loadWithout("C_PartyInfo", "C_DelvesUI", "GetInstanceInfo")
+    inst.mocks.setDelve(true)
+    assertFalse(inst.NS.Compat.IsInDelve(), "no way to tell must read as not-in-a-delve")
+end)
+
+test("Compat.IsSkyriding reads glide CAPABILITY, not altitude", function()
+    local inst = T.load()
+    assertFalse(inst.NS.Compat.IsSkyriding())
+    -- No IsFlying term on purpose: the rule fires on the ground the moment the
+    -- skyriding bar is available, which is when the player has stopped fighting
+    -- and started travelling.
+    inst.mocks.setCanGlide(true)
+    assertTrue(inst.NS.Compat.IsSkyriding())
+end)
+
+test("Compat.IsSkyriding is a PLAIN boolean, and false with no C_PlayerInfo", function()
+    local inst = loadWithout("C_PlayerInfo")
+    assertEqual(inst.NS.Compat.IsSkyriding(), false)
+    local other = T.load()
+    other.mocks.setCanGlide(true)
+    assertEqual(other.NS.Compat.IsSkyriding(), true)
+end)
+
+test("Compat.IsInHousing follows C_Housing, and is false without it", function()
+    local inst = T.load()
+    assertFalse(inst.NS.Compat.IsInHousing())
+    inst.mocks.setInHousing(true)
+    assertTrue(inst.NS.Compat.IsInHousing())
+
+    assertFalse(loadWithout("C_Housing").NS.Compat.IsInHousing())
+end)
+
+test("Compat: a delve namespace present but missing its member does not raise", function()
+    -- A PTR build can have the namespace without one of its functions, which is
+    -- the shape that turns a guarded call into an error at the call site.
+    local inst = T.load{ mutate = function(m)
+        m.C_PartyInfo.IsDelveInProgress = nil
+        m.C_DelvesUI.HasActiveDelve     = nil
+        m.C_Housing.IsInsideHouseOrPlot = nil
+        m.C_PlayerInfo.GetGlidingInfo   = nil
+    end }
+    inst.mocks.setDelve(true)
+    inst.mocks.setInHousing(true)
+    inst.mocks.setCanGlide(true)
+    -- Difficulty 208 is still readable, so the delve ladder still answers true
+    -- from its middle rung; the other two have nothing left to read.
+    assertTrue(inst.NS.Compat.IsInDelve())
+    assertFalse(inst.NS.Compat.IsInHousing())
+    assertFalse(inst.NS.Compat.IsSkyriding())
+end)

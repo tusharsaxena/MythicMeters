@@ -626,7 +626,10 @@ test("ShouldShow's ladder reads master enable, then test mode, then context", fu
     assertEqual(select(2, NS.ShouldShow(cfg)), "disabled")
     NS.db.profile.enabled = true
 
-    -- The open world ships off, so this window is refused by context...
+    -- The open world ships ON now, so the fixture has to switch it off itself to
+    -- get a context that refuses — which is the step this case is measuring.
+    cfg.visibility.world = false
+    -- ...refused by context...
     assertEqual(NS.ShouldShow(cfg), false)
     -- ...until test mode, which shows regardless: the whole point is to lay a
     -- layout out wherever the player happens to be standing.
@@ -1268,6 +1271,227 @@ test("Leaving test mode does not close the window", function()
         "and leaving test mode is not the same keystroke as closing it")
 end)
 
+test("A player-state edge re-runs the show ladder on the window itself", function()
+    -- THE BUG THE FIRST CUT OF THE PLAYER-STATE RULES SHIPPED WITH. The rules
+    -- lived in modules/Visibility.lua and were correct; the window never asked
+    -- them again. modules/Visibility.lua is a PREDICATE and publishes nothing by
+    -- design, and WindowProto:RefreshVisibility only runs off a bus message — so
+    -- a rule with no message the WINDOW listens to takes effect on the next zone
+    -- change, group change or settings write, and never on its own edge. Ticking
+    -- "hide when skyriding" appeared to work only because the tick itself fires
+    -- CONFIG_CHANGED; mounting up afterwards did nothing.
+    -- red under: dropping PLAYER_STATE_CHANGED from WindowProto:RegisterBus.
+    local inst = T.load()
+    local NS, mocks = inst.NS, inst.mocks
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.visibility = { world = true, hideWhenSkyriding = true }
+
+    local window = NS.Window.New(cfg)
+    assertTrue(window:IsShown(), "the window starts visible in the open world")
+
+    -- Nothing else moves: no zone change, no group change, no settings write.
+    -- The player simply got on a skyriding mount.
+    mocks.setCanGlide(true)
+    NS:SendMessage(NS.Constants.MSG.PLAYER_STATE_CHANGED)
+    assertFalse(window:IsShown(), "the window did not hear its own rule's edge")
+
+    mocks.setCanGlide(false)
+    NS:SendMessage(NS.Constants.MSG.PLAYER_STATE_CHANGED)
+    assertTrue(window:IsShown(), "and it must come back on the other edge")
+end)
+
+test("A combat edge re-runs the show ladder on the window itself", function()
+    -- Same defect, other message. A hidden window's OnUpdate does not fire, so
+    -- without this subscription a window hidden in combat could never come back
+    -- when the pull ended.
+    -- red under: dropping COMBAT_CHANGED from WindowProto:RegisterBus.
+    local inst = T.load()
+    local NS, mocks = inst.NS, inst.mocks
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.visibility = { world = true, hideInCombat = true }
+
+    local window = NS.Window.New(cfg)
+    assertTrue(window:IsShown())
+
+    mocks.setInCombat(true)
+    NS:SendMessage(NS.Constants.MSG.COMBAT_CHANGED)
+    assertFalse(window:IsShown())
+
+    mocks.setInCombat(false)
+    NS:SendMessage(NS.Constants.MSG.COMBAT_CHANGED)
+    assertTrue(window:IsShown(), "a hidden window's OnUpdate never fires, so only the message can lift it")
+end)
+
+test("The show ladder is re-run ONLY from a message, never from the refresh tick", function()
+    -- The property the two cases above rest on, stated once so it cannot rot
+    -- unnoticed: onUpdate refreshes DATA. It does not re-ask NS.ShouldShow, so
+    -- there is no per-tick fallback for a rule whose edge nothing announces —
+    -- every visibility input needs a message the window subscribes to.
+    local inst = T.load()
+    local NS, mocks = inst.NS, inst.mocks
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.visibility = { world = true, hideWhenMounted = true }
+
+    local window = NS.Window.New(cfg)
+    assertTrue(window:IsShown())
+
+    mocks.setMounted(true)
+    for _ = 1, 20 do
+        window:MarkDirty()
+        window.frame:_run("OnUpdate", 0.5)
+    end
+    assertTrue(window:IsShown(),
+        "if this ever goes red the tick has started re-running the ladder — " ..
+        "rewrite the comments in modules/Window.lua and modules/Visibility.lua that say it does not")
+
+    NS:SendMessage(NS.Constants.MSG.PLAYER_STATE_CHANGED)
+    assertFalse(window:IsShown())
+end)
+
+test("Entering a vehicle hides the window on its own edge", function()
+    -- hideInVehicle shipped in the first release and had NEVER fired on its own:
+    -- no vehicle event reached core/MultiMeters.lua's fan-out, and the module
+    -- header's claim that the answer would be right "at worst one refresh
+    -- interval later" was wrong, because the tick does not re-ask the ladder.
+    -- The rule only ever took effect if a zone change happened to follow.
+    -- red under: dropping UNIT_ENTERED_VEHICLE from core/MultiMeters.lua.
+    local inst = T.load{ enable = true }
+    local NS, mocks = inst.NS, inst.mocks
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.visibility = { world = true, hideInVehicle = true }
+
+    -- The registration is asserted as well as the behaviour: calling the handler
+    -- by hand proves the fan-out works and proves nothing about whether the game
+    -- can ever reach it, which is exactly the gap this rule fell into.
+    assertEqual(NS.__events["UNIT_ENTERED_VEHICLE"], "OnPlayerStateChanged")
+    assertEqual(NS.__events["UNIT_EXITED_VEHICLE"], "OnPlayerStateChanged")
+
+    local window = NS.Window.New(cfg)
+    assertTrue(window:IsShown())
+
+    mocks.setInVehicle(true)
+    NS:OnPlayerStateChanged("UNIT_ENTERED_VEHICLE", "player")
+    assertFalse(window:IsShown())
+
+    mocks.setInVehicle(false)
+    NS:OnPlayerStateChanged("UNIT_EXITED_VEHICLE", "player")
+    assertTrue(window:IsShown())
+end)
+
+test("A vehicle event about somebody else is not republished", function()
+    -- UNIT_ENTERED_VEHICLE fires for every unit, so in a raid it is one of the
+    -- busier events the addon could listen to. The unit filter is the only
+    -- decision in this handler and it is a FILTER, not a rule: nothing about
+    -- another player's vehicle can change where this player's window belongs.
+    -- red under: dropping the unit check from NS:OnPlayerStateChanged.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+    local seen = 0
+    local bus = NS.NewBusTarget()
+    bus:RegisterMessage(NS.Constants.MSG.PLAYER_STATE_CHANGED, function() seen = seen + 1 end)
+
+    NS:OnPlayerStateChanged("UNIT_ENTERED_VEHICLE", "raid7")
+    assertEqual(seen, 0, "a raider's vehicle woke every window in the raid")
+
+    NS:OnPlayerStateChanged("UNIT_ENTERED_VEHICLE", "player")
+    assertEqual(seen, 1)
+
+    -- An event with no unit argument at all still passes: nil is not somebody
+    -- else, it is "this event is not about a unit".
+    NS:OnPlayerStateChanged("PLAYER_MOUNT_DISPLAY_CHANGED")
+    assertEqual(seen, 2)
+end)
+
+test("A state that lags its own event is caught by the settle pass", function()
+    -- THE SKYRIDING DISMOUNT. A ground mount works on the edge alone, because
+    -- IsMounted() has already flipped by the time PLAYER_MOUNT_DISPLAY_CHANGED
+    -- arrives. GetGlidingInfo's canGlide has not: at the dismount edge the client
+    -- still reports the player as glide-capable, the ladder correctly re-hides,
+    -- and then NOTHING asks again — a hidden window has no OnUpdate running, so
+    -- it stayed hidden until the next zone change or settings write.
+    -- red under: dropping the deferred pass from NS:OnPlayerStateChanged.
+    local inst = T.load{ enable = true }
+    local NS, mocks = inst.NS, inst.mocks
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.frame.locked = true
+    cfg.visibility = { world = true, hideWhenSkyriding = true }
+
+    local window = NS.Window.New(cfg)
+    mocks.setCanGlide(true)
+    NS:OnPlayerStateChanged("PLAYER_MOUNT_DISPLAY_CHANGED")
+    assertFalse(window:IsShown(), "mounting up hides it")
+
+    -- The dismount edge, read while the client still says canGlide. This is the
+    -- read that used to be the last word.
+    NS:OnPlayerStateChanged("PLAYER_MOUNT_DISPLAY_CHANGED")
+    assertFalse(window:IsShown())
+
+    -- The client settles a moment later, and the deferred pass asks again.
+    mocks.setCanGlide(false)
+    mocks.__fireTimers()
+    assertTrue(window:IsShown(), "the window never came back after the state settled")
+end)
+
+test("The settle pass is scheduled once, however many edges land together", function()
+    -- Mounting fires several of these at once — the mount display, the glide
+    -- capability, sometimes a shapeshift. One deferred pass answers all of them,
+    -- and scheduling one per event would put a burst of timers on the frame that
+    -- fires them for no additional answer.
+    -- red under: dropping the pending guard in NS:OnPlayerStateChanged.
+    local inst = T.load{ enable = true }
+    local NS, mocks = inst.NS, inst.mocks
+
+    local before = #mocks.__timers
+    NS:OnPlayerStateChanged("PLAYER_MOUNT_DISPLAY_CHANGED")
+    NS:OnPlayerStateChanged("PLAYER_CAN_GLIDE_CHANGED")
+    NS:OnPlayerStateChanged("UPDATE_SHAPESHIFT_FORM")
+    assertEqual(#mocks.__timers - before, 1, "one settle pass, not one per event")
+
+    -- And the guard reopens once it has run, or the second mount of the session
+    -- would have no settle pass at all.
+    mocks.__fireTimers()
+    NS:OnPlayerStateChanged("PLAYER_MOUNT_DISPLAY_CHANGED")
+    assertEqual(#mocks.__timers, 1, "the guard never reopened")
+end)
+
+test("A glide event's boolean payload is not mistaken for a unit token", function()
+    -- THE BUG THAT MADE SKYRIDING LOOK SPECIAL. Both glide events carry a
+    -- BOOLEAN as arg1 — oUF_Fader spells it out: "unit is true/false with the
+    -- event being PLAYER_IS_GLIDING_CHANGED", and ElvUI reads
+    -- PLAYER_CAN_GLIDE_CHANGED's arg as canGlide. A filter that tested arg1
+    -- against "player" for EVERY event in the block therefore dropped every
+    -- skyriding edge, while ground mounts kept working because
+    -- PLAYER_MOUNT_DISPLAY_CHANGED carries no argument at all.
+    -- red under: filtering on arg1 without keying on the event name.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+    local seen = 0
+    local bus = NS.NewBusTarget()
+    bus:RegisterMessage(NS.Constants.MSG.PLAYER_STATE_CHANGED, function() seen = seen + 1 end)
+
+    NS:OnPlayerStateChanged("PLAYER_CAN_GLIDE_CHANGED", true)
+    NS:OnPlayerStateChanged("PLAYER_CAN_GLIDE_CHANGED", false)
+    NS:OnPlayerStateChanged("PLAYER_IS_GLIDING_CHANGED", true)
+    NS:OnPlayerStateChanged("PLAYER_IS_GLIDING_CHANGED", false)
+    assertEqual(seen, 4, "a skyriding edge was swallowed by the unit filter")
+end)
+
+test("A filtered-out unit event schedules nothing", function()
+    -- The unit filter runs FIRST. A raid full of vehicle events must not each
+    -- put a timer on the frame to answer a question about somebody else.
+    -- red under: moving the ScheduleTimer above the unit check.
+    local inst = T.load{ enable = true }
+    local NS, mocks = inst.NS, inst.mocks
+
+    local before = #mocks.__timers
+    NS:OnPlayerStateChanged("UNIT_ENTERED_VEHICLE", "raid7")
+    assertEqual(#mocks.__timers - before, 0)
+end)
+
 test("Building a window sets no text on a fontless FontString", function()
     -- THE BUG THAT BROKE THE LOAD. A FontString has no font until SetFont is
     -- called, and SetText on one answers `FontString:SetText(): Font not set` —
@@ -1366,6 +1590,12 @@ test("Closing cancels the request, so it does not reappear", function()
     -- The same bug pointed the other way.
     local inst = T.load{ enable = true }
     local window = inst.NS.WindowManager.All()[1]
+    -- A context that refuses, so what is being measured is forcedShow being
+    -- cleared rather than the ladder happening to say yes. With the shipped
+    -- defaults every context says yes, and a closed window DOES come back on the
+    -- next settings write — see the note on Hide in modules/Window.lua.
+    window.config.visibility.world = false
+    inst.mocks.setInstance(nil)
     window:Show()
     window:Hide("closed")
 

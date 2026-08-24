@@ -697,3 +697,80 @@ function Compat.FirstAtlas(names)
     end
     return nil
 end
+
+-- ---------------------------------------------------------------------------
+-- Player context
+-- ---------------------------------------------------------------------------
+--
+-- Three probes modules/Visibility.lua's rules ask about the world the player is
+-- standing in. They are here rather than in that module for the reason
+-- everything else in this file is here: each one reaches into a namespace that
+-- arrived in a recent patch, and one of them has to reconcile three APIs that do
+-- not agree with each other.
+--
+-- ALL THREE ANSWER FALSE WHERE THE API IS ABSENT, AND THE DIRECTION IS THE
+-- POINT. Each feeds a rule that only ever HIDES a window, so "I cannot tell"
+-- must mean "do not hide". Guessing the other way would make a window vanish on
+-- any client whose API surface this addon read wrong, in a state the player has
+-- no way to connect to a setting.
+
+--- The difficulty a delve reports through GetInstanceInfo. Named because the
+--- bare 208 in the middle of the ladder below reads as noise.
+local DELVE_DIFFICULTY_ID = 208
+
+--- Whether the player is in a delve.
+---
+--- Blizzard has no delve instance type: a delve reports instanceType "scenario",
+--- the same token an ordinary scenario and a follower dungeon report. So this is
+--- a LADDER of three independent signals, and ANY of them is taken as
+--- authoritative rather than requiring agreement — outdoor delves are the case
+--- that forces it, because the party-info flag, the scenario difficulty and the
+--- delve namespace do not all light up together there.
+---
+--- @return boolean
+function Compat.IsInDelve()
+    local party = _G.C_PartyInfo
+    if party and party.IsDelveInProgress and party.IsDelveInProgress() then
+        return true
+    end
+
+    if _G.GetInstanceInfo then
+        local _, instanceType, difficultyID = _G.GetInstanceInfo()
+        if instanceType == "scenario" and difficultyID == DELVE_DIFFICULTY_ID then
+            return true
+        end
+    end
+
+    local delves = _G.C_DelvesUI
+    if delves and delves.HasActiveDelve then
+        local map = _G.C_Map
+        local mapID = map and map.GetBestMapForUnit and map.GetBestMapForUnit("player")
+        if mapID and delves.HasActiveDelve(mapID) then return true end
+    end
+
+    return false
+end
+
+--- Whether the player is on a skyriding mount or in a skyriding-capable form.
+---
+--- CAPABILITY, not altitude. There is deliberately no IsFlying() term: the rule
+--- this feeds is about having stopped fighting and started travelling, and that
+--- is true from the moment the skyriding bar appears, which is on the ground.
+--- The capability flag also catches the flight forms that are not mounts at all
+--- — Druid, Dracthyr Soar, Haranir — which an IsMounted-shaped test misses.
+---
+--- @return boolean
+function Compat.IsSkyriding()
+    local info = _G.C_PlayerInfo
+    if not (info and info.GetGlidingInfo) then return false end
+    local _, canGlide = info.GetGlidingInfo()
+    return canGlide == true
+end
+
+--- Whether the player is inside their house or standing on their plot.
+--- @return boolean
+function Compat.IsInHousing()
+    local housing = _G.C_Housing
+    if not (housing and housing.IsInsideHouseOrPlot) then return false end
+    return housing.IsInsideHouseOrPlot() and true or false
+end

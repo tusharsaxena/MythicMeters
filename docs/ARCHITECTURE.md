@@ -85,7 +85,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **115 rows across 11 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **124 rows across 11 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -131,6 +131,8 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 | `ZONE_CHANGED` | `core/MultiMeters.lua` | `Visibility`, every `Window` | — |
 | `ENTERING_WORLD` | `core/MultiMeters.lua` | `Provider`, `Roster`, `Visibility`, every `Window` | `{ isLogin, isReload }` |
 | `RESTRICTION_CHANGED` | `core/MultiMeters.lua` | every `Window`, the export modal (`modules/Export.lua`) | `{ type, state }` |
+| `COMBAT_CHANGED` | `core/MultiMeters.lua` | `Visibility`, every `Window` | — |
+| `PLAYER_STATE_CHANGED` | `core/MultiMeters.lua` | `Visibility`, every `Window` | — |
 | `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `Targets`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
@@ -210,12 +212,45 @@ lets that section be read as a wiring diagram.
 | `DAMAGE_METER_CURRENT_SESSION_UPDATED` | `OnMeterUpdated` | `METER_UPDATED` |
 | `DAMAGE_METER_COMBAT_SESSION_UPDATED` | `OnMeterSession` | `METER_SESSION { type, sessionID }` |
 | `DAMAGE_METER_RESET` | `OnMeterReset` | wipes every cache, then `METER_RESET` |
+| `PLAYER_REGEN_DISABLED` / `PLAYER_REGEN_ENABLED` | `OnCombatChanged` | `COMBAT_CHANGED` |
+| `PLAYER_MOUNT_DISPLAY_CHANGED`, `UPDATE_SHAPESHIFT_FORM`, `PLAYER_CAN_GLIDE_CHANGED`, `PLAYER_IS_GLIDING_CHANGED`, `PET_BATTLE_OPENING_START`, `PET_BATTLE_CLOSE`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `OnPlayerStateChanged` | `PLAYER_STATE_CHANGED` |
 | `UNIT_SPELLCAST_SUCCEEDED` | `OnSpellSucceeded` | **the one handler that decides something** — Feign Death (5384) only, straight into `modules/Feign.lua`. Nothing reaches the bus: republishing every cast in a raid to save one comparison would be worse, and no other file may see a game event |
 
 The three `DAMAGE_METER_*` handlers carry the `meterEvent` perf bracket. It measures the **fan-out**,
 not the redraw: `SendMessage` walks every subscribed window's callback synchronously, which is the
 cost that scales with window count at raid event rate. What a window then does on its own throttle
 tick is the separate `refresh` bucket.
+
+The player-state block exists for `modules/Visibility.lua`'s rules and carries **no payload**,
+because those rules read their inputs live at the moment they are asked.
+
+**These edges are load-bearing, not an optimisation.** There is no fallback poll: `onUpdate` in
+`modules/Window.lua` refreshes *data* and never re-asks `NS.ShouldShow`, so the show ladder is
+re-run only from a bus message a window subscribes to (`ROSTER_CHANGED`, `ZONE_CHANGED`,
+`ENTERING_WORLD`, `COMBAT_CHANGED`, `PLAYER_STATE_CHANGED`, `TEST_MODE_CHANGED`, `CONFIG_CHANGED`).
+A visibility input with no edge on the bus is a rule that never fires — which is exactly what
+happened to `hideInVehicle`, shipped in 0.1.0 with no vehicle event registered, and to the first cut
+of the player-state rules, which reached `Visibility` but not the window.
+
+`PLAYER_IS_GLIDING_CHANGED` is **probed** through `C_EventUtils.IsEventValid` rather than registered
+outright: it is the newest of the set and a client that has not got it raises on `RegisterEvent`.
+Losing that one edge is survivable where losing the block is not — `PLAYER_CAN_GLIDE_CHANGED` still
+fires when the mount changes, which is the transition the skyriding rule turns on.
+`UNIT_ENTERED_VEHICLE` / `UNIT_EXITED_VEHICLE` fire for every unit, so `OnPlayerStateChanged`
+filters those two to `"player"`; that check is a filter, not a decision.
+
+**The filter is keyed on the event name, and must stay that way.** Only the vehicle pair carries a
+unit token in `arg1`. `PLAYER_CAN_GLIDE_CHANGED` and `PLAYER_IS_GLIDING_CHANGED` carry a **boolean**
+there (`canGlide` / `isGliding`); `PLAYER_MOUNT_DISPLAY_CHANGED` carries nothing. A filter that
+tested `arg1 ~= "player"` for the whole block swallowed both skyriding edges while ground mounts kept
+working — which read as "skyriding is broken" rather than as a filter bug.
+
+**Every edge is answered twice**, immediately and again after `Constants.PLAYER_STATE_SETTLE` (0.5s).
+Some client state lags its own event: `IsMounted()` has flipped by the time
+`PLAYER_MOUNT_DISPLAY_CHANGED` arrives, `GetGlidingInfo`'s `canGlide` has not always done so. Read at
+the edge alone, a lagging input answers with the state the player just left, and since a hidden
+window has no `OnUpdate` running, that stale answer stands until the next zone change. One settle
+pass is booked per burst, not per event — mounting fires several at once.
 
 `ADDON_RESTRICTION_STATE_CHANGED` is registered even on a client without `C_RestrictedActions` — an
 event that never fires costs nothing, and the alternative is a version check to keep in step with
