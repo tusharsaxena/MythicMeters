@@ -296,8 +296,8 @@ end)
 --
 -- debug-logging-§9 collapses per-ITEM to per-PASS. These cases are about the
 -- axis it leaves open: a pass on a timer that reports the same thing every time.
--- Measured on this addon, that is twelve lines a second into a 500-line buffer —
--- forty seconds of history, and a single steady state evicts everything behind
+-- Measured on this addon, that is twelve lines a second into a 1500-line buffer —
+-- two minutes of history, and a single steady state evicts everything behind
 -- it. Recorded as an accepted deviation in docs/ARCHITECTURE.md.
 
 --- Every line the sink emitted while `body` ran.

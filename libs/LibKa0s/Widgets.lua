@@ -33,7 +33,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 5
+local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 6
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -426,4 +426,178 @@ end
 --- click at all.
 function lib.CloseMenu()
   if menu and menu:IsShown() then menu:Hide() end
+end
+
+-- ── the copy window ──────────────────────────────────────────────────────────────────────────
+--
+-- WHY THIS IS HERE. There is no file I/O in WoW. Every "export this" surface in the collection
+-- therefore ends in the same thing: a frame holding a multi-line EditBox with the text selected,
+-- and an instruction to press Ctrl+C. There were four copies before this member — BankLedger's,
+-- LootHistory's, MultiMeters' and the debug log's — and two of them were the same fifty-two lines
+-- with the addon name substituted out.
+--
+-- It lives in Widgets rather than in a major of its own for the same reason the dropdown does:
+-- Widgets already owns "a frame this collection kept re-drawing", and the three addons that need
+-- this already vendor it. A new major would have bought a fourth vendor sweep for nothing.
+--
+-- WHAT THE HOST STILL OWNS. The art and the face arrive as DESCRIPTOR FIELDS, not as lookups: a
+-- vendored copy cannot know which addon folder it sits in, so it cannot resolve a texture path or
+-- ask Media for one without being told the host's name. That is the same bargain
+-- LibKa0s-Media-1.0 and Core.MakeCloseButton already strike.
+
+local COPY_DEFAULTS = {
+  width = 640, height = 420, fontSize = 10, title = "Export",
+  backdrop = { 0.06, 0.06, 0.08, 0.95 },
+}
+
+--- Fill a caller's descriptor out with the collection's defaults, without mutating theirs.
+local function copyDescriptor(d)
+  local out = {
+    addonName = d.addonName,
+    name      = d.name or (d.addonName .. "CopyWindow"),
+    width     = d.width or COPY_DEFAULTS.width,
+    height    = d.height or COPY_DEFAULTS.height,
+    title     = d.title or COPY_DEFAULTS.title,
+    font      = d.font,
+    fontSize  = d.fontSize or COPY_DEFAULTS.fontSize,
+    applySkin = d.applySkin,
+    backdrop  = d.backdrop or COPY_DEFAULTS.backdrop,
+    anchorTo  = d.anchorTo,
+  }
+  out.editWidth = d.editWidth or (out.width - 50)
+  return out
+end
+
+--- Build the frame. Called once, lazily, on the first Show — a modal rebuilt per open leaks a
+--- frame per open for the life of the session, because frames are never destroyed in WoW.
+local function buildCopyFrame(d)
+  local f = CreateFrame("Frame", d.name, UIParent, "BackdropTemplate")
+  f:SetSize(d.width, d.height)
+  f:SetPoint("CENTER")
+  -- FULLSCREEN so it sits above the DIALOG-strata modal that opened it. The modal stays visible
+  -- underneath, which is what makes "copy this, then pick a different set" one trip rather than two.
+  f:SetFrameStrata("FULLSCREEN")
+  f:EnableMouse(true)
+  f:SetMovable(true)
+  f:SetClampedToScreen(true)
+
+  local bar = CreateFrame("Frame", nil, f)
+  bar:SetPoint("TOPLEFT", 1, -1)
+  bar:SetPoint("TOPRIGHT", -1, -1)
+  bar:SetHeight(26)
+  bar:EnableMouse(true)
+  bar:RegisterForDrag("LeftButton")
+  bar:SetScript("OnDragStart", function() f:StartMoving() end)
+  bar:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+
+  local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  title:SetPoint("CENTER")
+  title:SetText(d.title)
+  f.title = title
+
+  -- Resolved at CALL time rather than at load: Core is the first file in LibKa0s.xml and this is
+  -- the third, so a load-time lookup would be fine here — but MakeCloseButton itself resolves Media
+  -- at call time for exactly this reason, and one rule about when the payload is resolvable is
+  -- easier to keep than two.
+  local coreLib = LibStub and LibStub("LibKa0s-Core-1.0", true)
+  if coreLib and coreLib.MakeCloseButton then
+    local close = coreLib.MakeCloseButton(bar, function() f:Hide() end, d.addonName)
+    if close then close:SetPoint("RIGHT", bar, "RIGHT", -6, 0) end
+  end
+
+  local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+  scroll:SetPoint("TOPLEFT", 8, -30)
+  scroll:SetPoint("BOTTOMRIGHT", -28, 10)
+
+  local edit = CreateFrame("EditBox", nil, scroll)
+  edit:SetMultiLine(true)
+  -- The face arrives as a PATH. SetFont does not accept a LibSharedMedia name, and a CSV is
+  -- columns of digits that only line up in a fixed-width face.
+  if d.font then edit:SetFont(d.font, d.fontSize, "") end
+  edit:SetAutoFocus(false)
+  edit:SetWidth(d.editWidth)
+  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
+  scroll:SetScrollChild(edit)
+
+  f.scroll, f.edit = scroll, edit
+
+  if d.applySkin then
+    d.applySkin(f)
+  elseif coreLib and coreLib.ApplySkin then
+    coreLib.ApplySkin(f)
+  end
+  -- Denser than the shared skin. This frame is a wall of small monospace text, and the world
+  -- behind it bleeding through costs legibility in a way it does not on a frame showing four
+  -- controls.
+  if f.SetBackdropColor then
+    f:SetBackdropColor(d.backdrop[1], d.backdrop[2], d.backdrop[3], d.backdrop[4])
+  end
+
+  f:Hide()
+  -- By NAME, type-guarded: UISpecialFrames is a list of GLOBAL frame names and the table itself is
+  -- not guaranteed to exist outside a real client.
+  if type(UISpecialFrames) == "table" then
+    table.insert(UISpecialFrames, d.name)
+  end
+  return f
+end
+
+--- A read-only copy window: text in, Ctrl+C out, Esc closes.
+---
+--- Returns a HANDLE, not a frame, so the frame stays lazy — nothing is created until the first
+--- Show, which matters because a host builds this at file load and most sessions never open it.
+--- Answers nil with no client and without an `addonName` (which the close control needs to find
+--- the collection's own art).
+---
+--- @param d table  see docs/api/Widgets — addonName is the only required field
+--- @return table|nil
+function lib.CopyWindow(d)
+  if type(d) ~= "table" or type(d.addonName) ~= "string" then return nil end
+  if type(CreateFrame) ~= "function" then return nil end
+
+  local desc = copyDescriptor(d)
+  local frame
+  local win = { __descriptor = desc }
+
+  function win:GetFrame()
+    if not frame then frame = buildCopyFrame(desc) end
+    return frame
+  end
+
+  function win:GetText()
+    return frame and frame.edit:GetText() or nil
+  end
+
+  function win:Hide()
+    if frame then frame:Hide() end
+  end
+
+  --- THE ORDER IS LOAD-BEARING: width, then text, then cursor to the top, then show, then focus,
+  --- then highlight. Highlighting before the frame is shown selects nothing, and focusing before
+  --- the text is set leaves the cursor wherever the last export left it. All four hand-rolled
+  --- copies got this right and the fifth author would have had to rediscover it.
+  function win:Show(text)
+    local f = self:GetFrame()
+
+    -- Re-anchored on EVERY show, not once at build: the popup has to land over the window that
+    -- spawned it, wherever the user has since dragged that window.
+    f:ClearAllPoints()
+    local anchor = desc.anchorTo and desc.anchorTo()
+    if anchor and anchor.IsShown and anchor:IsShown() then
+      f:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+    else
+      f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+
+    local w = f.scroll:GetWidth()
+    f.edit:SetWidth((type(w) == "number" and w > 0) and w or desc.editWidth)
+    f.edit:SetText(text or "")
+    f.edit:SetCursorPosition(0)
+    f:Show()
+    f.edit:SetFocus()
+    f.edit:HighlightText()
+    return f
+  end
+
+  return win
 end

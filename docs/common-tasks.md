@@ -61,7 +61,7 @@ string built at the call site, and one line per pass rather than one per row (`d
 
 **A pass that repeats on a timer logs through `NS.DebugSteady(key, "Tag", "fmt %d", n)` instead.**
 One line per *change*, plus a heartbeat every 10s carrying `(xN)` for the passes it stood for — the
-refresh loop runs four times a second and the console buffer holds 500 lines, so `NS.Debug` on that
+refresh loop runs four times a second and the console buffer holds 1500 lines, so `NS.Debug` on that
 path spends the whole buffer on one steady state. `key` separates emitters that share a call site
 (pass the window id); the call site itself is identified by the format string, so two `NS.Debug`
 calls under one tag do not need distinct keys. Still gated at the call site exactly as `NS.Debug` is

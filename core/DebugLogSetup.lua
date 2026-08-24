@@ -2,7 +2,7 @@ local addonName, NS = ...
 
 -- core/DebugLogSetup.lua — wires the addon into LibKa0s-DebugLog-1.0.
 --
--- The console window, the copy window, the two formatters, the 500-line buffer,
+-- The console window, the copy window, the two formatters, the 1500-line buffer,
 -- the scrollbar sync, the line counter and the enable seam live in
 -- libs/LibKa0s/DebugLog.lua and are shared across every Ka0s addon. This file
 -- supplies only the part that is ours: the frame-name prefix, the title, the
@@ -83,8 +83,8 @@ local addonName, NS = ...
 
 --- How long an unchanged run may stay silent before it re-announces itself.
 ---
---- Ten seconds is one line per tag per ten seconds in a steady state — about 80
---- minutes of history in the same 500-line buffer that held 40 seconds, and
+--- Ten seconds is one line per tag per ten seconds in a steady state — about four
+--- hours of history in the same 1500-line buffer that held two minutes, and
 --- still frequent enough that a reader who grabs the log mid-pull sees the
 --- current state rather than inferring it from a line five minutes old.
 local STEADY_HEARTBEAT = 10
