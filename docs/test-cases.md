@@ -618,7 +618,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (91)
+### test_window.lua (94)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -674,6 +674,9 @@ badge and any count quoted in the docs must agree with it.
 - Column headers are BUTTONS carrying the full stat label, left-aligned
 - The sort column shows an arrow and the others do not
 - The arrow flips with the direction
+- The sort arrow prefers the collection's own art over the Blizzard atlas
+- The sort arrow's two directions are two assets, never one flipped
+- The sort arrow falls to the Blizzard atlas with no LibKa0s art
 - Clicking a header sorts by it; clicking again reverses
 - Clicking a header drops the frozen sort order
 - A STAT header is honoured in combat: the column it ranks by is a choice
@@ -1009,7 +1012,7 @@ badge and any count quoted in the docs must agree with it.
 - Every death row has a distinct pool identity, id or no id
 - A death row wears the death icon
 
-### test_export.lua (68)
+### test_export.lua (73)
 
 - Export is a plain table on NS, not an AceAddon module
 - Export.Open refuses to open at all while restricted
@@ -1028,12 +1031,13 @@ badge and any count quoted in the docs must agree with it.
 - Export.Columns carries _ps for exactly the rate stats and no others
 - Export.Columns carries a total and a _pct for every stat in the catalog
 - Export.Columns follows catalog order and states each fact twice
-- Export.ResolveMetric follows the window's sort column when nothing is pinned
-- Export.ResolveMetric ships following the window, not pinned to damage
-- Export.ResolveMetric lets a pinned stat beat the window
+- Export.ResolveMetric answers the pinned stat
+- Export.ResolveMetric ships pinned to a real stat, never to the empty string
+- Export.ResolveMetric treats the old empty-string choice as unset
+- Export.ResolveMetric treats a stat this build does not offer as unset
 - Export.ResolveMetric falls back to the first catalog stat
-- Export.ResolveMetric treats a stat this build does not offer as unpinned
 - Export.ResolveMetric is callable through the colon form
+- The Metric selector offers exactly the catalog, with no sentinel entry
 - Export.SessionConfig names every catalog stat, enabled
 - Export.SessionConfig caps at the aggregator's own ceiling
 - Export.SessionConfig inherits the invoking window's segment
@@ -1079,6 +1083,10 @@ badge and any count quoted in the docs must agree with it.
 - Export.SessionLabel names what a bare config can name on its own
 - Export.Build goes through the aggregator and nowhere near the meter API
 - Export.Build answers nil when there is no aggregator to ask
+- The modal's whisper row is a row, not an overlap
+- Hiding the export modal closes an open dropdown menu (LibKa0s-Widgets-1.0)
+- Hiding the export modal with no menu ever opened is a safe no-op
+- Clicking a Metric row builds a real menu row and stores that metric
 
 ### test_visibility.lua (22)
 
@@ -1294,7 +1302,7 @@ badge and any count quoted in the docs must agree with it.
 - Columns: a width the slider can produce is never refused by the seam
 - Columns: a stat from a newer build is still LISTED so the player can remove it
 
-### test_degraded.lua (26)
+### test_degraded.lua (27)
 
 - Degraded: the library really is absent, so every case below is measuring a stub
 - Degraded: every seam soft-optionals its major, so a missing library is not a load error
@@ -1321,6 +1329,7 @@ badge and any count quoted in the docs must agree with it.
 - Degraded: every schema page is registered as an options page on both paths
 - Degraded: the namespace publishes the same seam members with and without the library
 - Degraded: every NS.Perf member the addon actually reaches exists on the stub
+- Degraded: the export modal refuses to open with no dropdown widget
 - Degraded: the addon still enables end to end with no library
 
 ## Totals
@@ -1348,13 +1357,13 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 91 |
+| test_window.lua | 94 |
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 99 |
 | test_drilldown.lua | 50 |
-| test_export.lua | 68 |
+| test_export.lua | 73 |
 | test_visibility.lua | 22 |
 | test_windowmanager.lua | 31 |
 | test_minimap.lua | 17 |
@@ -1363,5 +1372,5 @@ badge and any count quoted in the docs must agree with it.
 | test_slash.lua | 33 |
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
-| test_degraded.lua | 26 |
-| **Total** | **1206** |
+| test_degraded.lua | 27 |
+| **Total** | **1215** |

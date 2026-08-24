@@ -1054,7 +1054,7 @@ end)
 -- ---------------------------------------------------------------------------
 --
 -- LibKa0s-Widgets-1.0's popup is a process-wide singleton parented to UIParent at
--- FULLSCREEN_DIALOG (docs/api/Widgets/version-2-docs.md, "Behavior a host must
+-- FULLSCREEN_DIALOG (docs/api/Widgets/version-4-docs.md, "Behavior a host must
 -- know", in the LibKa0s repo) — not to this modal, so the modal's own Hide() does
 -- not reach it. This modal is in UISpecialFrames, so Escape hides it without going
 -- through onExportCsv/onPrintToChat or any other click handler this file controls;
@@ -1070,22 +1070,22 @@ test("Hiding the export modal closes an open dropdown menu (LibKa0s-Widgets-1.0)
     local modal = inst.NS.Export.Open({})
     assertTrue(type(modal) == "table", "the modal opened")
 
-    -- Emptied rather than left at the real metric list: LibKa0s-Widgets-1.0's
-    -- Populate paints every row's optional glyph FontString unconditionally
-    -- (paintMenuRow, Widgets.lua), and this harness's mock enforces the real
-    -- client's "FontString:SetText(): Font not set" rule (tests/wow_mock.lua,
-    -- see test_window.lua's "Building a window sets no text on a fontless
-    -- FontString") on a glyph column no export dropdown ever gives a
-    -- glyphFont for. That row-painting behavior is the library's, not this
-    -- hook's, and unrelated to what this case is pinning — closing the menu
-    -- on OnHide — so this case opens the menu with nothing to paint.
+    -- The REAL metric list, painted into real rows. It used to be emptied first,
+    -- on the grounds that LibKa0s-Widgets-1.0's paintMenuRow writes every row's
+    -- glyph FontString unconditionally while no export dropdown names a
+    -- glyphFont, and that this harness's mock enforces the client's
+    -- "FontString:SetText(): Font not set" rule (tests/wow_mock.lua). That
+    -- stopped being true at Widgets minor 3: the row's glyph FontString is now
+    -- built from GameFontHighlightSmall, so it has a font before its first
+    -- SetText and the mock's template branch lets it through. Emptying the list
+    -- now buys nothing and costs the row build — see the real-row case at the
+    -- foot of this file for why that matters.
     local made, savedCreateFrame = {}, inst.mocks.CreateFrame
     inst.mocks.CreateFrame = function(...)
         local f = savedCreateFrame(...)
         made[#made + 1] = f
         return f
     end
-    modal.metricDD:SetOptions({})
     modal.metricDD:__fire("OnClick")
     inst.mocks.CreateFrame = savedCreateFrame
 
@@ -1109,4 +1109,81 @@ test("Hiding the export modal with no menu ever opened is a safe no-op", functio
 
     local ok = pcall(function() modal:__fire("OnHide") end)
     assertTrue(ok, "closing the modal before any dropdown was clicked must not raise")
+end)
+
+-- ---------------------------------------------------------------------------
+-- A real row build, and a real click on a real row
+-- ---------------------------------------------------------------------------
+--
+-- THE HOLE THIS FILLS. Every other case in this file drives the collapsed
+-- button — the half modules/Export.lua wrote. None of them reached the half it
+-- did not: the pooled row buttons LibKa0s-Widgets-1.0 builds on the first click
+-- (`makeMenuRow`, Widgets.lua). That is the exact shape of hole that let
+-- v1.11.0 and v1.11.1 ship a first-click crash (`FontString:SetText(): Font not
+-- set`, on a row's glyph FontString) past 553 green library cases: every one of
+-- them seeded a stand-in row and none reached the constructor. A case that
+-- empties the option list first proves only that the click handler runs; the
+-- rows it would have built are what the crash was in.
+--
+-- NO OPTION THIS ADDON SETS CARRIES A GLYPH. metricOptions, channelOptions and
+-- linesOptions each build `{ value =, label = }` and nothing else, so the modal
+-- passes no `opts.glyphFont` — which is CORRECT rather than an oversight, and
+-- must stay that way: glyphFont is a precondition for a row carrying `glyph`
+-- (version-4-docs.md, "Behavior a host must know"), not decoration to add
+-- because the field exists. This case is what proves a glyphless row survives
+-- being built and painted with no face named.
+--
+-- HOW THE FRAMES ARE OBSERVED. The shared menu is a file-local in Widgets.lua
+-- with no getter, so this does what LibKa0s's own test_widgets.lua does:
+-- captures what CreateFrame makes while the click runs. The order is the
+-- library's own construction order — the menu, its click-catcher, then one
+-- pooled Button per option — and counting them is how "a row was really built"
+-- is asserted without reading anything back off a pooled row, which the
+-- contract forbids a host to do.
+test("Clicking a Metric row builds a real menu row and stores that metric", function()
+    local inst = T.load()
+    local NS = inst.NS
+    local modal = NS.Export.Open({})
+    assertTrue(type(modal) == "table", "the modal opened")
+
+    local stats = NS.Constants.STATS
+    assertTrue(#stats > 1, "the catalog offers more than one metric to pick between")
+
+    -- A metric that is NOT the one already resolved, so the assertion below
+    -- cannot pass on a click that did nothing.
+    local before = NS.Export.ResolveMetric()
+    local target
+    for _, stat in ipairs(stats) do
+        if stat.key ~= before then target = stat break end
+    end
+    assertTrue(target ~= nil, "the catalog offers a metric other than the current one")
+
+    local made, savedCreateFrame = {}, inst.mocks.CreateFrame
+    inst.mocks.CreateFrame = function(...)
+        local f = savedCreateFrame(...)
+        made[#made + 1] = f
+        return f
+    end
+    local ok, err = pcall(function() modal.metricDD:__fire("OnClick") end)
+    inst.mocks.CreateFrame = savedCreateFrame
+    assertTrue(ok, "the first click built the menu and its rows without raising: " .. tostring(err))
+
+    -- The menu, the catcher, and one pooled Button for every option in the list.
+    assertEqual(#made, #stats + 2,
+        "the first click built one real menu row per metric, not an empty menu")
+    local menu = made[1]
+    assertTrue(menu:IsShown(), "opening the Metric dropdown showed the shared menu")
+
+    -- Row i is the i-th option, in the order SetOptions was given them.
+    local index
+    for i, stat in ipairs(stats) do
+        if stat.key == target.key then index = i break end
+    end
+    made[index + 2]:__fire("OnClick")
+
+    assertEqual(NS.GetSetting("export.metric"), target.key,
+        "clicking the row stored that metric")
+    assertEqual(menu:IsShown(), false, "and a single-select pick closed the menu behind it")
+    assertTrue(tostring(modal.metricDD.text:GetText()):find(target.label, 1, true) ~= nil,
+        "and the collapsed button repainted to the metric that was picked")
 end)
