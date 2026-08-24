@@ -1315,6 +1315,41 @@ local function onPrintToChat()
     end
 end
 
+--- One of the modal's three selectors: a LibKa0s-Widgets-1.0 dropdown, full
+--- modal width, anchored `top` px below the modal's top edge.
+---
+--- ART IS A PARAMETER, AND IT IS RESOLVED IN ONE PLACE. The widget is vendored
+--- and cannot know which addon folder its copy sits in, so it takes no
+--- dependency on LibKa0s-Media-1.0 and every texture it draws arrives through
+--- `opts` (version-4-docs.md, "Why it takes no dependency on
+--- LibKa0s-Media-1.0"). Resolving that at each call site is how three selectors
+--- come to wear two skins the day one of them is restyled and the others are
+--- missed; this function is the one place `NS.Icon` is asked on the widget's
+--- behalf, and the geometry every selector shares lives here with it.
+---
+--- NO `glyphFont`, DELIBERATELY — not an oversight, and not a line to "fix".
+--- None of this modal's options carries a `glyph`: metricOptions,
+--- channelOptions and linesOptions each build `{ value =, label = }` and
+--- nothing else, and the widget then draws no glyph column at all. `glyphFont`
+--- is a PRECONDITION for an option that carries `glyph`, not decoration — and
+--- it must be a MONOSPACE face (`Const.FONT_MONO` here), because a proportional
+--- one has no such glyph and renders a box. If an option here ever grows one,
+--- this is the single line that has to grow with it.
+---
+--- `NS.Icon` answers nil on a load with no LibKa0s-Media, which is exactly the
+--- widget's own fallback: it draws Blizzard's arrow instead.
+---
+--- @param parent table   the modal
+--- @param top number     px below the modal's top edge
+--- @return table         the dropdown frame
+local function makeSelector(parent, top)
+    local dd = W.Dropdown(parent, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
+    dd:SetHeight(GEOM.rowHeight)
+    dd:SetPoint("TOPLEFT", 16, -top)
+    dd:SetPoint("TOPRIGHT", -16, -top)
+    return dd
+end
+
 --- Build the modal, once.
 ---
 --- @return table|nil  the frame, or nil with no client
@@ -1338,24 +1373,15 @@ local function EnsureFrame()
 
     makeTitleBar(modal, L["Export"])
 
-    local metricDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
-    metricDD:SetHeight(GEOM.rowHeight)
-    metricDD:SetPoint("TOPLEFT", 16, -GEOM.metricTop)
-    metricDD:SetPoint("TOPRIGHT", -16, -GEOM.metricTop)
+    local metricDD = makeSelector(modal, GEOM.metricTop)
     metricDD:SetOptions(metricOptions())
     metricDD.onSelect = function(v) chooseExport("metric", v) end
 
-    local channelDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
-    channelDD:SetHeight(GEOM.rowHeight)
-    channelDD:SetPoint("TOPLEFT", 16, -GEOM.channelTop)
-    channelDD:SetPoint("TOPRIGHT", -16, -GEOM.channelTop)
+    local channelDD = makeSelector(modal, GEOM.channelTop)
     channelDD:SetOptions(channelOptions())
     channelDD.onSelect = function(v) chooseExport("channel", v) end
 
-    local linesDD = W.Dropdown(modal, MODAL_WIDTH - 32, { chevron = NS.Icon("chevron-down") })
-    linesDD:SetHeight(GEOM.rowHeight)
-    linesDD:SetPoint("TOPLEFT", 16, -GEOM.linesTop)
-    linesDD:SetPoint("TOPRIGHT", -16, -GEOM.linesTop)
+    local linesDD = makeSelector(modal, GEOM.linesTop)
     linesDD:SetOptions(linesOptions())
     linesDD.onSelect = function(v) chooseExport("lines", v) end
 
@@ -1445,7 +1471,7 @@ local function EnsureFrame()
     -- Channel or Lines menu is the shared LibKa0s-Widgets-1.0 popup: a
     -- process-wide singleton parented to UIParent at FULLSCREEN_DIALOG, not to
     -- this modal, so the modal's own Hide() does not reach it (see the
-    -- FrameStrata comment above and Widgets version-2-docs.md, "Behavior a host
+    -- FrameStrata comment above and Widgets version-4-docs.md, "Behavior a host
     -- must know"). Without this, Escape would leave the menu orphaned above the
     -- game with the modal that owned it already gone. CloseMenu() is a safe
     -- no-op when no dropdown here has ever opened the menu, or when it is
