@@ -982,8 +982,11 @@ its export glyph.
   with it** — dark panel, no gold title bar. The current metric's row is **gold**;
   the rest are light gray. It looks like Bank Ledger's Data Set menu, not like a
   Blizzard right-click menu.
-- Click outside the menu. It closes and the click does **not** land on the modal
-  behind it.
+- Click outside the menu, on the modal behind it. It closes **and the click lands**
+  on the modal in that same press; a right-click there does the same. *(Changed at
+  LibKa0s v1.13.0, Widgets minor 5. The menu used to be dismissed by a full-screen
+  `Button` that consumed the press — and, registering `LeftButtonUp` only, swallowed
+  a right-click entirely — so dismissing cost a click that did nothing else.)*
 - Pick a different metric. The menu closes, the button reads `Metric: <that one>`.
 - Repeat for **Channel** and **Lines**. Same skin, same behaviour, in all three.
 - **Open Metric, then click Channel without picking anything.** The Metric menu **closes** as the

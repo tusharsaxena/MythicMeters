@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
+Forty-seven non-vendored source files: 1 locale, 14 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MultiMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -100,8 +100,8 @@ have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpres
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
 settings panel's window picker (`settings/Windows.lua`, its only writer) moves. Global rows keep
-absolute paths (`enabled`, `minimap.hide` and the four `export.*` preferences) and resolve against
-`db.profile`. Moving one integer of session state retargets seventy-odd rows.
+absolute paths (`enabled`, `minimap.hide` and the three `export.*` preferences) and resolve against
+`db.profile`. Moving one integer of session state retargets a hundred and seventeen rows.
 
 Two pages carry **zero** schema rows, both by necessity. `settings/Columns.lua` edits an ordered
 array whose length is the user's, which a path model has no vocabulary for — so `window.columns` is a
@@ -118,7 +118,7 @@ persisted shape and the migration seam: [schema.md](schema.md).
 
 ## Message bus
 
-Twelve `AceEvent` messages are the only inter-module communication channel — modules never call each
+Fourteen `AceEvent` messages are the only inter-module communication channel — modules never call each
 other across boundaries. Every name is declared once in `core/Constants.lua`'s `MSG` catalog, so a
 typo in a subscriber is a nil-index at load rather than a callback that silently never fires.
 **One sender each**; a second sender is a bug, not a convenience.
@@ -591,6 +591,8 @@ The directory carries no `.md` and so registers no row.
 | `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
 | `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
 | `superpowers/specs/2026-08-23-header-controls-design.md` | Tier 3 planning history — the approved header control strip (issues #6, #7) |
+| `superpowers/specs/2026-08-24-shared-dropdown-and-export-ux-design.md` | Tier 3 planning history — the approved shared dropdown and export-window UX corrections |
+| `superpowers/plans/2026-08-24-shared-dropdown-and-export-ux.md` | Tier 3 planning history — the shared-dropdown and export-UX build plan |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 

@@ -38,7 +38,7 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | 9 | Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
 | 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
 | 11 | Data | `data` | 6 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |
-| 12 | General | `general` | 8 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |
+| 12 | General | `general` | 7 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |
 | 13 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
 
 Seven of the thirteen — Header, Rows, Bars, Text, Icons, Tooltip, Visibility — are one

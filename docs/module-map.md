@@ -3,7 +3,7 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MultiMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-five non-vendored source files: 1 locale, 12 `core/`, 1 `defaults/`, 15 `modules/`,
+Forty-seven non-vendored source files: 1 locale, 14 `core/`, 1 `defaults/`, 15 `modules/`,
 16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
@@ -30,7 +30,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         reader Compat used to own. BEFORE Namespace.lua, which
 │                         resolves NS.version at file scope
 │   ├── Constants.lua   — NS.Constants / NS.Const: the STAT CATALOG (9 rows), the
-│                         enum resolutions, the MSG bus catalog (12 names), throttle
+│                         enum resolutions, the MSG bus catalog (14 names), throttle
 │                         bounds, pool and row caps, the shipped mono font
 │   ├── Namespace.lua   — identity (NS.PREFIX, NS.name, NS.version, NS.GRAY) and
 │                         NS.NewBusTarget(), the private-bus-target factory
@@ -44,7 +44,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         printer (NS.Print === NS.Util.print), NS.IsConcatSafe /
 │                         NS.SafeToString, NS.RGBA, NS.SKIN / NS.ApplySkin /
 │                         NS.MakeCloseButton, and NS.LIBKA0S_MISSING
-│   ├── PerfSetup.lua   — LibKa0s-Perf-1.0 seam: NS.Perf, the 7 buckets, and the
+│   ├── PerfSetup.lua   — LibKa0s-Perf-1.0 seam: NS.Perf, the 8 buckets, and the
 │                         suspend/resume that makes the addon inert without a reload
 │   ├── DebugLogSetup.lua — LibKa0s-DebugLog-1.0 seam: NS.DebugLog, the bare
 │                         NS.Debug(tag, fmt, …) sink, and NS.DebugSteady — the
@@ -56,8 +56,9 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         widget's 42×42 preview tile. It registered the shipped font
 │                         too until the face moved into the LibKa0s payload
 │   ├── MultiMeters.lua — AceAddon bootstrap, the AceConsole printer reclaim, THE
-│                         SINGLE GAME-EVENT LISTENER (7 events fanned onto the bus),
-│                         and NS.ShouldShow — the one show ladder
+│                         SINGLE GAME-EVENT LISTENER (21 events, all but one
+│                         fanned onto the bus), and NS.ShouldShow — the one show
+│                         ladder
 │   ├── Database.lua    — the AceDB instance, window-shape key-fill, the id counter,
 │                         SeedWindows, the migration runner, and the ONE
 │                         PROFILE_CHANGED emitter
@@ -148,7 +149,7 @@ own strings entirely.
 | `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.Version`, and `Provider` / `WindowManager` / `Visibility` at call time |
 | `DebugLogSetup.lua` | The console descriptor (including `addonName`, which is what makes the console's own close/copy/clear draw the collection's art), the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
 | `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
-| `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 7 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
+| `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 21 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |
 | `Diagnostics.lua` | The `/mm debug diag` report: atlas probes, the formatter ladder, visibility, header, name column, cells, tooltip font and width, the Targets cross-reference, and the provider-order probe. Every section is `pcall`-wrapped, and nothing here inspects a meter value | `NS.Diagnostics` (`Report`) | `NS.DebugLog`, `NS.Print`, `NS.Provider`, `NS.Constants.STATS`, `NS.Database`, `NS.Secrets`, `NS.WindowManager` |
 
@@ -203,10 +204,10 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Visibility.lua` | The Visibility page (17 rows across three groups — where, extra rules, combat). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
 | `Data.lua` | The Data page (6 rows) plus the "Reset meter data" confirmation, which routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration | `NS.Helpers`, `NS.Provider.Reset` |
-| `General.lua` | The General page (8 rows): the master enable, the minimap toggle, the two session-only checkboxes (test mode, debug console) and the four addon-wide export preferences — plus the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
+| `General.lua` | The General page (7 rows): the master enable, the minimap toggle, the two session-only checkboxes (test mode, debug console) and the three addon-wide export preferences — plus the reset-everything confirmation | a page registration | `NS.Helpers`, `NS.State`, `NS.DebugLog` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 103 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
+Schema rows total 124 across 11 page keys. `columns` and `profiles` are pages with zero schema rows —
 both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order

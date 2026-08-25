@@ -97,7 +97,7 @@ are currently looking at, not all of them.
 | Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
 | Columns | Add, remove and reorder columns; per-column width and whether it draws a bar |
 | Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |
-| General | Minimap button, debug console, and what the export modal remembers — metric, channel, whisper target, chat lines |
+| General | Minimap button, debug console, and what the export modal remembers — channel, whisper target, chat lines |
 | Profiles | Share a setup between characters |
 
 ## How it works
