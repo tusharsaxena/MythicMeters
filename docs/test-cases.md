@@ -639,7 +639,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (106)
+### test_window.lua (107)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -672,6 +672,7 @@ badge and any count quoted in the docs must agree with it.
 - ShouldShow STEP 0 is NS.Perf.suspended, above even the master enable
 - ShouldShow's ladder reads master enable, then test mode, then context
 - RefreshVisibility shows, hides, and marks dirty exactly once on the way in
+- An explicit Show draws on the next tick too, not a throttle later
 - The header folds its parts with `..`, and survives a secret duration
 - The header says the grid was built the restricted way
 - The header names AMBIGUITY when two rows cannot be told apart
@@ -1406,7 +1407,7 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 106 |
+| test_window.lua | 107 |
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
@@ -1422,4 +1423,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1260** |
+| **Total** | **1261** |

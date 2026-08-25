@@ -99,9 +99,14 @@ throttle is per-window (`data.throttle`, default 0.25s), cached into an instance
 to `Constants.THROTTLE_MIN` (0.05) / `THROTTLE_MAX` (2.0). A twenty-second pull that reports two
 thousand times still draws eighty times.
 
-Two messages bypass the wait deliberately by setting `self.elapsed = self.throttle`, so the next tick
-draws instead of the one a quarter second later: `DRILLDOWN_CHANGED` (a click must not wait) and the
-show transition in `RefreshVisibility`.
+Four paths bypass the wait deliberately by setting `self.elapsed = self.throttle`, so the next tick
+draws instead of the one a quarter second later. Two are messages and two are not, which is why they
+are listed together rather than under the bus: the wheel (a scroll must answer now),
+`DRILLDOWN_CHANGED` (a click must not wait), the show transition in `RefreshVisibility`, and
+`WindowProto:Show` — the `/mm toggle` path, which shows the frame itself instead of going through
+`RefreshVisibility` and so does not inherit that branch's nudge. Without it the chrome `BuildFrame`
+has already made appeared at once and the rows landed up to a whole `data.throttle` later, since a
+hidden frame runs no `OnUpdate` and `elapsed` is frozen wherever the hide left it.
 
 Three things do **not** go through the throttle, because they change what the window *is* rather than
 what it shows:

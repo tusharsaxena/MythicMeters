@@ -2000,6 +2000,16 @@ function WindowProto:Show()
     self.forcedShow = true
     self.frame:Show()
     self:MarkDirty()
+    -- THE SAME CLOCK NUDGE RefreshVisibility GIVES ITS OWN SHOW BRANCH, and it
+    -- has to be repeated here because this path never goes through that one: it
+    -- shows the frame itself. Without it `/mm toggle` put the chrome — the
+    -- backdrop, the title bar, the column headers, all of which BuildFrame has
+    -- already made — on screen in the same frame, and left the rows to the next
+    -- throttle tick, up to a whole `data.throttle` away. A hidden frame runs no
+    -- OnUpdate, so `elapsed` is frozen at whatever the hide left behind and the
+    -- wait is neither fixed nor short. The window appeared to assemble itself in
+    -- two stages.
+    self.elapsed = self.throttle   -- draw on the next tick, not in 0.25s
 end
 
 --- Forget an explicit show request. Called on a real context change, which is

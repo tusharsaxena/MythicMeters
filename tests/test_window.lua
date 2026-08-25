@@ -708,6 +708,23 @@ test("RefreshVisibility shows, hides, and marks dirty exactly once on the way in
     assertEqual(window.elapsed, window.throttle, "it draws on the next tick, not in 0.25s")
 end)
 
+test("An explicit Show draws on the next tick too, not a throttle later", function()
+    -- The `/mm toggle` half of the same fact. Show puts the frame on screen
+    -- itself rather than going through RefreshVisibility, so it did not inherit
+    -- that file's clock nudge: the chrome appeared instantly and the rows landed
+    -- up to a full `data.throttle` later, which reads as the window assembling
+    -- itself in two stages.
+    -- red under: WindowProto:Show leaving `elapsed` where the hide left it.
+    local _, window = scene()
+    window:Hide("toggled")
+    window.dirty, window.elapsed = false, 0
+
+    window:Show()
+    assertTrue(window.dirty, "the request marks it dirty")
+    assertEqual(window.elapsed, window.throttle,
+        "and hands the clock a full tick, so the first draw is the next frame")
+end)
+
 -- ---------------------------------------------------------------------------
 -- The header line
 -- ---------------------------------------------------------------------------
