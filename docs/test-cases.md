@@ -639,7 +639,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (105)
+### test_window.lua (106)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -661,6 +661,7 @@ badge and any count quoted in the docs must agree with it.
 - Refresh draws one row per aggregated entry, from the pool
 - Rows come from a POOL: no CreateFrame on a second refresh
 - HideAll returns every active row to the free list
+- A row widget keeps its RANK across refreshes: the pool hands them back in order
 - Render honors layout.maxRows and places rows from Row.OffsetFor
 - growthDirection UP anchors from the bottom of the body
 - R3: no geometry is read back off a cell that has held a secret
@@ -1405,7 +1406,7 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 105 |
+| test_window.lua | 106 |
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
@@ -1421,4 +1422,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1259** |
+| **Total** | **1260** |

@@ -437,21 +437,47 @@ test("HideAll returns every active row to the free list", function()
     end
 end)
 
+-- A ROW WIDGET MUST KEEP ITS RANK ACROSS REFRESHES, and the guarantee is the LIBRARY's now.
+--
+-- `Acquire` pops the free list from the end, so the direction `ReleaseAll` parks in decides which
+-- widget the next render hands to which rank. Parked forward, the mapping reverses and re-reverses,
+-- alternating with period 2 for as long as the window keeps drawing; parked backward, rank n comes
+-- back to rank n. LibKa0s-Pool-1.0 minor 3 made parking backward a documented contract, so
+-- `WindowProto:HideAll` is a bare `ReleaseAll` again — the host-side reversal it used to carry was
+-- removed in the same commit as that payload, because against a backward-parking library it
+-- double-reverses and puts the fault straight back.
+--
+-- WHY THIS TEST DID NOT MOVE WITH THE FIX: what it pins is the INVARIANT, not whichever layer
+-- currently supplies it. A widget that keeps its rank is handed the same figure every refresh; a
+-- widget that swaps rank is handed a different player's, and a meter value is a secret handle that
+-- shows a transient while it resolves — so a swap paints every bar full and snaps it back, four
+-- times a second, all fight. Nothing else in this repo would go red for it: the counts stay right,
+-- no frame leaks, and preview mode never shows it because placeholder figures apply with no resolve
+-- step. This case is the only thing between that bug and its next regression, wherever it comes
+-- from, so it outlives the host code it was originally written against.
+--
+-- THREE PASSES, NOT TWO. A period-2 alternation is right way up on every other render, so a single
+-- round trip can pass by luck; the third pass is what makes a swap unable to hide.
 test("A row widget keeps its RANK across refreshes: the pool hands them back in order", function()
     local _, window = scene()
 
     window:Refresh()
     local firstPass = {}
     for i, row in ipairs(window.pool.active) do firstPass[i] = row end
+    assertTrue(#firstPass > 1, "the fixture must draw enough rows for an order to exist")
 
-    window:Refresh()
-
-    for i, row in ipairs(window.pool.active) do
-        assertTrue(row == firstPass[i], string.format(
-            "rank %d drew a DIFFERENT row widget on the second refresh. Acquire pops the free " ..
-            "list from the end, so ReleaseAll must park rows in reverse rank order or the " ..
-            "mapping alternates every render -- which hands every bar a different player's " ..
-            "value four times a second, and a secret value shows a transient when it changes", i))
+    for pass = 2, 3 do
+        window:Refresh()
+        assertEqual(#window.pool.active, #firstPass, "the same rows are drawn on every pass")
+        for i, row in ipairs(window.pool.active) do
+            assertTrue(row == firstPass[i], string.format(
+                "rank %d drew a DIFFERENT row widget on refresh %d. Acquire pops the free list " ..
+                "from the end, so LibKa0s-Pool-1.0 ReleaseAll must park rows in reverse rank " ..
+                "order (minor 3) and HideAll must NOT reverse that again -- either fault alone " ..
+                "alternates the mapping every render, which hands every bar a different " ..
+                "player's value four times a second, and a secret value shows a transient when " ..
+                "it changes", i, pass))
+        end
     end
 end)
 
