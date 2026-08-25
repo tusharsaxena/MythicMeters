@@ -1189,33 +1189,45 @@ end
 -- hundreds of frames a minute, and WoW never truly frees one. Rows are acquired
 -- for a refresh, released at the end of it, and kept forever.
 
+--- A row pool: the library's two arrays, plus the host's third.
+---
+--- `all` holds every row ever built, parked ones included. ApplyLayout and ApplyLock iterate it so
+--- a FREE row is re-laid-out too — without that, a row parked across a settings change comes back
+--- at the old width the next time the group grows, and nothing would have caught it.
+local function newRowPool()
+    local pool = NS.Pool.New()
+    pool.all = {}
+    return pool
+end
+
 --- Take a row from the free list, growing the pool a batch at a time.
+---
+--- The free/active mechanics are the library's. The BATCH lives in the factory closure because
+--- `Acquire` calls its factory once per miss: the closure builds the batch, parks the surplus on
+--- the free list the library is about to draw from, registers all of it in `pool.all`, and returns
+--- one. Each row costs an ApplyLayout and an EnableCellMouse at build, which is why they are built
+--- five at a time rather than on demand.
 function WindowProto:Acquire()
     local pool = self.pool
-    local row = table.remove(pool.free)
-    if not row then
-        for _ = 1, Const.POOL_GROW_STEP do
+    return NS.Pool.Acquire(pool, function()
+        local first
+        for i = 1, Const.POOL_GROW_STEP do
             local fresh = NS.Row.New(self)
             fresh:ApplyLayout(self.layout)
             fresh:EnableCellMouse()
             pool.all[#pool.all + 1] = fresh
-            pool.free[#pool.free + 1] = fresh
+            if i == 1 then first = fresh else pool.free[#pool.free + 1] = fresh end
         end
-        row = table.remove(pool.free)
-    end
-    pool.active[#pool.active + 1] = row
-    return row
+        return first
+    end)
 end
 
 --- Return every active row to the free list.
+---
+--- `Release` runs through the library's `before` hook, so it still sees the row while it is shown
+--- and the library hides it immediately after — in the same call.
 function WindowProto:HideAll()
-    local pool = self.pool
-    for i = #pool.active, 1, -1 do
-        local row = pool.active[i]
-        row:Release()
-        pool.active[i] = nil
-        pool.free[#pool.free + 1] = row
-    end
+    NS.Pool.ReleaseAll(self.pool, function(row) row:Release() end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -2122,7 +2134,10 @@ function Window.New(config)
     local inst = setmetatable({
         id     = config.id,
         config = config,
-        pool   = { all = {}, active = {}, free = {} },
+        -- `free`/`active` are LibKa0s-Pool-1.0's; `all` is host state living beside them, for
+        -- the layout and lock passes that must reach PARKED rows too. The library's pool is a
+        -- plain table with no metatable precisely so a host can do this. See core/PoolSetup.lua.
+        pool   = newRowPool(),
         dirty  = true,
         elapsed = 0,
     }, WindowProto)

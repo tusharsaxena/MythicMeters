@@ -40,6 +40,8 @@ core\Compat.lua
 # be published before it. A seam that loaded later would leave NS.version as the hardcoded
 # FALLBACK_VERSION for the life of the session, silently.
 core\EnvSetup.lua
+# The LibKa0s-Pool-1.0 seam. After the libs block, before modules\Window.lua.
+core\PoolSetup.lua
 # Before Constants, deliberately: Constants.FONT_MONO is resolved from the seam this file
 # publishes, so a Constants that loaded first would resolve it to nil.
 core\MediaSetup.lua

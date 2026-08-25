@@ -1356,6 +1356,15 @@ function RowProto:EnableCellMouse()
     self:ApplyMouse()
 end
 
+--- Show and hide the row.
+---
+--- The pooled object here is this TABLE, not the frame it wraps, and LibKa0s-Pool-1.0 asks a
+--- pooled object for exactly two methods — `:Show()` and `:Hide()`. Forwarding them is the whole
+--- of what the row had to grow to be poolable by the library; everything else the pool does to a
+--- row it does through the `before` hook, which calls `Release` below.
+function RowProto:Show() self.frame:Show() end
+function RowProto:Hide() self.frame:Hide() end
+
 --- Return the row to the pool: hidden, blank, and holding no reference to the
 --- player it was drawing.
 function RowProto:Release()

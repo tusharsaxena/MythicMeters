@@ -1960,3 +1960,49 @@ test("A profile written before minimise existed is not collapsed", function()
     window:ApplyConfig()
     assertEqual(window.body:IsShown(), true, "an upgraded profile came back collapsed")
 end)
+
+-- ── pool.all reaches PARKED rows (LibKa0s-Pool-1.0 adoption) ────────────────
+--
+-- The one thing the library's pool cannot express, and therefore the one thing a
+-- careless adoption would have dropped. `pool.all` holds every row ever built,
+-- free ones included, and ApplyLayout iterates it so a row sitting on the free
+-- list is re-laid-out too. Drop that and everything still looks right until the
+-- group GROWS and a parked row is handed out at the old width — long after the
+-- settings change that caused it, with nothing pointing back.
+
+test("pool: a layout change re-applies to FREE rows, not just active ones", function()
+    local _, window = scene()
+    window:Refresh()
+
+    -- Park everything, so every row in `all` is on the free list.
+    window:HideAll()
+    assertEqual(#window.pool.active, 0)
+    assertEqual(#window.pool.free, #window.pool.all, "all rows are parked")
+
+    local applied = {}
+    for _, row in ipairs(window.pool.all) do
+        local real = row.ApplyLayout
+        row.ApplyLayout = function(self, layout) applied[self] = true; return real(self, layout) end
+    end
+
+    window:ApplyConfig()
+
+    local n = 0
+    for _ in pairs(applied) do n = n + 1 end
+    assertEqual(n, #window.pool.all,
+        "every row got the new layout, including the ones nobody is drawing with")
+end)
+
+test("pool: every row built lands in `all`, including the batch surplus", function()
+    -- Batch growth moved into the Acquire factory closure, which the library calls once per miss.
+    -- A closure that registered only the row it RETURNED would leave four of every five rows out
+    -- of `all` — and those four would then never be re-laid-out.
+    local inst, window = scene()
+    local Const = inst.NS.Constants
+
+    window:Refresh()
+    assertEqual(#window.pool.all, Const.POOL_GROW_STEP,
+        "the whole batch is tracked, not just the row handed back")
+    assertEqual(#window.pool.free + #window.pool.active, #window.pool.all,
+        "and every tracked row is accounted for as either parked or out")
+end)
