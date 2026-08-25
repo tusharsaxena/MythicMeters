@@ -3,3 +3,7 @@
 # --fetch, and the TGAs it produces are what ships -- the PNGs are an
 # intermediate, not a source of truth.
 tools/artwork/.cache/
+
+# Per-machine Claude Code settings -- tool permissions granted on this checkout,
+# not a fact about the addon. .claude/settings.json (shared) stays tracked.
+.claude/settings.local.json
