@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1257%2F1257_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1259%2F1259_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -95,9 +95,9 @@ are currently looking at, not all of them.
 | Icons | Class, spec and role icons — which to show, how big, where |
 | Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
 | Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
-| Columns | Add, remove and reorder columns; per-column width and whether it draws a bar |
+| Columns | Add, remove and reorder columns — nine statistics are catalogued and six are on by default; Absorbs, Damage Taken and Enemy Damage Taken are there to be switched on. Per-column width, and whether the column draws a bar |
 | Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |
-| General | Minimap button, debug console, and what the export modal remembers — channel, whisper target, chat lines |
+| General | The addon master switch, the minimap button, Test mode, the debug console, and what the export modal remembers — channel, whisper target, chat lines |
 | Profiles | Share a setup between characters |
 
 ## How it works
@@ -161,8 +161,8 @@ pull.
 **The window only shows placeholder rows.**
 The window is unlocked, and an unlocked window fills with placeholder data so you can position it
 against a real-looking grid. Lock it — `/mm lock on`, or the Lock window box on the Frame page — and
-the real numbers appear. Turning off Preview mode on its own is not enough while the window is
-unlocked.
+the real numbers appear. Turning off Test mode on the General page is not enough on its own while the
+window is unlocked.
 
 **I cannot open the settings while fighting.**
 That is deliberate. Blizzard protects the settings machinery during combat, so the panel refuses to

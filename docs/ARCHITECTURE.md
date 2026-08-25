@@ -10,7 +10,7 @@ that outgrows a screen belongs in its topic doc with a summary and a link left b
 
 ## Overview
 
-Forty-seven non-vendored source files: 1 locale, 14 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
+Forty-eight non-vendored source files: 1 locale, 15 `core/`, 1 `defaults/`, 15 `modules/`, 16 `settings/`.
 
 The addon is built on the **private namespace** WoW hands each file. `core/MultiMeters.lua` calls
 `AceAddon-3.0:NewAddon(NS, addonName, …)`, which promotes that table in place — so **`NS` *is* the
@@ -40,9 +40,13 @@ header all read the same table.
 
 Chrome comes from LibKa0s-Core-1.0's shared `SKIN` / `ApplySkin`, never a private lookalike, so the
 meter window, the debug console and the perf step panel wear the same Ka0s edge as every sibling
-addon. Six LibKa0s seams are adopted — Core, Media, Perf, DebugLog, Slash, Options — one setup file
-each, and every one degrades rather than erroring when `libs/LibKa0s` is absent. Two of them pass the
-addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
+addon. Nine LibKa0s majors are consumed — Core, Media, Perf, DebugLog, Env, Pool, Slash, Options and
+Widgets. Eight are reached through a seam file of their own (`core/CoreSetup.lua`,
+`core/MediaSetup.lua`, `core/PerfSetup.lua`, `core/DebugLogSetup.lua`, `core/EnvSetup.lua`,
+`core/PoolSetup.lua`, `settings/Slash.lua`, `settings/OptionsSetup.lua`); Widgets is resolved at its
+one call site, `modules/Export.lua`, because the export modal is the only thing in the addon that
+builds a dropdown. Every one of the nine degrades rather than erroring when `libs/LibKa0s` is
+absent. Two of them pass the addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
 `core/DebugLogSetup.lua`'s descriptor), and a third gets there by accident of its own descriptor —
 `core/PerfSetup.lua` passes the folder name as `name`, which is what the perf panel's own close
 control is built from (`PerfPanel.lua` minor 4). This is why that file passes **no** `decorate` hook:
@@ -72,7 +76,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `core/` boundary | `EnvSetup.lua` | The `LibKa0s-Env-1.0` seam: `NS.Meta` / `NS.Version`, the TOC-manifest reader `Compat.lua` used to own. |
 | `core/` values | `Constants.lua`, `Namespace.lua`, `State.lua` | The stat catalog, the bus catalog, identity, session-only flags and the shared cache. |
 | `core/` the rule | `Secrets.lua` | **The only file that inspects a meter value.** |
-| `core/` seams | `MediaSetup`, `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `LSMPatch` | LibKa0s wiring, the art and font seam, and one AceGUI widget fixup. |
+| `core/` seams | `MediaSetup`, `CoreSetup`, `PerfSetup`, `DebugLogSetup`, `PoolSetup`, `LSMPatch` | LibKa0s wiring, the art and font seam, the window row pool, and one AceGUI widget fixup. |
 | `core/` runtime | `MultiMeters.lua`, `Database.lua` | The single game-event listener and the show ladder; AceDB and migrations. |
 | `defaults/` | `Profile.lua` | The window template. The only place a profile default is hardcoded. |
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
@@ -99,9 +103,11 @@ setting is per-window, and a window is an instance created at runtime — so an 
 have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpressible in the flat
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
-settings panel's window picker (`settings/Windows.lua`, its only writer) moves. Global rows keep
-absolute paths (`enabled`, `minimap.hide` and the three `export.*` preferences) and resolve against
-`db.profile`. Moving one integer of session state retargets a hundred and seventeen rows.
+settings panel's window picker (`settings/Windows.lua`, its only writer) moves. The other seven rows
+keep absolute paths and resolve against `db.profile`: `enabled`, `minimap.hide`, the three `export.*`
+preferences, and the two `sessionOnly` rows `state.testMode` and `state.debugConsole`, whose own
+`get`/`set` are the whole of their storage. Moving one integer of session state retargets a hundred
+and seventeen rows.
 
 Two pages carry **zero** schema rows, both by necessity. `settings/Columns.lua` edits an ordered
 array whose length is the user's, which a path model has no vocabulary for — so `window.columns` is a
@@ -137,7 +143,7 @@ typo in a subscriber is a nil-index at load rather than a callback that silently
 | `PROFILE_CHANGED` | `core/Database.lua` (`fireProfileChanged`) | `Format`, `Roster`, `Aggregator`, `Targets`, `WindowManager`, `DrillDown`, `Visibility` | `{ newProfileKey }` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`) | `Format`, every `Window` | `{ section, windowId }` |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` (`announce`) | `DrillDown`, the settings panel | `{ windowId, action }` |
-| `PREVIEW_CHANGED` | `core/State.lua` (`State.SetTestMode`) | `Roster`, every `Window` | `{ enabled }` |
+| `TEST_MODE_CHANGED` | `core/State.lua` (`State.SetTestMode`) | `Roster`, every `Window` | `{ enabled }` |
 | `DRILLDOWN_CHANGED` | `modules/DrillDown.lua` (`announce`) | the addressed `Window` | `{ windowId, active }` |
 
 `METER_RESET` has two dispatch paths on purpose: the game fires `DAMAGE_METER_RESET` and
@@ -214,7 +220,7 @@ lets that section be read as a wiring diagram.
 | `DAMAGE_METER_COMBAT_SESSION_UPDATED` | `OnMeterSession` | `METER_SESSION { type, sessionID }` |
 | `DAMAGE_METER_RESET` | `OnMeterReset` | wipes every cache, then `METER_RESET` |
 | `PLAYER_REGEN_DISABLED` / `PLAYER_REGEN_ENABLED` | `OnCombatChanged` | `COMBAT_CHANGED` |
-| `PLAYER_MOUNT_DISPLAY_CHANGED`, `UPDATE_SHAPESHIFT_FORM`, `PLAYER_CAN_GLIDE_CHANGED`, `PLAYER_IS_GLIDING_CHANGED`, `PET_BATTLE_OPENING_START`, `PET_BATTLE_CLOSE`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `OnPlayerStateChanged` | `PLAYER_STATE_CHANGED` |
+| `PLAYER_MOUNT_DISPLAY_CHANGED`, `UNIT_ENTERED_VEHICLE`, `UNIT_EXITED_VEHICLE`, `UPDATE_SHAPESHIFT_FORM`, `PLAYER_CAN_GLIDE_CHANGED`, `PLAYER_IS_GLIDING_CHANGED`, `PET_BATTLE_OPENING_START`, `PET_BATTLE_CLOSE`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `OnPlayerStateChanged` | `PLAYER_STATE_CHANGED` |
 | `UNIT_SPELLCAST_SUCCEEDED` | `OnSpellSucceeded` | **the one handler that decides something** — Feign Death (5384) only, straight into `modules/Feign.lua`. Nothing reaches the bus: republishing every cast in a raid to save one comparison would be worse, and no other file may see a game event |
 
 The three `DAMAGE_METER_*` handlers carry the `meterEvent` perf bracket. It measures the **fan-out**,
@@ -549,13 +555,18 @@ comment, which argues the same split from the other side.
 ## Documentation map
 
 Every `.md` under `docs/` appears in exactly one of the three tables below (`documentation-§3`).
-Frozen and generated directories are named once and never enumerated per run: `docs/automated-tests/`,
-`docs/perf-analysis/`, `docs/superpowers/`. `docs/issues/` held image evidence attached to GitHub
-issues — GitHub's API has no supported path for uploading an issue attachment, so a raw link to a
-committed file is the only way a screenshot reaches one. It is **empty today**: an issue's images are
-deleted when it closes, and its links are re-pointed at the commit that last carried them, which
-keeps resolving forever without the repo carrying the weight. Issue #1's are pinned to `dcb29ad`.
-The directory carries no `.md` and so registers no row.
+**A store gets one row; its dated bundles get none.** `docs/automated-tests/` and
+`docs/perf-analysis/` register their two live docs — the README that says how a bundle is produced
+and, for the automated-test record, the `RESULTS.md` the runner rewrites — and nothing else under
+them; the dated folders beside those files are frozen evidence, and evidence is not registered.
+`docs/revendor/` and `docs/superpowers/` are frozen through and through and get one row apiece.
+
+`docs/issues/` used to hold image evidence attached to GitHub issues — GitHub's API has no supported
+path for uploading an issue attachment, so a raw link to a committed file is the only way a
+screenshot reaches one. **The directory is gone.** An issue's images are deleted when it closes and
+its links are re-pointed at the commit that last carried them, which keeps resolving forever without
+the repo carrying the weight; issue #1's are pinned to `dcb29ad`. Re-create it only when an open
+issue needs a picture, and expect it to empty itself again.
 
 ### Canonical trio (Tier 1)
 
@@ -585,30 +596,25 @@ The directory carries no `.md` and so registers no row.
 | `settings-panel.md` | The thirteen pages, per-option behavior, and the write seam |
 | `data-flow.md` | `C_DamageMeter` → pixel, and the secret-value rules that shape every hop |
 | `common-tasks.md` | Recipes for the changes made most often here |
-| `superpowers/specs/2026-08-09-multi-meters-design.md` | Tier 3 planning history — the approved v0.1.0 design |
-| `superpowers/plans/2026-08-09-multi-meters-v0.1.0-plan.md` | Tier 3 planning history — the v0.1.0 build plan |
-| `superpowers/specs/2026-08-09-display-overhaul-design.md` | Tier 3 planning history — the approved display overhaul |
-| `superpowers/specs/2026-08-22-export-design.md` | Tier 3 planning history — the approved export surface |
-| `superpowers/specs/2026-08-22-death-recap-design.md` | Tier 3 planning history — the approved death-recap drill-down, with §11 recording the one decision reversed |
-| `superpowers/specs/2026-08-23-header-controls-design.md` | Tier 3 planning history — the approved header control strip (issues #6, #7) |
-| `superpowers/specs/2026-08-24-shared-dropdown-and-export-ux-design.md` | Tier 3 planning history — the approved shared dropdown and export-window UX corrections |
-| `superpowers/plans/2026-08-24-shared-dropdown-and-export-ux.md` | Tier 3 planning history — the shared-dropdown and export-UX build plan |
+| `superpowers/` | Tier 3 planning history, frozen — the approved design specs and build plans behind each feature, under `specs/` and `plans/`, dated and never revised after the fact |
+| `revendor/` | Frozen — one dated bundle per LibKa0s re-vendor: the payload delta and what was adopted, declined or filed from it |
 
 ### Tier 2 conditional docs — evaluated at v0.1.0
 
-Each trigger was measured against the source, not assumed. None of the five ships; the measurements
-that decided that are recorded here so a later audit can re-run them rather than re-argue them. This
+Each trigger was measured against the source, not assumed. **None of the six ships today**, and the
+measurements that decided that are recorded here so a later audit can re-run them rather than
+re-argue them — one of them, `compat-layer.md`, is now flagged as having crossed its own line. This
 is an evaluation record, not a fourth register table — every doc below that *does* exist is
 registered above.
 
 | Doc | Status | Trigger, as measured |
 |---|---|---|
 | `slash-dispatch.md` | Not applicable | **16 verbs in `NS.COMMANDS`.** Ten are the standard's reserved set, implemented entirely by LibKa0s-Slash-1.0 and documented by the standard. This addon's own surface is 6 verbs and one 4-entry sub-verb tree (`window`: list/new/delete/copy); `debug` takes 4 words, `perf` delegates its whole sub-surface to the library, and `export` takes one optional window name. The [Slash commands](#slash-commands) section carries all of it in a screen. |
-| `message-bus.md` | Not applicable | **12 distinct messages**, all declared in one catalog (`core/Constants.lua` `MSG`) with the owning sender named beside each. Every payload is a flat table of one to two plain fields; none carries a handle, a curve object or a per-unit filter needing prose. The [Message bus](#message-bus) section carries sender, consumers and payload for all twelve in 22 lines. |
-| `compat-layer.md` | Not applicable | **`core/Compat.lua` is 389 lines and 18 shims**, each a guarded namespace check around one passthrough, with no feature decisions and no state. Nothing there inspects a meter value. The comparison point is KickCD's 490-line Compat, which ships the doc. |
+| `message-bus.md` | Not applicable | **14 distinct messages**, all declared in one catalog (`core/Constants.lua` `MSG`) with the owning sender named beside each. Every payload is a flat table of one to two plain fields; none carries a handle, a curve object or a per-unit filter needing prose. The [Message bus](#message-bus) section carries sender, consumers and payload for all fourteen in one table. |
+| `compat-layer.md` | **Re-measure — the trigger now fires** | **`core/Compat.lua` is 753 lines and 28 shims** (8 of them `C_DamageMeter`, 4 death-recap, plus the recap-namespace probe `RecapMembers` / `RecapAPIs` / `CallRecap`), each still a guarded namespace check around one passthrough, with no feature decisions and no state, and nothing there inspects a meter value. But the comparison point — KickCD's 490-line Compat, which ships the doc — has been passed by half again. It was 389 lines and 18 shims when this row was last measured. Raise the doc, or re-argue the trigger, through `/wow-addon:standards-audit`; it is not this register's call to make. |
 | `midnight-quirks.md` (secret values) | Not applicable | The 12.0 secret-value model is this addon's **defining** constraint, not a quirk beside its main subject — so it is carried by [Taint notes](#taint-notes) (the operation lists, R1/R3, the `Combat`-not-`ChallengeMode` fact) and by [data-flow.md](data-flow.md), which is Tier 1 and mandatory here regardless. A third copy would be the one that drifts. |
 | `profiles.md` | Not applicable | `settings/Profiles.lua` is 113 lines hosting **AceDBOptions-3.0's own tree** unchanged. The addon adds no profile semantics beyond the `PROFILE_CHANGED` fan-out already tabulated above and the reset-all veto already stated under [Settings schema](#settings-schema); the persisted shape is [schema.md](schema.md)'s. |
-| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. This addon's own surface is `/mm debug diag` and `/mm debug recap` — `core/Diagnostics.lua`, ~1115 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the death-recap probe for issue #1 is the newest section, the first with a verb of its own, and the first to search the client two ways because one was measured to be unreliable — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
+| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. This addon's own surface is `/mm debug diag` and `/mm debug recap` — `core/Diagnostics.lua`, ~1240 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the death-recap probe for issue #1 is the newest section, the first with a verb of its own, and the first to search the client two ways because one was measured to be unreliable — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
 
 ## Documented deviations
 
@@ -660,23 +666,28 @@ per-file reasoning in [module-map.md](module-map.md#load-order). The binding con
 
 1. `libs/` — Ace3, LibKa0s, LibSharedMedia, AceGUI-3.0-SharedMediaWidgets, LibDataBroker, LibDBIcon.
 2. `locales/enUS.lua` — first, so `NS.L` exists for every declaration below.
-3. `core/Compat.lua` **first** in the core block: `core/Namespace.lua` reads the TOC manifest through
-   it on the next line.
+3. `core/Compat.lua` **first** in the core block — it is the boundary every later file's cross-patch
+   call goes through — and `core/EnvSetup.lua` immediately after it and **before
+   `core/Namespace.lua`**, whose `resolveVersion()` runs at *file scope* and reads the TOC manifest
+   through the `NS.Meta` seam that file publishes. A seam that loaded later would pin `NS.version` to
+   `FALLBACK_VERSION` for the whole session, silently.
 4. `core/MediaSetup.lua` **before `core/Constants.lua`**, which resolves `FONT_MONO` from the
    `NS.MediaFont` it publishes. It is the one seam outside the cause clause, so it is free to load
    first and has to.
-5. `core/CoreSetup.lua` before `core/MultiMeters.lua`, whose AceConsole reclaim reads
+5. `core/PoolSetup.lua` after the `libs/` block and **before `modules/Window.lua`**, the pool's only
+   consumer. It carries no other constraint: it publishes `NS.Pool` and captures nothing.
+6. `core/CoreSetup.lua` before `core/MultiMeters.lua`, whose AceConsole reclaim reads
    `NS.Util.print`; and **first of the five seams that share the cause clause**, because it defines
    `NS.LIBKA0S_MISSING`.
-6. `core/PerfSetup.lua` after `core/Namespace.lua` (a nil `version` stamps every capture record `v?`)
+7. `core/PerfSetup.lua` after `core/Namespace.lua` (a nil `version` stamps every capture record `v?`)
    and **before every `modules/` file that takes `local Perf = NS.Perf` as a load-time upvalue**.
-7. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
-8. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
+8. `defaults/Profile.lua` after `core/Constants.lua`, whose stat catalog it captures at load.
+9. `modules/Format.lua` first in the module block; `modules/Row.lua` resolves `Tooltip` and
    `DrillDown` at *call* time because both load after it. `modules/Targets.lua` loads before
    `modules/Tooltip.lua`, its only caller. `modules/Export.lua` sits after `modules/DrillDown.lua`
    and is the one file in the block whose position carries no constraint at all: it captures no
    sibling at load and resolves every one of them — `Aggregator`, `Format`, `Secrets` — at call
    time, because `modules/Window.lua` loads *before* it and holds the button that calls it.
-9. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
-   their seams at `NS.SetByPath` / `NS.GetSetting` at load — and `settings/OptionsSetup.lua` before
-   every page file, which call `NS.Helpers` members inside schema-row literals at file load.
+10. `settings/Schema.lua` first in the settings block — `Slash.lua` and `OptionsSetup.lua` both point
+    their seams at `NS.SetByPath` / `NS.GetSetting` at load — and `settings/OptionsSetup.lua` before
+    every page file, which call `NS.Helpers` members inside schema-row literals at file load.

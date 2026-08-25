@@ -33,12 +33,17 @@ such rather than listed as a requirement.
 | `lua5.1` (+ `luac`) | **5.1 exactly** | the headless suite, `lua tests/run.lua` | `tests/_kit/loader.lua` uses `setfenv` |
 | `luacheck` | any recent | `luacheck .`, the other half of the green gate | `.luacheckrc` at the repo root |
 | `lizard` | any recent | the `complexity` suite of `tests/_kit/run-automated-tests.sh` | `tests/_kit/run-automated-tests.sh` invokes `lizard` |
-| `git` | any recent | vendoring, and `diff -r` against the LibKa0s repo | library-stack-§7 |
-| POSIX shell | any | the commands in this file and in `docs/testing.md` | `tests/_kit/run-automated-tests.sh` shebang |
+| `git` | any recent | vendoring, `diff -r` against the LibKa0s repo, and the runner's own provenance stamp | library-stack-§7; `tests/_kit/run-automated-tests.sh` calls `git describe` / `git rev-parse` / `git status --porcelain` |
+| `bash` | **4.x or later** | `tests/_kit/run-automated-tests.sh` — the whole automated-test bundle | its shebang is `#!/usr/bin/env bash`, and line 142 declares an associative array (`declare -A ST DUR NOTE`), which `dash`/POSIX `sh` has no syntax for |
 
 **Lua 5.1 is a requirement, not a preference.** The harness sandboxes each source file with
 `setfenv`, which was removed in 5.2 — "5.2 will probably work" is false and costs an hour to
 disprove.
+
+**`bash` is a requirement too, for the same kind of reason.** The runner keeps its four suites'
+status, duration and note in associative arrays; running it under `sh` fails at `declare -A` before
+a single suite starts. `lua tests/run.lua` and `luacheck .` — the green commit gate — need no shell
+beyond the one you typed them into.
 
 ```sh
 # Lua 5.1 and luacheck
@@ -57,6 +62,7 @@ lua5.1 -v                # Lua 5.1.5 …   (if `lua` is not 5.1, use lua5.1 expl
 luacheck --version
 lizard --version
 git --version
+bash --version         # GNU bash, version 4.x or 5.x — Ubuntu ships one by default
 ```
 
 Versions are pinned only where a version matters: `lua5.1` is hard, `luacheck` and `lizard` are

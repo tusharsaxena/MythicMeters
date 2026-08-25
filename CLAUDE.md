@@ -29,7 +29,8 @@ Every number this addon displays comes from Blizzard's built-in damage meter (`C
 is a **secret value** whenever the `Combat` addon restriction is active. Tainted code may not
 compare, add, key on, or apply `#` to a secret. Two invariants carry that rule:
 
-- **`modules/Provider.lua` is the only file that calls `C_DamageMeter`.**
+- **`modules/Provider.lua` is the only file that reaches `C_DamageMeter`**, and it reaches it only
+  through `core/Compat.lua`'s eight guarded meter shims, which are that namespace's sole callers.
 - **`core/Secrets.lua` is the only file that inspects a value.** Everywhere else a meter value is an
   opaque handle you may pass to a widget setter or the native formatter, and to nothing else.
 

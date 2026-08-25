@@ -639,7 +639,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (103)
+### test_window.lua (105)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -744,6 +744,8 @@ badge and any count quoted in the docs must agree with it.
 - A collapsed window keeps the notice hidden
 - Unlocking does not resurrect the grip on a collapsed window
 - A profile written before minimise existed is not collapsed
+- pool: a layout change re-applies to FREE rows, not just active ones
+- pool: every row built lands in `all`, including the batch surplus
 
 ### test_headercontrols.lua (43)
 
@@ -1403,7 +1405,7 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 103 |
+| test_window.lua | 105 |
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
@@ -1419,4 +1421,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1257** |
+| **Total** | **1259** |
