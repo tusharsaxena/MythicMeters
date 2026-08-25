@@ -3,7 +3,7 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MultiMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-seven non-vendored source files: 1 locale, 14 `core/`, 1 `defaults/`, 15 `modules/`,
+Forty-eight non-vendored source files: 1 locale, 15 `core/`, 1 `defaults/`, 15 `modules/`,
 16 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
@@ -49,6 +49,11 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │   ├── DebugLogSetup.lua — LibKa0s-DebugLog-1.0 seam: NS.DebugLog, the bare
 │                         NS.Debug(tag, fmt, …) sink, and NS.DebugSteady — the
 │                         same sink for a pass that repeats on a timer
+│   ├── PoolSetup.lua   — LibKa0s-Pool-1.0 seam: NS.Pool, the window row pool's
+│                         free/active halves. After libs/, BEFORE modules/Window.lua,
+│                         its only consumer. RANK STABILITY IS THE LIBRARY'S — minor 3
+│                         parks the active set backward — and the degraded fallback
+│                         here parks the same way rather than flickering
 │   ├── MediaSetup.lua  — the LibKa0s-Media seam: NS.Icon / NS.MediaFont, and the one
 │   │                     call that registers the library's font with LSM. Loads BEFORE
 │   │                     Constants, which resolves FONT_MONO from it
@@ -92,6 +97,10 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │   ├── Window.lua      — one window instance: the anchor/visible frame pair, the
 │                         layout computation (R3), the coalesced refresh loop, the
 │                         row pool, the header line, the unavailable notice
+│   ├── HeaderControls.lua — the window's own control strip: which controls exist,
+│                         where each sits (right-to-left, a hidden one yields its
+│                         slot), the TGA → Blizzard atlas → ASCII art ladder, and
+│                         when the set fades. Built here with or without LibKa0s
 │   ├── Row.lua         — one row and its cells: the StatusBar + two FontStrings,
 │                         the name column's icons, the bar colors, the mouse
 │                         hand-off. Nothing here looks at a number
@@ -148,6 +157,7 @@ own strings entirely.
 | `CoreSetup.lua` | The LibKa0s-Core seam and the shared "library missing" cause clause. `NS.MakeCloseButton` is the one member WRAPPED rather than handed over: it supplies the addon folder name the library needs to build a texture path for its own close icon | `NS.Util.print` / `NS.Print`, `NS.Format` (printer, later rebound), `NS.IsConcatSafe`, `NS.SafeToString`, `NS.RGBA`, `NS.SKIN`, `NS.ApplySkin`, `NS.MakeCloseButton`, `NS.LIBKA0S_MISSING` | `NS.PREFIX` |
 | `PerfSetup.lua` | The perf descriptor: bucket list, suspend, resume, log routing | `NS.Perf` | `NS.Version`, and `Provider` / `WindowManager` / `Visibility` at call time |
 | `DebugLogSetup.lua` | The console descriptor (including `addonName`, which is what makes the console's own close/copy/clear draw the collection's art), the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
+| `PoolSetup.lua` | The LibKa0s-Pool seam: the free/active halves of the window row pool. What stays in `modules/Window.lua` is what the library holds no opinion about — `pool.all` (every row ever built, so a **parked** row is re-laid-out too) and batch growth, folded into the `Acquire` factory closure. The degraded fallback is the same three members locally, parking **backward** exactly as `LibKa0s-Pool-1.0` minor 3 does; a forward-parked degraded install is the rank flicker back | `NS.Pool` | `LibKa0s-Pool-1.0`. Owns no state and registers no event |
 | `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
 | `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 21 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |
@@ -239,16 +249,19 @@ both are bespoke by necessity, and both say why in their file headers.
    10. `MediaSetup.lua` — **before `Constants.lua`**, which resolves `FONT_MONO` from `NS.MediaFont`,
       and therefore before `defaults/Profile.lua` names the font at load. This is one of the few
       TOC positions in `core/` that is load-bearing rather than conventional.
-   11. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
-   12. `MultiMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
-   13. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
+   11. `PoolSetup.lua` — after the `libs/` block and **before `modules/Window.lua`**, the pool's
+      only consumer. It carries no other constraint: it publishes `NS.Pool` and captures nothing.
+   12. `LSMPatch.lua` — unconstrained now that it only patches an AceGUI widget at PLAYER_LOGIN.
+   13. `MultiMeters.lua` — after every setup file; promotes `NS` into the AceAddon object.
+   14. `Database.lua` — after `State`, before `OnInitialize` runs. Reads `NS.defaults` at *call*
        time, because `defaults/` loads later.
-   13. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
+   15. `Diagnostics.lua` — **last in the block, and deliberately unconstrained.** It reads every
        module at *call* time and owns no state, so nothing depends on where it loads.
 4. **`defaults/Profile.lua`** — after `core/Constants.lua`, whose stat catalog it captures at load.
 5. **`modules/`** — `Format` first (nothing reads another module, and `Row` and `Tooltip` both format
-   on their first render), then `Provider` → `Roster` → `Aggregator` → `WindowManager` → `Window` →
-   `Row` → `Targets` → `Tooltip` → `DrillDown` → `Export` → `Visibility` → `Minimap`. `Row.lua` loads
+   on their first render), then `Provider` → `Roster` → `Feign` → `Aggregator` → `WindowManager` →
+   `Window` → `HeaderControls` → `Row` → `Targets` → `Tooltip` → `DrillDown` → `Export` →
+   `Visibility` → `Minimap`. `Row.lua` loads
    before `Tooltip.lua` and `DrillDown.lua` and therefore resolves both at *call* time. `Targets.lua`
    loads before `Tooltip.lua`, which is its only caller, and resolves the provider at *call* time for
    the same reason `Tooltip.lua` does. `Export.lua` is the one entry here under **no** constraint at
