@@ -1227,7 +1227,31 @@ end
 --- `Release` runs through the library's `before` hook, so it still sees the row while it is shown
 --- and the library hides it immediately after — in the same call.
 function WindowProto:HideAll()
-    NS.Pool.ReleaseAll(self.pool, function(row) row:Release() end)
+    local pool = self.pool
+    local parked = #pool.free
+    NS.Pool.ReleaseAll(pool, function(row) row:Release() end)
+
+    -- REVERSE WHAT RELEASEALL JUST PARKED, or every bar changes value four times a second.
+    --
+    -- Acquire pops the free list from the END (table.remove), while ReleaseAll appends the active
+    -- set walking FORWARD -- rank 1 first. So the next Render pops rank n's widget for rank 1,
+    -- rank n-1's for rank 2, and the mapping alternates with period 2 forever. The hand-rolled
+    -- HideAll this replaced walked BACKWARD, which is why it never showed: each widget kept its
+    -- rank for the life of the window and Cell:SetValue rewrote the value it already held.
+    --
+    -- A widget that keeps its rank is handed the same figure every refresh. A widget that swaps
+    -- rank is handed a different player's, and a meter value is a secret handle that shows a
+    -- transient while it resolves -- which is the bar painting full and then snapping to size,
+    -- on every row, in every column where the two entries differ. Preview never showed it because
+    -- placeholder figures are plain and apply without a resolve step.
+    --
+    -- Only the segment just appended is reversed; rows parked earlier by batch growth are
+    -- interchangeable and keep their places.
+    local i, j = parked + 1, #pool.free
+    while i < j do
+        pool.free[i], pool.free[j] = pool.free[j], pool.free[i]
+        i, j = i + 1, j - 1
+    end
 end
 
 -- ---------------------------------------------------------------------------

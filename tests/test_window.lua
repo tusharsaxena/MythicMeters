@@ -437,6 +437,24 @@ test("HideAll returns every active row to the free list", function()
     end
 end)
 
+test("A row widget keeps its RANK across refreshes: the pool hands them back in order", function()
+    local _, window = scene()
+
+    window:Refresh()
+    local firstPass = {}
+    for i, row in ipairs(window.pool.active) do firstPass[i] = row end
+
+    window:Refresh()
+
+    for i, row in ipairs(window.pool.active) do
+        assertTrue(row == firstPass[i], string.format(
+            "rank %d drew a DIFFERENT row widget on the second refresh. Acquire pops the free " ..
+            "list from the end, so ReleaseAll must park rows in reverse rank order or the " ..
+            "mapping alternates every render -- which hands every bar a different player's " ..
+            "value four times a second, and a secret value shows a transient when it changes", i))
+    end
+end)
+
 test("Render honors layout.maxRows and places rows from Row.OffsetFor", function()
     local inst, window, cfg = scene{
         sources = { src(ALPHA, 100), src(BETA, 50) },
