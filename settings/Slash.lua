@@ -7,7 +7,7 @@ local Sl = NS.Slash
 -- The dispatcher, the help renderer, the row and key/value formatters, the list
 -- builder and the type-aware value parser live in libs/LibKa0s/Slash.lua and are
 -- shared across every Ka0s addon. What stays ours is what is genuinely ours: the
--- verb table, the five host verbs that act on windows rather than on schema rows,
+-- verb table, the six host verbs that act on windows rather than on schema rows,
 -- and the adapters that point the library's schema seams at this addon's write
 -- seam.
 --

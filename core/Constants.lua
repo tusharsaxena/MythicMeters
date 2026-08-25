@@ -391,7 +391,7 @@ Constants.MSG = {
     WINDOWS_CHANGED     = "Ka0s_MultiMeters_WINDOWS_CHANGED",     -- { windowId, action }
 
     -- core/State.lua, when preview mode is toggled by the unlock state or by
-    -- `/mm preview`.
+    -- `/mm test`.
     TEST_MODE_CHANGED     = "Ka0s_MultiMeters_PREVIEW_CHANGED",     -- { enabled }
 
     -- modules/DrillDown.lua, when a window enters or leaves a per-source

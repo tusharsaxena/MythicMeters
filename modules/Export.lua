@@ -1305,7 +1305,7 @@ end
 --- ART IS A PARAMETER, AND IT IS RESOLVED IN ONE PLACE. The widget is vendored
 --- and cannot know which addon folder its copy sits in, so it takes no
 --- dependency on LibKa0s-Media-1.0 and every texture it draws arrives through
---- `opts` (version-4-docs.md, "Why it takes no dependency on
+--- `opts` (LibKa0s docs/api/Widgets/version-7-docs.md, "Why it takes no dependency on
 --- LibKa0s-Media-1.0"). Resolving that at each call site is how three selectors
 --- come to wear two skins the day one of them is restyled and the others are
 --- missed; this function is the one place `NS.Icon` is asked on the widget's
@@ -1455,7 +1455,7 @@ local function EnsureFrame()
     -- Channel or Lines menu is the shared LibKa0s-Widgets-1.0 popup: a
     -- process-wide singleton parented to UIParent at FULLSCREEN_DIALOG, not to
     -- this modal, so the modal's own Hide() does not reach it (see the
-    -- FrameStrata comment above and Widgets version-4-docs.md, "Behavior a host
+    -- FrameStrata comment above and LibKa0s docs/api/Widgets/version-7-docs.md, "Behavior a host
     -- must know"). Without this, Escape would leave the menu orphaned above the
     -- game with the modal that owned it already gone. CloseMenu() is a safe
     -- no-op when no dropdown here has ever opened the menu, or when it is
