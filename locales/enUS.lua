@@ -232,18 +232,9 @@ L["Color drawn behind the title bar, when the mode above is Custom. The column-h
 -- background. The column strip below it keeps its own group, because it is a
 -- different strip.
 L["Frame header"] = "Frame header"
-L["Title"] = "Title"
-L["Text shown in the header. Leave empty to use the window's name."] =
-    "Text shown in the header. Leave empty to use the window's name."
-L["Show session name"] = "Show session name"
-L["Show which combat session the window is reading — the current pull, or the overall run."] =
-    "Show which combat session the window is reading — the current pull, or the overall run."
-L["Show duration"] = "Show duration"
-L["Show how long the session has been running."] =
-    "Show how long the session has been running."
-L["Show totals"] = "Show totals"
-L["Show the group total for the sort column."] =
-    "Show the group total for the sort column."
+-- The header's own Title box and its three "show this too" checkboxes are gone
+-- with the strings that labelled them: each said something already on screen.
+-- The header draws the window's name now.
 L["Header height"] = "Header height"
 L["Height of the header strip in pixels."] = "Height of the header strip in pixels."
 L["Header background"] = "Header background"

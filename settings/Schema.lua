@@ -563,29 +563,24 @@ NS.Schema = {
     -- modules/WindowManager.lua, which owns re-anchoring a live frame.
 
     -- ── Header ───────────────────────────────────────────────────────────────
-    {
-        path = "window.header.title", type = "string", default = "",
-        dialogControl = "EditBox", maxLetters = 48,
-        page = "header", group = L["Frame header"],
-        label = L["Title"], desc = L["Text shown in the header. Leave empty to use the window's name."],
-        validate = function(v) return type(v) == "string" end,
-    },
-    {
-        path = "window.header.showSessionName", type = "bool", default = true,
-        page = "header", group = L["Frame header"],
-        label = L["Show session name"],
-        desc = L["Show which combat session the window is reading — the current pull, or the overall run."],
-    },
-    {
-        path = "window.header.showDuration", type = "bool", default = true,
-        page = "header", group = L["Frame header"],
-        label = L["Show duration"], desc = L["Show how long the session has been running."],
-    },
-    {
-        path = "window.header.showTotals", type = "bool", default = false,
-        page = "header", group = L["Frame header"],
-        label = L["Show totals"], desc = L["Show the group total for the sort column."],
-    },
+    --
+    -- FOUR ROWS LIVED AT THE TOP OF THIS GROUP and all four are gone, because
+    -- each of them said something that was already on screen.
+    --
+    --   `title`            a second name for a window that already has one. The
+    --                      header draws `window.name` now, always, so renaming a
+    --                      window renames its header and there is no way for the
+    --                      two to disagree.
+    --   `showSessionName`  "Overall" written beside a window the player called
+    --                      Overall.
+    --   `showDuration`     the segment's own length, over a header whose segment
+    --                      picker names the segment.
+    --   `showTotals`       a group total, over a column holding the same figure
+    --                      per player.
+    --
+    -- What the right-hand header line still says is in modules/Window.lua's
+    -- UpdateHeaderText, and it is state rather than preference: the drill-down
+    -- title and the restricted notice.
     {
         path = "window.header.font", type = "string", default = "Friz Quadrata TT",
         values = lsmValues("font"), dialogControl = "LSM30_Font",

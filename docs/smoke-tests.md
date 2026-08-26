@@ -214,8 +214,9 @@ second edge to catch.
   Column headers, and Tooltip each carry a **font** picker, a **font outline** dropdown, a **text
   shadow** checkbox, a **text colour** picker and a **Text color mode** dropdown of Class /
   Per-statistic / Custom. **Per-statistic means a different statistic on each**: the cell takes its
-  own column's colour, the title bar and the tooltip take the **sort column's** (change the sort and
-  watch them follow), and each **column label takes its own column's** — that last one is the check
+  own column's colour, the title bar takes the **sort column's** (change the sort and watch it follow), the tooltip
+  takes **the column you hovered** — a Healing tooltip is Healing-coloured whatever the grid is
+  sorted by, and each **column label takes its own column's** — that last one is the check
   that catches the strip being resolved once and painted uniformly. The two header strips also carry
   a **Background color mode** over the same three; on Column headers, Per-statistic paints one
   rectangle behind each label rather than one across the strip. **The configured opacity survives

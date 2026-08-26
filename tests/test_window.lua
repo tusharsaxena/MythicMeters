@@ -732,22 +732,34 @@ end)
 -- The header line
 -- ---------------------------------------------------------------------------
 
-test("The header folds its parts with `..`, and survives a secret duration", function()
-    local _, window, cfg = scene{ restricted = true }
-    cfg.header.showSessionName = true
-    cfg.header.showDuration    = true
-    cfg.header.showTotals      = true
+test("The header folds its parts with `..`, and survives a secret piece", function()
+    -- Two of the pieces this line can carry come out of NS.Format having been
+    -- built from a secret, and a formatted secret is itself secret. `..` is legal
+    -- on one; table.concat is the one string operation that RAISES on one -- it
+    -- is literally the probe core/CoreSetup.lua uses to detect a secret at all.
+    -- red under: joining the line rather than folding it.
+    local _, window = scene{ restricted = true, preview = true }
     window:ApplyConfig()
-
-    -- Two of the pieces come out of NS.Format having been built from a secret,
-    -- and a formatted secret is itself secret. `..` is legal on one;
-    -- table.concat is the one string operation that RAISES on one.
     window:Refresh()
 
     local line = window.sessionText:GetText()
     assertEqual(type(line), "string")
-    assertTrue(line:find("Current", 1, true) ~= nil, "which session")
-    assertTrue(line:find("212", 1, true) ~= nil, "how long it has run")
+    assertTrue(#line > 0, "the line said nothing at all")
+end)
+
+test("The header line says only what has nowhere else to be said", function()
+    -- The session NAME, the DURATION and the TOTAL were three checkboxes and are
+    -- gone: the name repeated the window's own title, the duration belongs to the
+    -- segment the picker already names, and the total is a figure the column
+    -- under it holds per player. What is left is the drill-down title and the
+    -- restricted notice -- state, not preference.
+    -- red under: putting any of the three back into UpdateHeaderText.
+    local _, window = scene()
+    window:ApplyConfig()
+    window:Refresh()
+
+    local line = window.sessionText:GetText() or ""
+    assertEqual(line, "", "an ordinary grid must leave the header line blank")
 end)
 
 test("The header says the grid was built the restricted way", function()
@@ -755,8 +767,7 @@ test("The header says the grid was built the restricted way", function()
     -- they are the engine's own live ranking. What the player is owed is why a
     -- CELL can be empty: mid-pull the other columns are matched to those rows by
     -- class and spec, because `sourceGUID` is secret and cannot be joined on.
-    local inst, window, cfg = scene{ restricted = true, sortMode = "value" }
-    cfg.header.showSessionName = true
+    local inst, window = scene{ restricted = true, sortMode = "value" }
     window:ApplyConfig()
     window:Refresh()
 
@@ -2250,6 +2261,22 @@ test("A window with no title bar draws no header background at all", function()
     cfg.frame.titleBar = false
     window:ApplyConfig()
     assertFalse(window.headerBG:IsShown())
+end)
+
+test("The header draws the WINDOW'S NAME, and follows a rename", function()
+    -- `header.title` was a second name for a window that already has one, and two
+    -- names for one thing is two things that can disagree: a window renamed in
+    -- the picker kept whatever its header had been set to, so the header could
+    -- not be used to tell which window you were looking at.
+    -- red under: restoring the title override.
+    local _, window, cfg = scene()
+    cfg.name = "Raid frame"
+    window:ApplyConfig()
+    assertEqual(window.frame.title:GetText(), "Raid frame")
+
+    cfg.name = "Mythic+"
+    window:ApplyConfig()
+    assertEqual(window.frame.title:GetText(), "Mythic+", "the header did not follow the rename")
 end)
 
 test("The window NAME takes the header's colour, class colour and all", function()

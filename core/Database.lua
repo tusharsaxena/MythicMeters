@@ -40,7 +40,8 @@ NS.Database = Database
 -- v5 lifts mergePets and throttle from per-window to addon-wide.
 -- v6 prunes the two row-background keys nothing ever read.
 -- v7 turns four class-colour booleans into three-way colour modes.
-local CURRENT_DB_VERSION = 7
+-- v8 prunes the four header keys that said what was already on screen.
+local CURRENT_DB_VERSION = 8
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -456,6 +457,43 @@ migrations[6] = function(db)
     end
 
     db.global.schemaVersion = 7
+end
+
+--- v7 -> v8: THE HEADER'S FOUR REDUNDANT KEYS ARE PRUNED.
+---
+--- `title`, `showSessionName`, `showDuration` and `showTotals` each said
+--- something already on screen: a second name for a window that has one,
+--- "Overall" beside a window the player called Overall, the length of a segment
+--- the header's own picker names, and a group total over a column holding the
+--- same figure per player. The header draws `window.name` now.
+---
+--- A TITLE THE PLAYER ACTUALLY TYPED IS NOT DISCARDED -- it becomes the window's
+--- NAME. That is what they were doing with it: naming the window, in the only box
+--- that changed what the header said. Dropping it would silently rename their
+--- windows back, which is the one outcome this step must not have.
+---
+--- The name is only taken where the window has not been named itself: a player
+--- who set both meant the one in the picker, since that is the one every other
+--- surface already used.
+migrations[7] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local header = type(w) == "table" and w.header
+            if type(header) == "table" then
+                local title = header.title
+                if type(title) == "string" and title ~= ""
+                    and (w.name == nil or w.name == "") then
+                    w.name = title
+                end
+                header.title = nil
+                header.showSessionName = nil
+                header.showDuration = nil
+                header.showTotals = nil
+            end
+        end
+    end
+
+    db.global.schemaVersion = 8
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

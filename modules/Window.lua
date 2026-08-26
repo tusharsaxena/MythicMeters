@@ -968,7 +968,12 @@ function WindowProto:ApplyTitle()
     -- between a player and reading placeholder data as their own performance is a
     -- label saying otherwise. It goes in the TITLE rather than in the session
     -- line because the title is the part of the window nothing else competes for.
-    local title = header.title ~= "" and header.title or (cfg.name or L["Multi Meters"])
+    -- THE WINDOW'S NAME, ALWAYS. `header.title` was a second name for a window
+    -- that already has one, and two names for one thing is two things that can
+    -- disagree -- a window renamed in the picker kept whatever its header had been
+    -- set to, with no way to tell from the header which window you were looking
+    -- at. Renaming a window renames its header now.
+    local title = cfg.name or L["Multi Meters"]
     if NS.State and NS.State.testMode then
         title = title .. "   |cffff2020" .. L["TEST MODE"] .. "|r"
     end
@@ -1026,14 +1031,27 @@ function WindowProto:ApplyHeaderStrip()
     end
 end
 
---- The right-hand line of the header strip: which session, how long, how much.
---- Only its widget is placed here — UpdateHeaderText writes the text, once per
---- refresh rather than once per settings change.
+--- The right-hand line of the header strip. Only its widget is placed here —
+--- UpdateHeaderText writes the text, once per refresh rather than once per
+--- settings change.
+---
+--- IT USED TO SAY WHICH SESSION, HOW LONG AND HOW MUCH, behind three checkboxes,
+--- and all three are gone. The session NAME is the window's own title said twice
+--- — a window called "Overall" that also says "Overall" beside itself. The
+--- DURATION belongs to the segment and the segment picker already names it. The
+--- TOTAL is a number nobody reads off a header when the column under it holds
+--- the same figure per player.
+---
+--- What is left has nowhere else to live and is not a preference: the DRILL-DOWN
+--- TITLE, which says whose breakdown this is, and the RESTRICTED NOTICE, which
+--- says why a cell can be empty mid-pull. So the line is always available and
+--- draws only when it has one of those to say — a header that is blank most of
+--- the time and speaks when something is unusual, rather than one that repeats
+--- the window's own name four times a second.
 function WindowProto:ApplySessionLine()
     local header = self.config.header or {}
     local path, size, flags = headerFont(header)
-    local shown = (header.showSessionName or header.showDuration
-        or header.showTotals) and true or false
+    local shown = true
 
     -- The BUTTON is what gets placed; the text fills it (SetAllPoints, in Build).
     -- Its width is a constant rather than a measurement of the string inside it,
@@ -2022,11 +2040,15 @@ end
 --- aggregator returns rows, and asking it to name the session would make it read
 --- a field it has no other use for.
 ---
+--- NO LONGER DRAWN IN THE HEADER, and kept because modules/Export.lua asks the
+--- WINDOW for it: a CSV or a chat dump is headed "Multi Meters — Damage —
+--- Overall", and the window is the only thing that knows which segment it was
+--- reading. The header dropped it because it repeated the window's own title.
+---
 --- @param preview boolean
 --- @return string|nil
 function WindowProto:SessionLabel(preview)
     if preview then return L["Test"] end
-    if not (self.config.header or {}).showSessionName then return nil end
 
     -- A PINNED SEGMENT NAMES ITSELF. Saying "Current" over a window that is
     -- showing a fight from ten minutes ago is the one label that is actively
@@ -2050,46 +2072,11 @@ function WindowProto:SessionLabel(preview)
         and L["Overall"] or L["Current"]
 end
 
---- How long the session has run, formatted — or nil when there is no duration to
---- show.
----
---- Emptiness is decided from the PLAIN INPUT, not from the output.
---- Format.Duration answers "" for a nil and something non-empty for anything
---- else, so `seconds ~= nil` is the same question — asked of a value this file is
---- allowed to test, where the formatted string is a secret that may be neither
---- truth-tested nor compared to "".
----
---- @param F table|nil  the resolved number formatter
---- @return string|nil
-function WindowProto:DurationText(F)
-    local header = self.config.header or {}
-    local Provider = mod("Provider")
-    if not (header.showDuration and Provider and Provider.GetSessionDuration
-        and F and F.Duration) then
-        return nil
-    end
-    local seconds = Provider.GetSessionDuration(self.sessionType,
-        (self.config.data or {}).sessionID)
-    if seconds == nil then return nil end
-    return F.Duration(seconds)
-end
-
---- The group total for the sort column, formatted — or nil when the header does
---- not show totals.
----
---- Taken from the aggregate the render pass just parked on the window rather than
---- from a fresh provider read. `sortTotal` is an opaque value like any other: it
---- is handed straight to the native formatter and never inspected.
----
---- @param F table|nil  the resolved number formatter
---- @return string|nil
-function WindowProto:SortTotalText(F)
-    local header = self.config.header or {}
-    if not (header.showTotals and F and F.Number) then return nil end
-    local total = self.aggregate and self.aggregate.sortTotal
-    if total == nil then return nil end
-    return F.Number(total, (self.config.text or {}).numberFormat)
-end
+-- `DurationText` AND `SortTotalText` LIVED HERE and are gone with the two
+-- checkboxes that gated them. The duration belongs to the segment, which the
+-- header's own picker names; the group total is a figure the column under it
+-- already holds per player. Neither had another caller: the export builds its own
+-- session label and reads its own totals.
 
 --- The note that this grid was built the restricted way, or nil when it was not.
 ---
@@ -2140,9 +2127,6 @@ function WindowProto:UpdateHeaderText(preview, isDrill, drillTitle)
         return
     end
 
-    local F = NS.Format
-    if type(F) ~= "table" or not F.Number then F = NS.NumberFormat end
-
     -- FOLDED WITH `..`, NOT JOINED WITH table.concat.
     --
     -- Two of the pieces below come out of NS.Format having been built from a
@@ -2162,9 +2146,16 @@ function WindowProto:UpdateHeaderText(preview, isDrill, drillTitle)
         if line == nil then line = part else line = line .. "  " .. part end
     end
 
-    add(self:SessionLabel(preview))
-    add(self:DurationText(F))
-    add(self:SortTotalText(F))
+    -- THE SESSION NAME, THE DURATION AND THE TOTAL USED TO BE HERE, behind three
+    -- checkboxes that are gone: the name repeated the window's own title, the
+    -- duration belongs to the segment the picker already names, and the total is
+    -- a figure the column under it holds per player. What is left is the state
+    -- that has nowhere else to be said.
+    --
+    -- `preview` still reaches the line, because "TEST" over a grid full of
+    -- placeholder numbers is the one label that stops a player reading invented
+    -- data as their own.
+    add(preview and L["Test"] or nil)
     add(self:RestrictedNotice(preview))
 
     self.sessionText:SetText(line == nil and "" or line)

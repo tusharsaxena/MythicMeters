@@ -303,13 +303,23 @@ verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a
 
 ### `header` — the strip above the rows
 
-`title = ""` (empty falls back to the window's name) · `showSessionName = true` ·
-`showDuration = true` · `showTotals = true` · `font = "Friz Quadrata TT"` · `size = 12` ·
+`font = "Friz Quadrata TT"` · `size = 12` ·
 `outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `colorMode = "custom"` ·
 `align = "LEFT"` · `height = 18` · `bgColor = { r=0, g=0, b=0, a=0.5 }` · `bgColorMode = "custom"`.
 
-`showTotals` shows the group total **for the sort column**, taken off the aggregate the render pass
-just parked on the window — never a second provider read.
+**Four keys lived here and are gone**, and each of them said something already on screen: `title`
+(a second name for a window that has one), `showSessionName` ("Overall" beside a window the player
+called Overall), `showDuration` (the length of a segment the header's own picker names) and
+`showTotals` (a group total over a column holding the same figure per player). The header draws
+`window.name` now, so renaming a window renames its header and the two cannot disagree.
+
+`schemaVersion` 8 prunes them — and **rescues a typed `title` into `window.name`**, where the window
+has not been named itself. That is what the box was being used for: naming the window, in the only
+field that changed what the header said. Dropping it would silently rename their windows back.
+
+What the right-hand header line still says is **state rather than preference**: the drill-down title,
+which says whose breakdown you are looking at, and the restricted notice, which says why a cell can be
+empty mid-pull. It is blank the rest of the time.
 
 **`bgColor` paints the TITLE BAR and stops there.** It used to cover both header rows, on the reading
 that "the header" is the whole block a player points at — which meant `columnHeader.bgColor` was
@@ -336,7 +346,7 @@ statistic is this text about?") answered by whichever statistic the surface actu
 | `text` (cells) | the class of the row being drawn | the column the cell sits in |
 | `header` (title bar) | **yours** — a header is about the window, not a row | the window's **sort column** |
 | `columnHeader` | yours, for the same reason | **each label's own column** — the one surface where it is literally per column |
-| `tooltip` | the class of the player being hovered | the window's sort column |
+| `tooltip` | the class of the player being hovered | **the hovered column** — a cell tooltip is the breakdown of one statistic. The name tooltip and the death recap, which are about no single one, fall back to the sort column |
 
 `none` is deliberately **not** offered. It is a legal answer for a tint drawn behind something and
 never for the writing itself, and a text surface set to "no colour" is one nobody can read.

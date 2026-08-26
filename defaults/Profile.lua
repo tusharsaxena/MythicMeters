@@ -150,15 +150,13 @@ local WINDOW_TEMPLATE = {
     -- -----------------------------------------------------------------------
     -- header — the strip above the rows
     -- -----------------------------------------------------------------------
+    -- `title`, `showSessionName`, `showDuration` and `showTotals` LIVED HERE and
+    -- are gone. Each said something already on screen: a second name for a window
+    -- that has one, "Overall" beside a window called Overall, the length of a
+    -- segment the header's own picker names, and a group total over a column
+    -- holding the same figure per player. The header draws `window.name` now, so
+    -- renaming a window renames its header.
     header = {
-        title           = "",      -- empty = fall back to the window's name
-        showSessionName = true,    -- "Current" / the encounter name
-        showDuration    = true,    -- session length
-        -- OFF. The group total is a number nobody reads off a meter header: it
-        -- is the sum of a column you can already see, it is the widest thing on
-        -- the line, and it pushed the session name and duration leftward to make
-        -- room for itself.
-        showTotals      = false,
         font            = "Friz Quadrata TT",
         size            = 12,
         outline         = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
@@ -170,6 +168,7 @@ local WINDOW_TEMPLATE = {
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
         -- The header is about the WINDOW, not about any one player, so the class
         -- it can wear is the local player's (NS.PlayerClassRGB).
+        --
         -- WHAT colours the header text: "class" (yours, because the header is
         -- about the window rather than any one row), "stat" (the colour of the
         -- column the grid is sorted by) or "custom" (the picker above). It was a

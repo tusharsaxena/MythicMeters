@@ -281,10 +281,16 @@ local function tooltipConfig(window)
         fontOutline        = field("fontOutline", "NONE"),
         fontShadow         = field("fontShadow", false),
         colorMode          = field("colorMode", "custom"),
-        -- WHICH statistic `colorMode == "stat"` means: the window's sort column,
-        -- the one the grid being hovered is ranked by. Resolved here, with the
-        -- rest of the config, so lineStyle stays a pure function of what it is
-        -- handed rather than reaching back into the window for one field.
+        -- WHICH statistic `colorMode == "stat"` means. Filled in by the CALLER,
+        -- because only the caller knows: a cell tooltip is about the column that
+        -- was hovered, which is the whole of what it is showing. The window's sort
+        -- column stood here first and was wrong for exactly that reason -- every
+        -- breakdown, of every column, came out in the sort column's colour, so a
+        -- Healing tooltip was red.
+        --
+        -- The two tooltips that are NOT about one statistic -- the name tooltip,
+        -- which lists them all, and the death recap -- fall back to the sort
+        -- column, which is the only statistic those two can be said to be about.
         statKey            = (type(window) == "table" and window.data
                               and window.data.sortColumn) or "DamageDone",
         showTargets        = field("showTargets", false),
@@ -2151,6 +2157,9 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     -- why this keeps working mid-pull when the bar LENGTHS cannot.
     local classes = _G.RAID_CLASS_COLORS
     local color = classes and row and row.classFilename and classes[row.classFilename] or nil
+    -- THE HOVERED COLUMN, not the sort column: this tooltip is the breakdown of
+    -- one statistic, and that statistic is the one whose cell the pointer is on.
+    config.statKey = statKey or config.statKey
     local style = lineStyle(config, color)
 
     -- DEATHS TAKES ITS OWN PATH, and never the spell one. See addDeathList.

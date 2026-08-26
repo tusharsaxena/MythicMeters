@@ -400,7 +400,7 @@ test("Database v2: every stored column is lifted to the one uniform width", func
         assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
             col.stat .. " kept its old per-stat width")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 7,
+    assertEqual(inst.NS.db.global.schemaVersion, 8,
         "the walk must run all the way to the current version, not stop at v2")
 end)
 
@@ -478,7 +478,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -620,7 +620,7 @@ test("Database v3: the three dead keys are REMOVED, not left to rot", function()
     assertNil(icons.showClass, "showClass survived the migration")
     assertNil(icons.showSpec,  "showSpec survived the migration")
     assertNil(icons.showRole,  "showRole survived the migration")
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -651,7 +651,7 @@ test("Database v4: a stored AUTO channel folds to SELF, in EVERY profile", funct
 
     assertEqual(sv.profiles.Default.export.channel, "SELF")
     assertEqual(sv.profiles.Alt.export.channel, "SELF")
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 test("Database v4: every other channel is left exactly as the player set it", function()
@@ -670,7 +670,7 @@ test("Database v4: a profile with no export block at all survives the step", fun
         profiles = { Default = { nextWindowId = 2, windows = { { id = 1 } } } },
         global   = { schemaVersion = 3 },
     })
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -703,7 +703,7 @@ test("Database v5: the FIRST window's values are the ones lifted", function()
 
     assertEqual(profile.data.mergePets, true)
     assertEqual(profile.data.throttle, 0.5)
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 test("Database v5: the per-window keys are REMOVED from EVERY window", function()
@@ -743,7 +743,7 @@ test("Database v5: a profile whose windows never carried the keys survives", fun
     -- Every profile written before either setting existed is this one, and the
     -- shipped defaults are what it should land on.
     local inst = v4Data({ { id = 1, data = { sortColumn = "Healing" } } })
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
     assertEqual(inst.NS.DataSetting("throttle"), 0.25)
     assertEqual(inst.NS.DataSetting("mergePets"), false)
 end)
@@ -775,7 +775,7 @@ test("Database v6: the two dead row-background keys are pruned from every window
     end
     -- And nothing else in the group was touched.
     assertEqual(inst.NS.Database.FindWindow(1).rows.highlightSelf, false)
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 test("Database v7: a class-colour boolean becomes a colour mode, on every surface", function()
@@ -811,7 +811,7 @@ test("Database v7: a class-colour boolean becomes a colour mode, on every surfac
     end
     -- Nothing else in a migrated group was touched.
     assertEqual(w.tooltip.fontSize, 14)
-    assertEqual(inst.NS.db.global.schemaVersion, 7)
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
 end)
 
 test("Database v7: a window that never set one is left to the shipped default", function()
@@ -821,4 +821,62 @@ test("Database v7: a window that never set one is left to the shipped default", 
     })
     -- The defaults merge supplies it; the step must not invent a different one.
     assertEqual(inst.NS.Database.FindWindow(1).text.colorMode, "custom")
+end)
+
+test("Database v8: the four redundant header keys are pruned from every window", function()
+    -- Each said something already on screen. AceDB never prunes what the defaults
+    -- stopped naming, so without this they sit in every saved window forever.
+    -- red under: deleting the schema rows and leaving the stored keys.
+    local inst = preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 2,
+                windows = {
+                    { id = 1, name = "Raid",
+                      header = { title = "Overall", showSessionName = true,
+                                 showDuration = true, showTotals = true, size = 14 } },
+                },
+            },
+        },
+        global = { schemaVersion = 7 },
+    })
+
+    local header = inst.NS.Database.FindWindow(1).header
+    for _, key in ipairs({ "title", "showSessionName", "showDuration", "showTotals" }) do
+        assertNil(header[key], "the header kept " .. key)
+    end
+    assertEqual(header.size, 14, "the rest of the group was touched")
+    assertEqual(inst.NS.db.global.schemaVersion, 8)
+end)
+
+test("Database v8: a typed header title becomes the window's NAME, not nothing", function()
+    -- That is what the box was being used for: naming the window, in the only
+    -- field that changed what the header said. Dropping it would silently rename
+    -- their windows back.
+    -- red under: pruning the key without rescuing the value.
+    local inst = preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 2,
+                windows = { { id = 1, header = { title = "Mythic+" } } },
+            },
+        },
+        global = { schemaVersion = 7 },
+    })
+    assertEqual(inst.NS.Database.FindWindow(1).name, "Mythic+")
+end)
+
+test("Database v8: a window that was named itself keeps its own name", function()
+    -- A player who set both meant the one in the picker: it is the name every
+    -- other surface already used.
+    local inst = preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 2,
+                windows = { { id = 1, name = "Raid", header = { title = "Overall" } } },
+            },
+        },
+        global = { schemaVersion = 7 },
+    })
+    assertEqual(inst.NS.Database.FindWindow(1).name, "Raid")
 end)

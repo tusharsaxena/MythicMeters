@@ -749,6 +749,44 @@ test("The bar's fill and its backdrop each take their own colour and opacity", f
     assertEqual(b.bg.__colorTexture[4], 0.25, "the backdrop ignored its opacity")
 end)
 
+test("Per-statistic mode is the HOVERED column's colour, not the sort column's", function()
+    -- THE BUG: it resolved to the window's sort column, so every breakdown of
+    -- every column came out in the sort column's colour -- a Healing tooltip in
+    -- Damage red. This tooltip IS the breakdown of one statistic, and that
+    -- statistic is the one whose cell the pointer is on.
+    -- red under: reading window.data.sortColumn in lineStyle.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barColorMode = "stat"
+        c.data.sortColumn      = "DamageDone"
+    end }
+    local Const = inst.NS.Constants
+    local want = Const.STAT_COLORS.HealingDone
+    local sorted = Const.STAT_COLORS.DamageDone
+    assertTrue(want ~= nil and sorted ~= nil, "the palette has no pair to tell apart")
+    assertTrue(want[1] ~= sorted[1], "the two colours are identical; the case proves nothing")
+
+    inst.NS.Tooltip:CellTooltip(row(), "HealingDone", anchor, cfg)
+    local b = tooltipBars(inst)[1]
+    assertTrue(b ~= nil, "no bar was drawn")
+    assertEqual(b.__barColor[1], want[1], "a Healing breakdown took the sort column's colour")
+end)
+
+test("The text mode follows the hovered column too", function()
+    -- One tooltip, one statistic: the bar and the writing on it must not disagree
+    -- about which.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.colorMode = "stat"
+        c.data.sortColumn   = "DamageDone"
+    end }
+    local want = inst.NS.Constants.STAT_COLORS.HealingDone
+    inst.NS.Tooltip:CellTooltip(row(), "HealingDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    local carrier = b.__parent
+    assertEqual(carrier.amount.__textColor[1], want[1],
+        "the amount took a different statistic's colour from its own bar")
+end)
+
 test("Class mode paints the bar with the hovered player's class", function()
     local inst, cfg, anchor = bench{ configure = function(c)
         c.tooltip.barColorMode = "class"
