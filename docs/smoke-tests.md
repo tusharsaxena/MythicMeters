@@ -241,6 +241,17 @@ second edge to catch.
 - **A reset leaves your other profiles alone.** Make a second profile on the Profiles page, switch
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
+- **The four meta rows.** Frame → Frame behavior carries **Color mode**, **Bar texture**, **Font**
+  and **Font outline**, each marked *(all surfaces)*. Each sets every surface that has a setting of
+  its kind — the bar texture reaches the grid and the tooltip, the font and its outline reach the
+  cells, both header strips and the tooltip. The check below is written for the colour mode and is
+  the same for all four.
+- **The meta colour mode.** Frame → Frame behavior → **Color mode (all surfaces)**. Set it to
+  Per-statistic and check all ten of the individual dropdowns followed — Bars (bar and background),
+  Bars → Cell text, Header → Frame header (text and background), Header → Column headers (text and
+  background), Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
+  only that one changes, and the meta is not fought. Finally press the Frame page's **Defaults**
+  button and confirm the ten are **untouched** — a page's reset must not reach other pages.
 - **The Frame page's shape.** Three groups, in order: *Size and position* — which now ends with
   **Background color**, the fill inside the window; it sat under *Border style*, which is the edge
   around it — then *Border style*, then *Frame behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears

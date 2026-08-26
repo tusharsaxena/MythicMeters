@@ -474,6 +474,89 @@ test("Schema: the export choices are hidden from the panel but NOT from the seam
     assertEqual(NS.GetSetting("export.channel"), "PARTY")
 end)
 
+test("The meta colour mode sets every surface in the window at once", function()
+    -- Ten surfaces each carry a colour mode of their own -- the cells, the bar and
+    -- its background, both header strips and both of their backgrounds, the
+    -- tooltip's text and both of its bars -- which is right when a player wants
+    -- one of them different and tedious when they want all ten the same.
+    -- red under: a path dropped from COLOR_MODE_PATHS.
+    local inst = T.load()
+    local NS = inst.NS
+
+    assertTrue(NS.SetByPath("window.colorMode", "stat"))
+
+    for _, path in ipairs({
+        "window.bars.colorMode", "window.bars.bgColorMode",
+        "window.text.colorMode",
+        "window.header.colorMode", "window.header.bgColorMode",
+        "window.columnHeader.colorMode", "window.columnHeader.bgColorMode",
+        "window.tooltip.colorMode", "window.tooltip.barColorMode",
+        "window.tooltip.barBgColorMode",
+    }) do
+        assertEqual(NS.GetSetting(path), "stat", path .. " did not follow the meta")
+    end
+end)
+
+test("The other three meta rows broadcast their own kind of setting", function()
+    -- Same bargain as the colour mode: the individual rows all still exist, and
+    -- each meta sets every surface that has one of its kind.
+    -- red under: a path dropped from any of the three lists.
+    local inst = T.load()
+    local NS = inst.NS
+    inst.mocks.__media.statusbar["Ka0s Bar"] = "Interface\\Test\\Bar"
+    inst.mocks.__media.font["Ka0s Font"] = "Interface\\Test\\Font"
+
+    assertTrue(NS.SetByPath("window.barTexture", "Ka0s Bar"))
+    assertEqual(NS.GetSetting("window.bars.texture"), "Ka0s Bar")
+    assertEqual(NS.GetSetting("window.tooltip.barTexture"), "Ka0s Bar")
+
+    assertTrue(NS.SetByPath("window.font", "Ka0s Font"))
+    for _, path in ipairs({ "window.text.font", "window.header.font",
+                            "window.columnHeader.font", "window.tooltip.font" }) do
+        assertEqual(NS.GetSetting(path), "Ka0s Font", path .. " did not follow the meta")
+    end
+
+    assertTrue(NS.SetByPath("window.fontOutline", "THICKOUTLINE"))
+    -- The tooltip's key is `fontOutline`, not `outline`, which is why the fan-out
+    -- is a list of PATHS rather than a suffix assumed to be shared.
+    for _, path in ipairs({ "window.text.outline", "window.header.outline",
+                            "window.columnHeader.outline", "window.tooltip.fontOutline" }) do
+        assertEqual(NS.GetSetting(path), "THICKOUTLINE", path .. " did not follow the meta")
+    end
+end)
+
+test("A surface changed after the broadcast keeps its own answer", function()
+    -- The meta is a SHORTCUT, not a source of truth: a player who then changes one
+    -- surface has changed one surface, and the meta does not fight them for it.
+    local inst = T.load()
+    local NS = inst.NS
+
+    NS.SetByPath("window.colorMode", "class")
+    NS.SetByPath("window.text.colorMode", "custom")
+
+    assertEqual(NS.GetSetting("window.text.colorMode"), "custom")
+    assertEqual(NS.GetSetting("window.bars.colorMode"), "class",
+        "changing one surface reached the others")
+end)
+
+test("The Frame page's Defaults button does NOT broadcast", function()
+    -- A per-page reset walks that page's rows through ApplyDefault. The meta row
+    -- lives on Frame and writes ten rows on three other pages, so a broadcast
+    -- from there would make the Frame page's Defaults button silently reset
+    -- settings it has no business reaching.
+    -- red under: dropping the restore guard from broadcastColorMode.
+    local inst = T.load()
+    local NS = inst.NS
+
+    NS.SetByPath("window.text.colorMode", "stat")
+    NS.Helpers.RestoreDefaults("frame", nil)
+
+    assertEqual(NS.GetSetting("window.text.colorMode"), "stat",
+        "the Frame page's reset reached the Bars page")
+    assertEqual(NS.GetSetting("window.colorMode"), "custom",
+        "the meta itself must still be restored")
+end)
+
 test("Schema: the Header page's three groups are named and ordered for the strip they describe",
 function()
     -- Two strips, three groups, top to bottom in the order they are drawn:

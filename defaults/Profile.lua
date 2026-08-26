@@ -60,6 +60,18 @@ local WINDOW_TEMPLATE = {
     -- the result to NS.DefaultWindow.
     name = "Multi Meters",
 
+    -- The META colour mode: what the Frame page's "Color mode (all surfaces)"
+    -- dropdown last broadcast to the ten surfaces that each carry one of their
+    -- own. NOTHING READS IT -- it is a shortcut for setting all ten, and a player
+    -- who changes one of them afterwards has changed one, not overridden this.
+    colorMode = "custom",
+    -- The other three meta controls, same bargain: each sets its own kind of
+    -- setting on every surface that has one, stores what it last broadcast, and
+    -- is read by nothing.
+    barTexture  = "Blizzard Raid Bar",
+    font        = "Friz Quadrata TT",
+    fontOutline = "OUTLINE",
+
     -- -----------------------------------------------------------------------
     -- frame — the standalone window itself
     -- -----------------------------------------------------------------------

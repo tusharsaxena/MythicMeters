@@ -226,6 +226,39 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 "Settings to copy" dropdown — one list, three jobs. **A group added to the template and not to
 `COPY_GROUPS` simply never copies.**
 
+### The four meta rows
+
+`window.colorMode`, `window.barTexture`, `window.font` and `window.fontOutline` are rows on the
+**Frame** page that set the others rather than being read by anything. Each fans out to every surface
+that has a setting of its kind: the colour mode to ten, the bar texture to two (the grid and the
+tooltip), and the font and its outline to four each (the cells, both header strips and the tooltip).
+The tooltip's keys carry a `font` prefix of their own — `fontOutline`, not `outline` — which is why
+each fan-out is a list of **paths** rather than a group list and a suffix assumed to be shared.
+
+`window.colorMode` sets the other ten rather than being read by
+anything. Ten surfaces each carry a mode of their own — `bars.colorMode`, `bars.bgColorMode`,
+`text.colorMode`, `header.colorMode`, `header.bgColorMode`, `columnHeader.colorMode`,
+`columnHeader.bgColorMode`, `tooltip.colorMode`, `tooltip.barColorMode`, `tooltip.barBgColorMode` —
+which is right when a player wants one of them different and tedious when they want all ten the same.
+
+All four behave the same way, so what follows about the colour mode is true of every one of them.
+
+**It stores what was last broadcast and nothing reads it back.** A player who then changes one
+surface individually has changed one surface; the meta does not fight them for it and does not claim
+to describe them afterwards. Deriving it instead — showing "mixed" when the ten disagree — would make
+a control that cannot be set to the value it is displaying, which is worse than a shortcut that goes
+stale.
+
+The fan-out writes **through `NS.SetByPath`, one at a time**, so each target gets its own validation,
+its own debug line and its own `CONFIG_CHANGED`: a broadcast is indistinguishable from the player
+having set all ten by hand. Writing the config tree directly would be a second write seam, and the
+windows would not repaint.
+
+**It does not fire during a reset.** `NS.ApplyDefault` raises `NS.__restoring` around its write,
+because the Frame page's Defaults button walks every row of that page — and a meta row that
+broadcast from there would make that button silently reset ten settings on three other pages, which
+is the one thing a per-page reset must not do.
+
 ### The four text controls
 
 Four groups draw text — `text` (the cells), `header` (the title bar), `columnHeader` (the label

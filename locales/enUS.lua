@@ -231,6 +231,20 @@ L["Color drawn behind the title bar, when the mode above is Custom. The column-h
 -- put the height and the alignment of the text under a heading that said
 -- background. The column strip below it keeps its own group, because it is a
 -- different strip.
+L["Color mode (all surfaces)"] = "Color mode (all surfaces)"
+L["Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."] =
+    "Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."
+
+L["Bar texture (all surfaces)"] = "Bar texture (all surfaces)"
+L["Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."] =
+    "Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."
+L["Font (all surfaces)"] = "Font (all surfaces)"
+L["Set the font for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."] =
+    "Set the font for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."
+L["Font outline (all surfaces)"] = "Font outline (all surfaces)"
+L["Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."] =
+    "Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."
+
 L["Frame header"] = "Frame header"
 -- The header's own Title box and its three "show this too" checkboxes are gone
 -- with the strings that labelled them: each said something already on screen.

@@ -245,6 +245,98 @@ local function refreshVisibility()
     if V and V.Refresh then V:Refresh() end
 end
 
+-- Every colour-mode dropdown in one window, in the order a player meets them.
+-- The META ROW on the Frame page writes this whole list; each of them is also
+-- still its own row, and setting one individually afterwards is expected rather
+-- than an override to defend against.
+--
+-- WRITTEN THROUGH NS.SetByPath, ONE AT A TIME, and not by poking the config
+-- table: each target then gets its own validation, its own debug line and its own
+-- CONFIG_CHANGED, which is what makes a broadcast indistinguishable from the
+-- player having set all nine by hand. A fan-out that wrote the tree directly
+-- would be a second write seam, and the windows would not repaint.
+-- THE THREE OTHER THINGS EVERY SURFACE STATES SEPARATELY, and the meta rows that
+-- set each of them everywhere at once. Same bargain as the colour mode below: the
+-- individual rows all still exist, the meta stores what it last broadcast, and
+-- nothing reads it back.
+--
+-- The tooltip's keys carry a `font` prefix of their own (`fontOutline`, not
+-- `outline`), which is why these are lists of PATHS rather than a group list and
+-- a suffix assumed to be shared.
+local BAR_TEXTURE_PATHS = {
+    "window.bars.texture",
+    "window.tooltip.barTexture",
+}
+
+local FONT_PATHS = {
+    "window.text.font",
+    "window.header.font",
+    "window.columnHeader.font",
+    "window.tooltip.font",
+}
+
+local OUTLINE_PATHS = {
+    "window.text.outline",
+    "window.header.outline",
+    "window.columnHeader.outline",
+    "window.tooltip.fontOutline",
+}
+
+local COLOR_MODE_PATHS = {
+    "window.bars.colorMode",
+    "window.bars.bgColorMode",
+    "window.text.colorMode",
+    "window.header.colorMode",
+    "window.header.bgColorMode",
+    "window.columnHeader.colorMode",
+    "window.columnHeader.bgColorMode",
+    "window.tooltip.colorMode",
+    "window.tooltip.barColorMode",
+    "window.tooltip.barBgColorMode",
+}
+
+--- Broadcast one colour mode to every surface of the window.
+---
+--- THE META ROW IS A SHORTCUT, NOT A SOURCE OF TRUTH. It stores what was last
+--- broadcast and nothing reads it back: every surface keeps its own mode, and a
+--- player who then changes one individually has changed one, not "overridden" the
+--- meta. The alternative -- deriving the meta from the nine and showing "mixed"
+--- when they disagree -- makes a control that cannot be set to the thing it is
+--- showing, which is worse than a shortcut that goes stale.
+---
+--- The meta's own path is deliberately absent from the list above, so this cannot
+--- re-enter.
+---
+--- NOT DURING A RESET. "Restore this page's defaults" on the Frame page walks
+--- every row of that page through NS.ApplyDefault, and a meta row that broadcast
+--- from there would make the Frame page's Defaults button silently reset ten
+--- settings on three other pages -- a button reaching past its own page, which is
+--- the one thing a per-page reset must not do. The flag is set for exactly the
+--- length of that call and is the narrowest way to say "this write is a restore,
+--- not a click".
+---
+--- @param paths table   the surfaces to write
+--- @param value any      the value to write to each
+local function broadcast(paths, value)
+    if NS.__restoring then return end
+    if value == nil or value == "" then return end
+    for _, path in ipairs(paths) do
+        NS.SetByPath(path, value)
+    end
+end
+
+--- @param value string  "class" | "stat" | "custom"
+local function broadcastColorMode(value) broadcast(COLOR_MODE_PATHS, value) end
+
+--- @param value string  an LSM statusbar key
+local function broadcastBarTexture(value) broadcast(BAR_TEXTURE_PATHS, value) end
+
+--- @param value string  an LSM font key
+local function broadcastFont(value) broadcast(FONT_PATHS, value) end
+
+--- @param value string  NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+local function broadcastOutline(value) broadcast(OUTLINE_PATHS, value) end
+
 --- Show or hide the minimap button. LibDBIcon holds the button and reads the same
 --- `minimap` table this row writes, so it has to be told to look again. Guarded on
 --- its registry rather than pcall'd: an unregistered button is the normal state of
@@ -566,6 +658,52 @@ NS.Schema = {
     -- "Reset all settings" is a PROFILE reset, and a position lives in the
     -- profile. `/mm reset-positions` is the targeted verb, and it goes to
     -- modules/WindowManager.lua, which owns re-anchoring a live frame.
+
+    {
+        -- A META ROW: it sets the other ten rather than being read by anything.
+        -- Every surface in a window carries its own colour mode -- the cells, the
+        -- bar and its background, both header strips and both of their
+        -- backgrounds, the tooltip's text and both of its bars -- which is right
+        -- when a player wants one of them different and tedious when they want
+        -- all ten the same, which is the usual case.
+        --
+        -- IT STORES WHAT WAS LAST BROADCAST AND NOTHING READS IT BACK. A player
+        -- who then changes one surface individually has changed one surface; the
+        -- meta does not fight them for it and does not claim to describe them
+        -- afterwards. Deriving it instead -- showing "mixed" when the ten
+        -- disagree -- would make a control that cannot be set to the value it is
+        -- displaying, which is worse than a shortcut that goes stale.
+        path = "window.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "frame", group = L["Frame behavior"],
+        label = L["Color mode (all surfaces)"],
+        desc = L["Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."],
+        onChange = broadcastColorMode,
+    },
+    {
+        path = "window.barTexture", type = "string", default = "Blizzard Raid Bar",
+        values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
+        page = "frame", group = L["Frame behavior"],
+        label = L["Bar texture (all surfaces)"],
+        desc = L["Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastBarTexture,
+    },
+    {
+        path = "window.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "frame", group = L["Frame behavior"],
+        label = L["Font (all surfaces)"],
+        desc = L["Set the font for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastFont,
+    },
+    {
+        path = "window.fontOutline", type = "string", default = "OUTLINE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "frame", group = L["Frame behavior"],
+        label = L["Font outline (all surfaces)"],
+        desc = L["Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastOutline,
+    },
 
     -- ── Header ───────────────────────────────────────────────────────────────
     --
@@ -1896,10 +2034,19 @@ end
 --- @param row table
 function NS.ApplyDefault(row)
     if type(row) ~= "table" or row.path == nil then return end
+    -- A RESTORE IS NOT A CLICK, and one row cares: the Frame page's meta colour
+    -- mode broadcasts to ten rows on three other pages when it is SET, which is
+    -- the point of it -- and must not when the page's own Defaults button walks
+    -- it, or that button silently resets settings on pages it has no business
+    -- reaching. Set around the write rather than passed as an argument, because
+    -- every other row and every other seam is indifferent to the difference.
+    local was = NS.__restoring
+    NS.__restoring = true
     -- toDisplay, because SetByPath expects display terms and will invert back. The
     -- round trip is what keeps `default` meaning "the stored value" for the
     -- validator while the seam still sees what a user would have clicked.
     NS.SetByPath(row.path, toDisplay(row, copy(row.default)))
+    NS.__restoring = was
 end
 
 -- ---------------------------------------------------------------------------
