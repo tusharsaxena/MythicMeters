@@ -282,14 +282,26 @@ local OUTLINE_PATHS = {
     "window.tooltip.fontOutline",
 }
 
+-- TWO TEXT SURFACES ARE DELIBERATELY ABSENT: `window.text.colorMode`, the
+-- numbers in the grid, and `window.tooltip.colorMode`, the tooltip's own text.
+--
+-- Both of them are drawn ON TOP OF a surface this list DOES broadcast to. Sending
+-- "per statistic" to the whole window therefore painted the Damage number in the
+-- Damage colour over a Damage-coloured bar, and the tooltip's text in the sorted
+-- stat's colour over bars carrying that same colour -- the one place where making
+-- every surface agree makes the text stop being readable at all.
+--
+-- Foreground text is the surface whose colour has to CONTRAST with the broadcast,
+-- not match it, so it stays an explicit choice. Both remain their own rows on
+-- their own pages, so a player who wants the match can still ask for it; what
+-- they no longer get is it happening to them from a control labelled "all
+-- surfaces".
 local COLOR_MODE_PATHS = {
     "window.bars.colorMode",
     "window.bars.bgColorMode",
-    "window.text.colorMode",
     "window.header.colorMode",
     "window.columnHeader.colorMode",
     "window.columnHeader.bgColorMode",
-    "window.tooltip.colorMode",
     "window.tooltip.barColorMode",
     "window.tooltip.barBgColorMode",
 }
@@ -663,24 +675,28 @@ NS.Schema = {
     -- modules/WindowManager.lua, which owns re-anchoring a live frame.
 
     {
-        -- A META ROW: it sets the other ten rather than being read by anything.
-        -- Every surface in a window carries its own colour mode -- the cells, the
-        -- bar and its background, both header strips and both of their
-        -- backgrounds, the tooltip's text and both of its bars -- which is right
-        -- when a player wants one of them different and tedious when they want
-        -- all ten the same, which is the usual case.
+        -- A META ROW: it sets seven others rather than being read by anything.
+        -- Every surface in a window carries its own colour mode -- the bar and its
+        -- background, both header strips and both of their backgrounds, and both
+        -- of the tooltip's bars -- which is right when a player wants one of them
+        -- different and tedious when they want them all the same, which is the
+        -- usual case.
+        --
+        -- IT SKIPS THE TWO TEXT SURFACES, and COLOR_MODE_PATHS says why at
+        -- length: text is drawn on top of a surface this row broadcasts to, so
+        -- making it agree is what makes it unreadable.
         --
         -- IT STORES WHAT WAS LAST BROADCAST AND NOTHING READS IT BACK. A player
         -- who then changes one surface individually has changed one surface; the
         -- meta does not fight them for it and does not claim to describe them
-        -- afterwards. Deriving it instead -- showing "mixed" when the ten
+        -- afterwards. Deriving it instead -- showing "mixed" when the seven
         -- disagree -- would make a control that cannot be set to the value it is
         -- displaying, which is worse than a shortcut that goes stale.
         path = "window.colorMode", type = "string", default = "custom",
         values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "frame", group = L["Frame behavior"],
         label = L["Color mode (all surfaces)"],
-        desc = L["Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."],
+        desc = L["Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."],
         onChange = broadcastColorMode,
     },
     {
@@ -1356,6 +1372,9 @@ NS.Schema = {
         -- three every text surface answers. The fill used to be the hovered
         -- player's class and nothing else, with no setting reaching it, and the
         -- backdrop was a hard-coded black at 0.35 that no setting reached either.
+        -- The setting ships at 0.1 now: the tooltip's bars sit on the tooltip's
+        -- own backdrop, which is already dark, so a third of a screen of black
+        -- on top of it read as a smear rather than as an unfilled bar.
         path = "window.tooltip.barColorMode", type = "string", default = "class",
         values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "tooltip", group = L["Tooltip bars"],
@@ -1390,7 +1409,7 @@ NS.Schema = {
         desc = L["Color of the unfilled part, when the mode above is Custom."],
     },
     {
-        path = "window.tooltip.barBgAlpha", type = "number", default = 0.35,
+        path = "window.tooltip.barBgAlpha", type = "number", default = 0.1,
         min = 0, max = 1, step = 0.01, isPercent = true,
         page = "tooltip", group = L["Tooltip bars"],
         label = L["Bar background opacity"],

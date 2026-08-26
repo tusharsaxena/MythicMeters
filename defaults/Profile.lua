@@ -402,13 +402,15 @@ local WINDOW_TEMPLATE = {
         barSpacing         = 1,                    -- px between tooltip lines
         -- The fill and the backdrop each carry a colour, a MODE and an opacity.
         -- The fill was the hovered player's class with no setting reaching it; the
-        -- backdrop was a hard-coded black at 0.35 with none either.
+        -- backdrop was a hard-coded black at 0.35 with none either. It ships at
+        -- 0.1: these bars sit on the tooltip's own dark backdrop, so a third of
+        -- a screen of black over it read as a smear rather than an empty bar.
         barColor           = { r = 0.6, g = 0.6, b = 0.6, a = 1 },
         barColorMode       = "class",
         barAlpha           = 0.85,
         barBgColor         = { r = 0, g = 0, b = 0, a = 1 },
         barBgColorMode     = "custom",
-        barBgAlpha         = 0.35,
+        barBgAlpha         = 0.1,
         barBorderStyle     = "None",               -- LSM "border" key
         barBorderSize      = 1,
         barBorderColor     = { r = 0, g = 0, b = 0, a = 1 },

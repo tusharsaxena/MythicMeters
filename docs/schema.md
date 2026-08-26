@@ -582,7 +582,7 @@ every number to its right is opaque.
 Its own appearance, kept separate from `bars` and `text` on purpose — a 14px spell line and a 90px
 cell are different surfaces, and a texture or a size that reads across one often does not across the
 other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `scale = 1.0` · `barColorMode = "class"` · `barAlpha = 0.85` · `barBgColorMode = "custom"` ·
-`barBgAlpha = 0.35` · `barBorderStyle = "None"` ·
+`barBgAlpha = 0.1` · `barBorderStyle = "None"` ·
 `barBorderSize = 1` · `barBorderColor = { r = 0, g = 0, b = 0, a = 1 }` ·
 `font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"` ·
 `textColor = { r = 1, g = 1, b = 1, a = 1 }`. One colour for **both** number slots: the amount used
