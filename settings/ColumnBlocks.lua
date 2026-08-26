@@ -81,6 +81,38 @@ local function dropIndex(from, rows, count, boundary)
     return to
 end
 
+--- The one insertion line for this scroll, built once and reused.
+---
+--- Cached on the content frame for exactly the reason the blocks are: a fresh one
+--- per render would pile up on a recycled frame, and nothing would ever take the
+--- old ones down.
+---
+--- A FRAME CARRYING A TEXTURE, not a bare texture, and that is not decoration. A
+--- texture belongs to its own frame's draw layers, so one created on `content`
+--- draws UNDER every block -- each block is a child frame with its own layers,
+--- and a parent's OVERLAY still loses to a child. The line has to be a sibling
+--- that outranks them, which means a frame with a raised level.
+local function lineFor(content)
+    if not content then return nil end
+    if content.mmDropLine then return content.mmDropLine end
+
+    local line = CreateFrame("Frame", nil, content)
+    line:SetHeight(3)
+    -- Guarded on the ANSWER, not just on the method existing: a stub that returns
+    -- itself for anything it does not implement answers a table here, and adding
+    -- 20 to it takes the whole render down.
+    local level = content.GetFrameLevel and content:GetFrameLevel()
+    if type(level) == "number" then line:SetFrameLevel(level + 20) end
+
+    local tex = line:CreateTexture(nil, "OVERLAY")
+    tex:SetAllPoints(line)
+    tex:SetColorTexture(1, 0.82, 0, 0.9)
+
+    line:Hide()
+    content.mmDropLine = line
+    return line
+end
+
 --- The one block on `parent`, built the first time and reused forever after.
 ---
 --- REUSED, NOT REBUILT, AND THAT IS THE WHOLE BUG THIS FIXES. H.ClearScroll calls
@@ -175,6 +207,8 @@ local function blockFor(parent)
 
     local function finish()
         block:SetScript("OnUpdate", nil)
+        if block.mmLine then block.mmLine:Hide() end
+        block:SetAlpha(1)
         if not block.mmStartY then return end
         block.mmStartY  = nil
         block.mmSawDown = nil
@@ -195,6 +229,35 @@ local function blockFor(parent)
         end
     end
 
+    --- Put the insertion line where the block would land right now.
+    ---
+    --- ANCHORED TO THE TARGET BLOCK, never positioned by arithmetic. The index is
+    --- computed from the cursor, but WHERE THAT INDEX IS on screen is a question
+    --- only the frames can answer -- and anchoring to one asks it without reading
+    --- a single coordinate back, which is both simpler than measuring and the
+    --- habit rule R3 exists to build.
+    ---
+    --- IT IS SHOWN EVEN WHEN THE TARGET IS THE BLOCK'S OWN INDEX, and that is the
+    --- point of it. A drag clamped at the rule used to end with nothing moved and
+    --- nothing said, which is indistinguishable from a drag that never worked --
+    --- the line stopping dead at the rule is what tells you the clamp is a rule
+    --- rather than a failure.
+    local function showLine(to)
+        local line, siblings = block.mmLine, block.mmSiblings
+        local target = siblings and siblings[to]
+        if not (line and target) then return end
+
+        line:ClearAllPoints()
+        if to <= block.mmIndex then
+            line:SetPoint("BOTTOMLEFT",  target, "TOPLEFT",  0, 0)
+            line:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", 0, 0)
+        else
+            line:SetPoint("TOPLEFT",  target, "BOTTOMLEFT",  0, 0)
+            line:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        end
+        line:Show()
+    end
+
     local function track()
         if not block.mmStartY then return end
 
@@ -204,6 +267,9 @@ local function blockFor(parent)
         -- the next slot has visibly left its own, and rounding down would drop it
         -- back where it started.
         block.mmRows = math.floor(moved / NS.BLOCK_STRIDE + 0.5)
+
+        showLine(dropIndex(block.mmIndex, block.mmRows,
+            block.mmCount or 1, block.mmBoundary or 0))
 
         local held = mouseHeld()
         if held then
@@ -220,6 +286,9 @@ local function blockFor(parent)
         block.mmRows    = 0
         block.mmSawDown = nil
         block:SetScript("OnUpdate", track)
+        -- The block you are carrying fades, so the row you are looking at is the
+        -- line rather than the thing you grabbed.
+        block:SetAlpha(0.45)
 
         if NS.State and NS.State.debug and NS.Debug then
             NS.Debug("Blocks", "grab %d at y=%.1f", block.mmIndex, block.mmStartY)
@@ -241,6 +310,7 @@ local function applyBlock(block, index, item, spec, count, boundary)
     block.mmSpec     = spec
     block.mmCount    = count
     block.mmBoundary = boundary
+    block:SetAlpha(1)
 
     -- A disabled block is dimmer but still a block: it can be dragged, and it is
     -- what you click to bring the column back.
@@ -313,6 +383,18 @@ function NS.ReorderableBlocks(ctx, spec)
             rule:SetHeight(12)
             scroll:AddChild(rule)
         end
+    end
+
+    -- Handed out AFTER the loop, because a block cannot be told about siblings
+    -- that do not exist yet. Both are what the drag needs and neither is
+    -- knowable while the list is still being built: `mmSiblings` is how the line
+    -- finds the frame it should sit against, and `mmLine` is the one texture they
+    -- all share.
+    local line = lineFor(scroll.content or scroll.frame)
+    if line then line:Hide() end
+    for _, block in ipairs(blocks) do
+        block.mmSiblings = blocks
+        block.mmLine     = line
     end
 
     return blocks

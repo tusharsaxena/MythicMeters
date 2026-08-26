@@ -266,6 +266,61 @@ test("Blocks: OnDragStop completes a drag too", function()
     assertEqual(log.moved[1][2], 3)
 end)
 
+test("Blocks: the insertion line follows the drop target while dragging", function()
+    -- WITHOUT THIS A WORKING DRAG LOOKED BROKEN. Nothing moves under the cursor
+    -- while you drag, so until the line existed the only feedback was the list
+    -- redrawing after the drop -- and a drop clamped at the rule redraws nothing
+    -- at all. The line is what makes the clamp read as a rule rather than as a
+    -- failure.
+    local inst = T.load()
+    local blocks = render(inst)
+    local block = blocks[1]
+
+    inst.mocks.setMouseDown("LeftButton", true)
+    inst.mocks.setCursor(0, 1000)
+    block.mmHandle:_run("OnMouseDown")
+    assertTrue(block:GetAlpha() < 1, "the block being carried must fade")
+
+    inst.mocks.setCursor(0, 1000 - 2 * inst.NS.BLOCK_STRIDE)
+    block:_run("OnUpdate", 0.1)
+
+    local line = block.mmLine
+    assertTrue(line ~= nil, "no insertion line was built")
+    assertTrue(line:IsShown(), "the line must be visible during a drag")
+    -- Anchored to the TARGET block, never positioned by arithmetic: where an
+    -- index is on screen is a question only the frames can answer.
+    local _, relativeTo = line:GetPoint(1)
+    assertEqual(relativeTo, blocks[3], "the line is not against the drop target")
+
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)
+    assertFalse(line:IsShown(), "the line must go away when the drag ends")
+    assertEqual(block:GetAlpha(), 1, "the block must come back to full opacity")
+end)
+
+test("Blocks: a clamped drag still shows the line, stopped at the rule", function()
+    -- The case that read as "the drag does nothing": block 3 is the last ticked
+    -- one, so dragging it down is clamped to itself and writes nothing. The line
+    -- stopping dead at the rule is the only thing that says so.
+    local inst = T.load()
+    local blocks, log = render(inst)
+    local block = blocks[3]
+
+    inst.mocks.setMouseDown("LeftButton", true)
+    inst.mocks.setCursor(0, 1000)
+    block.mmHandle:_run("OnMouseDown")
+    inst.mocks.setCursor(0, 1000 - 3 * inst.NS.BLOCK_STRIDE)
+    block:_run("OnUpdate", 0.1)
+
+    assertTrue(block.mmLine:IsShown(), "a clamped drag must still show where it would land")
+    local _, relativeTo = block.mmLine:GetPoint(1)
+    assertEqual(relativeTo, blocks[3], "clamped to its own index, so the line sits on itself")
+
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)
+    assertEqual(#log.moved, 0, "a clamped drag must not write")
+end)
+
 test("Blocks: a drag that lands where it started reports nothing", function()
     -- Reporting it would rewrite the array and repaint the page for no change.
     local inst = T.load()

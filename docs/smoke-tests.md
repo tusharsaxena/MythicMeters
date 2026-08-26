@@ -350,8 +350,14 @@ below it. Nothing here can be driven offline, so every check below needs a clien
 - **2** — the block drops to the **top of the disabled group**, just below the rule, and the window
   loses that column. It lands where you can see it, not at the bottom of a long list.
 - **3** — it lands at the **end of the ticked group** and reappears as the **rightmost** column.
-- **4** — the drag **stops at the rule** and the block stays ticked. The tick is what moves a block
-  between groups; a drag must never silently turn a column off.
+- **4** — the **insertion line stops at the rule** and the block stays ticked, wherever you take the
+  cursor. The tick is what moves a block between groups; a drag must never silently turn a column off.
+  A clamped drop writes nothing, so the line stopping is the only feedback there is — if you cannot
+  see it, that is the bug, not the clamp.
+
+**Throughout a drag:** the block you grabbed **fades**, and a gold **insertion line** sits where it
+would land, following the cursor. Neither the list nor the block moves under the pointer — the line
+is the whole of the feedback, and without it a working drag is indistinguishable from a broken one.
 - **5** — refused, with "A window must keep at least one column." printed. A window of nothing but
   names reads as a broken addon rather than as a configuration.
 

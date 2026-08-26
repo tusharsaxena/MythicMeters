@@ -1437,7 +1437,7 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
 
-### test_columnblocks.lua (15)
+### test_columnblocks.lua (17)
 
 - Blocks: one block per item, each carrying its index and its label
 - Blocks: the glyph says enabled or disabled, and clicking it toggles
@@ -1449,6 +1449,8 @@ badge and any count quoted in the docs must agree with it.
 - Blocks: a drag reports where it landed
 - Blocks: a poll that never reports the button held cannot kill the drag
 - Blocks: OnDragStop completes a drag too
+- Blocks: the insertion line follows the drop target while dragging
+- Blocks: a clamped drag still shows the line, stopped at the rule
 - Blocks: a drag that lands where it started reports nothing
 - Blocks: an enabled block cannot be dragged past the last enabled one
 - Blocks: a disabled block cannot be dragged above the rule
@@ -1539,7 +1541,7 @@ badge and any count quoted in the docs must agree with it.
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
 | test_options_panel.lua | 25 |
-| test_columnblocks.lua | 15 |
+| test_columnblocks.lua | 17 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1376** |
+| **Total** | **1378** |
