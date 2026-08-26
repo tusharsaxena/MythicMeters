@@ -324,11 +324,18 @@ function WindowProto:BuildLayout()
     -- the frame is clamped instead (MinResize below).
     local visible = {}
     for _, col in ipairs(cfg.columns or {}) do
-        -- A column whose stat this build does not offer is DROPPED rather than
-        -- drawn blank: it means the profile was written against a build with
-        -- more stats in the catalog, and a nameless empty column is worse than
-        -- an absent one.
-        local stat = Const.STAT_BY_KEY[col.stat]
+        -- TWO REASONS A STORED ENTRY IS NOT DRAWN, and they are different facts.
+        --
+        -- `enabled == false` is the player's decision, made on the Columns page
+        -- and reversible there. Every statistic in the catalog has an entry now,
+        -- so most of a typical window's array is exactly this case.
+        --
+        -- An unknown stat is a profile written against a build with more
+        -- statistics than this one. normalizeColumns drops those on the way IN,
+        -- so reaching one here means an array that has not been through the seam
+        -- yet -- and a nameless empty column is worse than an absent one either
+        -- way.
+        local stat = col.enabled and Const.STAT_BY_KEY[col.stat]
         if stat then visible[#visible + 1] = { col = col, stat = stat } end
     end
 
@@ -342,11 +349,10 @@ function WindowProto:BuildLayout()
 
     for _, entry in ipairs(visible) do
         layout.columns[#layout.columns + 1] = {
-            key     = entry.col.stat,
-            stat    = entry.stat,
-            x       = x,
-            width   = statWidth,
-            showBar = entry.col.showBar ~= false,
+            key   = entry.col.stat,
+            stat  = entry.stat,
+            x     = x,
+            width = statWidth,
         }
         x = x + statWidth + COLUMN_GAP
     end
