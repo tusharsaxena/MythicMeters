@@ -323,28 +323,38 @@ second edge to catch.
 
 ### 5. Column editor
 
-**Steps.** Out of combat, on the Columns page: add **Absorbs**; move it left twice; widen it; turn
-its bar off; remove it. Then try to add a stat already shown.
+The page is **one block per statistic** — a drag handle, a green tick or a red cross, and a name.
+Ticked blocks are the columns, in block order, and they always sit above the rule; unticked ones sit
+below it. Nothing here can be driven offline, so every check below needs a client.
+
+**Steps.** Out of combat, on the Columns page:
+
+1. **Drag** a block from the bottom of the ticked group to the top, by its handle.
+2. **Untick** a middle column.
+3. **Re-tick** it.
+4. Try to **drag a ticked block below the rule**.
+5. Untick down to one column, then try to untick that one.
 
 **Pass.**
-- Each edit repaints the window immediately and repaints the page (the page's shape changed).
-- The width slider commits **on release**, not while dragging — the slider must not tear out from
-  under the cursor.
-- The Add picker offers only stats not already shown; when every stat is shown it says so instead of
-  offering an empty dropdown.
-- A column's own stat dropdown lists the stat that column already shows (or it would open with
-  nothing selected).
-- **Remove** is disabled when only one column remains, and attempting it anyway prints "A window must
-  keep at least one column."
-- Turning a bar off leaves the column's **text** — the column still reads, it just stops competing
-  for attention.
+- **1** — the window's columns reorder to match, immediately, and the page after the drop shows the
+  new order. Only the **handle** starts a drag: pressing anywhere else on the block does not.
+- **2** — the block drops to the **top of the disabled group**, just below the rule, and the window
+  loses that column. It lands where you can see it, not at the bottom of a long list.
+- **3** — it lands at the **end of the ticked group** and reappears as the **rightmost** column.
+- **4** — the drag **stops at the rule** and the block stays ticked. The tick is what moves a block
+  between groups; a drag must never silently turn a column off.
+- **5** — refused, with "A window must keep at least one column." printed. A window of nothing but
+  names reads as a broken addon rather than as a configuration.
 
-**Combat refusal.** Leave the Columns page **open**, then pull. Click Add / Remove / Move.
+Also check: every column draws its **bar** (there is no numbers-only column any more), and the
+columns share the frame width evenly (there is no per-column width to set).
 
-**Pass.** Every mutation is refused with "Columns cannot be changed during combat." — printed, not
-silent. **No Lua error.** This is the case the library's render-time refusal does not cover: a panel
-left open when a pull starts is still clickable, and rebuilding cells that are holding secret values
-is precisely what must not happen.
+**Combat refusal.** Leave the Columns page **open**, then pull. Click a glyph and drag a handle.
+
+**Pass.** Both are refused with "Columns cannot be changed during combat." — printed, not silent.
+**No Lua error.** This is the case the library's render-time refusal does not cover: a panel left
+open when a pull starts is still clickable, and rebuilding cells that are holding secret values is
+precisely what must not happen.
 
 ### 6. Multi-window
 

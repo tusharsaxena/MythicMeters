@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1296%2F1296_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1370%2F1370_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -102,7 +102,7 @@ The six pages between Windows and Profiles are **indented under it**, because th
 | `  - `Bars | The grid and everything drawn in it — row height, count, spacing and growth direction, and then, per cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
 | `  - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
 | `  - `Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
-| `  - `Columns | Add, remove and reorder columns — eight statistics are catalogued and six are on by default; Absorbs and Damage Taken are there to be switched on. Per-column width, and whether the column draws a bar |
+| `  - `Columns | One block per statistic — tick the ones you want, drag them by the handle into the order they appear. All eight are catalogued and listed; six are on by default, with Absorbs and Damage Taken there to be switched on |
 | Profiles | Share a setup between characters |
 
 ## How it works

@@ -153,7 +153,7 @@ badge and any count quoted in the docs must agree with it.
 - Locale: the locale file registers no second table over NS.L
 - Locale: enUS is the only locale shipped, and it is unconditional
 
-### test_database.lua (38)
+### test_database.lua (53)
 
 - Database: InitDB publishes the live instance under both names
 - Database: the profile is the SHARED Default, not a per-character one
@@ -177,11 +177,11 @@ badge and any count quoted in the docs must agree with it.
 - Database: RunMigrations stamps and holds the current schema version
 - Database: the schema version is account-wide, not per-profile
 - Database: a version ahead of any registered step is walked forward, not spun on
-- Database v2: every stored column is lifted to the one uniform width
+- Database v1: a v1 account walks all the way to the catalog shape
 - Database v2: the frame is widened to hold the new grid
 - Database v2: a frame that already fits the grid is left alone
 - Database v2: a frame already wider than the grid is left alone
-- Database v2: EVERY saved profile is lifted, not just the active one
+- Database: EVERY saved profile is walked, not just the active one
 - Database v2: the step is idempotent and survives a malformed window
 - Database: RunMigrations with no database is a no-op, not an error
 - Database: RunMigrations normalizes every window whatever the version claims
@@ -193,6 +193,21 @@ badge and any count quoted in the docs must agree with it.
 - Database v3: ANY of the three old icon flags means the icon stays on
 - Database v3: all three off stays off
 - Database v3: the three dead keys are REMOVED, not left to rot
+- Database v4: a stored AUTO channel folds to SELF, in EVERY profile
+- Database v4: every other channel is left exactly as the player set it
+- Database v4: a profile with no export block at all survives the step
+- Database v5: the FIRST window's values are the ones lifted
+- Database v5: the per-window keys are REMOVED from EVERY window
+- Database v5: the window's value beats whatever sits at the profile address
+- Database v5: a profile whose windows never carried the keys survives
+- Database v6: the two dead row-background keys are pruned from every window
+- Database v7: a class-colour boolean becomes a colour mode, on every surface
+- Database v7: a window that never set one is left to the shipped default
+- Database v8: the four redundant header keys are pruned from every window
+- Database v8: a typed header title becomes the window's NAME, not nothing
+- Database v8: a window that was named itself keeps its own name
+- Database v9: the title bar's background mode is pruned, the column strip's is kept
+- Database v10: a stored cursor anchor becomes TOP, and other anchors are left alone
 
 ### test_diagnostics.lua (43)
 
@@ -247,8 +262,8 @@ badge and any count quoted in the docs must agree with it.
 - Defaults: two windows share NO sub-table, at any depth
 - Defaults: a window shares NO sub-table with the shipped template
 - Defaults: editing one window leaves the other and the template untouched
-- Defaults: a new window's columns are the catalog's default set, in catalog order
-- Defaults: every default column takes its width from the catalog and ships its bar on
+- Defaults: a new window carries the WHOLE catalog, defaults ticked and first
+- Defaults: no column carries a width or a show-bar flag
 - Defaults: two windows' column entries are separate tables
 - Defaults: the template carries every group the settings pages edit
 - Defaults: no template leaf is nil, and no leaf is a function
@@ -641,7 +656,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (117)
+### test_window.lua (129)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -655,6 +670,8 @@ badge and any count quoted in the docs must agree with it.
 - A stat column never shrinks below the legible floor
 - The window refuses to be dragged smaller than the grid needs
 - BuildLayout drops a column whose stat this build does not offer
+- BuildLayout draws only the ENABLED columns, in stored order
+- A layout column carries no show-bar decision
 - BuildLayout derives how many rows FIT, capped by maxRows and MAX_ROWS
 - The throttle is clamped to the constants, whatever the profile says
 - The throttle coalesces N events into ONE refresh
@@ -675,7 +692,10 @@ badge and any count quoted in the docs must agree with it.
 - ShouldShow's ladder reads master enable, then test mode, then context
 - RefreshVisibility shows, hides, and marks dirty exactly once on the way in
 - An explicit Show draws on the next tick too, not a throttle later
-- The header folds its parts with `..`, and survives a secret duration
+- The header folds its parts with `..`, and survives a secret piece
+- The header line says which fight, and stays out of the way otherwise
+- Show segment off leaves the header line blank again
+- The segment name sits LAST, nearest the picker that changes it
 - The header says the grid was built the restricted way
 - The header names AMBIGUITY when two rows cannot be told apart
 - The header line reads 'Test' while placeholder data is on screen
@@ -725,6 +745,9 @@ badge and any count quoted in the docs must agree with it.
 - Header art falls back to ASCII on a client with none of the atlases
 - Header art prefers an atlas where the client has one
 - Changing a setting does not close a window the player asked for
+- The master switch closes a window the player asked for
+- A perf suspend closes a window the player asked for
+- A CONTEXT rule still cannot close a window the player asked for
 - A zone change is what makes an explicit show stale
 - Closing cancels the request, so it does not reappear
 - Scrolling moves the window into the list, it does not shorten it
@@ -741,6 +764,8 @@ badge and any count quoted in the docs must agree with it.
 - The body claims the mouse only while a breakdown is open
 - Column headers take their own font, not the cells'
 - Column headers have their own colour and background
+- Per-statistic mode leaves the Player header white, not the sort column's colour
+- The Player header's sort arrow is white too, in per-statistic mode
 - Minimise hides everything below the title bar
 - Minimise actually shrinks the window
 - Minimise leaves the STORED height alone, so expanding restores it
@@ -748,7 +773,9 @@ badge and any count quoted in the docs must agree with it.
 - A collapsed window keeps the notice hidden
 - Header shadow reaches every line of the strip
 - Column header shadow is its OWN setting, not the header's
-- Header class color is the LOCAL player's, since the header has no row
+- The header's text colour is the picker, and nothing resolves a mode
+- The header colour survives a sort change, having nothing to do with it
+- The window NAME takes the header's colour
 - Column header class color is the local player's too
 - Scale scales the WINDOW, not just what is inside it
 - Border style None draws NO edge, whatever the library's own is
@@ -761,7 +788,7 @@ badge and any count quoted in the docs must agree with it.
 - pool: a layout change re-applies to FREE rows, not just active ones
 - pool: every row built lands in `all`, including the batch surplus
 
-### test_headercontrols.lua (43)
+### test_headercontrols.lua (46)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -773,6 +800,9 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: a control at rest takes the control colour
 - HeaderControls: the control under the pointer takes the HOVER colour
 - HeaderControls: both colours come from config
+- HeaderControls: each colour has its OWN class-colour flag
+- HeaderControls: the hover flag classes the hover colour and nothing else
+- HeaderControls: both flags off is the shipped look, unchanged
 - HeaderControls: control size comes from config
 - HeaderControls: the width reserved equals the width occupied
 - HeaderControls: no title bar means no strip and no reservation
@@ -807,7 +837,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (74)
+### test_row.lua (85)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -830,12 +860,21 @@ badge and any count quoted in the docs must agree with it.
 - Every color mode falls back to one neutral, never to a fourth palette
 - Role and stat color modes read their own tables
 - A custom color comes from the setting, not from the last-resort literal
-- A cell with its bar switched off keeps its text
+- Every cell draws its bar, because the bar is not optional
 - Cell text takes the ROW's class color when asked
 - Class color keeps the configured ALPHA, not the class's own
 - With no class to read, cell text keeps its configured color
 - Text opacity fades the TEXT, and leaves the bar alone
-- Bar opacity fades the bar, and the text rides on top of it
+- The bar border takes the player's thickness and colour
+- The bar border is drawn ABOVE the fill, not under it
+- Border style None keeps the cheap flat outline and puts no backdrop on a cell
+- Border style art moves to a backdrop and takes the flat outline down
+- A window that sets neither keeps the border it always had
+- Per-statistic cell text is the colour of the column the cell is in
+- Text opacity reaches the NAME and the numbers alike, class colour or not
+- Text opacity and the colour's own alpha multiply, rather than one winning
+- Bar opacity fades the FILL, and nothing else in the cell
+- Bar opacity and text opacity are independent, in both directions
 - The name cell is never handed a meter value at all
 - The name cell colors the NAME by class, now that no bar carries it
 - An unknown class reads as white, not as a tenth palette entry
@@ -857,6 +896,8 @@ badge and any count quoted in the docs must agree with it.
 - A ROLE icon is never drawn, whatever the row carries
 - A breakdown row draws the SPELL's icon, not a unit's
 - Turning the icon off hides it rather than destroying it
+- An icon turned off STAYS off across the next refresh
+- The name starts clear of the icon, with a gap you can see
 - highlightSelf honors both spellings of 'this row is you'
 - The class tint is painted on the CELLS, not on the row
 - A row with no class falls back to the alternating stripe
@@ -911,10 +952,10 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (105)
+### test_tooltip.lua (116)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
-- CellTooltip honors the anchor setting and falls back to the cursor
+- CellTooltip honors the anchor setting and falls back to the default
 - CellTooltip sorts biggest-first when comparison is legal
 - CellTooltip REFUSES the sort while comparison is illegal
 - CellTooltip refuses the sort when an amount is MISSING, not merely secret
@@ -942,6 +983,15 @@ badge and any count quoted in the docs must agree with it.
 - The bar is DRAWN mid-pull, because the widget does the division
 - A bar spans the FULL line, so its length is comparable down the column
 - A bar clears the icon rather than running underneath it
+- The player's name is class-coloured on every tooltip that names one
+- A row with no class keeps a white name rather than an invented colour
+- The scale reaches the tooltip BEFORE it is placed, and is put back after
+- A nonsense scale is bounded rather than handed to the client
+- The bar's fill and its backdrop each take their own colour and opacity
+- Per-statistic mode is the HOVERED column's colour, not the sort column's
+- The text mode follows the hovered column too
+- Class mode paints the bar with the hovered player's class
+- The bar border is drawn on the BAR, where it can be seen
 - A bar sits UNDER the tooltip's text, not over it
 - Bars come down when GameTooltip closes, whoever closed it
 - A spell line carries its SHARE of the player's total beside the amount
@@ -952,6 +1002,8 @@ badge and any count quoted in the docs must agree with it.
 - The AMOUNT rides on the carrier, not on the bar
 - The tooltip is widened for the slots, and put back afterwards
 - Every anchor the schema offers resolves to a real GameTooltip token
+- Each anchor puts the tooltip in the box of a 3x3 around the cell
+- There is no "At cursor" anchor, and TOP is what shipped instead
 - The anchor dropdown offers nothing the token table cannot resolve
 - The x/y offset reaches SetOwner rather than a SetPoint of our own
 - A junk offset off an old profile is clamped, never handed to the client
@@ -1072,7 +1124,7 @@ badge and any count quoted in the docs must agree with it.
 - Every death row has a distinct pool identity, id or no id
 - A death row wears the death icon
 
-### test_export.lua (77)
+### test_export.lua (91)
 
 - Export is a plain table on NS, not an AceAddon module
 - Export.Open refuses to open at all while restricted
@@ -1101,6 +1153,7 @@ badge and any count quoted in the docs must agree with it.
 - Export.SessionConfig names every catalog stat, enabled
 - Export.SessionConfig caps at the aggregator's own ceiling
 - Export.SessionConfig inherits the invoking window's segment
+- Export.SessionConfig takes pet merging from the PROFILE, not the window
 - Export.SessionConfig falls back to the Current session with no window
 - Export.SessionConfig takes a Window INSTANCE as well as a bare config
 - Export.SessionConfig ranks by the requested column, then the window's
@@ -1129,14 +1182,27 @@ badge and any count quoted in the docs must agree with it.
 - Export.ChatLines answers nothing rather than raising with no formatter
 - Export.ChatLines refuses to the empty array while restricted
 - Export.ResolveChannel answers nothing for SELF, which is the default
-- Export.ResolveChannel walks AUTO's instance -> raid -> party -> say ladder
+- Export.ResolveChannel folds the RETIRED "AUTO" key to self only
+- The channel catalog no longer offers AUTO
 - Export.ResolveChannel trims a whisper target and refuses an empty one
+- The TARGET channel whispers whoever the player has targeted
+- A cross-realm target keeps its realm, because a whisper needs it
+- TargetName refuses no target and a target that is not a player, separately
+- TARGET with nothing targeted resolves to SELF rather than to a broken send
 - Export.ResolveChannel takes every other key from the catalog
 - Export.ResolveChannel treats an unknown key as its own chat type
 - Export.Send prints to the player alone for SELF
 - Export.Send hands one message per line to the client
 - Export.Send sends every line at once on a client with no C_Timer
 - Export.Send prints locally for SELF and sends nothing to any channel
+- Export.SendDelay takes an extra second every batch, to duck the message counter
+- Export.NeedsHardwareEvent is true for Say outdoors and false inside an instance
+- Say outdoors sends the WHOLE dump inside the click, not off timers
+- Say INSIDE an instance keeps the stagger, because the restriction lifts there
+- A whisper to nobody drops the rest of the dump and says so once
+- An unrelated system message leaves a whisper dump alone
+- A system message with no dump in flight is a cheap no
+- A second send supersedes whatever the first still had queued
 - Export.Send does nothing with nothing to send
 - Export.SessionLabel asks the window, never the provider
 - Export.SessionLabel survives a window whose label raises
@@ -1188,7 +1254,7 @@ badge and any count quoted in the docs must agree with it.
 - Visibility listens on the bus and registers no game event
 - A profile change forgets the old answers and re-evaluates
 
-### test_windowmanager.lua (31)
+### test_windowmanager.lua (34)
 
 - WindowManager is published under the flat name every caller uses
 - Init builds one live instance per stored config, and is idempotent
@@ -1198,6 +1264,9 @@ badge and any count quoted in the docs must agree with it.
 - Create appends a window with the shipped defaults and a live instance
 - Ids are monotonic and never reused
 - A duplicate name is disambiguated rather than refused
+- A window created with no name is numbered off how many windows exist
+- The default number counts windows rather than climbing with deleted ids
+- The default name steps past a name the player has already taken
 - Rename stores the new name and refuses an empty one
 - Duplicate deep-copies the source and offsets the copy
 - Delete removes the config, destroys the instance and repoints the picker
@@ -1242,7 +1311,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (41)
+### test_schema.lua (46)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1259,7 +1328,10 @@ badge and any count quoted in the docs must agree with it.
 - SetByPath: a table value is COPIED in, never stored by reference
 - ApplyDefault: restores through the same seam, deep-copying a table default
 - ApplyDefault: round-trips the inverted row back to its SHIPPED stored value
-- SetByPath: window.columns ACCEPTS a well-formed ordered array and stores it
+- SetByPath: window.columns repairs any array into the WHOLE catalog
+- SetByPath: window.columns DROPS a statistic this build does not have
+- SetByPath: window.columns keeps a repeated statistic's FIRST appearance only
+- SetByPath: window.columns stores the enabled ones ahead of the disabled ones
 - SetByPath: window.columns REBUILDS the array rather than adopting the caller's
 - SetByPath: window.columns takes the same log, message and refresh a scalar takes
 - SetByPath: window.columns is readable through the generic resolver
@@ -1267,18 +1339,20 @@ badge and any count quoted in the docs must agree with it.
 - SetByPath: window.columns REFUSES an empty array, with a message
 - SetByPath: window.columns REFUSES a gap or a string key, with a message
 - SetByPath: window.columns REFUSES an entry that is not a table, with a message
-- SetByPath: window.columns REFUSES a statistic this build does not have, with a message
-- SetByPath: window.columns REFUSES the same statistic twice, with a message
-- SetByPath: window.columns REFUSES a width below the slider's floor, with a message
-- SetByPath: window.columns REFUSES a width above the slider's ceiling, with a message
-- SetByPath: window.columns REFUSES a non-numeric width, with a message
-- SetByPath: window.columns REFUSES a NaN width, with a message
-- SetByPath: window.columns REFUSES a show-bar flag that is not a boolean, with a message
+- SetByPath: window.columns REFUSES an array with nothing enabled, with a message
+- SetByPath: window.columns REFUSES an array whose every statistic this build dropped, with a message
 - SetByPath: a path INTO the column array is refused by name
-- SetByPath: the columns validator agrees with the width slider's own range
+- Schema: NS.NormalizeColumns is published for the migration ladder
 - Schema: a `hidden` row is writable and listable but draws no control
-- Schema: the close button is a HEADER CONTROL, and Frame behavior is named for the frame
-- Schema: every Frame page group is CONTIGUOUS, or a heading prints twice
+- Schema: the export choices are hidden from the panel but NOT from the seam
+- The meta colour mode sets every bar and header in the window at once
+- The meta colour mode leaves both TEXT surfaces alone
+- The other three meta rows broadcast their own kind of setting
+- A surface changed after the broadcast keeps its own answer
+- The Frame page's Defaults button does NOT broadcast
+- Schema: the Header page's three groups are named and ordered for the strip they describe
+- Schema: the header controls are EDITED on Header and STORED under frame
+- Schema: every group on every page is CONTIGUOUS, or a heading prints twice
 - Schema: every LSM border setting is one this suite knows honours "None"
 - Schema: every text surface offers face, outline, shadow and colour
 - RestoreAllDefaults resets EVERY window, not just the selected one
@@ -1335,8 +1409,11 @@ badge and any count quoted in the docs must agree with it.
 - Slash: no raw SLASH_* global is claimed anywhere
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
 
-### test_options_panel.lua (22)
+### test_options_panel.lua (25)
 
+- Options: General is the FIRST page, above Windows
+- Options: every window page is marked as nested, and the two that are not are not
+- Options: the page HEADING keeps the plain name, mark or no mark
 - Options: the parent category is registered at CreateOptionsPanel time
 - Options: every page's subcategory is registered eagerly, before any panel is shown
 - Options: a page's ctx carries its page key
@@ -1360,31 +1437,31 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
 
-### test_columns.lua (23)
+### test_columnblocks.lua (9)
 
-- Columns: the page renders one control set per stored column
-- Columns: the first column cannot move left and the last cannot move right
-- Columns: the width slider writes the stored width and repaints
-- Columns: the show-bar checkbox writes the stored flag as a real boolean
-- Columns: the stat dropdown re-points a column at another statistic
-- Columns: Move left swaps a column with its neighbour
-- Columns: Move right swaps a column with its neighbour
-- Columns: Remove drops exactly that column
-- Columns: the last column cannot be removed
-- Columns: Add appends the picked statistic, sized from the catalog
-- Columns: Add with nothing picked does nothing
-- Columns: the Add picker offers only statistics not already shown
-- Columns: a column's own picker offers the free stats PLUS the one it shows
-- Columns: the Add section says so rather than offering an empty picker
-- Columns: the picker never offers a choice NS.SetByPath would refuse
+- Blocks: one block per item, each carrying its index and its label
+- Blocks: the glyph says enabled or disabled, and clicking it toggles
+- Blocks: only the handle takes the mouse for dragging
+- Blocks: a drag reports where it landed
+- Blocks: a drag that lands where it started reports nothing
+- Blocks: an enabled block cannot be dragged past the last enabled one
+- Blocks: a disabled block cannot be dragged above the rule
+- Blocks: a list with nothing disabled drags end to end
+- Blocks: the rule is drawn once, under the last enabled block
+
+### test_columns.lua (11)
+
+- Columns: the page draws one block per statistic in the catalog
+- Columns: the blocks are in the STORED order, ticked ones first
+- Columns: unticking a column drops it to the TOP of the disabled group
+- Columns: ticking a statistic adds it as the RIGHTMOST column
+- Columns: the last shown column cannot be unticked, and the refusal is said
+- Columns: dragging a block reorders the stored array
+- Columns: a drag that goes nowhere writes nothing
+- Columns: no change is applied under combat lockdown, and the reason is said
 - Columns: a refused write is REPORTED and the page is not repainted
 - Columns: an accepted write IS repainted
-- Columns: every mutation goes through NS.SetByPath, never straight into the profile
 - Columns: the stored array is never the page's own working copy
-- Columns: no mutation is applied under combat lockdown
-- Columns: the width slider's range matches the carve-out's validator
-- Columns: a width the slider can produce is never refused by the seam
-- Columns: a stat from a newer build is still LISTED so the player can remove it
 
 ### test_degraded.lua (27)
 
@@ -1426,7 +1503,7 @@ badge and any count quoted in the docs must agree with it.
 | test_compat.lua | 33 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
-| test_database.lua | 38 |
+| test_database.lua | 53 |
 | test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 23 |
@@ -1442,20 +1519,21 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 117 |
-| test_headercontrols.lua | 43 |
-| test_row.lua | 74 |
+| test_window.lua | 129 |
+| test_headercontrols.lua | 46 |
+| test_row.lua | 85 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 105 |
+| test_tooltip.lua | 116 |
 | test_drilldown.lua | 50 |
-| test_export.lua | 77 |
+| test_export.lua | 91 |
 | test_visibility.lua | 33 |
-| test_windowmanager.lua | 31 |
+| test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 41 |
+| test_schema.lua | 46 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
-| test_options_panel.lua | 22 |
-| test_columns.lua | 23 |
+| test_options_panel.lua | 25 |
+| test_columnblocks.lua | 9 |
+| test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1296** |
+| **Total** | **1370** |

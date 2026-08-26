@@ -528,29 +528,13 @@ L["Hide the window whenever you are not fighting."] =
 -- Columns page
 -- ---------------------------------------------------------------------------
 
-L["Column list"] = "Column list"
-L["The columns this window shows, left to right. Columns can only be changed out of combat."] =
-    "The columns this window shows, left to right. Columns can only be changed out of combat."
-L["Add column"] = "Add column"
-L["Add a statistic as a new column on the right."] =
-    "Add a statistic as a new column on the right."
-L["Remove column"] = "Remove column"
-L["Remove this column from the window."] = "Remove this column from the window."
-L["Move left"] = "Move left"
-L["Move right"] = "Move right"
-L["Column width"] = "Column width"
-L["Width of this column in pixels."] = "Width of this column in pixels."
-L["Show bar"] = "Show bar"
-L["Draw a bar behind this column's number. Turn it off for a numbers-only column."] =
-    "Draw a bar behind this column's number. Turn it off for a numbers-only column."
-L["Statistic"] = "Statistic"
-L["Which statistic this column shows."] = "Which statistic this column shows."
 L["Columns cannot be changed during combat."] =
     "Columns cannot be changed during combat."
-L["Every available statistic is already shown."] =
-    "Every available statistic is already shown."
 L["A window must keep at least one column."] =
     "A window must keep at least one column."
+
+L["Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."] =
+    "Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."
 
 -- ---------------------------------------------------------------------------
 -- Data page

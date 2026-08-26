@@ -34,7 +34,7 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | 6 | `  - `Bars | `bars` | 28 | yes | **Everything drawn inside a cell**, in five groups, back to front: **Bar appearance** (texture, colour mode, custom colour, opacity, fill direction), **Bar background color** (its mode, colour and opacity, plus the alternating row stripe that competes with it), **Bar border** (on/off, thickness, colour), **Cell text** (the two slots, number format, death timestamps, max name length, the four text controls, size, opacity) and **Row icons** (one icon per row, its size and which side of the name it sits on). The Text and Icons pages folded in here: styling one cell used to be three pages and two clicks between each change you wanted to compare |
 | 7 | `  - `Tooltip | `tooltip` | 20 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own four text controls, and the Targets section |
 | 7 | `  - `Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
-| 8 | `  - `Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
+| 8 | `  - `Columns | `columns` | **0** | **no** | One block per statistic — a drag handle, a tick/cross toggle, and a name. Ticked ones are the columns, in block order |
 | 9 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
 
 Five of the nine — Frame, Header, Bars, Tooltip, Visibility — are one
@@ -112,7 +112,9 @@ Two groups make the point, and both are deliberate:
   Defaults expects.
 - **Columns** — the column list is not a set of rows, so there is nothing per-row to restore.
   "Reset the columns" is what a fresh window gives, and the global reset already rebuilds them from
-  the catalog through `NS.ApplyDefault`.
+  the catalog through `NS.ApplyDefault`. Since the array became the whole catalog there is also
+  nothing to restore *back* — every statistic is already on the page; only which are ticked, and in
+  what order, can differ from the shipped list.
 - **Profiles** — restoring here would delete the player's profiles, which is not what anyone means
   by restoring a default (`options-ui-§3`). This is enforced **twice**: the button is suppressed on
   the page, and `settings/OptionsSetup.lua`'s `skipRestoreAll` predicate
@@ -319,30 +321,40 @@ whole design is arranged to avoid. `commit()` refuses under `InCombatLockdown()`
 
 ### How the editor works
 
-Each column renders as a section — `1. Damage`, `2. Healing` — carrying four controls: a stat
-dropdown, a width slider (24–240), a show-bar checkbox, and a three-across row of Move left / Move
-right / Remove. Below them, an Add column picker offering only the stats not already shown.
+The page is **one block per statistic in the catalog**, always all of them, in the order the window
+draws them left to right. A block is a drag handle, a state glyph (`ReadyCheck-Ready` /
+`ReadyCheck-NotReady`, the same pair ConsumableMaster's priority list wears) and a right-aligned
+name. A thin rule sits under the last ticked block, marking where the shown columns stop.
+
+There is no add, no remove, no move-left, no move-right, no width slider and no show-bar checkbox.
+The array *is* the catalog, so there is nothing to add and nothing to remove — only an order, and
+which of them you want to see.
 
 Five details worth knowing:
 
 - **Every mutation snapshots, edits, and hands the whole array to `NS.SetByPath("window.columns", …)`.**
   Mutating the live table in place and then "writing" it would hand the seam a table it already
   holds, and any change detection would correctly conclude that nothing happened.
-- **The seam's answer is checked, not discarded.** It can legitimately say no — an unknown stat
-  carried in from a newer build, a width outside range, no window selected. A refusal followed by an
-  unconditional repaint is the worst outcome: the page redraws from the unchanged stored array, so
-  the control looks like it did nothing rather than like it failed. Repainting is conditional on
-  success and the reason is printed.
-- **The width slider commits on `OnMouseUp`, never `OnValueChanged`.** A width write rebuilds the
-  window and re-renders this page; doing that per drag frame would tear the slider out from under
-  the cursor.
-- **A stat can appear once**, which `NS.SetByPath` enforces — so the pickers must not offer a choice
-  it would refuse. `unusedStatList(w, keep)` takes a `keep` argument for exactly that: a column's own
-  stat dropdown has to list the stat that column already shows, or the control opens with nothing
-  selected.
-- **A column whose stat this build does not have is still listed**, labelled with its raw key, so a
-  player who moved a profile back from a newer build can see it and remove it. The renderer drops
-  it; the editor must not hide it.
+- **The seam's answer is checked, not discarded.** It can legitimately say no — no window selected,
+  or an edit that would leave nothing ticked. A refusal followed by an unconditional repaint is the
+  worst outcome: the page redraws from the unchanged stored array, so the control looks like it did
+  nothing rather than like it failed. Repainting is conditional on success and the reason is printed.
+- **A toggle is also a move.** Ticking sends a block to the end of the ticked group — it becomes the
+  rightmost column, which is where a column you just added belongs. Unticking sends it to the top of
+  the unticked group, the shortest travel available, so the player watches it drop just below the
+  rule rather than hunting the list for where it went.
+- **A drag that would cross the rule is clamped to it.** You reorder within your own group and the
+  tick is what moves you between them. Without the clamp, dropping a ticked block into the unticked
+  half would have to silently untick it — a state change from a gesture that means "move".
+- **The drop target is index arithmetic, not a hit test.** Every block is `NS.BLOCK_STRIDE` tall, so
+  where the cursor landed is a division. Nothing asks which block is under the pointer, so nothing
+  depends on the blocks having been laid out yet, on the scroll position, or on AceGUI having
+  finished its layout pass — all three of which are true at different moments during a drag.
+
+The blocks themselves live in **`settings/ColumnBlocks.lua`** and know nothing about statistics: they
+take `items` and answer with indices. That is a generic options widget living outside LibKa0s, which
+is a [documented deviation](ARCHITECTURE.md#documented-deviations) tracked as
+[issue #21](https://github.com/tusharsaxena/MultiMeters/issues/21).
 
 ---
 
