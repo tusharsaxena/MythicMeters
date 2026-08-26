@@ -81,13 +81,6 @@ local TOOLTIP_ICON_SIZE = 14
 -- of the sort. Small enough that a hover never walks a long array.
 local COLLECT_LIMIT = 64
 
--- Gray used for statistics the hovered window is not currently showing. The
--- name tooltip deliberately lists every tracked stat — that is its whole job —
--- and the dimming is what keeps "this is on your grid" separable from "this is
--- extra" at a glance. NS.GRAY is the collection's canonical gray; never a second
--- hex literal.
-local GRAY = NS.GRAY or "|cff9d9d9d"
-
 -- ---------------------------------------------------------------------------
 -- Collaborators, resolved at call time
 -- ---------------------------------------------------------------------------
@@ -1689,34 +1682,6 @@ local function addDeathBreakdown(row, style, numberStyle)
     applyDeathMinimumWidth(style)
 end
 
---- The extra facts an Avoidable Damage row carries: whether the hit was
---- avoidable, and whether it was deadly.
----
---- Only rendered for the avoidable column, because that is the column where the
---- question "could I have stepped out of this" is the entire point. The flags go
---- through plainTruth, because they may be secret booleans and a boolean test on
---- one raises.
----
---- NO OVERKILL LINE. This used to render `overkillAmount` beneath the hit, and it
---- was noise in the one place it appeared: overkill is the part of a killing blow
---- that exceeded the target's remaining health, which is a fact about DAMAGE
---- DEALT. On damage the player TOOK it is either zero or the amount by which they
---- were already dead, and neither answers "could I have stepped out of this".
---- Blizzard still ships the field; we simply have no column it belongs to.
----
---- @param _numberStyle string|nil  kept so the signature matches its sibling
----   renderers; nothing here formats an amount any more
-local function addAvoidableDetail(spell, _numberStyle)
-    local marks
-    if plainTruth(spell.isAvoidable) then marks = L["Avoidable"] end
-    if plainTruth(spell.isDeadly) then
-        marks = marks and (marks .. ", " .. L["Deadly"]) or L["Deadly"]
-    end
-    if marks then
-        GameTooltip:AddLine(string.format("    %s%s|r", GRAY, marks))
-    end
-end
-
 --- The provider's per-spell detail for one player in one column, or nil when
 --- there is nothing to read.
 ---
@@ -1815,11 +1780,12 @@ end
 --- ordering in place rather than degrading anything downstream of it.
 ---
 --- @param source table       a DamageMeterCombatSessionSource
---- @param statKey string
+--- @param _statKey string     kept so the call site reads like its siblings; the
+---   breakdown is drawn the same way for every column
 --- @param cap number         the most lines this section may draw
 --- @param numberStyle string|nil
 --- @return number  lines drawn
-local function addSpellBreakdown(source, statKey, cap, numberStyle, style)
+local function addSpellBreakdown(source, _statKey, cap, numberStyle, style)
     local spells, spellTotal = collectSpells(source)
     sortSpellsIfLegal(spells)
 
@@ -1836,14 +1802,16 @@ local function addSpellBreakdown(source, statKey, cap, numberStyle, style)
     -- refuses to fill on its own if the operands cannot be divided.
     local barMax = (spells[1] and spells[1].totalAmount) or source.maxAmount
 
-    local wantAvoidableDetail = (statKey == "AvoidableDamageTaken")
+    -- ONE LINE PER SPELL, on every column including this one. The avoidable
+    -- breakdown used to tag each spell with a gray "Avoidable" / "Avoidable,
+    -- Deadly" sub-line beneath its bar, and it was noise in the one place it
+    -- appeared: EVERY spell in an Avoidable Damage breakdown is avoidable — the
+    -- tooltip's own header says so — so the tag restated the column for each row
+    -- while breaking the list into ragged, mismatched groups.
     local shown = 0
     for i = 1, #spells do
         if i > cap then break end
         addSpellLine(spells[i], numberStyle, barMax, style, source.totalAmount)
-        if wantAvoidableDetail then
-            addAvoidableDetail(spells[i], numberStyle)
-        end
         shown = i
     end
 
@@ -2007,6 +1975,28 @@ end
 -- Name tooltip — every statistic for one player
 -- ---------------------------------------------------------------------------
 
+--- One statistic's color as three plain numbers, dimmed when the hovered window
+--- has no column for it.
+---
+--- The catalog's palette, the same three numbers modules/Row.lua paints the bar
+--- with. An unknown key answers a neutral rather than a tenth color, so a stat
+--- added to the catalog without a palette entry renders plainly instead of
+--- inventing a hue nothing else in the addon uses.
+---
+--- @param statKey string
+--- @param shown boolean|nil  is this statistic a column in the hovered window
+--- @return number, number, number
+local function statColor(statKey, shown)
+    local c = Const.STAT_COLORS and Const.STAT_COLORS[statKey or ""]
+    if not c then
+        if shown then return 1, 1, 1 end
+        return 0.62, 0.62, 0.62
+    end
+    if shown then return c[1], c[2], c[3] end
+    local dim = Const.STAT_DIM or 0.6
+    return c[1] * dim, c[2] * dim, c[3] * dim
+end
+
 --- Which stats the hovered window has on screen, as a lookup.
 ---
 --- Built per hover rather than cached: the column list is short, and holding a
@@ -2026,8 +2016,17 @@ end
 --- One line per tracked statistic, dimmed where the window is not showing that
 --- column, and the count of lines drawn.
 ---
---- Stats the window does show are drawn in full color; the rest are dimmed, so
---- the two groups stay distinguishable without a second header.
+--- EVERY LINE WEARS ITS OWN STATISTIC'S COLOR, label and amount alike — the
+--- catalog's palette (`Const.STAT_COLORS`), the same nine colors a bar takes
+--- under `bars.colorMode == "stat"`, and it wears them WHATEVER that setting says.
+--- This is the one place all nine statistics are on screen at once, so the color
+--- is doing work here that it is only optionally doing on a bar: it is what ties
+--- the "Healing" line in this list to the Healing column in the grid behind it.
+--- The setting governs the BARS; this list is not a bar.
+---
+--- Stats the window does show are drawn in full color; the rest are dimmed — the
+--- same hue at a lower level rather than a flat gray, so the two groups stay
+--- distinguishable without a hidden statistic losing its identity.
 ---
 --- One provider call per statistic. That is up to nine calls on a hover, and it
 --- is the right trade: the totals live on the per-source read anyway, and
@@ -2049,12 +2048,18 @@ local function addAllStatLines(row, window, numberStyle)
         local stat = Const.STATS[i]
         local source = sourceDetailFor(window, stat.key, row)
         if source and source.totalAmount ~= nil then
-            local label = L[stat.label]
-            if not onScreen[stat.key] then
-                label = string.format("%s%s|r", GRAY, label)
-            end
-            GameTooltip:AddDoubleLine(label, formatNumber(source.totalAmount, numberStyle),
-                1, 1, 1, 1, 1, 1)
+            -- BOTH SIDES IN THE SAME COLOR, so the line reads as one fact rather
+            -- than as a colored name beside a neutral number.
+            --
+            -- Through AddDoubleLine's own color arguments and NOT through a
+            -- `|cff…` escape on the string. Two reasons, and the second is the
+            -- one that matters: an escape is a concatenation, and `formatNumber`
+            -- may hand back a SECRET, which may not be concatenated. The tooltip
+            -- applies the color arguments to whatever string it was handed,
+            -- secret or not, so the same mechanism serves both sides of the line.
+            local r, g, b = statColor(stat.key, onScreen[stat.key])
+            GameTooltip:AddDoubleLine(L[stat.label],
+                formatNumber(source.totalAmount, numberStyle), r, g, b, r, g, b)
             rendered = rendered + 1
         end
     end

@@ -197,19 +197,13 @@ end
 
 -- One color per stat for `bars.colorMode == "stat"`, so a glance at a wide
 -- window tells you which column you are reading without tracing back up to the
--- header. Keyed by the catalog's stat key (core/Constants.lua), and deliberately
--- muted: these sit behind white text all day.
-local STAT_COLORS = {
-    DamageDone           = { 0.78, 0.25, 0.25 },
-    HealingDone          = { 0.25, 0.70, 0.35 },
-    Absorbs              = { 0.45, 0.65, 0.80 },
-    Interrupts           = { 0.85, 0.65, 0.20 },
-    Dispels              = { 0.55, 0.45, 0.80 },
-    DamageTaken          = { 0.65, 0.35, 0.20 },
-    AvoidableDamageTaken = { 0.80, 0.45, 0.15 },
-    Deaths               = { 0.55, 0.55, 0.55 },
-    EnemyDamageTaken     = { 0.60, 0.30, 0.45 },
-}
+-- header.
+--
+-- THE CATALOG OWNS THE PALETTE, not this file: modules/Tooltip.lua colors the
+-- name tooltip's "All statistics" labels with the same nine colors whatever this
+-- window's `colorMode` is set to, and two copies of nine colors is the duplicate
+-- that drifts the first time one of them is tuned.
+local STAT_COLORS = Const.STAT_COLORS
 
 local ROLE_COLORS = {
     TANK    = { 0.30, 0.50, 0.85 },

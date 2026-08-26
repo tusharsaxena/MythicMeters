@@ -117,9 +117,12 @@ it *and* the order it lands in a new window if it ships enabled.
 | The name tooltip's all-statistics list | `modules/Tooltip.lua` walks `Const.STATS` |
 | The aggregator's per-stat read | `columnKeys(window)` filters the window's columns through `STAT_BY_KEY` |
 
-**4. Optionally add a bar color** to `STAT_COLORS` in `modules/Row.lua`, for
-`bars.colorMode == "stat"`. Absent, the cell falls back to the shared neutral — which is correct
-rather than broken, but it means two columns read alike.
+**4. Optionally add a color** to `Constants.STAT_COLORS` in `core/Constants.lua`. The same three
+numbers are worn in two places: a bar under `bars.colorMode == "stat"`, and — always, whatever that
+setting says — the new statistic's whole line in the name tooltip's all-statistics list, taken down
+by `Constants.STAT_DIM` when the hovered window has no column for it. Absent, the bar falls back to
+the shared neutral and the tooltip line to plain white or gray — correct rather than broken, but it
+means two columns read alike.
 
 **Gotchas.**
 - `defaultEnabled = true` changes what a **new** window ships with. It does **not** appear in an

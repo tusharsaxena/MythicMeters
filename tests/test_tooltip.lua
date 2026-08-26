@@ -293,7 +293,7 @@ end)
 -- Avoidable damage carries its own facts
 -- ---------------------------------------------------------------------------
 
-test("The avoidable column tags Avoidable and Deadly, and NOT Overkill", function()
+test("The avoidable column tags nothing per spell — no Deadly, no Overkill", function()
     local inst, cfg, anchor = bench{ detail = {
         combatSpells = {
             { spellID = 101, totalAmount = 100, isAvoidable = true, isDeadly = true,
@@ -307,20 +307,26 @@ test("The avoidable column tags Avoidable and Deadly, and NOT Overkill", functio
     for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
         if type(line.text) == "string" then text = text .. line.text .. "\n" end
     end
-    assertTrue(text:find("Avoidable", 1, true) ~= nil)
-    assertTrue(text:find("Deadly", 1, true) ~= nil)
+
+    -- EVERY spell in an Avoidable Damage breakdown is avoidable, and the header
+    -- above the list already says so — a gray "Avoidable" / "Avoidable, Deadly"
+    -- sub-line beneath each bar restated the column once per row and broke the
+    -- list into ragged groups. It was most visible in test mode, where the
+    -- preview detail sets both flags on alternating spells.
+    -- red under: restoring addAvoidableDetail.
+    assertFalse(text:find("Deadly", 1, true) ~= nil,
+        "the per-spell flag lines are noise inside a column that IS the flag")
 
     -- Overkill is the part of a KILLING BLOW that exceeded the target's remaining
     -- health — a fact about damage DEALT. On damage the player took it is either
     -- zero or the amount by which they were already dead, and neither answers
     -- "could I have stepped out of this". Blizzard still ships the field; we have
     -- no column it belongs to.
-    -- red under: restoring the overkillAmount line to addAvoidableDetail.
     assertFalse(text:find("Overkill", 1, true) ~= nil,
         "the overkill line is noise on damage taken")
 end)
 
-test("Those flags are never truth-tested directly — a secret boolean would raise", function()
+test("Those flags are never truth-tested anywhere — a secret boolean would raise", function()
     local inst, cfg, anchor = bench{ restricted = true, detail = {
         combatSpells = {
             { spellID = 101, totalAmount = 100, isAvoidable = true, isDeadly = true,
@@ -330,8 +336,9 @@ test("Those flags are never truth-tested directly — a secret boolean would rai
     } }
 
     -- `if spell.isAvoidable then` is the natural way to write it and raises the
-    -- moment the restriction is active. An inaccessible flag reads as false: the
-    -- tooltip loses a tag mid-pull rather than erroring.
+    -- moment the restriction is active. Nothing reads these flags today, and this
+    -- case is what keeps a reader that comes back from reading them the raising
+    -- way — the spells still carry them, so a direct truth test would fail here.
     local ok = pcall(function()
         inst.NS.Tooltip:CellTooltip(row(), "AvoidableDamageTaken", anchor, cfg)
     end)
@@ -388,13 +395,82 @@ test("NameTooltip lists EVERY tracked stat, dimming the ones not on screen", fun
     -- is to ask "what else did they do".
     assertEqual(#labels, #inst.NS.Constants.STATS)
 
-    local gray = inst.NS.GRAY
+    local Const = inst.NS.Constants
+    local lines = {}
+    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
+        if line.double then lines[#lines + 1] = line end
+    end
+
     local onScreen, dimmed = 0, 0
-    for _, label in ipairs(labels) do
-        if label:sub(1, #gray) == gray then dimmed = dimmed + 1 else onScreen = onScreen + 1 end
+    for i, stat in ipairs(Const.STATS) do
+        local full = Const.STAT_COLORS[stat.key]
+        local red  = lines[i].leftColor[1]
+        if math.abs(red - full[1]) < 0.001 then
+            onScreen = onScreen + 1
+        elseif math.abs(red - full[1] * Const.STAT_DIM) < 0.001 then
+            dimmed = dimmed + 1
+        end
     end
     assertEqual(onScreen, 1, "the window's own column is drawn in full color")
-    assertEqual(dimmed, #inst.NS.Constants.STATS - 1)
+    assertEqual(dimmed, #Const.STATS - 1)
+end)
+
+test("NameTooltip colors each stat by the catalog palette, whatever colorMode says", function()
+    -- THE PALETTE IS NOT THE BAR SETTING. `bars.colorMode` governs the bars in the
+    -- grid; this list is the one surface where all nine statistics appear at once,
+    -- and the color is what ties a line here to its column in the window behind
+    -- it. So it wears the palette even with the bars set to class color.
+    -- red under: gating the line color on bars.colorMode == "stat".
+    local inst, cfg, anchor = bench()
+    cfg.bars.colorMode = "class"
+    cfg.columns = { { stat = "DamageDone", width = 90 }, { stat = "HealingDone", width = 90 } }
+
+    inst.NS.Tooltip:NameTooltip(row(), anchor, cfg)
+
+    local Const = inst.NS.Constants
+    local lines = {}
+    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
+        if line.double then lines[#lines + 1] = line end
+    end
+
+    -- The catalog's order is the tooltip's order: Damage first, Healing second.
+    local damage, healing = Const.STAT_COLORS.DamageDone, Const.STAT_COLORS.HealingDone
+    assertEqual(lines[1].leftColor[1], damage[1])
+    assertEqual(lines[1].leftColor[2], damage[2])
+    assertEqual(lines[2].leftColor[1], healing[1])
+    assertEqual(lines[2].leftColor[2], healing[2])
+    assertTrue(damage[1] ~= healing[1] or damage[2] ~= healing[2],
+        "two statistics must not share one color, or the palette says nothing")
+end)
+
+test("NameTooltip colors the AMOUNT the same as its label, on both sides of the line", function()
+    -- A colored name beside a white number reads as two things; the line is one
+    -- fact. It was also plainly inconsistent — the dimmed rows carried a gray
+    -- number while the rest carried white ones.
+    -- red under: passing 1, 1, 1 for the right-hand side again.
+    local inst, cfg, anchor = bench()
+    cfg.columns = { { stat = "DamageDone", width = 90 } }
+
+    inst.NS.Tooltip:NameTooltip(row(), anchor, cfg)
+
+    local Const = inst.NS.Constants
+    local lines = {}
+    for _, line in ipairs(inst.mocks.GameTooltip.__lines) do
+        if line.double then lines[#lines + 1] = line end
+    end
+
+    for i, stat in ipairs(Const.STATS) do
+        local line = lines[i]
+        for channel = 1, 3 do
+            assertEqual(line.rightColor[channel], line.leftColor[channel],
+                stat.key .. "'s amount must wear its label's color")
+        end
+    end
+
+    -- And the dimming reaches the amount too: the second statistic has no column
+    -- in this window, so its whole line is the dimmed hue.
+    local hidden = Const.STATS[2]
+    assertEqual(lines[2].rightColor[1], Const.STAT_COLORS[hidden.key][1] * Const.STAT_DIM)
 end)
 
 test("NameTooltip works while restricted, adding nothing up", function()

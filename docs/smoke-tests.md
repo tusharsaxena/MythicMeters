@@ -420,11 +420,19 @@ a raider most wants to know what killed them is the moment they are still fighti
 - Out of combat the spell list is **biggest first**. In combat it is in the game's own order — the
   sort is attempted only when comparison is legal, and it refuses **as a whole** rather than
   partially. A partial sort would raise *"invalid order function for sorting"*.
-- Hovering an **Avoidable Damage** cell adds the "Avoidable" / "Deadly" tags and an Overkill line
-  where present. Those flags may be **secret booleans**; a Lua error here means one was truth-tested
-  directly.
+- Hovering an **Avoidable Damage** cell draws **one line per spell and nothing else** — no
+  "Avoidable" / "Avoidable, Deadly" sub-line beneath a bar, and no Overkill line. Every spell in that
+  breakdown is avoidable by definition, so the tag restated the column once per row. Check this in
+  **test mode** (`/mm test`) especially: the preview detail sets both flags on alternating spells,
+  which is where the tags were most visible.
 - **Name tooltip** lists **every** tracked statistic for that player, including the ones this window
-  is not showing — the extras dimmed gray. That cross-column read is the reason the addon exists.
+  is not showing. Each line wears **its own statistic's color, label and amount alike** — the same
+  palette a bar takes under `bars.colorMode == "stat"`, and it wears it whatever that setting is
+  currently set to. Hold the tooltip beside the grid and check the two **match**: a "Damage" line
+  that reads as a paler or less saturated red than the Damage bars behind it means the palette has
+  been lifted or tinted somewhere between the catalog and the tooltip. The statistics this window has
+  no column for are the **same hue, dimmed**, not a flat gray — and the dimming reaches the number,
+  not just the label. That cross-column read is the reason the addon exists.
 - **Drill-down**: clicking a cell replaces the grid with that player's spell breakdown, styled
   identically (same fonts, bars, row height — it is the same renderer), with the header reading
   `<player> - <stat>`. Clicking the same cell again returns to the grid, and so does a **right-click

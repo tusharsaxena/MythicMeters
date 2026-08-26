@@ -1856,9 +1856,15 @@ local function build()
         right:SetText(nil)
         return self
     end
-    function tooltip:AddDoubleLine(leftText, rightText, ...)
-        self.__lines[#self.__lines + 1] =
-            { text = leftText, right = rightText, double = true }
+    function tooltip:AddDoubleLine(leftText, rightText, lr, lg, lb, rr, rg, rb)
+        -- THE COLORS ARE RECORDED, not discarded. The name tooltip colors both
+        -- sides of its lines through these arguments rather than through a
+        -- `|cff…` escape — an escape is a concatenation and the amount may be a
+        -- secret — so a mock that drops them leaves the coloring untestable.
+        self.__lines[#self.__lines + 1] = {
+            text = leftText, right = rightText, double = true,
+            leftColor = { lr, lg, lb }, rightColor = { rr, rg, rb },
+        }
         local left, right = lineWidgets(#self.__lines)
         left:SetText(leftText)
         right:SetText(rightText)

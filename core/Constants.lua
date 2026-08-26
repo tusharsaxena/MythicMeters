@@ -277,6 +277,49 @@ for _, stat in ipairs(Constants.STATS) do
     Constants.STAT_BY_KEY[stat.key] = stat
 end
 
+--- ONE COLOR PER STATISTIC, and the single place either of the two surfaces that
+--- wear it may read it from: modules/Row.lua paints a bar with it when
+--- `bars.colorMode == "stat"`, and modules/Tooltip.lua colors the name tooltip's
+--- "All statistics" labels with it ALWAYS — the palette is how you tell one
+--- column from another at a glance, and a tooltip that lists all nine of them at
+--- once is the surface that needs that most. Keyed by the catalog's stat key.
+---
+--- NINE HUES THAT STAY APART. The palette's only job is telling one column from
+--- another at a glance, so what matters is not that any one color is pretty but
+--- that no two are confusable — red · green · steel blue · gold · violet ·
+--- turquoise · orange · magenta · coral. Each has to work in both of its
+--- surfaces at once: behind white text on a bar, and AS text on the tooltip's
+--- dark backing. That rules out the two shapes this palette has already tried
+--- and lost: a color dark and muted enough to be a comfortable bar backing
+--- (Damage Taken's old brown, Enemy Damage Taken's old plum) is barely legible
+--- as text, and a NEUTRAL (Deaths' old gray) reads as "disabled" rather than as
+--- a statistic, which is the one thing a palette entry must never say.
+Constants.STAT_COLORS = {
+    DamageDone           = { 0.78, 0.25, 0.25 },  -- red
+    HealingDone          = { 0.25, 0.70, 0.35 },  -- green
+    Absorbs              = { 0.45, 0.65, 0.80 },  -- steel blue
+    Interrupts           = { 0.85, 0.65, 0.20 },  -- gold
+    Dispels              = { 0.55, 0.45, 0.80 },  -- violet
+    DamageTaken          = { 0.25, 0.78, 0.75 },  -- turquoise
+    AvoidableDamageTaken = { 0.80, 0.45, 0.15 },  -- orange
+    Deaths               = { 0.92, 0.25, 0.68 },  -- magenta
+    EnemyDamageTaken     = { 0.95, 0.48, 0.40 },  -- coral
+}
+
+--- How far a statistic NOT on screen in the hovered window is taken down.
+---
+--- The dimming is what carries "this window has no column for this one" — the
+--- same hue at a lower level rather than a flat gray, so a hidden statistic is
+--- still identifiably itself.
+---
+--- ONE PALETTE, WORN UNCHANGED. The tooltip's text takes the same three numbers
+--- the bar does rather than a variant lifted toward white to "read better as
+--- text": lifting DESATURATES, and a washed-out label beside a saturated bar of
+--- the same statistic reads as a different color, not as a brighter one. The
+--- palette only does its job — tying a tooltip line to a column in the grid
+--- behind it — when the two are literally the same color.
+Constants.STAT_DIM = 0.6
+
 --- The default column set, in display order, left to right after the name
 --- column: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deaths
 --- (design §5). Derived from `defaultEnabled` rather than restated, so the two

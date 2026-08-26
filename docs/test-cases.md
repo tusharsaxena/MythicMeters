@@ -891,7 +891,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (99)
+### test_tooltip.lua (101)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -904,11 +904,13 @@ badge and any count quoted in the docs must agree with it.
 - showSpells = false keeps the header and drops the breakdown
 - hideInCombat refuses the hover outright
 - An unresolvable spell is shown by ID rather than dropped
-- The avoidable column tags Avoidable and Deadly, and NOT Overkill
-- Those flags are never truth-tested directly — a secret boolean would raise
+- The avoidable column tags nothing per spell — no Deadly, no Overkill
+- Those flags are never truth-tested anywhere — a secret boolean would raise
 - The Deaths cell advertises the click that opens the recap
 - A death with no recap id advertises nothing
 - NameTooltip lists EVERY tracked stat, dimming the ones not on screen
+- NameTooltip colors each stat by the catalog palette, whatever colorMode says
+- NameTooltip colors the AMOUNT the same as its label, on both sides of the line
 - NameTooltip works while restricted, adding nothing up
 - showAllStatsOnName = false stops after the name
 - NameTooltip says 'no data' when the meter has nothing for the player
@@ -1411,7 +1413,7 @@ badge and any count quoted in the docs must agree with it.
 | test_headercontrols.lua | 43 |
 | test_row.lua | 66 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 99 |
+| test_tooltip.lua | 101 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 77 |
 | test_visibility.lua | 33 |
@@ -1423,4 +1425,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1261** |
+| **Total** | **1263** |
