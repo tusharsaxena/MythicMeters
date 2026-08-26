@@ -173,7 +173,10 @@ second edge to catch.
 - Unlocking implies preview: the two are coupled in `WindowManager:SetLocked`, and the General page's
   Preview mode checkbox agrees with the lock state.
 - Dragging moves the window; the position persists across `/reload`.
-- The resize grip is visible only while unlocked, and resizing persists.
+- The resize grip is visible only while unlocked, and resizing persists. That is the **only** thing
+  that governs it — there is no "Show resize grip" setting any more, and there must not be: the one
+  there used to be was read while the frame was being built, so unticking it did nothing until a
+  reload.
 - **Locked**, the window does not drag, and hovering a cell produces a tooltip (locked hands the
   mouse to the cells). **Unlocked**, the whole window drags as one object and cells do not respond.
 - `/mm reset-positions` re-centers every window and prints how many moved.
@@ -189,12 +192,43 @@ second edge to catch.
   symptoms are the lazy-build rules failing; see
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
+- **The four text controls, on all four surfaces.** Text, Header, Header → Column headers, and
+  Tooltip each carry a **font** picker, a **font outline** dropdown, a **text shadow** checkbox and a
+  **text colour** picker with **Use class color** beside it. Walk all four on each page and watch the
+  right thing change: the cells, the title bar and session line, the "Player | Damage | Healing"
+  strip, and a hovered tooltip. A control that moves the wrong surface means two groups are sharing a
+  key that is supposed to be their own.
+- **"Use class color" means the right class on each surface.** On **Text** the cells take **each
+  row's** class, so a grid of mixed classes goes multi-coloured — not all one colour. On **Tooltip**
+  the text takes the class of the player you are **hovering**; hover two different players and the
+  colour follows. On **Header** and **Column headers** it takes **your own** class, because those
+  strips are about the window rather than any row. Also set **Text opacity** to 50% with Use class
+  color on: the text must stay half-transparent — a class colour that resets it is one setting
+  cancelling another.
+- **The Frame page's shape.** Three groups, in order: *Size and position*, *Border style*, *Frame
+  behavior* (**not** "Row behavior" — that heading belongs to the Rows page), then *Header controls*.
+  Each heading appears **once**; a heading printed twice means a row is filed under a group the page
+  has already left. **Show close** sits among the header controls, not under Frame behavior. There is
+  **no** "Show resize grip" checkbox and **no** "Minimised" checkbox — the lock governs the grip, and
+  the header's own minimise button governs the collapse.
+- **Scale scales the whole window.** Frame → Scale to 0.5, then 2.0. The window's **outline** grows
+  and shrinks with its contents. A box that stays exactly the size it was while the grid inside it
+  shrinks into one corner means the scale reached the visible frame but not its anchor.
+- **No border means no border.** Frame → Border style **None** and Border thickness **0**: the window
+  has no edge of any kind. A 1px line surviving both is the library skin's `frame.innerBorder`, a
+  child frame that is not part of the backdrop the border settings rewrite. Check **None** at a
+  non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
+  addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
+  border style, checked in §23.
 - Ten pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
   The Settings window's own footer Defaults control works on the same ten.
 - **Panel ↔ CLI parity.** With a page open, run `/mm set window.frame.width 640`. The Frame page's
   Width slider moves to 640 **without being reopened** (`RefreshScalars`). Conversely, move a slider
   and `/mm get window.frame.width` reports the new value.
-- `/mm list` groups every setting under the same page keys the panel uses.
+- `/mm list` groups every setting under the same page keys the panel uses. It lists
+  `window.frame.minimised`, which the **panel does not draw** — that row is `hidden`, because it is
+  state the header's own minimise button writes rather than a preference. `/mm set
+  window.frame.minimised true` must still collapse the window.
 - **Combat refusal.** Enter combat (a dummy is fine here). `/mm config` **refuses** and prints one
   gray notice. It must **not** queue the request and open the panel when combat ends.
 - **Profiles page mid-combat.** With the Settings window closed, enter combat, then open Settings →
@@ -890,7 +924,9 @@ Everything here is cosmetic except the last item, which is the one that can dama
   that reached only the numbers means the shared line FontStrings were skipped.
 - The border appears around each spell bar and **disappears completely** when set back to None. A
   border that lingers means the pooled carrier was not cleared — the lines are recycled, so line 4
-  of this hover is the same frame as line 4 of the last one.
+  of this hover is the same frame as line 4 of the last one. This is one of the addon's **two** LSM
+  border settings, and "None" has to mean no edge on both: the other is Frame → Border style, checked
+  in §4.
 - Every anchor moves the tooltip somewhere different. An anchor that behaves identically to **At
   cursor** means its token is missing and it silently fell back.
 - The offsets move the tooltip and it **still stays on screen** near the edges — the client is doing

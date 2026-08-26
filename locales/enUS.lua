@@ -173,6 +173,7 @@ L["Draw the title strip along the top of the window."] =
 L["Show close button"] = "Show close button"
 L["Draw a close button in the title bar."] = "Draw a close button in the title bar."
 L["Header controls"] = "Header controls"
+L["Show close"] = "Show close"
 L["Show minimise"] = "Show minimise"
 L["Collapse the window to its title bar and back."] = "Collapse the window to its title bar and back."
 L["Show lock"] = "Show lock"
@@ -243,6 +244,7 @@ L["Growth direction"] = "Growth direction"
 L["Whether rows stack downward from the header or upward from the bottom."] =
     "Whether rows stack downward from the header or upward from the bottom."
 L["Row behavior"] = "Row behavior"
+L["Frame behavior"] = "Frame behavior"
 L["Always show yourself"] = "Always show yourself"
 L["Keep your own row visible even when it would fall outside the maximum row count."] =
     "Keep your own row visible even when it would fall outside the maximum row count."
@@ -314,6 +316,7 @@ L["Font outline"] = "Font outline"
 L["Outline and monochrome flags applied to the text."] =
     "Outline and monochrome flags applied to the text."
 L["Text shadow"] = "Text shadow"
+L["Use class color"] = "Use class color"
 L["Draw a drop shadow behind the text so it stays readable over a bright bar."] =
     "Draw a drop shadow behind the text so it stays readable over a bright bar."
 L["Text color"] = "Text color"

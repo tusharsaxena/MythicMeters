@@ -641,7 +641,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (107)
+### test_window.lua (117)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -746,6 +746,16 @@ badge and any count quoted in the docs must agree with it.
 - Minimise leaves the STORED height alone, so expanding restores it
 - A collapsed window does not aggregate or render
 - A collapsed window keeps the notice hidden
+- Header shadow reaches every line of the strip
+- Column header shadow is its OWN setting, not the header's
+- Header class color is the LOCAL player's, since the header has no row
+- Column header class color is the local player's too
+- Scale scales the WINDOW, not just what is inside it
+- Border style None draws NO edge, whatever the library's own is
+- A border style that CANNOT be fetched still falls back to the library edge
+- With no border, the SKIN's inner highlight goes too
+- The resize grip is built unconditionally and follows the LOCK
+- `resizeGrip` is gone from the code, not just from the panel
 - Unlocking does not resurrect the grip on a collapsed window
 - A profile written before minimise existed is not collapsed
 - pool: a layout change re-applies to FREE rows, not just active ones
@@ -797,7 +807,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (71)
+### test_row.lua (74)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -821,6 +831,9 @@ badge and any count quoted in the docs must agree with it.
 - Role and stat color modes read their own tables
 - A custom color comes from the setting, not from the last-resort literal
 - A cell with its bar switched off keeps its text
+- Cell text takes the ROW's class color when asked
+- Class color keeps the configured ALPHA, not the class's own
+- With no class to read, cell text keeps its configured color
 - Text opacity fades the TEXT, and leaves the bar alone
 - Bar opacity fades the bar, and the text rides on top of it
 - The name cell is never handed a meter value at all
@@ -898,7 +911,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (101)
+### test_tooltip.lua (105)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the cursor
@@ -947,6 +960,10 @@ badge and any count quoted in the docs must agree with it.
 - NONE is an absent outline flag, not the literal string
 - Every tooltip line we restyled is put back when the tooltip hides
 - The tooltip's own bar texture is used, not the grid's
+- Tooltip text takes the HOVERED player's class color when asked
+- With the class colour off, the tooltip keeps its configured text colour
+- Tooltip shadow reaches the line, and survives the post-Show re-font
+- The tooltip puts a SHARED line's shadow back when it lets go
 - A bar border is applied when asked and cleared off the POOLED line when not
 - Border size zero drops the border FILE with it
 - maxSpells 0 lists every spell the breakdown collected
@@ -1225,7 +1242,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (32)
+### test_schema.lua (37)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1259,6 +1276,11 @@ badge and any count quoted in the docs must agree with it.
 - SetByPath: window.columns REFUSES a show-bar flag that is not a boolean, with a message
 - SetByPath: a path INTO the column array is refused by name
 - SetByPath: the columns validator agrees with the width slider's own range
+- Schema: a `hidden` row is writable and listable but draws no control
+- Schema: the close button is a HEADER CONTROL, and Frame behavior is named for the frame
+- Schema: every Frame page group is CONTIGUOUS, or a heading prints twice
+- Schema: every LSM border setting is one this suite knows honours "None"
+- Schema: every text surface offers face, outline, shadow and colour
 
 ### test_schema_defaults.lua (10)
 
@@ -1416,20 +1438,20 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 107 |
+| test_window.lua | 117 |
 | test_headercontrols.lua | 43 |
-| test_row.lua | 71 |
+| test_row.lua | 74 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 101 |
+| test_tooltip.lua | 105 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 77 |
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 31 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 32 |
+| test_schema.lua | 37 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1270** |
+| **Total** | **1292** |

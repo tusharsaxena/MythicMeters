@@ -88,13 +88,14 @@ local WINDOW_TEMPLATE = {
         locked         = false,
         clampToScreen  = true,
         titleBar       = true,
-        closeButton    = true,
         -- ── The header's controls (issue #6) ──
         --
-        -- Six show* keys, one per control that this addon builds. `closeButton`
-        -- above is the seventh and deliberately keeps its old name: renaming it
-        -- to `showClose` for symmetry would migrate every stored profile in
-        -- exchange for a consistency nobody can see.
+        -- Seven keys, one per control that this addon builds. `closeButton` is
+        -- the odd one out and deliberately keeps its old name: renaming it to
+        -- `showClose` for symmetry would migrate every stored profile in exchange
+        -- for a consistency nobody can see. It sits here rather than up beside
+        -- `titleBar` because what it draws is a header control.
+        closeButton     = true,
         showMinimise    = true,
         showLock        = true,
         showSettings    = true,
@@ -105,8 +106,9 @@ local WINDOW_TEMPLATE = {
         -- behaviour every version before this one had, so it is the honest
         -- fallback rather than a degraded one.
         hoverReveal     = true,
-        -- Collapsed to the title bar. Persisted like every other window fact, so
-        -- a window left collapsed comes back collapsed.
+        -- STATE, not a preference, and deliberately not a settings row: the
+        -- header's minimise control writes it, and a window left collapsed comes
+        -- back collapsed. Persisted like every other window fact.
         minimised       = false,
         -- TWO COLOURS, BECAUSE HOVER IS THE ONLY FEEDBACK A CONTROL GIVES. The
         -- art ships white and is tinted by a multiply, so white is the identity
@@ -122,7 +124,11 @@ local WINDOW_TEMPLATE = {
         -- 11px icon on the same line as a 12px title and the strip stops
         -- outweighing the text beside it.
         controlSize     = 16,
-        resizeGrip     = true,
+        -- NO `resizeGrip` KEY. The grip follows the LOCK -- drawn while the
+        -- window is unlocked, hidden while it is locked -- and a second setting
+        -- for it was one that could disagree with the lock, and did: it was read
+        -- only while the frame was being built, so unticking it changed nothing
+        -- until a reload.
         -- Position is stored, never read back off the frame. Rule R3: a cell
         -- that has been handed a secret value makes its own geometry secret and
         -- propagates that to its parent, so GetPoint on a live window is not
@@ -145,7 +151,15 @@ local WINDOW_TEMPLATE = {
         font            = "Friz Quadrata TT",
         size            = 12,
         outline         = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+        -- OFF, on both new keys, and deliberately: a setting added to a shipped
+        -- window must not change how that window already looks. A shadow under
+        -- an outlined face is heavier than either alone, and a class-colored
+        -- header is a taste rather than an improvement.
+        shadow          = false,
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
+        -- The header is about the WINDOW, not about any one player, so the class
+        -- it can wear is the local player's (NS.PlayerClassRGB).
+        classColor      = false,
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },
@@ -168,7 +182,13 @@ local WINDOW_TEMPLATE = {
         font     = "Friz Quadrata TT",
         size     = 11,
         outline  = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+        -- Both off for the reason the header's are: a new setting must not
+        -- restyle a window that already exists.
+        shadow   = false,
         color    = { r = 1, g = 0.82, b = 0, a = 1 },   -- Blizzard gold
+        -- The local player's class, like the header's -- the strip labels the
+        -- grid rather than any row in it.
+        classColor = false,
         -- Transparent: the strip has never had a backdrop, and defaulting one on
         -- would change every existing window's appearance to introduce a setting.
         bgColor  = { r = 0, g = 0, b = 0, a = 0 },
@@ -280,6 +300,12 @@ local WINDOW_TEMPLATE = {
         outline      = "NONE",
         shadow       = true,
         color        = { r = 1, g = 1, b = 1, a = 1 },
+        -- THIS one takes the ROW's class, not the local player's: a cell is about
+        -- the player whose row it is. The Player column has always been drawn
+        -- that way; this extends it to the numbers. Off by default, because the
+        -- numbers reading white against nine bar colors is what makes a grid
+        -- scannable.
+        classColor   = false,
         alpha        = 1.0,
     },
 
@@ -343,10 +369,15 @@ local WINDOW_TEMPLATE = {
         font               = "Friz Quadrata TT",
         fontSize           = 12,
         fontOutline        = "NONE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
+        -- Off, so the tooltip keeps the face it has always had.
+        fontShadow         = false,
         -- Both number slots on a spell line. The amount used to be hardcoded
         -- gold and the share hardcoded white, which read as two kinds of number
         -- when they are one row's two figures.
         textColor          = { r = 1, g = 1, b = 1, a = 1 },
+        -- The HOVERED row's class. A tooltip is already about one player, which
+        -- is what makes the question answerable here and not on the header.
+        classColor         = false,
 
         -- Which enemies this player hit, cross-referenced out of the meter's
         -- EnemyDamageTaken data by modules/Targets.lua — which is NOT a column in

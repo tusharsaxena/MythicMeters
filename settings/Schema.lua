@@ -528,41 +528,48 @@ NS.Schema = {
     -- and why modules/WindowManager.lua owns the coupling rather than this row.
     {
         path = "window.frame.locked", type = "bool", default = false,
-        page = "frame", group = L["Row behavior"],
+        page = "frame", group = L["Frame behavior"],
         label = L["Lock window"],
         desc = L["When unlocked you can drag the window to reposition it and drag its corner to resize. Nothing else changes \226\128\148 for placeholder rows use Test mode on the General page."],
     },
     {
         path = "window.frame.clampToScreen", type = "bool", default = true,
-        page = "frame", group = L["Row behavior"],
+        page = "frame", group = L["Frame behavior"],
         label = L["Keep on screen"], desc = L["Prevent the window from being dragged off the edge of the screen."],
     },
     {
         path = "window.frame.titleBar", type = "bool", default = true,
-        page = "frame", group = L["Row behavior"],
+        page = "frame", group = L["Frame behavior"],
         label = L["Show title bar"], desc = L["Draw the title strip along the top of the window."],
     },
-    {
-        path = "window.frame.closeButton", type = "bool", default = true,
-        page = "frame", group = L["Row behavior"],
-        label = L["Show close button"], desc = L["Draw a close button in the title bar."],
-    },
-    {
-        path = "window.frame.resizeGrip", type = "bool", default = true,
-        page = "frame", group = L["Row behavior"],
-        label = L["Show resize grip"], desc = L["Draw a drag handle in the bottom-right corner for resizing."],
-    },
+    -- NO `resizeGrip` ROW, and no setting behind it. The grip is drawn whenever
+    -- the window is UNLOCKED and hidden whenever it is locked, which is the same
+    -- question the lock already answers -- a second control for it was one that
+    -- could disagree with the lock, and did: modules/Window.lua consulted it only
+    -- while BUILDING the frame, so unticking it changed nothing until a reload.
+    -- Locking a window is how you put the grip away.
+    --
+    -- `closeButton` moved to Header controls, where it belongs: it draws a
+    -- control in the header strip, which is what every row of that group is
+    -- about. It keeps its stored NAME among the show* keys -- it predates them,
+    -- and renaming it to `showClose` for symmetry would migrate every stored
+    -- profile in exchange for a consistency nobody can see.
 
     -- ── The header's controls (issue #6) ─────────────────────────────────────
     --
-    -- Nine rows kept CONTIGUOUS and placed after resizeGrip. Group headings are
-    -- emitted when `group` CHANGES between consecutive rows, so interleaving one
-    -- of these among the rows above would print a second "Row behavior" heading
-    -- further down the page.
+    -- Kept CONTIGUOUS and placed last on the page. Group headings are emitted
+    -- when `group` CHANGES between consecutive rows, so interleaving one of these
+    -- among the rows above would print a second "Header controls" heading further
+    -- down the page.
     --
     -- Every default here is stated a SECOND time in defaults/Profile.lua, and
     -- both statements are checked against each other -- see the note above on
     -- why the two are deliberately not factored into one shared constant.
+    {
+        path = "window.frame.closeButton", type = "bool", default = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Show close"], desc = L["Draw a close button in the title bar."],
+    },
     {
         path = "window.frame.showMinimise", type = "bool", default = true,
         page = "frame", group = L["Header controls"],
@@ -599,11 +606,6 @@ NS.Schema = {
         label = L["Reveal controls on hover"], desc = L["Fade every control except the one under the pointer. Off keeps them all visible."],
     },
     {
-        path = "window.frame.minimised", type = "bool", default = false,
-        page = "frame", group = L["Header controls"],
-        label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
-    },
-    {
         path = "window.frame.controlColor", type = "color",
         default = { r = 1, g = 1, b = 1, a = 1 },
         page = "frame", group = L["Header controls"],
@@ -622,6 +624,25 @@ NS.Schema = {
         page = "frame", group = L["Header controls"],
         label = L["Control size"], desc = L["How large each header control is drawn, in pixels."],
     },
+    -- `frame.minimised` is a HIDDEN row: it exists so the path is writable and
+    -- listable, and it draws no control on the panel.
+    --
+    -- It is STATE, not a preference. The header's minimise control writes it, and
+    -- a window left collapsed comes back collapsed. As a checkbox it duplicated
+    -- that control on a page you have to open to reach, and read as a setting
+    -- when it is a record of what you last did. `showMinimise` -- whether the
+    -- control is drawn at all -- is the preference, and it stays a checkbox.
+    --
+    -- It cannot simply be DELETED the way `frame.position` is absent, and that is
+    -- the whole reason `hidden` exists: NS.SetByPath refuses a path with no row,
+    -- and the minimise control writes through that seam rather than poking the
+    -- config table, because SetByPath is what publishes CONFIG_CHANGED.
+    {
+        path = "window.frame.minimised", type = "bool", default = false, hidden = true,
+        page = "frame", group = L["Header controls"],
+        label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
+    },
+
     -- `frame.position` is deliberately NOT a row. It is written by a drag, it is
     -- four values with one meaning, and — rule R3 — it is never read back off the
     -- live frame. NS.ResetPositions() is how a reset reaches it, wired into the
@@ -670,10 +691,21 @@ NS.Schema = {
         label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
     },
     {
+        path = "window.header.shadow", type = "bool", default = false,
+        page = "header", group = L["Header text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the header text so it stays readable over a bright backdrop."],
+    },
+    {
         path = "window.header.color", type = "color",
         default = { r = 1, g = 0.82, b = 0, a = 1 },
         page = "header", group = L["Header text"],
-        label = L["Text color"], desc = L["Color of the numbers and names."],
+        label = L["Text color"], desc = L["Color of the header's own lines."],
+    },
+    {
+        path = "window.header.classColor", type = "bool", default = false,
+        page = "header", group = L["Header text"],
+        label = L["Use class color"], desc = L["Draw the header lines in your own class color instead of the color above. The header is about the window rather than about any one player, so the class it takes is yours."],
     },
     {
         path = "window.header.align", type = "string", default = "LEFT",
@@ -720,10 +752,21 @@ NS.Schema = {
         label = L["Font outline"], desc = L["Outline and monochrome flags applied to the column headers."],
     },
     {
+        path = "window.columnHeader.shadow", type = "bool", default = false,
+        page = "header", group = L["Column headers"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the column labels so they stay readable over a bright backdrop."],
+    },
+    {
         path = "window.columnHeader.color", type = "color",
         default = { r = 1, g = 0.82, b = 0, a = 1 },
         page = "header", group = L["Column headers"],
         label = L["Text color"], desc = L["Color of the column header labels."],
+    },
+    {
+        path = "window.columnHeader.classColor", type = "bool", default = false,
+        page = "header", group = L["Column headers"],
+        label = L["Use class color"], desc = L["Draw the column labels in your own class color instead of the color above. The strip is about the window rather than about any one player, so the class it takes is yours."],
     },
     {
         path = "window.columnHeader.bgColor", type = "color",
@@ -936,6 +979,11 @@ NS.Schema = {
         label = L["Text color"], desc = L["Color of the numbers and names."],
     },
     {
+        path = "window.text.classColor", type = "bool", default = false,
+        page = "text", group = L["Cell text"],
+        label = L["Use class color"], desc = L["Draw each cell's text in that row's class color instead of the color above. The Player column has always been drawn this way; this extends it to the numbers."],
+    },
+    {
         path = "window.text.alpha", type = "number", default = 1.0,
         min = 0, max = 1, step = 0.05, isPercent = true,
         page = "text", group = L["Cell text"],
@@ -1086,10 +1134,21 @@ NS.Schema = {
         label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
     },
     {
+        path = "window.tooltip.fontShadow", type = "bool", default = false,
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the tooltip text so it stays readable over a bright bar."],
+    },
+    {
         path = "window.tooltip.textColor", type = "color",
         default = { r = 1, g = 1, b = 1, a = 1 },
         page = "tooltip", group = L["Tooltip text"],
         label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
+    },
+    {
+        path = "window.tooltip.classColor", type = "bool", default = false,
+        page = "tooltip", group = L["Tooltip text"],
+        label = L["Use class color"], desc = L["Draw the tooltip's text in the class color of the player you are hovering, instead of the color above."],
     },
 
     -- OFF by default, and for two reasons that are worth stating separately.
@@ -1714,7 +1773,12 @@ end
 function NS.SchemaForPage(pageKey, filter)   -- luacheck: ignore 212/filter
     local rows = {}
     for _, row in ipairs(NS.Schema) do
-        if row.page == pageKey then rows[#rows + 1] = row end
+        -- `hidden` rows are skipped HERE and nowhere else, so they stay writable
+        -- through NS.SetByPath, listable through `/mm list` and comparable by the
+        -- schema-vs-defaults validator, and only ever miss the panel. A row is
+        -- hidden when it is per-window STATE that something else in the UI already
+        -- writes -- `frame.minimised` is the one -- rather than a preference.
+        if row.page == pageKey and not row.hidden then rows[#rows + 1] = row end
     end
     return rows
 end

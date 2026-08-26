@@ -35,8 +35,10 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         (EnemyDamageTaken — read, never a column), the
 │                         enum resolutions, the MSG bus catalog (14 names), throttle
 │                         bounds, pool and row caps, the shipped mono font
-│   ├── Namespace.lua   — identity (NS.PREFIX, NS.name, NS.version, NS.GRAY) and
-│                         NS.NewBusTarget(), the private-bus-target factory
+│   ├── Namespace.lua   — identity (NS.PREFIX, NS.name, NS.version, NS.GRAY),
+│                         the one class-color reader (NS.ClassRGB /
+│                         NS.PlayerClassRGB) and NS.NewBusTarget(), the
+│                         private-bus-target factory
 │   ├── State.lua       — session-only flags (debug, restricted, preview,
 │                         activeWindowId) and the shared per-module cache with its
 │                         one wipe seam. Nothing here is ever persisted
@@ -154,7 +156,7 @@ own strings entirely.
 | `Compat.lua` | All 28 cross-patch shims — the TOC-manifest reader is no longer among them; it moved to `EnvSetup.lua`. Never inspects a meter value; reading a field off a session table and passing it on is not inspection | `NS.Compat` | `_G` only |
 | `Constants.lua` | The stat catalog, the per-stat palette (`STAT_COLORS`, worn unchanged by both a bar and a name-tooltip line, plus the `STAT_DIM` factor), the two stat lookups — `STAT_BY_KEY` ("may this be a column") and `READABLE_STAT_BY_KEY` ("may this be read", the catalog plus `OFF_CATALOG_STATS`), enum resolutions, the `MSG` catalog, timing and pool bounds, the monospace font path (resolved from the LibKa0s payload, falling back to the client font) and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum`, `NS.MediaFont` |
 | `EnvSetup.lua` | The LibKa0s-Env seam: this addon's TOC manifest, and the one place the manifest-then-constant version pair is resolved. Repeats the reader ladder itself on a degraded install, so an install missing LibKa0s still reports its packaged version | `NS.Meta`, `NS.Version` | `LibKa0s-Env-1.0`, `NS.version` at call time. Owns no state and registers no event |
-| `Namespace.lua` | Addon identity and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.NewBusTarget` | `NS.Meta` |
+| `Namespace.lua` | Addon identity, the collection's one class-color reader (four surfaces can wear one — the bars and cell text in `Row.lua`, both header strips in `Window.lua`, the tooltip) and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.ClassRGB`, `NS.PlayerClassRGB`, `NS.NewBusTarget` | `NS.Meta`, `_G.RAID_CLASS_COLORS`, `_G.UnitClass` |
 | `State.lua` | The four session flags, each with exactly one named writer, and `State.Cache` / `State.WipeCache` (wipes **in place**, so a module may hold its sub-table as an upvalue) | `NS.State` | `NS.Constants.MSG` |
 | `Secrets.lua` | Restriction state, per-value and per-table inspection, and the two bounded walks. Correct when the whole secrets system is absent | `NS.Secrets` | `_G.C_RestrictedActions`, `_G.issecretvalue` and friends |
 | `MediaSetup.lua` | The LibKa0s-Media seam: where the icons and the monospace face come from, and the one call that registers the face with LibSharedMedia. Answers `nil` for both on a degraded install, which is what sends the header down its art ladder | `NS.Icon`, `NS.MediaFont` | `LibKa0s-Media-1.0`, LibSharedMedia. Owns no state and registers no event |

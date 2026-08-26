@@ -1997,6 +1997,211 @@ test("A collapsed window keeps the notice hidden", function()
     assertEqual(window.notice:IsShown(), false, "the notice came back over a collapsed window")
 end)
 
+-- ---------------------------------------------------------------------------
+-- The header's four text controls
+-- ---------------------------------------------------------------------------
+
+test("Header shadow reaches every line of the strip", function()
+    -- The cell text has had a shadow all along and the other three surfaces had
+    -- not, so a player styling a window had to discover which of the four had
+    -- grown which control. All four carry the same four now.
+    -- red under: setting the header font without its shadow.
+    local _, window, cfg = scene()
+    cfg.header.shadow = true
+    window:ApplyConfig()
+
+    assertEqual(window.frame.title.__shadow[1], 1, "the title has no shadow")
+    assertEqual(window.frame.title.__shadow[2], -1)
+    assertEqual(window.sessionText.__shadow[1], 1, "the session line has no shadow")
+
+    cfg.header.shadow = false
+    window:ApplyConfig()
+    assertEqual(window.frame.title.__shadow[1], 0, "the shadow did not come off")
+end)
+
+test("Column header shadow is its OWN setting, not the header's", function()
+    -- The two strips are separate groups precisely so they can differ; a shared
+    -- shadow would undo half of that.
+    -- red under: reading header.shadow for the column labels.
+    local _, window, cfg = scene()
+    cfg.header.shadow       = false
+    cfg.columnHeader.shadow = true
+    window:ApplyConfig()
+
+    local button = window.columnHeaders and window.columnHeaders[1]
+    assertTrue(button ~= nil, "no column header was built")
+    assertEqual(button.text.__shadow[1], 1)
+    assertEqual(window.frame.title.__shadow[1], 0,
+        "the title took the column strip's shadow")
+end)
+
+test("Header class color is the LOCAL player's, since the header has no row", function()
+    -- The header is about the WINDOW. A cell answers the same setting with the
+    -- class of the row it is drawing (modules/Row.lua); this one has no row to
+    -- ask about, so yours is the only class it can sensibly mean.
+    -- red under: colouring the header from a row, or ignoring the setting.
+    local inst, window, cfg = scene()
+    -- The scene's `player` unit is Alpha, a paladin. The mock ships every class
+    -- the same colour, so one is given its own -- otherwise "took SOME class
+    -- colour" would pass for "took the LOCAL player's".
+    inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
+    cfg.header.color      = { r = 1, g = 0.82, b = 0, a = 1 }
+    cfg.header.classColor = true
+    window:ApplyConfig()
+
+    local c = window.sessionText.__textColor
+    assertEqual(c[1], 0.41)
+    assertEqual(c[3], 0.94)
+    assertEqual(c[4], 1, "the configured alpha must survive the class colour")
+
+    cfg.header.classColor = false
+    window:ApplyConfig()
+    assertEqual(window.sessionText.__textColor[1], 1, "the gold did not come back")
+    assertEqual(window.sessionText.__textColor[2], 0.82)
+end)
+
+test("Column header class color is the local player's too", function()
+    -- The strip labels the grid rather than any row in it, so it takes the same
+    -- reading the title bar does.
+    -- red under: the two strips disagreeing about whose class they mean.
+    local inst, window, cfg = scene()
+    inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
+    cfg.columnHeader.classColor = true
+    window:ApplyConfig()
+
+    local button = window.columnHeaders and window.columnHeaders[1]
+    assertTrue(button ~= nil, "no column header was built")
+    assertEqual(button.text.__textColor[1], 0.41)
+end)
+
+test("Scale scales the WINDOW, not just what is inside it", function()
+    -- The visible frame is pinned TOPLEFT and BOTTOMRIGHT to the anchor, so the
+    -- anchor's screen rect dictates the frame's whatever scale the frame carries.
+    -- Scaling the frame alone therefore left the box the size it was and shrank
+    -- only its contents: at 0.5 a full-size window with a miniature grid in the
+    -- corner of it.
+    -- red under: dropping anchor:SetScale and keeping frame:SetScale alone.
+    local _, window, cfg = scene()
+    cfg.frame.scale = 0.5
+    window:ApplyConfig()
+
+    assertEqual(window.anchor:GetScale(), 0.5, "the geometry frame did not scale")
+    assertEqual(window.frame:GetScale(), 0.5, "the visible frame did not scale")
+
+    cfg.frame.scale = nil
+    window:ApplyConfig()
+    assertEqual(window.anchor:GetScale(), 1.0, "an unset scale is 1, not 0")
+    assertEqual(window.frame:GetScale(), 1.0)
+end)
+
+test("Border style None draws NO edge, whatever the library's own is", function()
+    -- `borderPath` falls back to NS.SKIN's edge when a NAMED texture cannot be
+    -- fetched, which is right for a missing media pack and wrong for a CHOICE:
+    -- LSM's name for the empty border is not a failed fetch, and falling back on
+    -- it handed the player the Ka0s edge they had just turned off.
+    --
+    -- Asserted at a NON-ZERO thickness, because the `borderSize == 0` branch would
+    -- otherwise hide the bug: the style has to answer for itself.
+    -- red under: moving the "None" test out of `borderPath` and back behind the
+    -- size check, or dropping it.
+    local _, window, cfg = scene()
+    cfg.frame.borderSize = 8
+
+    -- Every spelling of "no border", including the two a hand-edited
+    -- SavedVariables or a profile written before the setting existed can produce.
+    for _, style in ipairs({ "None", "", "\0" }) do
+        cfg.frame.borderStyle = (style ~= "\0") and style or nil
+        window:ApplyConfig()
+        local backdrop = window.frame.__backdrop or {}
+        assertEqual(backdrop.edgeFile, nil,
+            ("%q still drew an edge"):format(tostring(cfg.frame.borderStyle)))
+    end
+end)
+
+test("A border style that CANNOT be fetched still falls back to the library edge", function()
+    -- The other half of the same function, and the reason "None" could not simply
+    -- be lumped in with it. A named texture that does not resolve is a media pack
+    -- that is no longer installed -- a failure, not a choice -- and a window that
+    -- silently loses its edge over it is worse than one wearing the collection's.
+    -- red under: `borderPath` answering nil for anything it cannot fetch.
+    local _, window, cfg = scene()
+    cfg.frame.borderStyle = "A Border No Media Pack Here Provides"
+    cfg.frame.borderSize  = 2
+    window:ApplyConfig()
+
+    local backdrop = window.frame.__backdrop or {}
+    assertTrue(backdrop.edgeFile ~= nil,
+        "an unfetchable NAME is a failure, and falls back to the Ka0s edge")
+end)
+
+test("With no border, the SKIN's inner highlight goes too", function()
+    -- LibKa0s's ApplySkin builds a 1px `frame.innerBorder` CHILD inset inside the
+    -- black edge. It is not part of the backdrop ApplyBorder rewrites, so with the
+    -- style set to None and the thickness at 0 it was the whole visible border --
+    -- outliving both controls that claim to govern one.
+    -- red under: ApplyBorder leaving frame.innerBorder alone.
+    local _, window, cfg = scene()
+    cfg.frame.borderStyle = "None"
+    cfg.frame.borderSize  = 0
+    window:ApplyConfig()
+
+    -- ASSERTED, not skipped when absent: the harness loads the real
+    -- libs/LibKa0s/Core.lua, so ApplySkin has genuinely built this child by now.
+    -- A guarded `if type(...) == "table"` here would pass on a day the library
+    -- stopped building it, which is exactly the day this case has to fail.
+    assertEqual(type(window.frame.innerBorder), "table",
+        "the library's inner border was never built -- this case is asserting nothing")
+    assertEqual(window.frame.innerBorder:IsShown(), false,
+        "the skin's highlight is the border the settings could not turn off")
+
+    -- And it comes back with the edge, because inside a real border it is the
+    -- highlight the library drew it to be.
+    cfg.frame.borderStyle = "Blizzard Tooltip"
+    cfg.frame.borderSize  = 2
+    window:ApplyConfig()
+    assertEqual(window.frame.innerBorder:IsShown(), true)
+end)
+
+test("The resize grip is built unconditionally and follows the LOCK", function()
+    -- There used to be a `resizeGrip` setting read inside BuildFrame, which runs
+    -- ONCE per window -- so unticking it did nothing at all until a reload. The
+    -- lock already answers this question, and now it is the only thing that does.
+    -- red under: restoring the `if frameCfg.resizeGrip ~= false then` gate.
+    local _, window, cfg = scene()
+    assertTrue(window.grip ~= nil, "the grip was not built")
+
+    cfg.frame.locked = false
+    window:ApplyConfig()
+    assertEqual(window.grip:IsShown(), true, "an unlocked window offers its grip")
+
+    cfg.frame.locked = true
+    window:ApplyConfig()
+    assertEqual(window.grip:IsShown(), false, "locking is how you put the grip away")
+end)
+
+test("`resizeGrip` is gone from the code, not just from the panel", function()
+    -- The BEHAVIOURAL guard above cannot catch this one coming back. A resurrected
+    -- `if frameCfg.resizeGrip ~= false then` reads a key no profile has any more,
+    -- so it is always true and every case still passes -- right up until someone
+    -- re-adds the schema row and the old bug with it. So the guard is static.
+    -- red under: any read of frameCfg.resizeGrip anywhere in these two files.
+    local offenders = {}
+    for _, path in ipairs{ "/modules/Window.lua", "/settings/Schema.lua",
+                           "/defaults/Profile.lua" } do
+        local fh = assert(io.open(T.root .. path, "r"))
+        local n = 0
+        for line in fh:lines() do
+            n = n + 1
+            local code = line:gsub("%s*%-%-.*$", "")
+            if code:find("resizeGrip", 1, true) then
+                offenders[#offenders + 1] = path .. ":" .. n
+            end
+        end
+        fh:close()
+    end
+    assertEqual(#offenders, 0, table.concat(offenders, ", "))
+end)
+
 test("Unlocking does not resurrect the grip on a collapsed window", function()
     -- ApplyLock and ApplyMinimised are two authors of one property, so whichever
     -- runs last wins unless they ask the same question. `/mm lock off` was the

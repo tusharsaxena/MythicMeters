@@ -183,23 +183,56 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 "Settings to copy" dropdown — one list, three jobs. **A group added to the template and not to
 `COPY_GROUPS` simply never copies.**
 
+### The four text controls
+
+Four groups draw text — `text` (the cells), `header` (the title bar), `columnHeader` (the label
+strip) and `tooltip` — and each of them offers the **same four controls**: an LSM **font** picker, an
+**outline** dropdown over one shared value set, a **shadow** checkbox, and a **colour** picker with a
+**Use class color** checkbox beside it. They did not always: only `text` had a shadow, none had a
+class colour, and a player styling a window had to discover which surface had grown which control.
+`tests/test_schema.lua`'s *every text surface offers face, outline, shadow and colour* is the
+contract — a fifth surface, or a fifth control, is a row added to that table and then made to pass.
+
+**"Use class color" means a different class on different surfaces, and the difference is not an
+inconsistency.** A cell is about the player whose row it is, so `text.classColor` takes **that row's**
+class — the same reading the Player column has always had and the same one `bars.colorMode = "class"`
+has. A tooltip is about the player you are hovering, so `tooltip.classColor` takes **that** player's.
+The two header strips are about the **window** rather than about any row, so `header.classColor` and
+`columnHeader.classColor` take the **local player's** — the only class those surfaces can sensibly
+mean. One reader answers all four: `NS.ClassRGB(classFilename)` and `NS.PlayerClassRGB()` in
+`core/Namespace.lua`, so the header and a row of the grid can never disagree about what a warlock
+looks like.
+
+The configured **alpha survives** a class colour on every surface. `RAID_CLASS_COLORS` carries none,
+so taking one from it would make Use class color silently cancel Text opacity — one setting
+overruling another. A class that cannot be read keeps the configured colour rather than falling back
+to a hue invented for the occasion.
+
+Every one of the new keys ships **off**: `header.shadow`, `columnHeader.shadow`,
+`tooltip.fontShadow` and all four `classColor` keys are `false`. A setting added to a shipped window
+must not change how that window already looks, and a shadow under an outlined face is heavier than
+either alone. `text.shadow` keeps its long-standing `true`.
+
 ### `frame` — the standalone window
 
 | Key | Default | Notes |
 |---|---|---|
 | `width` | `716` | slider 160–1400. Derived from the grid: name column + six default columns at `COLUMN_WIDTH` + seams + padding. |
 | `height` | `220` | slider 60–900 |
-| `scale` | `1.0` | 0.5–2.0 |
+| `scale` | `1.0` | 0.5–2.0. Applied to the anchor **and** the visible frame. Scaling only the frame left the box its original size and shrank its contents, because the frame is pinned TOPLEFT/BOTTOMRIGHT to the anchor and inherits its screen rect. |
 | `alpha` | `1.0` | 0–1, rendered as a percentage |
 | `strata` | `"MEDIUM"` | `LOW` `MEDIUM` `HIGH` `DIALOG` |
 | `backdropColor` | `{ r=0, g=0, b=0, a=0.75 }` | |
 | `borderStyle` | `"Blizzard Tooltip"` | LSM `border` key |
-| `borderSize` | `2` | `0` drops `edgeFile` with it — a zero edge size with a texture still present is drawn as a hard 1px line |
+| `borderStyle` = `"None"` (or `""`, or unset) | | means **no edge**, answered by `borderPath` itself. That resolver distinguishes a CHOICE from a FAILURE: "None" is nil, while a name it cannot fetch — a media pack that is no longer installed — still falls back to the library's own edge. Conflating the two handed a player who picked "None" the Ka0s edge they had just turned off. Same rule and same order as `modules/Tooltip.lua`'s `mediaPath`, the addon's other LSM resolver |
+| `borderSize` | `2` | `0` drops `edgeFile` with it — a zero edge size with a texture still present is drawn as a hard 1px line. With no edge, the skin's 1px `frame.innerBorder` child is hidden too: it is not part of the backdrop `ApplyBorder` rewrites, so it used to be the whole visible border on a window whose border was switched off |
 | `borderColor` | `{ r=0, g=0, b=0, a=1 }` | |
 | `padding` | `6` | frame edge to rows |
 | `locked` | `false` | unlocking implies preview mode |
 | `clampToScreen` | `true` | |
-| `titleBar` / `closeButton` / `resizeGrip` | `true` | |
+| `titleBar` | `true` | |
+| `closeButton` | `true` | a **header control**, grouped with the `show*` keys on the panel |
+| `minimised` | `false` | a **hidden** schema row: writable through `NS.SetByPath` and listed by `/mm list`, but drawn as no control. It is per-window state the header's own minimise button writes, not a preference |
 | `position` | `{ point="CENTER", relativePoint="CENTER", x=0, y=0 }` | **not a schema row** — see below |
 
 The chrome itself is `LibKa0s-Core-1.0`'s shared `SKIN` / `ApplySkin`, which tints `frame.title` and
@@ -270,9 +303,15 @@ leaves it as dead space above the row and lands the text against the divider. No
 bar is anchored to a hand-picked offset any more.
 
 `showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
-`true`. Six of the seven controls; `closeButton` above is the seventh and deliberately keeps its
-older name, because renaming it to `showClose` for symmetry would migrate every stored profile in
-exchange for a consistency nobody can see.
+`true`. Six of the seven controls; `closeButton` is the seventh and deliberately keeps its older
+name, because renaming it to `showClose` for symmetry would migrate every stored profile in exchange
+for a consistency nobody can see. All seven sit in the panel's **Header controls** group, because
+what each of them governs is a control in the header strip.
+
+**There is no `resizeGrip` key.** There was, and it was read once while the frame was being built —
+so unticking it did nothing until a reload. The grip follows the **lock**: drawn while the window is
+unlocked, hidden while it is locked, which is the same question the lock already answers. Locking a
+window is how you put its grip away.
 
 `hoverReveal = true` fades every control except the one under the pointer — the reveal is per
 control, not per strip, so it *is* the "which one am I about to click" feedback rather than a

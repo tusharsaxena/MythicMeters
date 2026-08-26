@@ -195,6 +195,12 @@ local RGBA = NS.RGBA or function(_, dr, dg, db, da)
     return dr, dg, db, da
 end
 
+-- The collection's one class-color reader (core/Namespace.lua). Resolved
+-- defensively for the same reason RGBA above is: a degraded install must render
+-- rows rather than raise, and "no class color" is a shape every caller here
+-- already handles.
+local ClassRGB = NS.ClassRGB or function() return nil end
+
 -- One color per stat for `bars.colorMode == "stat"`, so a glance at a wide
 -- window tells you which column you are reading without tracing back up to the
 -- header.
@@ -225,9 +231,8 @@ local function barColor(bars, entry, statKey)
     local mode = bars and bars.colorMode or "class"
 
     if mode == "class" then
-        local classes = _G.RAID_CLASS_COLORS
-        local c = classes and entry.classFilename and classes[entry.classFilename]
-        if c then return c.r, c.g, c.b end
+        local r, g, b = ClassRGB(entry.classFilename)
+        if r then return r, g, b end
     elseif mode == "role" then
         local c = ROLE_COLORS[entry.role or ""]
         if c then return c[1], c[2], c[3] end
@@ -651,14 +656,49 @@ end
 function Cell:ApplyNameColor(entry)
     if self.key ~= "name" then return end
     entry = entry or self.entry
-    local classes = _G.RAID_CLASS_COLORS
-    local c = classes and entry and entry.classFilename and classes[entry.classFilename]
-    if c then
-        self.left:SetTextColor(c.r, c.g, c.b)
+    local r, g, b = ClassRGB(entry and entry.classFilename)
+    if r then
+        self.left:SetTextColor(r, g, b)
     else
         -- An unknown class reads as "no class information", not as a tenth color.
         self.left:SetTextColor(1, 1, 1)
     end
+end
+
+--- Re-color a STAT cell's two slots for the row it is about to draw.
+---
+--- `text.classColor` is the setting, and the subject is THIS ROW'S PLAYER -- a
+--- cell is about the player whose row it is, which is the same reading the Player
+--- column has always had and the same one `bars.colorMode == "class"` has. The
+--- header surfaces answer the question differently because they have no row to
+--- ask about; see NS.PlayerClassRGB.
+---
+--- Called per row rather than from ApplyTextStyle, because ApplyTextStyle runs on
+--- a LAYOUT and a layout has no entry. With the setting off this does nothing at
+--- all and the color ApplyTextStyle painted stands, which is also what restores
+--- the configured color the moment the setting is turned back off: a settings
+--- change re-runs the layout.
+---
+--- The ALPHA stays the player's. RAID_CLASS_COLORS carries no alpha, and a class
+--- color that silently reset Text opacity would be one setting quietly cancelling
+--- another.
+---
+--- @param entry table|nil  the aggregated row this cell is drawing
+function Cell:ApplyEntryTextColor(entry)
+    if self.key == "name" then return end
+    local text = self.window.config.text or {}
+    if not text.classColor then return end
+
+    local r, g, b = ClassRGB(entry and entry.classFilename)
+    if not r then
+        -- No class information, so no class color -- the configured one is the
+        -- honest answer rather than a tenth palette entry.
+        local cr, cg, cb = RGBA(text.color, 1, 1, 1, 1)
+        r, g, b = cr, cg, cb
+    end
+    local _, _, _, a = RGBA(text.color, 1, 1, 1, 1)
+    self.left:SetTextColor(r, g, b, a)
+    self.right:SetTextColor(r, g, b, a)
 end
 
 function Cell:ApplyTextStyle(text)
@@ -834,6 +874,11 @@ function Cell:SetValue(entry)
 
     self.left:SetText(primary or "")
     self.right:SetText(secondary or "")
+
+    -- LAST, and after the text: the color is per ROW where ApplyTextStyle's is
+    -- per LAYOUT, so this is the only place the entry is in hand. A no-op unless
+    -- `text.classColor` is on.
+    self:ApplyEntryTextColor(entry)
 end
 
 --- Blank the cell without releasing it. Used for a row that is on screen but has

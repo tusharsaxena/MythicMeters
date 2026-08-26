@@ -413,3 +413,188 @@ test("SetByPath: the columns validator agrees with the width slider's own range"
     assertFalse(widthOK(23))
     assertFalse(widthOK(241))
 end)
+
+-- ---------------------------------------------------------------------------
+-- The Frame page's shape
+-- ---------------------------------------------------------------------------
+
+test("Schema: a `hidden` row is writable and listable but draws no control", function()
+    -- `frame.minimised` is per-window STATE, not a preference: the header's
+    -- minimise control writes it and a window left collapsed comes back
+    -- collapsed. As a checkbox it duplicated that control on a page you have to
+    -- open to reach. It cannot simply be DELETED, though -- NS.SetByPath refuses
+    -- a path with no row, and the minimise control writes through that seam
+    -- precisely because it is what publishes CONFIG_CHANGED.
+    -- red under: dropping the row, or dropping SchemaForPage's `hidden` filter.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local found
+    for _, row in ipairs(NS.Schema) do
+        if row.path == "window.frame.minimised" then found = row end
+    end
+    assertTrue(found ~= nil, "the path must still resolve, or minimise cannot write")
+    assertEqual(found.hidden, true)
+
+    for _, row in ipairs(NS.SchemaForPage("frame")) do
+        assertTrue(row.path ~= "window.frame.minimised",
+            "a state row was rendered as a setting")
+    end
+
+    assertTrue((NS.SetByPath("window.frame.minimised", true)),
+        "the seam must still accept it")
+end)
+
+test("Schema: the close button is a HEADER CONTROL, and Frame behavior is named for the frame", function()
+    -- It draws a control in the header strip, which is what every row of that
+    -- group is about; it sat under a group heading that said "Row behavior" on a
+    -- page with no rows on it.
+    -- red under: moving it back, or restoring the old heading.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local closeGroup, groups = nil, {}
+    for _, row in ipairs(NS.SchemaForPage("frame")) do
+        groups[row.group or ""] = true
+        if row.path == "window.frame.closeButton" then closeGroup = row.group end
+    end
+
+    assertEqual(closeGroup, NS.L["Header controls"])
+    assertTrue(groups[NS.L["Frame behavior"]], "the Frame page lost its behavior group")
+    assertFalse(groups[NS.L["Row behavior"]] or false,
+        "\"Row behavior\" is the Rows page's heading, not this one's")
+end)
+
+test("Schema: every Frame page group is CONTIGUOUS, or a heading prints twice", function()
+    -- Group headings are emitted when `group` CHANGES between consecutive rows,
+    -- so a row filed under a group that has already been left prints that
+    -- heading a second time further down the page. Moving the close button
+    -- across groups is exactly the edit that breaks this.
+    local inst = T.load()
+    local seen, previous = {}, nil
+    for _, row in ipairs(inst.NS.SchemaForPage("frame")) do
+        local group = row.group or ""
+        if group ~= previous then
+            assertFalse(seen[group] or false,
+                "group returned after being left: " .. tostring(group))
+            seen[group] = true
+            previous = group
+        end
+    end
+end)
+
+test("Schema: every LSM border setting is one this suite knows honours \"None\"", function()
+    -- "None" is LSM's own name for the empty border, and it has to mean NO EDGE on
+    -- every surface that offers it. The window frame did not: its resolver fell
+    -- back to the library's own edge on anything it could not fetch, and treated a
+    -- deliberate "None" as a failed fetch.
+    --
+    -- This case does not re-test the rendering -- each surface has its own case
+    -- for that, named below. It enumerates the border settings, so a THIRD one
+    -- added later cannot quietly ship without someone checking it behaves like
+    -- these two.
+    -- red under: adding an LSM30_Border row without a "None" case behind it.
+    local COVERED = {
+        -- path -> the case that proves this surface honours "None"
+        ["window.frame.borderStyle"] =
+            "test_window.lua: Border style None draws NO edge, whatever the library's own is",
+        ["window.tooltip.barBorderStyle"] =
+            "test_tooltip.lua: A bar border is applied when asked and cleared off the POOLED line when not",
+    }
+
+    local inst = T.load()
+    local uncovered = {}
+    for _, row in ipairs(inst.NS.Schema) do
+        if row.dialogControl == "LSM30_Border" and not COVERED[row.path] then
+            uncovered[#uncovered + 1] = row.path
+        end
+    end
+    assertEqual(#uncovered, 0,
+        "border settings with no \"None\" case: " .. table.concat(uncovered, ", "))
+
+    -- And the reverse, so a path that is renamed or removed does not leave this
+    -- list quietly claiming coverage of something that no longer exists.
+    local present = {}
+    for _, row in ipairs(inst.NS.Schema) do present[row.path] = true end
+    for path in pairs(COVERED) do
+        assertTrue(present[path], "this list names a row that is gone: " .. path)
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- Every text surface offers the same four controls
+-- ---------------------------------------------------------------------------
+
+test("Schema: every text surface offers face, outline, shadow and colour", function()
+    -- FOUR SURFACES DRAW TEXT and they used to offer different subsets of the
+    -- same controls: the cell text had a shadow and the other three did not, and
+    -- none of them could take a class colour. A player styling a window had to
+    -- discover which of the four had grown which control.
+    --
+    -- The table is the contract. A fifth surface, or a fifth control, is a row
+    -- added here and then made to pass -- which is the point: it fails until the
+    -- surface actually offers it.
+    -- red under: dropping any row below, on any surface.
+    local SURFACES = {
+        { label = "Cell text",      prefix = "window.text.",
+          font = "font", outline = "outline", shadow = "shadow",
+          color = "color", classColor = "classColor" },
+        { label = "Header text",    prefix = "window.header.",
+          font = "font", outline = "outline", shadow = "shadow",
+          color = "color", classColor = "classColor" },
+        { label = "Column headers", prefix = "window.columnHeader.",
+          font = "font", outline = "outline", shadow = "shadow",
+          color = "color", classColor = "classColor" },
+        -- The tooltip's keys carry a `font` prefix of their own, which is why
+        -- this is a table of names rather than four suffixes assumed to be equal.
+        { label = "Tooltip text",   prefix = "window.tooltip.",
+          font = "font", outline = "fontOutline", shadow = "fontShadow",
+          color = "textColor", classColor = "classColor" },
+    }
+
+    local inst = T.load()
+    local byPath = {}
+    for _, row in ipairs(inst.NS.Schema) do byPath[row.path] = row end
+
+    local missing = {}
+    for _, surface in ipairs(SURFACES) do
+        local function need(control, key, wantType)
+            local path = surface.prefix .. key
+            local row = byPath[path]
+            if not row then
+                missing[#missing + 1] = surface.label .. " has no " .. control ..
+                    " (" .. path .. ")"
+            elseif row.type ~= wantType then
+                missing[#missing + 1] = path .. " is a " .. tostring(row.type) ..
+                    ", expected " .. wantType
+            end
+            return row
+        end
+
+        -- The face is a MEDIA row, not a free string: it has to be the LSM
+        -- picker, or "font selector" is an edit box you can type a typo into.
+        local face = need("font selector", surface.font, "string")
+        if face then
+            assertEqual(face.dialogControl, "LSM30_Font",
+                surface.label .. "'s font is not the LSM picker")
+        end
+
+        -- The outline is a DROPDOWN over one shared value set, so the four
+        -- surfaces cannot offer different outlines from each other.
+        local outline = need("outline dropdown", surface.outline, "string")
+        if outline then
+            assertTrue(type(outline.values) == "table",
+                surface.label .. "'s outline has no value list")
+            for _, key in ipairs({ "NONE", "OUTLINE", "THICKOUTLINE" }) do
+                assertTrue(outline.values[key] ~= nil,
+                    surface.label .. "'s outline is missing " .. key)
+            end
+        end
+
+        need("shadow checkbox", surface.shadow, "bool")
+        need("colour picker", surface.color, "color")
+        need("class colour checkbox", surface.classColor, "bool")
+    end
+
+    assertEqual(#missing, 0, table.concat(missing, "; "))
+end)

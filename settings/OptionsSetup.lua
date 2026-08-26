@@ -80,7 +80,7 @@ local descriptor = {
         if NS.SchemaForPage then return NS.SchemaForPage(pageKey, filter) end
         local rows = {}
         for _, row in ipairs(NS.Schema or {}) do
-            if row.page == pageKey then rows[#rows + 1] = row end
+            if row.page == pageKey and not row.hidden then rows[#rows + 1] = row end
         end
         return rows
     end,

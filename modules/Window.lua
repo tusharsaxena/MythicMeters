@@ -170,13 +170,29 @@ local function fontPath(name)
     return path or Const.FONT_MONO or _G.STANDARD_TEXT_FONT
 end
 
---- The LSM border texture the player picked, falling back to the LIBRARY's own
---- edge rather than to a literal: NS.SKIN's edgeFile is the Ka0s window edge
---- (standalone-windows), and restating it here would be the copy that goes stale
---- one hex digit at a time.
+--- The LSM border texture the player picked, or nil for "no border at all".
+---
+--- "NONE" IS ANSWERED HERE, BEFORE THE FALLBACK, and that distinction is the
+--- whole shape of this function. `nil` and `""` and LSM's own `"None"` are a
+--- CHOICE — the player asked for no edge — and the answer is nil. A name that is
+--- present but cannot be fetched is a FAILURE, most often a media pack that is no
+--- longer installed, and that falls back to the LIBRARY's own edge rather than to
+--- a literal: NS.SKIN's edgeFile is the Ka0s window edge (standalone-windows),
+--- and restating it here would be the copy that goes stale one hex digit at a
+--- time.
+---
+--- Conflating the two is what handed a player who picked "None" the Ka0s edge
+--- they had just turned off. Same rule, same order, as modules/Tooltip.lua's
+--- `mediaPath` — the addon's other LSM resolver, and the other surface with a
+--- border setting on it.
+-- The collection's one class-color reader (core/Namespace.lua), resolved
+-- defensively like every other seam member this file takes.
+local PlayerClassRGB = NS.PlayerClassRGB or function() return nil end
+
 local function borderPath(name)
+    if type(name) ~= "string" or name == "" or name == "None" then return nil end
     local media = lsm()
-    local path = media and name and media:Fetch("border", name, true)
+    local path = media and media:Fetch("border", name, true)
     return path or (NS.SKIN and NS.SKIN.edgeFile)
 end
 
@@ -557,7 +573,12 @@ function WindowProto:BuildFrame()
     self.notice:SetJustifyH("CENTER")
     self.notice:Hide()
 
-    if frameCfg.resizeGrip ~= false then
+    -- ALWAYS BUILT, never gated on a setting. There used to be a `resizeGrip`
+    -- checkbox read right here, and because BuildFrame runs ONCE per window,
+    -- unticking it did nothing at all until a reload -- the reported bug. The
+    -- grip's visibility is the LOCK's answer and only the lock's: ApplyLock and
+    -- ApplyMinimised are its two authors and both ask the same question.
+    do
         local grip = CreateFrame("Button", nil, frame)
         grip:SetSize(12, 12)
         grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
@@ -592,7 +613,22 @@ function WindowProto:ApplyConfig()
     self.anchor:SetClampedToScreen(frameCfg.clampToScreen ~= false)
     self:ApplyPosition()
 
-    frame:SetScale(frameCfg.scale or 1.0)
+    -- BOTH FRAMES, and that is what makes Scale scale the WINDOW rather than only
+    -- its contents.
+    --
+    -- The visible frame is pinned TOPLEFT and BOTTOMRIGHT to the anchor, so the
+    -- anchor's screen rect dictates its screen rect whatever scale it carries.
+    -- Scaling the frame alone therefore left the box exactly the size it was and
+    -- shrank everything inside it: at 0.5 you got a full-size window with a
+    -- miniature grid in the corner of it, which is the bug as reported.
+    --
+    -- Scaling the anchor takes its screen rect to width*scale by height*scale;
+    -- the frame, at the same scale, then measures width by height in its own
+    -- units and lays its rows out against the numbers the player set. One scale
+    -- on both, and every part of the window changes size together.
+    local scale = frameCfg.scale or 1.0
+    self.anchor:SetScale(scale)
+    frame:SetScale(scale)
     frame:SetAlpha(frameCfg.alpha or 1.0)
     frame:SetFrameStrata(frameCfg.strata or "MEDIUM")
 
@@ -638,7 +674,17 @@ end
 ---
 --- `borderSize == 0` means "no edge", and it drops edgeFile with it: a zero
 --- edgeSize with a texture still present is the combination WoW draws as a hard
---- 1px line, which is the setting doing the opposite of what it says.
+--- 1px line, which is the setting doing the opposite of what it says. A
+--- borderStyle of "None" means the same thing and is `borderPath`'s answer, not
+--- this function's -- the rule belongs with the resolver, so a second caller
+--- inherits it instead of restating it.
+---
+--- THE SKIN'S INNER HIGHLIGHT GOES WITH THE EDGE. LibKa0s's ApplySkin builds a
+--- 1px `frame.innerBorder` child inset inside the black edge, and it is a child
+--- frame rather than part of the backdrop this function rewrites -- so with the
+--- style set to None and the thickness at 0 it was the whole visible border,
+--- outliving both controls that claim to govern one. It is shown exactly when
+--- there is an edge for it to sit inside.
 ---
 --- @param frameCfg table  the window's `frame` config group
 function WindowProto:ApplyBorder(frameCfg)
@@ -649,6 +695,14 @@ function WindowProto:ApplyBorder(frameCfg)
     local size = clamp(frameCfg.borderSize or 2, 0, 32)
     local edge = (size > 0) and borderPath(frameCfg.borderStyle) or nil
     local inset = edge and size or 0
+
+    -- Type-tested, not truth-tested: `innerBorder` is a key LibKa0s writes onto a
+    -- frame this file does not own, and a mock that answers every key with a
+    -- function would otherwise be indexed as a frame -- the library's own header
+    -- records that exact breakage.
+    if type(frame.innerBorder) == "table" and frame.innerBorder.SetShown then
+        frame.innerBorder:SetShown(edge ~= nil)
+    end
 
     frame:SetBackdrop({
         bgFile   = skin.bgFile,
@@ -679,8 +733,37 @@ local function headerFont(header)
 end
 
 --- The header's text color, defaulting to the gold WoW uses for its own headers.
+---
+--- `classColor` swaps the hue for the LOCAL PLAYER'S — the header is about the
+--- window rather than about any one row, so yours is the only class it can
+--- sensibly mean. (A cell's text answers the same setting with the class of the
+--- row it is drawing; see modules/Row.lua's ApplyEntryTextColor.) The configured
+--- ALPHA is kept either way: RAID_CLASS_COLORS carries none, and a class color
+--- that silently reset transparency would be one setting cancelling another. A
+--- player whose class cannot be read keeps the configured color, which is the
+--- honest answer rather than a fallback hue.
 local function headerColor(header)
-    return RGBA(header.color, 1, 0.82, 0, 1)
+    local r, g, b, a = RGBA(header.color, 1, 0.82, 0, 1)
+    if header.classColor then
+        local cr, cg, cb = PlayerClassRGB()
+        if cr then r, g, b = cr, cg, cb end
+    end
+    return r, g, b, a
+end
+
+--- How far the text is offset to draw its drop shadow, or 0, 0 for none.
+---
+--- One reader for all four of this addon's text surfaces, which is the point:
+--- `text`, `header`, `columnHeader` and the tooltip each carry the same four
+--- controls now (face, outline, shadow, color), and four private opinions about
+--- what "shadow" means in pixels is how two of them end up with different ones.
+--- 1, -1 is the offset modules/Row.lua has always used.
+---
+--- @param on boolean|nil
+--- @return number x, number y
+local function shadowOffset(on)
+    if not on then return 0, 0 end
+    return 1, -1
 end
 
 --- The header's font and colour, in the one shape modules/HeaderControls.lua
@@ -787,6 +870,7 @@ function WindowProto:ApplyTitle()
     frame.title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -self:HeaderRightInset(), y)
     frame.title:SetJustifyH(header.align or "LEFT")
     frame.title:SetFont(path, size, flags)
+    frame.title:SetShadowOffset(shadowOffset(header.shadow))
     -- THE TEST-MODE MARKER RIDES ON THE TITLE, in red, the way Loot History
     -- marks its own. Test mode fills the grid with numbers that look exactly like
     -- real ones — that is the entire point of it — so the only thing standing
@@ -856,6 +940,7 @@ function WindowProto:ApplySessionLine()
     self.sessionLine:SetShown(shown)
 
     self.sessionText:SetFont(path, size, flags)
+    self.sessionText:SetShadowOffset(shadowOffset(header.shadow))
     self.sessionText:SetTextColor(headerColor(header))
     self.sessionText:SetShown(shown)
 end
@@ -867,7 +952,15 @@ function WindowProto:ApplyColumnHeaders()
     local pad    = layout.padding
     local colHeader = cfg.columnHeader or {}
     local colFont, colSize, flags = columnHeaderFont(colHeader)
+    local shadowX, shadowY = shadowOffset(colHeader.shadow)
     local hr, hg, hb, ha = RGBA(colHeader.color, 1, 0.82, 0, 1)
+    -- The STRIP labels the grid rather than any row in it, so its class color is
+    -- the local player's -- the same reading `header.classColor` takes, and for
+    -- the same reason. See headerColor.
+    if colHeader.classColor then
+        local cr, cg, cb = PlayerClassRGB()
+        if cr then hr, hg, hb = cr, cg, cb end
+    end
 
     -- One FontString per drawn column plus the name column's, placed at the same
     -- x offsets the cells will use — from the SAME layout table, so a header can
@@ -933,6 +1026,7 @@ function WindowProto:ApplyColumnHeaders()
         button.text:SetWidth(width)
         button.text:SetHeight(layout.headerHeight)
         button.text:SetFont(colFont, colSize, flags)
+        button.text:SetShadowOffset(shadowX, shadowY)
         button.text:SetTextColor(hr, hg, hb, ha)
         button.text:SetJustifyH("LEFT")
         button.text:SetText(label)
@@ -973,6 +1067,7 @@ function WindowProto:ApplyColumnHeaders()
                 button.arrow:Hide()
             else
                 button.arrow:SetFont(colFont, colSize, flags)
+                button.arrow:SetShadowOffset(shadowX, shadowY)
                 button.arrow:SetTextColor(hr, hg, hb, ha)
                 button.arrow:SetText(data.sortAscending and SORT_ASCII_UP or SORT_ASCII_DOWN)
                 button.arrow:ClearAllPoints()

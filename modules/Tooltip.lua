@@ -240,6 +240,8 @@ local function tooltipConfig(window)
         font               = field("font", "Friz Quadrata TT"),
         fontSize           = field("fontSize", 12),
         fontOutline        = field("fontOutline", "NONE"),
+        fontShadow         = field("fontShadow", false),
+        classColor         = field("classColor", false),
         showTargets        = field("showTargets", false),
         maxTargets         = field("maxTargets", 3),
     }
@@ -693,10 +695,19 @@ Tooltip.__fontProbe = nil
 --- because they are not all the same: a section gap gets the same face at half
 --- the size, and a single remembered font would have the post-layout pass stamp
 --- full size back over it and quietly restore the gap this addon just halved.
-local function applyLineFont(fontString, index, path, size, flags)
+local function applyLineFont(fontString, index, path, size, flags, shadowX, shadowY)
     if not (fontString and fontString.SetFont) then return end
     fontString:SetFont(path, size, flags)
-    fontedLines[index] = { fs = fontString, path = path, size = size, flags = flags }
+    -- THE SHADOW RIDES WITH THE FONT, and is recorded with it, because
+    -- `reapplyFonts` runs after Show and would otherwise put back the face
+    -- without the shadow the same setting asked for. Restated on every line for
+    -- the reason the font is: GameTooltip is shared, and the line we are dressing
+    -- may carry another addon's shadow.
+    if fontString.SetShadowOffset then
+        fontString:SetShadowOffset(shadowX or 0, shadowY or 0)
+    end
+    fontedLines[index] = { fs = fontString, path = path, size = size, flags = flags,
+                           shadowX = shadowX or 0, shadowY = shadowY or 0 }
 
     if State.debug and fontString.GetFont then
         local gotPath, gotSize, gotFlags = fontString:GetFont()
@@ -738,7 +749,8 @@ local function addSectionGap(style)
 
     local half = math.floor((style.fontSize or 12) / 2)
     if half < 1 then half = 1 end
-    applyLineFont(left, index, style.fontPath, half, style.fontFlags)
+    applyLineFont(left, index, style.fontPath, half, style.fontFlags,
+        style.shadowX, style.shadowY)
 end
 
 --- Put our font back on every line, AFTER GameTooltip:Show() has laid out.
@@ -768,6 +780,9 @@ local function reapplyFonts()
     for _, entry in pairs(fontedLines) do
         if entry.fs.SetFont then
             entry.fs:SetFont(entry.path, entry.size, entry.flags)
+            if entry.fs.SetShadowOffset then
+                entry.fs:SetShadowOffset(entry.shadowX, entry.shadowY)
+            end
         end
     end
     sampleFontAfterShow()
@@ -780,6 +795,10 @@ local function restoreFonts()
         if fontString.SetFontObject and _G.GameTooltipText then
             fontString:SetFontObject(_G.GameTooltipText)
         end
+        -- The shadow goes back with the face. A font OBJECT does not carry one,
+        -- so ours would otherwise stay on a shared line and turn up under the
+        -- next addon's item tooltip -- the same class of leak as a bar left Shown.
+        if fontString.SetShadowOffset then fontString:SetShadowOffset(0, 0) end
         fontedLines[index] = nil
     end
 end
@@ -1168,9 +1187,23 @@ local function lineStyle(config, color)
     local tr, tg, tb = rgba(config.textColor,
         SLOT_COLOR_DEFAULT[1], SLOT_COLOR_DEFAULT[2], SLOT_COLOR_DEFAULT[3], 1)
 
+    -- THE HOVERED PLAYER'S CLASS, which the bars already wear -- `color` is that
+    -- same table, resolved by the caller off `row.classFilename`. A tooltip is
+    -- about ONE player, which is what makes the question answerable here where
+    -- the window header has to fall back to the local player's class instead.
+    -- With no class to read, the configured color stands.
+    if config.classColor and color then
+        tr, tg, tb = color.r, color.g, color.b
+    end
+
+    local shadowX, shadowY = 0, 0
+    if config.fontShadow then shadowX, shadowY = 1, -1 end
+
     return {
         color      = color,
         textColor  = { tr, tg, tb },
+        shadowX    = shadowX,
+        shadowY    = shadowY,
         texture    = mediaPath("statusbar", config.barTexture),
         -- Size zero drops the FILE with it. A zero edgeSize with a texture still
         -- present is the combination WoW draws as a hard 1px line, which is the
@@ -1241,6 +1274,12 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, mode
     frame.amount:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.share:SetFont(style.fontPath, style.fontSize, style.fontFlags)
     frame.label:SetFont(style.fontPath, style.fontSize, style.fontFlags)
+    -- OUR OWN carriers, so no restore is owed on them the way it is on a shared
+    -- GameTooltip line -- but they are POOLED, so the offset is restated every
+    -- draw for the same reason the face and the color are.
+    frame.amount:SetShadowOffset(style.shadowX, style.shadowY)
+    frame.share:SetShadowOffset(style.shadowX, style.shadowY)
+    frame.label:SetShadowOffset(style.shadowX, style.shadowY)
 
     -- Which slots exist on this line, and how wide they are. Re-stated here for
     -- the same reason the font above it is: the carrier is pooled.
@@ -1259,7 +1298,8 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, mode
     frame.amount:SetTextColor(tc[1], tc[2], tc[3])
     frame.share:SetTextColor(tc[1], tc[2], tc[3])
     frame.label:SetTextColor(tc[1], tc[2], tc[3])
-    applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags)
+    applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags,
+        style.shadowX, style.shadowY)
 
     applyLineBorder(frame, style)
 

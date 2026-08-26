@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1270%2F1270_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1292%2F1292_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -93,7 +93,7 @@ are currently looking at, not all of them.
 | Page | What you set there |
 |---|---|
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
-| Frame | Size, scale, opacity, background, border, lock, title bar, close button |
+| Frame | Size, scale, opacity, background, border, lock, title bar — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
 | Header | Title, session name, duration, totals, font, alignment, background |
 | Rows | Row height, spacing, how many, growth direction, self highlight, alternating backgrounds |
 | Bars | Texture, color mode, background, border, opacity, fill direction |

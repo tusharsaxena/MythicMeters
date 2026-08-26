@@ -28,13 +28,13 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | # | Page | Panel key | Rows | Defaults button | What is on it |
 |---|---|---|---|---|---|
 | 1 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
-| 2 | Frame | `frame` | 26 | yes | Geometry, backdrop, LSM border, lock, title bar / close / grip, the seven header controls with their size and their two colours, hover reveal, minimised · **Reset position** button |
-| 3 | Header | `header` | 16 | yes | Title text, session name / duration / totals, font, alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own font, size, outline, colour and background |
+| 2 | Frame | `frame` | 24 | yes | Geometry, backdrop, LSM border, lock, title bar, the seven header controls (close among them) with their size and their two colours, hover reveal · **Reset position** button. 25 schema rows, one of them `hidden`: `frame.minimised` is state the header's own button writes, so it stays writable and listable without drawing a control |
+| 3 | Header | `header` | 20 | yes | Title text, session name / duration / totals, the four text controls (font, outline, shadow, colour + class colour), alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own four |
 | 4 | Rows | `rows` | 10 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
 | 5 | Bars | `bars` | 9 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |
-| 6 | Text | `text` | 11 | yes | Left slot, right slot, number format, death timestamps, max name length, font, size, outline, shadow, color, opacity |
+| 6 | Text | `text` | 12 | yes | Left slot, right slot, number format, death timestamps, max name length, the four text controls (font, outline, shadow, colour + class colour), size, opacity |
 | 7 | Icons | `icons` | 3 | yes | One icon per row — spec where known, class otherwise, never a role — plus its size and which side of the name it sits on |
-| 8 | Tooltip | `tooltip` | 18 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own font/size/outline, and the Targets section |
+| 8 | Tooltip | `tooltip` | 20 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own four text controls, and the Targets section |
 | 9 | Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
 | 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
 | 11 | Data | `data` | 6 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |

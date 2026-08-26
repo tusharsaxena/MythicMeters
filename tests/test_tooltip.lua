@@ -1084,6 +1084,89 @@ test("The tooltip's own bar texture is used, not the grid's", function()
         "the tooltip bar took the GRID's texture instead of its own")
 end)
 
+test("Tooltip text takes the HOVERED player's class color when asked", function()
+    -- A tooltip is about ONE player, which is what makes the question answerable
+    -- here where the window header has to fall back to the local player's class
+    -- instead. The bars have always worn this colour; the text can now too.
+    -- red under: colouring the tooltip from NS.PlayerClassRGB, or ignoring the
+    -- setting.
+    local inst, cfg, anchorFrame = bench{ configure = function(c)
+        c.tooltip.classColor = true
+        c.tooltip.textColor  = { r = 1, g = 1, b = 1, a = 1 }
+    end }
+    -- The mock ships every class the same colour, so one is given its own.
+    inst.mocks.RAID_CLASS_COLORS.MAGE = { r = 0.41, g = 0.8, b = 0.94 }
+
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchorFrame, cfg)
+
+    local lines = spellLines(inst)
+    assertTrue(#lines > 0, "no spell lines were drawn")
+    assertEqual(lines[1].amount.__textColor[1], 0.41)
+    assertEqual(lines[1].share.__textColor[3], 0.94,
+        "both number slots, or one line carries two kinds of number")
+end)
+
+test("With the class colour off, the tooltip keeps its configured text colour", function()
+    -- red under: the class colour applying whether or not it was asked for.
+    local inst, cfg, anchorFrame = bench{ configure = function(c)
+        c.tooltip.classColor = false
+        c.tooltip.textColor  = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+    end }
+    inst.mocks.RAID_CLASS_COLORS.MAGE = { r = 0.41, g = 0.8, b = 0.94 }
+
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchorFrame, cfg)
+    local lines = spellLines(inst)
+    assertEqual(lines[1].amount.__textColor[1], 0.2)
+end)
+
+test("Tooltip shadow reaches the line, and survives the post-Show re-font", function()
+    -- `reapplyFonts` runs AFTER Show, because the show path re-fonts the
+    -- tooltip's own lines. A shadow set only on the first pass would be put back
+    -- without it -- the same trap the font size fell into.
+    -- red under: recording the font in `fontedLines` without its shadow.
+    local inst, cfg, anchorFrame = bench{ configure = function(c)
+        c.tooltip.fontShadow = true
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchorFrame, cfg)
+
+    local lines = spellLines(inst)
+    assertTrue(#lines > 0, "no spell lines were drawn")
+    assertEqual(lines[1].amount.__shadow[1], 1)
+    assertEqual(lines[1].amount.__shadow[2], -1)
+end)
+
+test("The tooltip puts a SHARED line's shadow back when it lets go", function()
+    -- GameTooltip is Blizzard's and every addon in the game draws on it. A
+    -- SetFont left behind is a leak this file has always cleaned up; a shadow is
+    -- the same leak, and a font OBJECT does not carry one -- so restoring the
+    -- face is not enough to take the shadow off.
+    -- red under: restoreFonts putting back SetFontObject alone.
+    local inst, cfg, anchorFrame = bench{ configure = function(c)
+        c.tooltip.fontShadow = true
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchorFrame, cfg)
+
+    -- The shared line widgets are reachable exactly the way an addon reaches
+    -- them in the client: by global name. Collected BEFORE the hide, and the
+    -- collection is asserted non-empty -- a loop over nothing would pass forever.
+    local shared = {}
+    for index = 1, inst.mocks.GameTooltip:NumLines() do
+        local fs = inst.mocks["GameTooltipTextLeft" .. index]
+        if type(fs) == "table" and fs.__shadow and fs.__shadow[1] ~= 0 then
+            shared[#shared + 1] = fs
+        end
+    end
+    assertTrue(#shared > 0, "no shared line carried our shadow -- nothing to restore")
+
+    inst.NS.Tooltip:Hide()
+
+    for _, fs in ipairs(shared) do
+        assertEqual(fs.__shadow[1], 0,
+            "our shadow was left on a line the next addon will draw on")
+        assertEqual(fs.__shadow[2], 0)
+    end
+end)
+
 test("A bar border is applied when asked and cleared off the POOLED line when not", function()
     -- The carrier drawing line 4 of this hover drew line 4 of the last one, so a
     -- player who turns the border off between two hovers keeps it unless the

@@ -414,6 +414,71 @@ test("A cell with its bar switched off keeps its text", function()
     assertEqual(row.cells.DamageDone.bg:IsShown(), true)
 end)
 
+test("Cell text takes the ROW's class color when asked", function()
+    -- A cell is about the player whose row it is, which is the reading the Player
+    -- column has always had and the one `bars.colorMode == "class"` has. The
+    -- header surfaces answer the same setting with the LOCAL player's class
+    -- instead, because they have no row to ask about.
+    -- red under: colouring cell text from NS.PlayerClassRGB, or from a layout
+    -- pass that has no entry to read.
+    local inst, _, row = bench(function(cfg)
+        cfg.text.classColor = true
+        cfg.text.color = { r = 1, g = 1, b = 1, a = 1 }
+    end)
+
+    -- The mock ships every class the same colour, which would let "took SOME
+    -- class colour" pass for "took THIS row's". One class is given its own.
+    inst.mocks.RAID_CLASS_COLORS.MAGE = { r = 0.41, g = 0.8, b = 0.94 }
+
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "MAGE" }), 1)
+
+    local left = row.cells.DamageDone.left.__textColor
+    assertEqual(left[1], 0.41)
+    assertEqual(left[2], 0.8)
+    assertEqual(left[3], 0.94)
+    assertEqual(row.cells.DamageDone.right.__textColor[1], 0.41,
+        "both slots, or the two halves of one figure disagree")
+
+    -- And a DIFFERENT row on the same pooled widget takes its own class, which is
+    -- what makes this per-entry rather than per-layout.
+    inst.mocks.RAID_CLASS_COLORS.WARLOCK = { r = 0.58, g = 0.51, b = 0.79 }
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "WARLOCK" }), 1)
+    assertEqual(row.cells.DamageDone.left.__textColor[1], 0.58,
+        "the pooled cell kept the last row's class")
+end)
+
+test("Class color keeps the configured ALPHA, not the class's own", function()
+    -- RAID_CLASS_COLORS carries no alpha. Taking one from it -- or defaulting to
+    -- 1 -- would make Use class color silently cancel Text opacity, which is one
+    -- setting overruling another.
+    -- red under: SetTextColor(r, g, b) with no fourth argument.
+    local _, _, row = bench(function(cfg)
+        cfg.text.classColor = true
+        cfg.text.color = { r = 1, g = 1, b = 1, a = 0.4 }
+    end)
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "MAGE" }), 1)
+    assertEqual(row.cells.DamageDone.left.__textColor[4], 0.4)
+end)
+
+test("With no class to read, cell text keeps its configured color", function()
+    -- An unknown class means "no class information", and the honest answer is the
+    -- colour the player chose -- never a tenth palette entry invented here.
+    -- red under: falling back to white, or leaving the slot uncoloured.
+    local _, _, row = bench(function(cfg)
+        cfg.text.classColor = true
+        cfg.text.color = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+    end)
+    -- A class this client has never heard of -- which is what a stored row from a
+    -- future build, or a source the meter could not identify, looks like.
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "SOMECLASSTHISBUILDLACKS" }), 1)
+    assertEqual(row.cells.DamageDone.left.__textColor[1], 0.2)
+    assertEqual(row.cells.DamageDone.left.__textColor[3], 0.6)
+end)
+
 test("Text opacity fades the TEXT, and leaves the bar alone", function()
     -- It used to be multiplied into the StatusBar's alpha, and the two
     -- FontStrings are children of that bar — so dropping the text to 10% dropped

@@ -41,6 +41,53 @@ NS.PREFIX = "|cff00ffff[MM]|r"
 -- defers.
 NS.GRAY = "|cff9d9d9d"
 
+--- One player's class color as three plain numbers, or nil when the class is not
+--- known.
+---
+--- ONE READER FOR ALL FOUR SURFACES that can wear a class color: the bars and the
+--- name in modules/Row.lua, that file's cell text under `text.classColor`, the
+--- header lines in modules/Window.lua under `header.classColor` /
+--- `columnHeader.classColor`, and the tooltip under `tooltip.classColor`. Four
+--- private lookups into RAID_CLASS_COLORS is the duplicate that drifts the first
+--- time one of them grows a fallback the others do not have.
+---
+--- `classFilename` is the token WoW's own table is keyed by ("MAGE", "PRIEST")
+--- and is NeverSecret, which is what makes a class color legal to compute at the
+--- height of a pull when every number beside it is opaque (design §4).
+---
+--- NIL IS AN ANSWER, never a tenth color. An unknown class means "no class
+--- information", and every caller decides for itself what to draw instead --
+--- white for a name, the shared neutral for a bar, the configured color for a
+--- line of text. Substituting one here would make that decision for all of them.
+---
+--- The global is read at CALL time, not captured: RAID_CLASS_COLORS is Blizzard's
+--- and this file loads early.
+---
+--- @param classFilename string|nil
+--- @return number|nil r, number|nil g, number|nil b
+function NS.ClassRGB(classFilename)
+    if type(classFilename) ~= "string" then return nil end
+    local classes = _G.RAID_CLASS_COLORS
+    local c = classes and classes[classFilename]
+    if not c then return nil end
+    return c.r, c.g, c.b
+end
+
+--- The LOCAL player's class color, for a surface with no row to ask about.
+---
+--- The title bar and the column-header strip are about the window, not about any
+--- one player, so "class color" there can only mean yours. Read through the same
+--- reader, so the header and a row of the grid can never disagree about what a
+--- warlock looks like.
+---
+--- @return number|nil r, number|nil g, number|nil b
+function NS.PlayerClassRGB()
+    local f = _G.UnitClass
+    if not f then return nil end
+    local _, classFilename = f("player")
+    return NS.ClassRGB(classFilename)
+end
+
 -- The folder name, which is also the AceAddon name, the SavedVariables stem and
 -- the Interface\AddOns path segment. Taken from the vararg rather than written
 -- out so a rename cannot leave one of the four behind.
