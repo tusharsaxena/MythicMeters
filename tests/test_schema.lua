@@ -474,11 +474,11 @@ test("Schema: the export choices are hidden from the panel but NOT from the seam
     assertEqual(NS.GetSetting("export.channel"), "PARTY")
 end)
 
-test("The meta colour mode sets every surface in the window at once", function()
-    -- Nine surfaces each carry a colour mode of their own -- the cells, the bar
-    -- and its background, both header strips, the column strip's background, the
-    -- tooltip's text and both of its bars -- which is right when a player wants
-    -- one of them different and tedious when they want all nine the same.
+test("The meta colour mode sets every bar and header in the window at once", function()
+    -- Seven surfaces each carry a colour mode of their own -- the bar and its
+    -- background, both header strips, the column strip's background and both of
+    -- the tooltip's bars -- which is right when a player wants one of them
+    -- different and tedious when they want them all the same.
     --
     -- The title bar's BACKGROUND is deliberately not among them: it is one strip
     -- over the whole window, so a per-statistic mode could only paint it the sort
@@ -492,14 +492,40 @@ test("The meta colour mode sets every surface in the window at once", function()
 
     for _, path in ipairs({
         "window.bars.colorMode", "window.bars.bgColorMode",
-        "window.text.colorMode",
         "window.header.colorMode",
         "window.columnHeader.colorMode", "window.columnHeader.bgColorMode",
-        "window.tooltip.colorMode", "window.tooltip.barColorMode",
-        "window.tooltip.barBgColorMode",
+        "window.tooltip.barColorMode", "window.tooltip.barBgColorMode",
     }) do
         assertEqual(NS.GetSetting(path), "stat", path .. " did not follow the meta")
     end
+end)
+
+test("The meta colour mode leaves both TEXT surfaces alone", function()
+    -- Text is drawn ON TOP OF a surface the meta broadcasts to. Sending "per
+    -- statistic" to the whole window painted the Damage number in the Damage
+    -- colour over a Damage-coloured bar, and the tooltip's text in the sorted
+    -- stat's colour over bars already carrying it -- the one place where making
+    -- every surface agree is what makes the text stop being readable.
+    -- red under: window.text.colorMode or window.tooltip.colorMode back in
+    -- COLOR_MODE_PATHS.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local before = {
+        text    = NS.GetSetting("window.text.colorMode"),
+        tooltip = NS.GetSetting("window.tooltip.colorMode"),
+    }
+
+    assertTrue(NS.SetByPath("window.colorMode", "stat"))
+
+    assertEqual(NS.GetSetting("window.text.colorMode"), before.text,
+        "the grid's numbers must not follow the meta onto the bars behind them")
+    assertEqual(NS.GetSetting("window.tooltip.colorMode"), before.tooltip,
+        "the tooltip's text must not follow the meta onto its own bars")
+
+    -- Still its own setting, so a player who WANTS the match can ask for it.
+    assertTrue(NS.SetByPath("window.text.colorMode", "stat"))
+    assertEqual(NS.GetSetting("window.text.colorMode"), "stat")
 end)
 
 test("The other three meta rows broadcast their own kind of setting", function()

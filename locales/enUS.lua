@@ -228,8 +228,8 @@ L["What colors the tooltip's text. Class is the class of the player you are hove
 -- background. The column strip below it keeps its own group, because it is a
 -- different strip.
 L["Color mode (all surfaces)"] = "Color mode (all surfaces)"
-L["Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."] =
-    "Set every color mode in this window at once — the bars, the cell text, both header strips and the tooltip. Each of them is still its own setting, so you can change one afterwards without changing the rest."
+L["Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."] =
+    "Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."
 
 L["Bar texture (all surfaces)"] = "Bar texture (all surfaces)"
 L["Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."] =
