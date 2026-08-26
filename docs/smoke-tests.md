@@ -241,8 +241,9 @@ second edge to catch.
 - **A reset leaves your other profiles alone.** Make a second profile on the Profiles page, switch
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
-- **The Frame page's shape.** Three groups, in order: *Size and position*, *Border style*, *Frame
-  behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears
+- **The Frame page's shape.** Three groups, in order: *Size and position* — which now ends with
+  **Background color**, the fill inside the window; it sat under *Border style*, which is the edge
+  around it — then *Border style*, then *Frame behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears
   **once**; a heading printed twice means a row is filed under a group the page has already left.
   There is **no** *Header controls* group here any more — the whole group is on **Header** — and
   **no** "Reset position" button, which is on **General**. There is also **no** "Show resize grip"

@@ -496,9 +496,14 @@ NS.Schema = {
         label = L["Padding"], desc = L["Gap in pixels between the window edge and the rows inside it."],
     },
     {
+        -- IN Size and position, NOT under Border style. It is the fill inside the
+        -- window rather than the edge around it -- the two happened to be
+        -- adjacent, which is not the same as belonging together, and a player
+        -- looking for "what colour is my window" was looking under a heading that
+        -- said border.
         path = "window.frame.backdropColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 0.75 },
-        page = "frame", group = L["Border style"],
+        page = "frame", group = L["Size and position"],
         label = L["Background color"], desc = L["Color drawn behind the rows."],
     },
     {
