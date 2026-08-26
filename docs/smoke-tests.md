@@ -202,9 +202,14 @@ second edge to catch.
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
 - **The tooltip.** *Tooltip behavior* now holds the **scale** slider and the **Targets** pair (they
-  had a group of their own for two rows). **Top left** and **Top right** grow the way **Bottom left**
-  and **Bottom right** do — pick each of the four and watch which way the tooltip opens; a top corner
-  growing across the grid is the bug this replaced. Every **target line carries an icon** now, in the
+  had a group of their own for two rows). **Each anchor is a box of a 3×3 around the cell**: "Top left" is above and to
+  the LEFT, "Left" is beside it and grows left, and so on around the eight. Walk all nine (the ninth
+  is At cursor) and check each opens AWAY from the cell rather than across it. **This is the one
+  place the addon positions the tooltip itself**, so it is also the check for a taint error: if
+  hovering a cell mid-pull ever produces a Lua error naming this addon, the placement is the
+  suspect — it is `pcall`'d and the tooltip should fall back to roughly the right place rather than
+  failing to open, so a tooltip that opens in the WRONG box mid-pull and the right box out of combat
+  is that fallback doing its job. Every **target line carries an icon** now, in the
   column where the spell lines put theirs. The **player's name is class-coloured** on every tooltip
   that names one. **Text color mode reaches the spell name as well as the numbers** — all the text on
   a bar, not two thirds of it. The **fill and the backdrop** each have their own colour, mode and

@@ -562,6 +562,15 @@ comment, which argues the same split from the other side.
 - No automated in-client tests: headless suites plus manual in-game smoke tests.
 - Not published — `X-Curse-Project-ID` and `X-Wago-ID` are deliberately absent from the TOC.
 
+**The tooltip is the one thing this addon positions itself.** Everything else is laid out from config
+and never anchored to a frame that has held a meter value (rule R3) — but the eight tooltip anchors
+name boxes of a 3×3 around the hovered cell, and Blizzard's `SetOwner` tokens cannot express the four
+diagonals at all. So `modules/Tooltip.lua` calls `SetOwner` with the closest token first and then lays
+a `SetPoint` over it. That `SetPoint` anchors GameTooltip to a cell with secret geometry, which is
+the one call in the addon that could raise inside Blizzard's own code while tainted by us. It is
+`pcall`'d, and a failure leaves the token's placement standing: the tooltip opens in roughly the
+right place rather than not at all.
+
 ## Documentation map
 
 Every `.md` under `docs/` appears in exactly one of the three tables below (`documentation-§3`).

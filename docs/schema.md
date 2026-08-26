@@ -590,10 +590,23 @@ one line's two figures.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
 
-`anchor` takes nine values — `CURSOR`, the four edges and the four corners — and each maps to a
-GameTooltip `ANCHOR_*` token. `ANCHOR_NONE` and `ANCHOR_PRESERVE` are deliberately absent: both mean
-"the owner places the tooltip itself", which would require computing a point from a frame that has
-held a secret value.
+`anchor` takes nine values — `CURSOR`, the four edges and the four corners — and the eight that are
+not the cursor name **a box of a 3×3 drawn around the hovered cell**. "Top left" is the box above and
+to the LEFT; "Left" is the box beside it, growing left. Each therefore names a direction the tooltip
+grows in as well as a corner it touches, which is what a player means by picking one.
+
+**Blizzard's tokens cannot say that**: `ANCHOR_TOPLEFT` and `ANCHOR_TOPRIGHT` are both directly above
+the owner, aligned to one edge or the other, so both grow *across* the thing being hovered — and
+there is no token at all for the four diagonals. So `SetOwner` is called with the closest token first,
+which gives the tooltip a valid position and keeps it on screen, and `placeTooltip` then lays the
+exact box over it with a `SetPoint`.
+
+**That `SetPoint` is the one place this addon positions anything against a frame that has held a
+meter value.** A cell handed a secret has secret anchoring data (rule R3), so this is the one call in
+the file that could raise inside Blizzard's own code while tainted by us. It is `pcall`'d, and a
+failure leaves the token's placement standing — the tooltip opens in roughly the right place rather
+than not at all. `ANCHOR_NONE` and `ANCHOR_PRESERVE` are still absent, and now for a simpler reason:
+both mean "the owner places this", which with our own placement gone would be no placement at all.
 
 `maxSpells = 0` means "every spell the breakdown collected", which is the collector's own ceiling of
 64 rather than literally unbounded — the "and N more" line stays honest about anything past it.

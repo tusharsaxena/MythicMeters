@@ -402,36 +402,56 @@ end
 -- Anchoring
 -- ---------------------------------------------------------------------------
 --
--- GameTooltip's own anchor tokens, keyed by the setting's value. The setting is
--- worded for a player ("Bottom right") and the token is Blizzard's; keeping the
--- translation in one table is what stops a typo'd "ANCHOR_BOTTOMRIGHT" from
--- silently falling back to the cursor.
+-- WHERE THE TOOLTIP GOES, as the cell of a 3x3 grid drawn around the thing being
+-- hovered. "Top left" is the box above and to the LEFT of the cell; "Left" is the
+-- box beside it, vertically centred; and so on around the eight. Every one of
+-- them therefore names a direction the tooltip grows in as well as a corner it
+-- touches, which is what a player means by picking one.
 --
--- NOTE ON SECRET GEOMETRY: we set the OWNER and let the client place the
--- tooltip. We never read GetPoint / GetLeft / GetWidth off the anchor frame to
--- position anything ourselves — a cell that has been handed a secret value has
--- secret geometry, and reading it back is rule R3's exact prohibition.
+-- BLIZZARD'S TOKENS CANNOT SAY THIS. ANCHOR_TOPLEFT and ANCHOR_TOPRIGHT put the
+-- tooltip directly ABOVE the owner, aligned to one edge or the other, so both of
+-- them grow across the thing you are hovering rather than away from it; there is
+-- no token at all for the four diagonal boxes. So the token is the FALLBACK and
+-- the pair below is the placement.
 --
--- ANCHOR_NONE and ANCHOR_PRESERVE are deliberately absent. Both mean "the owner
--- places the tooltip itself", and placing it ourselves would mean computing a
--- point from the anchor frame — which is the read rule R3 forbids.
+-- `tip` is the tooltip's own corner and `owner` is the corner of the hovered
+-- frame it is put against. Reading one row: TOPLEFT puts the tooltip's
+-- BOTTOMRIGHT on the cell's TOPLEFT, so it sits up and to the left, growing that
+-- way.
+local ANCHOR_POINTS = {
+    TOPLEFT     = { tip = "BOTTOMRIGHT", owner = "TOPLEFT" },
+    TOP         = { tip = "BOTTOM",      owner = "TOP" },
+    TOPRIGHT    = { tip = "BOTTOMLEFT",  owner = "TOPRIGHT" },
+    LEFT        = { tip = "RIGHT",       owner = "LEFT" },
+    RIGHT       = { tip = "LEFT",        owner = "RIGHT" },
+    BOTTOMLEFT  = { tip = "TOPRIGHT",    owner = "BOTTOMLEFT" },
+    BOTTOM      = { tip = "TOP",         owner = "BOTTOM" },
+    BOTTOMRIGHT = { tip = "TOPLEFT",     owner = "BOTTOMRIGHT" },
+}
+
+-- GameTooltip's own anchor tokens, keyed by the setting's value, and now the
+-- FALLBACK rather than the placement: SetOwner is called with one of these first
+-- so the tooltip always has a valid position, and the exact placement above is
+-- then laid over it.
 --
--- THE TWO TOP CORNERS ARE CROSSED, DELIBERATELY. Blizzard's ANCHOR_TOPLEFT and
--- ANCHOR_TOPRIGHT grow the opposite way from the bottom pair of the same names:
--- picking "Top left" put the tooltip's left edge on the cell and grew it
--- RIGHTWARD, across the grid, while "Bottom left" grew leftward away from it.
--- Two settings that read as a matched pair behaving as opposites is the setting
--- lying about itself, so the SETTING's names describe the direction and the map
--- translates. A player picking "Top left" gets a tooltip that grows left, like
--- the Bottom left they already have.
+-- THE ORDER MATTERS AND IS THE SAFETY NET. Anchoring GameTooltip to a cell that
+-- has been handed a meter value gives the tooltip secret anchoring data (rule
+-- R3), and this addon's execution is tainted -- so the SetPoint below is the one
+-- call in this file that could raise inside Blizzard's own code, at the worst
+-- possible moment. It is pcall'd, and a failure leaves the token's placement
+-- standing: the tooltip opens in roughly the right place rather than not at all.
+--
+-- ANCHOR_NONE and ANCHOR_PRESERVE are still absent, and for the same reason as
+-- before: both mean "the owner places this", which with no placement of our own
+-- would be no placement at all.
 local ANCHOR_TOKENS = {
     CURSOR      = "ANCHOR_CURSOR",
     TOP         = "ANCHOR_TOP",
     BOTTOM      = "ANCHOR_BOTTOM",
     LEFT        = "ANCHOR_LEFT",
     RIGHT       = "ANCHOR_RIGHT",
-    TOPLEFT     = "ANCHOR_TOPRIGHT",
-    TOPRIGHT    = "ANCHOR_TOPLEFT",
+    TOPLEFT     = "ANCHOR_TOPLEFT",
+    TOPRIGHT    = "ANCHOR_TOPRIGHT",
     BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
     BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
 }
@@ -457,6 +477,28 @@ local function offset(v)
     if v < -400 then return -400 end
     if v > 400 then return 400 end
     return v
+end
+
+--- Put the tooltip in the box the setting names, or leave the token's placement
+--- alone.
+---
+--- THE OFFSETS ARE APPLIED HERE rather than through SetOwner, so they mean the
+--- same thing whichever path placed the tooltip: positive x moves it right and
+--- positive y moves it up, from wherever the anchor put it.
+---
+--- @param anchorFrame table
+--- @param config table
+local function placeTooltip(anchorFrame, config)
+    local at = ANCHOR_POINTS[config.anchor]
+    if not (at and GameTooltip.SetPoint and GameTooltip.ClearAllPoints) then return end
+
+    -- pcall'd: see the note on ANCHOR_TOKENS above. A raise here means the
+    -- tooltip keeps the placement SetOwner already gave it.
+    pcall(function()
+        GameTooltip:ClearAllPoints()
+        GameTooltip:SetPoint(at.tip, anchorFrame, at.owner,
+            offset(config.offsetX), offset(config.offsetY))
+    end)
 end
 
 --- Claim GameTooltip for this hover, or answer false if it must not open.
@@ -494,6 +536,7 @@ local function openTooltip(anchorFrame, config)
 
     GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_CURSOR",
         offset(config.offsetX), offset(config.offsetY))
+    placeTooltip(anchorFrame, config)
     GameTooltip:ClearLines()
 
     -- Line spacing is a property of the SHARED tooltip, like the minimum width,

@@ -1043,28 +1043,19 @@ end)
 -- ---------------------------------------------------------------------------
 
 test("Every anchor the schema offers resolves to a real GameTooltip token", function()
-    -- The setting is worded for a player ("Bottom right") and the token is
-    -- Blizzard's, so the translation table is the one thing standing between a
-    -- typo'd "ANCHOR_BOTTOMRIGHT" and a silent fallback to the cursor. Every value
-    -- the dropdown can produce is walked, which is what makes adding a ninth
-    -- anchor without adding its token a failing test rather than a shrug.
-    --
-    -- THE TWO TOP CORNERS ARE CROSSED, and that is the interesting row of this
-    -- table rather than a typo in it. Blizzard's top pair grows the opposite way
-    -- from its bottom pair of the same names, so "Top left" put the tooltip's
-    -- left edge on the cell and grew it rightward across the grid while "Bottom
-    -- left" grew leftward away from it. The SETTING's names describe the
-    -- direction; the map translates.
-    -- red under: dropping any entry from ANCHOR_TOKENS, or "fixing" the crossed
-    -- pair back to matching names.
+    -- The token is the FALLBACK now, not the placement: SetOwner is called with
+    -- one so the tooltip always has a valid position, and placeTooltip lays the
+    -- exact box over it. A missing token would leave a tooltip with nothing to
+    -- fall back to if our own SetPoint raises.
+    -- red under: dropping any entry from ANCHOR_TOKENS.
     local expected = {
         CURSOR      = "ANCHOR_CURSOR",
         TOP         = "ANCHOR_TOP",
         BOTTOM      = "ANCHOR_BOTTOM",
         LEFT        = "ANCHOR_LEFT",
         RIGHT       = "ANCHOR_RIGHT",
-        TOPLEFT     = "ANCHOR_TOPRIGHT",
-        TOPRIGHT    = "ANCHOR_TOPLEFT",
+        TOPLEFT     = "ANCHOR_TOPLEFT",
+        TOPRIGHT    = "ANCHOR_TOPRIGHT",
         BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
         BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
     }
@@ -1075,6 +1066,45 @@ test("Every anchor the schema offers resolves to a real GameTooltip token", func
         assertEqual(inst.mocks.GameTooltip.__anchor, token,
             "anchor " .. value .. " did not reach the client")
     end
+end)
+
+test("Each anchor puts the tooltip in the box of a 3x3 around the cell", function()
+    -- "Top left" is the box ABOVE AND TO THE LEFT of the cell, not the box above
+    -- it aligned to its left edge -- so it grows away from the thing you are
+    -- hovering rather than across it. Blizzard's tokens cannot say that: their
+    -- TOPLEFT and TOPRIGHT are both directly above, and there is no token at all
+    -- for the four diagonals.
+    -- red under: going back to SetOwner's placement.
+    local EXPECTED = {
+        TOPLEFT     = { "BOTTOMRIGHT", "TOPLEFT" },
+        TOP         = { "BOTTOM",      "TOP" },
+        TOPRIGHT    = { "BOTTOMLEFT",  "TOPRIGHT" },
+        LEFT        = { "RIGHT",       "LEFT" },
+        RIGHT       = { "LEFT",        "RIGHT" },
+        BOTTOMLEFT  = { "TOPRIGHT",    "BOTTOMLEFT" },
+        BOTTOM      = { "TOP",         "BOTTOM" },
+        BOTTOMRIGHT = { "TOPLEFT",     "BOTTOMRIGHT" },
+    }
+
+    for value, want in pairs(EXPECTED) do
+        local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.anchor = value end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+        local tip, relTo, rel = inst.mocks.GameTooltip:GetPoint(1)
+        assertTrue(tip ~= nil, value .. ": the tooltip was never placed")
+        assertEqual(tip, want[1], value .. ": the tooltip's own corner")
+        assertEqual(rel, want[2], value .. ": the corner of the cell it is put against")
+        assertTrue(relTo == anchor, value .. ": anchored to something other than the cell")
+    end
+end)
+
+test("At the cursor, nothing is placed by us at all", function()
+    -- The cursor is not a corner of anything, and ANCHOR_CURSOR is the one token
+    -- that already does exactly what its name says.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.anchor = "CURSOR" end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+    assertEqual(inst.mocks.GameTooltip.__anchor, "ANCHOR_CURSOR")
+    assertNil(inst.mocks.GameTooltip:GetPoint(1), "the cursor anchor was overridden")
 end)
 
 test("The anchor dropdown offers nothing the token table cannot resolve", function()
