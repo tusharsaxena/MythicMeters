@@ -58,6 +58,22 @@ Constants.FONT_MONO = NS.MediaFont and NS.MediaFont("JetBrains Mono")
 -- what was registered.
 Constants.FONT_MONO_NAME = "JetBrains Mono"
 
+-- The About/landing-page logo, drawn by LibKa0s' O.BuildLandingPage through the
+-- `logo` field of the spec in settings/OptionsSetup.lua. That call site has
+-- always reached for this constant; until the collection-wide logo set landed
+-- there was no art to point it at, and a nil `logo` makes the library skip the
+-- block entirely — which is why the landing page had no picture on it.
+--
+-- THE .tga IS THE ONLY LOADABLE FORM. The client cannot read the .png master or
+-- the .jpg render sitting beside it in media/logos/; both are there for the
+-- project page and for regenerating this file, and .pkgmeta keeps them out of
+-- the packaged build. A path to a file that is not present draws nothing and
+-- raises nothing, so this name must track the file on disk exactly.
+--
+-- 300x300 is the art's native size AND `LANDING_LOGO`, the size the library
+-- draws it at, so it renders pixel-exact rather than resampled.
+Constants.LOGO = "Interface\\AddOns\\MultiMeters\\media\\logos\\multimeters.logo.tga"
+
 -- ---------------------------------------------------------------------------
 -- Enum resolution
 -- ---------------------------------------------------------------------------
