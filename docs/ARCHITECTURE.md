@@ -33,10 +33,19 @@ Three things define the shape of everything else:
   nearly empty: an array of windows, an id counter, two addon-wide toggles, and the `export` group,
   which remembers an **action** the player takes rather than how any one window looks.
 
-Nine statistics are catalogued in `core/Constants.lua`; six ship enabled on a new window (Damage,
-Healing, Interrupts, Dispels, Avoidable Damage, Deaths). Adding a tenth is one row in that catalog —
+Eight statistics are catalogued in `core/Constants.lua`; six ship enabled on a new window (Damage,
+Healing, Interrupts, Dispels, Avoidable Damage, Deaths). Adding a ninth is one row in that catalog —
 the column editor, the defaults, the aggregator's read loop, the sort-column dropdown and the tooltip
 header all read the same table.
+
+`EnemyDamageTaken` is **read but not catalogued**. The meter offers it and `modules/Targets.lua`
+walks it to build "which enemies this player hit", but it is not a column: every catalog row answers
+a question about a group member, and that one answers a question about an enemy, so offering it as a
+column asked a single grid row to be both a player and a mob. `Constants.STAT_BY_KEY` is therefore
+"may this be a column" and `Constants.READABLE_STAT_BY_KEY` — the catalog plus
+`Constants.OFF_CATALOG_STATS` — is "may this be read", which is the lookup `modules/Provider.lua`
+alone uses. It returns as its own window type, whose rows are enemies
+([issue #2](https://github.com/tusharsaxena/MultiMeters/issues/2)).
 
 Chrome comes from LibKa0s-Core-1.0's shared `SKIN` / `ApplySkin`, never a private lookalike, so the
 meter window, the debug console and the perf step panel wear the same Ka0s edge as every sibling

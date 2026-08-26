@@ -80,7 +80,12 @@ local Secrets     = NS.Secrets
 local State       = NS.State
 local Const       = NS.Constants
 local MSG         = Const.MSG
-local STAT_BY_KEY = Const.STAT_BY_KEY
+-- READABLE, not STAT_BY_KEY: this file answers for every stat the meter holds,
+-- which is the grid's columns PLUS the off-catalog reads modules/Targets.lua
+-- lives on (`EnemyDamageTaken`, which is deliberately not a column — issue #2).
+-- The narrower lookup here would answer "unknown stat" for a read the addon
+-- makes on every tooltip that shows targets.
+local STAT_BY_KEY = Const.READABLE_STAT_BY_KEY
 
 -- Perf bracket upvalue, resolved ONCE at load and never through an NS lookup on
 -- the read path (performance-§2). core/PerfSetup.lua is in the core block, so

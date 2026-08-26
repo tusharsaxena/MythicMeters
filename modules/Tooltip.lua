@@ -2017,9 +2017,9 @@ end
 --- column, and the count of lines drawn.
 ---
 --- EVERY LINE WEARS ITS OWN STATISTIC'S COLOR, label and amount alike — the
---- catalog's palette (`Const.STAT_COLORS`), the same nine colors a bar takes
+--- catalog's palette (`Const.STAT_COLORS`), the same eight colors a bar takes
 --- under `bars.colorMode == "stat"`, and it wears them WHATEVER that setting says.
---- This is the one place all nine statistics are on screen at once, so the color
+--- This is the one place all eight statistics are on screen at once, so the color
 --- is doing work here that it is only optionally doing on a bar: it is what ties
 --- the "Healing" line in this list to the Healing column in the grid behind it.
 --- The setting governs the BARS; this list is not a bar.
@@ -2028,7 +2028,7 @@ end
 --- same hue at a lower level rather than a flat gray, so the two groups stay
 --- distinguishable without a hidden statistic losing its identity.
 ---
---- One provider call per statistic. That is up to nine calls on a hover, and it
+--- One provider call per statistic. That is up to eight calls on a hover, and it
 --- is the right trade: the totals live on the per-source read anyway, and
 --- caching them would mean holding meter values across time — which is exactly
 --- the thing this addon does not do.

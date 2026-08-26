@@ -200,8 +200,8 @@ end
 -- header.
 --
 -- THE CATALOG OWNS THE PALETTE, not this file: modules/Tooltip.lua colors the
--- name tooltip's "All statistics" labels with the same nine colors whatever this
--- window's `colorMode` is set to, and two copies of nine colors is the duplicate
+-- name tooltip's "All statistics" labels with the same eight colors whatever this
+-- window's `colorMode` is set to, and two copies of eight colors is the duplicate
 -- that drifts the first time one of them is tuned.
 local STAT_COLORS = Const.STAT_COLORS
 

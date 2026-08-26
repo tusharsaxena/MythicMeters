@@ -24,9 +24,13 @@ Retail only · English only.
 
 ## In scope
 
-- **Nine statistics**, catalogued in `core/Constants.lua`: Damage, Healing, Absorbs, Interrupts,
-  Dispels, Damage Taken, Avoidable Damage, Deaths, Enemy Damage Taken. Six are enabled on a new
-  window; adding a tenth is one row in that catalog and nothing else.
+- **Eight statistics**, catalogued in `core/Constants.lua`: Damage, Healing, Absorbs, Interrupts,
+  Dispels, Damage Taken, Avoidable Damage, Deaths. Six are enabled on a new window; adding a ninth is
+  one row in that catalog and nothing else. `EnemyDamageTaken` is deliberately **not** among them —
+  it describes an enemy rather than a group member, so it needs a window type whose rows are enemies
+  rather than a column on this one ([issue #2](https://github.com/tusharsaxena/MultiMeters/issues/2)).
+  The addon still READS it: it is what `modules/Targets.lua` cross-references to answer "which enemies
+  this player hit".
 - **Multiple independent windows.** A window is an instance, not a singleton — there are no global
   display settings. `frame`, `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`,
   `columns` and `data` all live inside one window's config, which is what makes multi-window and

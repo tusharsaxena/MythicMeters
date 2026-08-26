@@ -1089,17 +1089,18 @@ meant to change; a difference between the two lists is the bug.
 
 - **The header line is exactly 26 columns**, and it is:
   ```
-  session,duration,name,class,spec,role,damage_done,damage_done_ps,damage_done_pct,healing_done,healing_done_ps,healing_done_pct,absorbs,absorbs_pct,interrupts,interrupts_pct,dispels,dispels_pct,damage_taken,damage_taken_pct,avoidable_damage_taken,avoidable_damage_taken_pct,deaths,deaths_pct,enemy_damage_taken,enemy_damage_taken_pct
+  session,duration,name,class,spec,role,damage_done,damage_done_ps,damage_done_pct,healing_done,healing_done_ps,healing_done_pct,absorbs,absorbs_pct,interrupts,interrupts_pct,dispels,dispels_pct,damage_taken,damage_taken_pct,avoidable_damage_taken,avoidable_damage_taken_pct,deaths,deaths_pct
   ```
   Names are `snake_case`, **derived from the stat keys and never localized** — a German client must
   produce a file a colleague on an English client can open with the same formulas. Run one export on
   a non-English locale if you can and diff the header line against the one above: it must be
   byte-identical.
 - **`_ps` appears twice and only twice**, on Damage and Healing — the two `isRate` stats. `_pct`
-  appears once per stat, nine times.
+  appears once per stat, eight times.
 - **Every stat in the catalog is present, not the window's columns.** Export from a window showing
-  only Damage and confirm the CSV still carries all nine — the export is "the data", not "what is on
-  screen".
+  only Damage and confirm the CSV still carries all eight — the export is "the data", not "what is on
+  screen". `enemy_damage_taken` is **not** among them and must not come back: it is read by the
+  Targets tooltip section, but it is not a column and so not a CSV field (issue #2).
 - **Values are raw integers.** `4821993`, never `4.8M`. A spreadsheet wants the number; the
   abbreviation belongs to the chat dump. `_pct` is a bare two-decimal number with no `%` sign.
 - **`session` and `duration` repeat on every row** rather than sitting in a preamble, so two exports

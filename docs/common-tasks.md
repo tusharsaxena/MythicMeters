@@ -223,7 +223,7 @@ and in catalog order:
 
 Header names come from `Export.HeaderName`, which lowercases and underscores the stat key
 (`AvoidableDamageTaken` → `avoidable_damage_taken`). It is a **rule rather than a table** on purpose:
-a hand-written list of nine names goes stale the first time the catalog grows a tenth stat, and it
+a hand-written list of eight names goes stale the first time the catalog grows a ninth stat, and it
 goes stale silently. It is also emphatically **not** `L[stat.label]` — a CSV is a data interchange,
 and a German client must produce a file a colleague on an English client can open with the same
 formulas.

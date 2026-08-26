@@ -771,8 +771,10 @@ end
 --- while Blizzard's own meter and every other addon showed them.
 ---
 --- ENEMIES ARE STILL REFUSED, and that is what keeps this safe: without the
---- `sourceDisplayType` gate the EnemyDamageTaken column would put every mob in
---- the pull on the grid as a row. `mergePets` is not consulted, because merging
+--- `sourceDisplayType` gate any read that reaches an enemy source would put a mob
+--- on the grid as a row. No column asks for one today — EnemyDamageTaken is no
+--- longer in the catalog (issue #2) — but the gate is what makes that a fact
+--- about this function rather than a fact about the column list. `mergePets` is not consulted, because merging
 --- is addition into an OWNER's row and there is no owner to add into — the whole
 --- reason we are here.
 ---
@@ -1524,7 +1526,6 @@ local PREVIEW_SCALE = {
     Absorbs              =  480000,
     DamageTaken          =  910000,
     AvoidableDamageTaken =  120000,
-    EnemyDamageTaken     = 3100000,
     Interrupts           =       9,
     Dispels              =       7,
     Deaths               =       3,

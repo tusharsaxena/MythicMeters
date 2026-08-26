@@ -31,7 +31,8 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         resolves NS.version at file scope
 │   ├── Constants.lua   — NS.Constants / NS.Const: the STAT CATALOG (9 rows), the
 │                         per-stat palette (STAT_COLORS + STAT_DIM, worn by both
-│                         a bar and a name-tooltip line), the
+│                         a bar and a name-tooltip line), the off-catalog reads
+│                         (EnemyDamageTaken — read, never a column), the
 │                         enum resolutions, the MSG bus catalog (14 names), throttle
 │                         bounds, pool and row caps, the shipped mono font
 │   ├── Namespace.lua   — identity (NS.PREFIX, NS.name, NS.version, NS.GRAY) and
@@ -107,7 +108,8 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         the name column's icons, the bar colors, the mouse
 │                         hand-off. Nothing here looks at a number
 │   ├── Targets.lua     — the enemy cross-reference: reconstructs "who did this
-│                         player hit" out of the EnemyDamageTaken column, and
+│                         player hit" out of the EnemyDamageTaken data — which is
+│                         read, never a column of this grid (issue #2) — and
 │                         refuses outright rather than summing secrets
 │   ├── Tooltip.lua     — the per-cell spell breakdown, the all-statistics
 │                         summary on a name and the Targets section, all on
@@ -150,7 +152,7 @@ own strings entirely.
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
 | `Compat.lua` | All 28 cross-patch shims — the TOC-manifest reader is no longer among them; it moved to `EnvSetup.lua`. Never inspects a meter value; reading a field off a session table and passing it on is not inspection | `NS.Compat` | `_G` only |
-| `Constants.lua` | The stat catalog, the per-stat palette (`STAT_COLORS`, worn unchanged by both a bar and a name-tooltip line, plus the `STAT_DIM` factor), enum resolutions, the `MSG` catalog, timing and pool bounds, the monospace font path (resolved from the LibKa0s payload, falling back to the client font) and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum`, `NS.MediaFont` |
+| `Constants.lua` | The stat catalog, the per-stat palette (`STAT_COLORS`, worn unchanged by both a bar and a name-tooltip line, plus the `STAT_DIM` factor), the two stat lookups — `STAT_BY_KEY` ("may this be a column") and `READABLE_STAT_BY_KEY` ("may this be read", the catalog plus `OFF_CATALOG_STATS`), enum resolutions, the `MSG` catalog, timing and pool bounds, the monospace font path (resolved from the LibKa0s payload, falling back to the client font) and its LSM key | `NS.Constants`, `NS.Const` | `_G.Enum`, `NS.MediaFont` |
 | `EnvSetup.lua` | The LibKa0s-Env seam: this addon's TOC manifest, and the one place the manifest-then-constant version pair is resolved. Repeats the reader ladder itself on a degraded install, so an install missing LibKa0s still reports its packaged version | `NS.Meta`, `NS.Version` | `LibKa0s-Env-1.0`, `NS.version` at call time. Owns no state and registers no event |
 | `Namespace.lua` | Addon identity and the bus-target factory. No side effects at all | `NS.PREFIX`, `NS.GRAY`, `NS.name`, `NS.version`, `NS.FALLBACK_VERSION`, `NS.NewBusTarget` | `NS.Meta` |
 | `State.lua` | The four session flags, each with exactly one named writer, and `State.Cache` / `State.WipeCache` (wipes **in place**, so a module may hold its sub-table as an upvalue) | `NS.State` | `NS.Constants.MSG` |

@@ -123,8 +123,8 @@ Constants.SESSION_TYPE = {
 }
 
 --- Enum.DamageMeterSourceDisplayType. Rows are filtered to Ally; Enemy rows are
---- what the EnemyDamageTaken column is made of, and None is the "not a
---- displayable source" marker.
+--- what the enemy column modules/Targets.lua reads is made of, and None is the
+--- "not a displayable source" marker.
 Constants.SOURCE_DISPLAY_TYPE = {
     None  = enumValue("DamageMeterSourceDisplayType", "None",  0),
     Ally  = enumValue("DamageMeterSourceDisplayType", "Ally",  1),
@@ -261,10 +261,39 @@ Constants.STATS = {
         isCount = true,
         isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = true,
     },
+}
+
+-- ENEMY DAMAGE TAKEN IS DELIBERATELY NOT A CATALOG ROW — issue #2.
+--
+-- It was one, disabled by default, and it did not belong: every row above
+-- answers a question about a GROUP MEMBER ("how much did Alpha do"), and this
+-- one answers a question about an ENEMY ("how much did the boss take"). Offered
+-- as a column it asked one grid row to be both a player and a mob, which the
+-- roster filter in modules/Aggregator.lua then has to special-case.
+--
+-- `STAT_TYPE.EnemyDamageTaken` above STAYS, and is still read: modules/Targets.lua
+-- walks that column to build "which enemies this player hit", and
+-- core/Diagnostics.lua probes it. Removing the catalog row removes the COLUMN,
+-- not the data.
+--
+-- It comes back as its own window type, whose rows are enemies — see issue #2.
+-- A profile that already holds an EnemyDamageTaken column keeps it in the saved
+-- variables and is not migrated: every consumer resolves a stored column through
+-- STAT_BY_KEY and drops what it cannot resolve, and settings/Columns.lua still
+-- LISTS the orphan so a player can see it and remove it.
+
+--- The one stat this addon READS without offering it as a column.
+---
+--- Shaped like a catalog row because the provider takes it exactly as it takes
+--- one — it wants `enumValue` and nothing else — but deliberately NOT in
+--- `Constants.STATS`, because everything that builds a column list walks that
+--- array and this is not a column (issue #2). modules/Targets.lua and
+--- core/Diagnostics.lua are its only readers.
+Constants.OFF_CATALOG_STATS = {
     {
         key = "EnemyDamageTaken", enumValue = Constants.STAT_TYPE.EnemyDamageTaken,
         label = "Enemy Damage Taken", shortLabel = "EDT", headerLabel = "Enemy Taken",
-        isRate = false, defaultWidth = Constants.COLUMN_WIDTH, defaultEnabled = false,
+        isRate = false,
     },
 }
 
@@ -281,17 +310,17 @@ end
 --- wear it may read it from: modules/Row.lua paints a bar with it when
 --- `bars.colorMode == "stat"`, and modules/Tooltip.lua colors the name tooltip's
 --- "All statistics" labels with it ALWAYS — the palette is how you tell one
---- column from another at a glance, and a tooltip that lists all nine of them at
---- once is the surface that needs that most. Keyed by the catalog's stat key.
+--- column from another at a glance, and a tooltip that lists all eight of them
+--- at once is the surface that needs that most. Keyed by the catalog's stat key.
 ---
---- NINE HUES THAT STAY APART. The palette's only job is telling one column from
+--- EIGHT HUES THAT STAY APART. The palette's only job is telling one column from
 --- another at a glance, so what matters is not that any one color is pretty but
 --- that no two are confusable — red · green · steel blue · gold · violet ·
---- turquoise · orange · magenta · coral. Each has to work in both of its
+--- turquoise · orange · magenta. Each has to work in both of its
 --- surfaces at once: behind white text on a bar, and AS text on the tooltip's
 --- dark backing. That rules out the two shapes this palette has already tried
 --- and lost: a color dark and muted enough to be a comfortable bar backing
---- (Damage Taken's old brown, Enemy Damage Taken's old plum) is barely legible
+--- (Damage Taken's old brown) is barely legible
 --- as text, and a NEUTRAL (Deaths' old gray) reads as "disabled" rather than as
 --- a statistic, which is the one thing a palette entry must never say.
 Constants.STAT_COLORS = {
@@ -303,7 +332,6 @@ Constants.STAT_COLORS = {
     DamageTaken          = { 0.25, 0.78, 0.75 },  -- turquoise
     AvoidableDamageTaken = { 0.80, 0.45, 0.15 },  -- orange
     Deaths               = { 0.92, 0.25, 0.68 },  -- magenta
-    EnemyDamageTaken     = { 0.95, 0.48, 0.40 },  -- coral
 }
 
 --- How far a statistic NOT on screen in the hovered window is taken down.
@@ -319,6 +347,23 @@ Constants.STAT_COLORS = {
 --- palette only does its job — tying a tooltip line to a column in the grid
 --- behind it — when the two are literally the same color.
 Constants.STAT_DIM = 0.6
+
+--- key -> ANY stat the provider may be asked for: every column plus every
+--- off-catalog read.
+---
+--- Two lookups, and the difference between them is the point. `STAT_BY_KEY`
+--- answers "may this be a column", which is the question every settings page,
+--- every layout and every export asks. This one answers "may this be read",
+--- which is the question modules/Provider.lua asks — and only it. A key in
+--- neither is a column configured against a build with more stats than this one,
+--- and stays named rather than silently skipped.
+Constants.READABLE_STAT_BY_KEY = {}
+for key, stat in pairs(Constants.STAT_BY_KEY) do
+    Constants.READABLE_STAT_BY_KEY[key] = stat
+end
+for _, stat in ipairs(Constants.OFF_CATALOG_STATS) do
+    Constants.READABLE_STAT_BY_KEY[stat.key] = stat
+end
 
 --- The default column set, in display order, left to right after the name
 --- column: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deaths

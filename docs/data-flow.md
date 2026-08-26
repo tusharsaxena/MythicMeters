@@ -566,6 +566,12 @@ addon where the display **withholds information rather than decoration** while t
 active. Worth understanding before touching it, because the reasoning inverts the rule everywhere
 else.
 
+**`EnemyDamageTaken` here is the METER's column, not one of this addon's.** The addon does not offer
+it as a grid column — a grid row is a group member and an enemy is not one
+([issue #2](https://github.com/tusharsaxena/MultiMeters/issues/2)) — but it reads it, and this
+section is the only reason it does. `Constants.READABLE_STAT_BY_KEY` is what lets
+`modules/Provider.lua` answer for a stat that is deliberately absent from the catalog.
+
 **It is a join, not a read.** A `DamageDone` source knows its spells and nothing about who they hit.
 The information is filed under the other party: an `EnemyDamageTaken` source is one enemy, its
 `combatSpells` are the spells that hit it, and each carries `combatSpellDetails.unitName` — the

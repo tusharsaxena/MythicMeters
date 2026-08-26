@@ -16,7 +16,7 @@ badge and any count quoted in the docs must agree with it.
 - loadorder: the LibKa0s seams load in the order their headers pin
 - loadorder: core/MultiMeters.lua loads after every core/ setup file
 
-### test_constants.lua (21)
+### test_constants.lua (23)
 
 - Constants: NS.Const and NS.Constants are the same table
 - Constants: the chat prefix is the cyan [MM] tag and closes its color code
@@ -27,6 +27,8 @@ badge and any count quoted in the docs must agree with it.
 - Constants: every STATS row is fully populated and correctly typed
 - Constants: no two STATS rows share a key or an enum value
 - Constants: STAT_BY_KEY holds exactly the catalog, by identity
+- Constants: EnemyDamageTaken is READABLE but is NOT a column
+- Constants: READABLE_STAT_BY_KEY is a superset of STAT_BY_KEY
 - Constants: each stat key is the name of the enum value it carries
 - Constants: DEFAULT_STAT_KEYS is derived from defaultEnabled, in catalog order
 - Constants: the six default columns are the design's six
@@ -1388,7 +1390,7 @@ badge and any count quoted in the docs must agree with it.
 | Suite | Cases |
 |-------|------:|
 | test_loadorder.lua | 7 |
-| test_constants.lua | 21 |
+| test_constants.lua | 23 |
 | test_secrets.lua | 38 |
 | test_compat.lua | 33 |
 | test_state.lua | 17 |
@@ -1425,4 +1427,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1263** |
+| **Total** | **1265** |

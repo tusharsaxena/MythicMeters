@@ -347,8 +347,9 @@ local WINDOW_TEMPLATE = {
         -- when they are one row's two figures.
         textColor          = { r = 1, g = 1, b = 1, a = 1 },
 
-        -- Which enemies this player hit, cross-referenced out of the
-        -- EnemyDamageTaken column by modules/Targets.lua. OFF by default: it is
+        -- Which enemies this player hit, cross-referenced out of the meter's
+        -- EnemyDamageTaken data by modules/Targets.lua — which is NOT a column in
+        -- this addon's grid (issue #2), only a source it reads. OFF by default: it is
         -- one provider call per enemy on a hover, and it is a summation, so it is
         -- absent for the whole of a pull (see that file's header).
         showTargets        = false,

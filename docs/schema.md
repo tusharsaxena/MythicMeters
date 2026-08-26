@@ -447,8 +447,10 @@ columns = {
 }
 ```
 
-The catalog offers three more that ship disabled: `Absorbs`, `DamageTaken`, `EnemyDamageTaken`.
-`Dps` and `Hps` are absent from the catalog entirely and never queried — `amountPerSecond` ships on
+The catalog offers two more that ship disabled: `Absorbs` and `DamageTaken`. `EnemyDamageTaken` is
+no longer offered as a column at all — it is read, never catalogued (issue #2), and a profile that
+still holds such a column is not migrated: the renderer drops it and the Columns page lists it so it
+can be removed by hand. `Dps` and `Hps` are absent from the catalog entirely and never queried — `amountPerSecond` ships on
 the same source row as `totalAmount`, so one `DamageDone` read fills both halves of the column.
 
 ### `data`

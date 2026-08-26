@@ -202,13 +202,16 @@ test("Export.HeaderName turns a catalog key into snake_case", function()
     assertEqual(HeaderName("DamageDone"), "damage_done")
     assertEqual(HeaderName("HealingDone"), "healing_done")
     assertEqual(HeaderName("Absorbs"), "absorbs")
-    assertEqual(HeaderName("EnemyDamageTaken"), "enemy_damage_taken")
     assertEqual(HeaderName("AvoidableDamageTaken"), "avoidable_damage_taken")
+    -- Not a catalog key and not a CSV field — `EnemyDamageTaken` is read, never
+    -- a column (issue #2). The RULE still has to hold for it, because the rule is
+    -- a gsub over CamelCase and knows nothing about what is catalogued.
+    assertEqual(HeaderName("EnemyDamageTaken"), "enemy_damage_taken")
 end)
 
 test("Export.HeaderName covers every key in the catalog and invents no gaps", function()
-    -- The rule is one gsub over CamelCase, and it has to hold for the tenth stat
-    -- somebody adds as well as the nine that are there. A hand-written table of
+    -- The rule is one gsub over CamelCase, and it has to hold for the ninth stat
+    -- somebody adds as well as the eight that are there. A hand-written table of
     -- header names would go stale silently — the new column would export under
     -- whatever the fallback picked — so this walks the catalog rather than
     -- restating it.

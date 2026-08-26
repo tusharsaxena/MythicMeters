@@ -121,6 +121,45 @@ test("Constants: STAT_BY_KEY holds exactly the catalog, by identity", function()
     end
 end)
 
+test("Constants: EnemyDamageTaken is READABLE but is NOT a column", function()
+    -- ISSUE #2. Every catalog row answers a question about a group member; this
+    -- one answers a question about an enemy, so offering it as a column asked one
+    -- grid row to be both a player and a mob. It comes back as its own window
+    -- type, whose rows are enemies.
+    --
+    -- The DATA did not go anywhere: modules/Targets.lua builds "which enemies
+    -- this player hit" by walking that very column, and core/Diagnostics.lua
+    -- probes it. So the two lookups have to disagree about exactly this key.
+    -- red under: putting the row back in STATS, or pointing modules/Provider.lua
+    -- at the narrow lookup.
+    assertNil(Const.STAT_BY_KEY.EnemyDamageTaken,
+        "an enemy is not a row on a grid of players")
+    assertTrue(Const.READABLE_STAT_BY_KEY.EnemyDamageTaken ~= nil,
+        "the provider must still answer for it, or the Targets section goes dark")
+    assertEqual(Const.READABLE_STAT_BY_KEY.EnemyDamageTaken.enumValue,
+        Const.STAT_TYPE.EnemyDamageTaken)
+
+    for _, stat in ipairs(Const.STATS) do
+        assertTrue(stat.key ~= "EnemyDamageTaken", "it is back in the catalog")
+    end
+end)
+
+test("Constants: READABLE_STAT_BY_KEY is a superset of STAT_BY_KEY", function()
+    -- Anything that may be a COLUMN must be readable. The reverse does not hold,
+    -- and that asymmetry is the whole point of the second lookup.
+    local columns = 0
+    for key, stat in pairs(Const.STAT_BY_KEY) do
+        columns = columns + 1
+        assertTrue(Const.READABLE_STAT_BY_KEY[key] == stat,
+            key .. " is a column the provider would refuse to read")
+    end
+    assertEqual(columns + #Const.OFF_CATALOG_STATS, (function()
+        local n = 0
+        for _ in pairs(Const.READABLE_STAT_BY_KEY) do n = n + 1 end
+        return n
+    end)(), "the readable set is the catalog plus the off-catalog reads, exactly")
+end)
+
 test("Constants: each stat key is the name of the enum value it carries", function()
     -- Stated as a rule in the file's header and worth pinning: a reader holding
     -- Blizzard's documentation maps a catalog row to an API value with no lookup
