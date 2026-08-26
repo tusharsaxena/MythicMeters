@@ -1175,14 +1175,29 @@ function WindowProto:ApplyColumnHeaders()
         -- PER COLUMN, and only here. `stat` mode on every other surface resolves
         -- to one colour for the whole surface; this strip is the one place where
         -- "per statistic" is literally per column, so each label takes the colour
-        -- of the column it labels. The name column has no statistic and keeps the
-        -- resolved fallback, which is what `hr, hg, hb` already hold.
-        if colHeader.colorMode == "stat" and key ~= "name" then
-            local cr, cg, cb, ca = surfaceColor("stat", colHeader.color, key, hr, hg, hb, ha)
-            button.text:SetTextColor(cr, cg, cb, ca)
-        else
-            button.text:SetTextColor(hr, hg, hb, ha)
+        -- of the column it labels.
+        --
+        -- THE NAME COLUMN IS NOT A STATISTIC AND MUST NOT BORROW ONE. It used to
+        -- fall through to `hr, hg, hb`, but that fallback is itself resolved
+        -- through windowStat() -- the SORT column -- so "Player" came out in the
+        -- sorted stat's colour: red on a damage-sorted window, and a different
+        -- colour every time the sort moved. White is what it says instead, the
+        -- one colour on this strip that claims no statistic. Only in `stat` mode:
+        -- every other mode's fallback is a colour the player actually chose.
+        --
+        -- Resolved into locals rather than applied inline because THE SORT ARROW
+        -- WEARS THE SAME COLOUR and had the same bug. Sorting by name puts the
+        -- arrow on the Player header, where it was drawn in the sort column's
+        -- stat colour over a label that is no longer that colour.
+        local tr, tg, tb, ta = hr, hg, hb, ha
+        if colHeader.colorMode == "stat" then
+            if key == "name" then
+                tr, tg, tb = 1, 1, 1
+            else
+                tr, tg, tb, ta = surfaceColor("stat", colHeader.color, key, hr, hg, hb, ha)
+            end
         end
+        button.text:SetTextColor(tr, tg, tb, ta)
         button.text:SetJustifyH("LEFT")
         button.text:SetText(label)
 
@@ -1216,7 +1231,7 @@ function WindowProto:ApplyColumnHeaders()
                 -- No SetTexCoord: two assets, not one flipped. The atlas branch
                 -- below flips because it has only one arrow to flip.
                 button.arrowTex:SetTexCoord(0, 1, 0, 1)
-                button.arrowTex:SetVertexColor(hr, hg, hb)
+                button.arrowTex:SetVertexColor(tr, tg, tb)
                 button.arrowTex:Show()
                 button.arrow:Hide()
             elseif atlas then
@@ -1235,7 +1250,7 @@ function WindowProto:ApplyColumnHeaders()
             else
                 button.arrow:SetFont(colFont, colSize, flags)
                 button.arrow:SetShadowOffset(shadowX, shadowY)
-                button.arrow:SetTextColor(hr, hg, hb, ha)
+                button.arrow:SetTextColor(tr, tg, tb, ta)
                 button.arrow:SetText(data.sortAscending and SORT_ASCII_UP or SORT_ASCII_DOWN)
                 button.arrow:ClearAllPoints()
                 button.arrow:SetPoint("LEFT", button.text, "LEFT", after, 0)

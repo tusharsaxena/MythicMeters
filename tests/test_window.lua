@@ -1905,6 +1905,65 @@ test("Column headers have their own colour and background", function()
     assertEqual(bg[3], 1, "the backdrop did not take the configured colour")
 end)
 
+test("Per-statistic mode leaves the Player header white, not the sort column's colour", function()
+    -- The Player column labels the NAMES, not a statistic, so there is no stat
+    -- colour for it to take. It was taking one anyway: its fallback resolved
+    -- through windowStat() -- the sort column -- so "Player" came out red on a
+    -- damage-sorted window and changed colour whenever the sort moved.
+    -- red under: `button.text:SetTextColor(hr, hg, hb, ha)` for the name column.
+    local inst, window, cfg = scene{ configure = function(c)
+        c.columnHeader.colorMode = "stat"
+    end }
+    cfg.data.sortColumn = "DamageDone"
+    window:ApplyColumnHeaders()
+
+    local byKey = {}
+    for _, button in ipairs(window.columnHeaders or {}) do byKey[button.mmKey] = button end
+
+    local nr, ng, nb = byKey["name"].text:GetTextColor()
+    assertEqual(nr, 1, "the Player header must be white in per-statistic mode")
+    assertEqual(ng, 1, "the Player header must be white in per-statistic mode")
+    assertEqual(nb, 1, "the Player header must be white in per-statistic mode")
+
+    -- The stat columns still take their own colours, which is the whole feature.
+    local dr, dg, db = byKey["DamageDone"].text:GetTextColor()
+    local want = inst.NS.Constants.STAT_COLORS["DamageDone"]
+    assertEqual(dr, want[1], "the Damage header lost its own statistic colour")
+    assertEqual(dg, want[2], "the Damage header lost its own statistic colour")
+    assertEqual(db, want[3], "the Damage header lost its own statistic colour")
+end)
+
+test("The Player header's sort arrow is white too, in per-statistic mode", function()
+    -- Sorting by name puts the arrow on the Player header, where it was drawn
+    -- from the same stat-resolved fallback the label was -- so the arrow stayed
+    -- red over a label that is no longer red.
+    -- red under: the arrow branches reading `hr, hg, hb` instead of the
+    -- per-header colour.
+    local _, window = scene{ configure = function(c)
+        c.columnHeader.colorMode = "stat"
+    end }
+    window:SortByColumn("name")
+    window:ApplyColumnHeaders()
+
+    local nameButton
+    for _, button in ipairs(window.columnHeaders or {}) do
+        if button.mmKey == "name" then nameButton = button end
+    end
+    assertTrue(nameButton ~= nil, "the Player header must exist as a button")
+
+    local r, g, b
+    if nameButton.arrowTex:IsShown() then
+        local c = nameButton.arrowTex.__vertexColor
+        assertTrue(c ~= nil, "the shown arrow texture was never tinted")
+        r, g, b = c[1], c[2], c[3]
+    else
+        r, g, b = nameButton.arrow:GetTextColor()
+    end
+    assertEqual(r, 1, "the Player header's sort arrow must match its white label")
+    assertEqual(g, 1, "the Player header's sort arrow must match its white label")
+    assertEqual(b, 1, "the Player header's sort arrow must match its white label")
+end)
+
 -- ---------------------------------------------------------------------------
 -- Minimise (issue #6)
 -- ---------------------------------------------------------------------------
