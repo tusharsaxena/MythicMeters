@@ -43,7 +43,7 @@ local function Build(mainCategory)
         H.RenderSchema(c, PAGE)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Tooltip"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Tooltip"]))
 end
 
 if NS.RegisterOptionsPage then

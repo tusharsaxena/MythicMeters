@@ -42,6 +42,59 @@ local addonName, NS = ...
 -- descriptor.skipRestoreAll, and by the degradation stub's own reset loop, which
 -- has to keep working with no library at all. Two spellings of one predicate is
 -- how a reset ends up deleting profiles on exactly the install nobody tests.
+-- ---------------------------------------------------------------------
+-- The nesting mark
+-- ---------------------------------------------------------------------
+--
+-- Blizzard's Settings tree draws every canvas subcategory of one addon at the
+-- SAME depth, and this addon's pages are not one flat set: Frame, Header, Rows,
+-- Bars, Text, Icons, Tooltip, Visibility and Columns all edit the window that
+-- Windows has selected, while General and Profiles edit the addon. Nine pages
+-- that silently retarget when a picker two pages up moves, presented as peers of
+-- the two that never do, is the tree lying about what a click will change.
+--
+-- There is no API for a third level, so the mark is TYPOGRAPHY: four spaces, a
+-- hyphen and a space, prefixed to the tree label ONLY. It is deliberately not
+-- part of the page's own title -- the canvas heading and the breadcrumb keep the
+-- plain name, because a page heading that starts four spaces in reads as a
+-- layout bug.
+--
+-- THE INDENT DOES THE NESTING; THE HYPHEN MARKS THE ITEM. Two earlier spellings
+-- got one of those and not the other, and both are recorded because each failed
+-- in its own way:
+--
+--   U+21B3  a rightwards arrow with tip downwards -- exactly the right character,
+--           and one Friz Quadrata does not have. The client drew a HOLLOW BOX in
+--           front of all nine pages, and the tree offers no way to hand the
+--           player a font that has the glyph.
+--   "|- "   draws on any font and reads as a bulleted LIST rather than as
+--           nesting: with nothing indenting it, the mark sat where the page name
+--           should start and competed with it for the eye.
+--
+-- Four spaces alone were confirmed in the client to survive -- leading
+-- whitespace is the kind of thing a UI toolkit trims, and this one does not --
+-- which is what makes the hyphen safe to add: it is decoration on an indent that
+-- is already doing the work, rather than the only thing standing in for it. If a
+-- future client does start trimming, the nine pages keep a visible "- " and
+-- degrade to a flat bulleted list rather than to nothing at all.
+--
+-- Not a locale string. It is furniture rather than text, and a translator handed
+-- four spaces and a hyphen has nothing to translate and one more chance to drop
+-- a space.
+local SUBPAGE_MARK = "    - "
+
+--- The tree label for a page nested under Windows.
+---
+--- Used by the nine window pages at the RegisterCanvasLayoutSubcategory call and
+--- nowhere else. General and Profiles do NOT call it: they are not about a
+--- window, and marking them would make the mark mean nothing.
+---
+--- @param name string  the page's own display name
+--- @return string
+function NS.SubPageLabel(name)
+    return SUBPAGE_MARK .. tostring(name)
+end
+
 local function vetoedFromResetAll(row)
     if row.page == "profiles" then return true end
     return not row.sessionOnly

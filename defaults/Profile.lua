@@ -121,6 +121,15 @@ local WINDOW_TEMPLATE = {
         -- constantly, and one of them being unconfigurable was the complaint.
         controlColor      = { r = 1, g = 1, b = 1, a = 1 },
         controlHoverColor = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- One class-colour flag EACH, and both ship off so no window changes
+        -- appearance. Two rather than one because hover and rest are two
+        -- independent answers: sharing a flag would make the pointer's colour
+        -- identical to the resting one for anybody who ticked it, which is the
+        -- one thing a hover colour must never be. The LOCAL player's class, like
+        -- every other header surface — the strip is about the window, not about
+        -- any row in it.
+        controlClassColor      = false,
+        controlHoverClassColor = false,
         -- The SLOT a control occupies -- its click target and the strip's layout
         -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
         -- 11px icon on the same line as a 12px title and the strip stops
@@ -210,15 +219,16 @@ local WINDOW_TEMPLATE = {
         -- a capped list. The single most-requested behavior of every meter.
         alwaysShowSelf        = true,
         highlightSelf         = true,
+        -- Shade every other row so the grid is easier to read across. A ROW-level
+        -- fact, which is why it lives here — but it is EDITED on the Bars page,
+        -- beside the per-cell tint it competes with, because choosing between the
+        -- two meant reading two pages.
+        --
+        -- The class tint itself is `bars.bgColorMode` and lives with the bars. It
+        -- was briefly a row-level texture too, and tinting the row turned out to
+        -- tint the two-pixel seams between the columns and lose the separators
+        -- the grid is read by; painting the cells leaves them clear.
         alternatingBackground = true,
-        -- Tint each row with its player's class color. `classFilename` is
-        -- NeverSecret, so it keeps working mid-pull when every number is opaque.
-        -- 0.1 is a tint, not a bar: the column seams stay visible through it and
-        -- the cells' own bars still carry the magnitude. A row with no class —
-        -- an NPC, an enemy, a spell in a breakdown — falls back to the
-        -- alternating stripe rather than to an invented color.
-        classBackground       = true,
-        classBackgroundAlpha  = 0.1,
         mouseoverHighlight    = true,
     },
 
@@ -248,6 +258,12 @@ local WINDOW_TEMPLATE = {
         bgColor       = { r = 0, g = 0, b = 0, a = 1 },
         bgAlpha       = 0.1,
         border        = false,
+        -- The outline's own thickness and colour. It used to be one pixel of the
+        -- library skin's edge colour, which no setting could reach -- so "Bar
+        -- border" was a switch with no dial and no swatch beside it.
+        borderStyle     = "None",              -- LSM "border" key; None = flat
+        borderThickness = 1,
+        borderColor     = { r = 0, g = 0, b = 0, a = 1 },
         alpha         = 1.0,
         fillDirection = "LEFT",    -- LEFT (fills rightward) | RIGHT
     },
@@ -462,16 +478,13 @@ local WINDOW_TEMPLATE = {
         sortColumn  = "DamageDone",
         -- Largest first. Toggled by clicking the sort column's header.
         sortAscending = false,
-        -- A pet gets its OWN row. Merging it into its owner is addition, and
-        -- addition on two secret values raises — so the merged mode cannot do it
-        -- mid-pull and drops the pet's numbers instead, leaving the owner's total
-        -- quietly low for the whole fight. A separate row is exact in both
-        -- states, and is what Blizzard's own meter shows.
-        mergePets   = false,
-        -- Seconds between refreshes. The meter events fire far faster than a
-        -- human reads; this coalesces them so a busy pull cannot drive one
-        -- rebuild per event. Clamped to Constants.THROTTLE_MIN/MAX.
-        throttle    = 0.25,
+        -- `mergePets` and `throttle` USED TO LIVE HERE and are now addon-wide,
+        -- at `profile.data` below. Neither is a property of how a window looks,
+        -- which is the test everything else in this template passes: one is a
+        -- statement about what a pet's damage IS, and the other is a refresh
+        -- rate. A player who wanted them to differ between two windows on the
+        -- same screen would be describing two different answers to one
+        -- question. core/Database.lua's v4 -> v5 step lifts them.
     },
 }
 
@@ -508,6 +521,27 @@ end
 -- rebuilding a whole window.
 NS.WINDOW_TEMPLATE = WINDOW_TEMPLATE
 
+--- One addon-wide `data.*` setting, with the shipped value as the floor.
+---
+--- The ONE reader for `profile.data`, because three modules want these two
+--- values (modules/Aggregator.lua and modules/Export.lua want `mergePets`,
+--- modules/Window.lua wants `throttle`) and each reaching into `NS.db` for
+--- itself is three chances to disagree about what a missing db means.
+---
+--- The fallback is the DEFAULTS TREE rather than a literal: this file is the
+--- only place a profile default is hardcoded (savedvariables-§2), and a second
+--- copy of 0.25 in a module is a value that can drift from the schema row that
+--- claims to set it.
+---
+--- @param key string  a leaf under `data.`
+--- @return any
+function NS.DataSetting(key)
+    local profile = NS.db and NS.db.profile
+    local stored  = profile and profile.data and profile.data[key]
+    if stored ~= nil then return stored end
+    return NS.defaults.profile.data[key]
+end
+
 -- ---------------------------------------------------------------------------
 -- The profile
 -- ---------------------------------------------------------------------------
@@ -537,6 +571,24 @@ NS.defaults = {
         -- Minimap / DataBroker button (LibDBIcon-1.0 owns the shape of this
         -- table — `hide` is its key, not ours).
         minimap      = { hide = false },
+
+        -- How the meter is read, addon-wide. Both of these were per-window and
+        -- neither described a window: `mergePets` says what a pet's damage IS,
+        -- and `throttle` is a refresh rate. Two windows disagreeing about either
+        -- is two answers to one question, and the settings tree was the only
+        -- thing asking it twice.
+        data         = {
+            -- A pet gets its OWN row. Merging it into its owner is addition, and
+            -- addition on two secret values raises — so the merged mode cannot do
+            -- it mid-pull and drops the pet's numbers instead, leaving the owner's
+            -- total quietly low for the whole fight. A separate row is exact in
+            -- both states, and is what Blizzard's own meter shows.
+            mergePets = false,
+            -- Seconds between refreshes. The meter events fire far faster than a
+            -- human reads; this coalesces them so a busy pull cannot drive one
+            -- rebuild per event. Clamped to Constants.THROTTLE_MIN/MAX.
+            throttle  = 0.25,
+        },
 
         -- What the export surface remembers between uses. ADDON-WIDE rather
         -- than per-window, and that is the one deliberate exception to the rule

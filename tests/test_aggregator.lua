@@ -66,12 +66,21 @@ local function makeWindow(opts)
             -- and so cannot quietly reorder what a join case is asserting.
             sortMode    = opts.sortMode or "provider",
             sortColumn  = opts.sortColumn,
-            -- Off is the shipped default: a pet gets its own row. The folding
-            -- mode is opt-in because merging is addition, and addition on two
-            -- secret values raises.
-            mergePets   = opts.mergePets or false,
         },
     }
+end
+
+--- Turn pet merging on for an instance.
+---
+--- ADDON-WIDE since schemaVersion 5, so it is written to the profile rather than
+--- into the synthetic window config above: merging says what a pet's damage IS,
+--- which is not a question two windows may answer differently. Off is the
+--- shipped default — a pet gets its own row — because merging is addition, and
+--- addition on two secret values raises.
+local function mergePets(inst)
+    local profile = inst.NS.db.profile
+    profile.data = profile.data or {}
+    profile.data.mergePets = true
 end
 
 --- A loaded instance with the standard three-player group.
@@ -296,7 +305,8 @@ test("Aggregator sums an attributed pet into its owner out of combat", function(
         src(PET, 40, { rate = 4, name = "Ghoul" }),
     }, { maxAmount = 100, totalAmount = 140 })
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     assertEqual(#result, 1, "the pet is folded, never listed")
     assertEqual(result[1].guid, ALPHA)
     assertEqual(result[1].values.DamageDone.total, 140)
@@ -411,7 +421,8 @@ test("A pet is a ROW OF ITS OWN while restricted, not a dropped contribution", f
         src(PET, 40, { rate = 4, name = "Ghoul", class = "PET" }),
     }, { maxAmount = 100, totalAmount = 140 })
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     assertEqual(#result, 2, "the pet's damage is shown rather than discarded")
     assertEqual(inst.mocks.reveal(result[1].values.DamageDone.total), 100,
         "and the owner's own number is untouched — nothing was added to it")
@@ -430,7 +441,8 @@ test("Aggregator adopts a pet's numbers into a column the owner has no cell in",
     install(inst, { src(PET, 40, { rate = 4, name = "Ghoul" }) },
         { maxAmount = 40, totalAmount = 40 })
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     assertEqual(#result, 1)
     assertEqual(result[1].guid, ALPHA)
     assertEqual(result[1].values.DamageDone.total, 40)
@@ -448,7 +460,8 @@ test("A pet's position never moves its owner in the provider order", function()
         src(ALPHA, 100),
     }, { maxAmount = 400, totalAmount = 700 })
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     assertEqual(#result, 2)
     assertEqual(result[1].guid, BETA, "Beta was the first REAL member in the source list")
     assertEqual(result[2].guid, ALPHA)
@@ -479,7 +492,8 @@ test("Aggregator computes percent out of combat", function()
     install(inst, { src(ALPHA, 75), src(BETA, 25) },
         { maxAmount = 75, totalAmount = 100 })
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     assertEqual(result[1].values.DamageDone.percent, 75)
     assertEqual(result[2].values.DamageDone.percent, 25)
 end)
@@ -490,7 +504,8 @@ test("Aggregator answers nil percent while restricted — never zero", function(
         { maxAmount = 75, totalAmount = 100 })
     inst.mocks.setRestricted(true)
 
-    local result = inst.NS.Aggregator.Build(makeWindow{ mergePets = true })
+    mergePets(inst)
+    local result = inst.NS.Aggregator.Build(makeWindow{})
     -- A division on an inaccessible operand raises, so the slot goes quiet. nil
     -- means "cannot be known right now" and callers must not read it as 0%.
     assertNil(result[1].values.DamageDone.percent)

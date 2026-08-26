@@ -469,14 +469,20 @@ end)
 test("Export.SessionConfig inherits the invoking window's segment", function()
     -- "Export this" said while looking at last pull means last pull.
     local cfg = T.NS.Export.SessionConfig({
-        data = {
-            sessionType = Const.SESSION_TYPE.Overall,
-            sessionID   = 17,
-            mergePets   = true,
-        },
+        data = { sessionType = Const.SESSION_TYPE.Overall, sessionID = 17 },
     })
     assertEqual(cfg.data.sessionType, Const.SESSION_TYPE.Overall)
     assertEqual(cfg.data.sessionID, 17)
+end)
+
+test("Export.SessionConfig takes pet merging from the PROFILE, not the window", function()
+    -- Addon-wide since schemaVersion 5, so an export merges pets exactly as the
+    -- grid it was taken from does — even for a window config that still carries
+    -- a stale per-window key from before the migration.
+    -- red under: reading window.data.mergePets, which no longer exists.
+    local inst = T.load()
+    inst.NS.db.profile.data.mergePets = true
+    local cfg = inst.NS.Export.SessionConfig({ data = { mergePets = false } })
     assertTrue(cfg.data.mergePets)
 end)
 

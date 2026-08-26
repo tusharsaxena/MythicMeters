@@ -39,7 +39,7 @@
 --
 -- Meter events fire far faster than a human reads. One event must NEVER drive
 -- one rebuild, so every message handler in this file does nothing but set a
--- flag, and a single OnUpdate spends the window's `data.throttle` (0.25s by
+-- flag, and a single OnUpdate spends the profile's `data.throttle` (0.25s by
 -- default, clamped to Constants.THROTTLE_MIN/MAX) before turning that flag into
 -- a Refresh. A twenty-second pull that reports two thousand times still draws
 -- eighty times.
@@ -235,6 +235,49 @@ end
 --- there. Recomputed on a settings change, never on a refresh.
 ---
 --- @return table layout
+--- How wide the Player column has to be, from the config alone.
+---
+--- IT FOLLOWS "MAX NAME LENGTH", and it did not before: the cap shortened the
+--- text and the column stayed at a fixed 118px, so lowering it left a wide
+--- column with a short name rattling around in it and raising it clipped the
+--- name the setting had just permitted. The setting names a number of
+--- CHARACTERS, so the column it lives in is the one thing that should follow it.
+---
+--- FROM CONFIG, NEVER MEASURED. Rule R3 (docs/data-flow.md): layout is computed,
+--- never read back off a frame. So the per-character width is an ESTIMATE off the
+--- font size rather than a GetStringWidth -- NAME_CHAR_RATIO is a little generous
+--- because a name that is one pixel too wide is a name with a comma clipped off
+--- its realm, while one that is a few too wide costs nothing anybody can see.
+---
+--- The icon's allowance is added only when the icon is actually drawn, which is
+--- the other half of what the player asked for: turning the icon off should give
+--- the width back to the name rather than leave a hole where a picture was.
+--- `ICON_TEXT_GAP` is modules/Row.lua's, published rather than restated, because
+--- the two files reserving different gaps is how a name gets clipped by the
+--- space its icon was promised.
+---
+--- @param cfg table  a window config
+--- @return number  pixels
+local function nameColumnWidth(cfg)
+    local text  = cfg.text or {}
+    local icons = cfg.icons or {}
+
+    local cap = text.maxNameLength
+    -- 0 is the documented "no cap", and a window with no cap has no length to
+    -- size itself from -- so it keeps the shipped width.
+    if type(cap) ~= "number" or cap <= 0 then return Const.NAME_COLUMN_WIDTH end
+
+    local size = text.size or 11
+    local width = math.ceil(cap * size * Const.NAME_CHAR_RATIO) + Const.NAME_COLUMN_PAD
+
+    if icons.showIcon then
+        width = width + (icons.size or 14) + (NS.ICON_TEXT_GAP or 4)
+    end
+
+    if width < Const.NAME_COLUMN_MIN then width = Const.NAME_COLUMN_MIN end
+    return width
+end
+
 function WindowProto:BuildLayout()
     local cfg    = self.config
     local frame  = cfg.frame or {}
@@ -258,10 +301,11 @@ function WindowProto:BuildLayout()
     -- The name column is not a stat and can never be removed, so it is placed
     -- first and separately (core/Constants.lua).
     local x = 0
+    local nameWidth = nameColumnWidth(cfg)
     layout.nameColumn = {
-        key = "name", x = x, width = Const.NAME_COLUMN_WIDTH, showBar = true,
+        key = "name", x = x, width = nameWidth, showBar = true,
     }
-    x = x + Const.NAME_COLUMN_WIDTH + COLUMN_GAP
+    x = x + nameWidth + COLUMN_GAP
 
     -- STAT COLUMNS SHARE WHATEVER THE FRAME HAS LEFT, EQUALLY.
     --
@@ -291,7 +335,7 @@ function WindowProto:BuildLayout()
     local statWidth = Const.COLUMN_WIDTH
     if #visible > 0 then
         local available = (frame.width or 694) - pad * 2
-            - Const.NAME_COLUMN_WIDTH - COLUMN_GAP * #visible
+            - nameWidth - COLUMN_GAP * #visible
         statWidth = math.floor(available / #visible)
         if statWidth < Const.COLUMN_MIN_WIDTH then statWidth = Const.COLUMN_MIN_WIDTH end
     end
@@ -310,7 +354,7 @@ function WindowProto:BuildLayout()
     -- The smallest this window may be dragged to, both axes, from the same
     -- arithmetic that just laid it out. Published on the layout so the resize
     -- clamp and the layout can never disagree about it.
-    layout.minWidth = Const.NAME_COLUMN_WIDTH + pad * 2
+    layout.minWidth = nameWidth + pad * 2
         + math.max(#visible, 1) * (Const.COLUMN_MIN_WIDTH + COLUMN_GAP)
     layout.minHeight = pad * 2 + layout.titleHeight + layout.headerHeight + rowHeight
 
@@ -339,13 +383,18 @@ end
 --- layout. Called on creation and on ANY settings change — never per frame.
 ---
 --- The values below are read on every OnUpdate tick, and reaching
---- `self.config.data.throttle` forty times a second through three table lookups
+--- the profile's `data.throttle` forty times a second through three table lookups
 --- is exactly the per-frame cost the standard's upvalue rule exists to remove.
 function WindowProto:RefreshUpvalues()
     local cfg = self.config
     local data = cfg.data or {}
 
-    self.throttle    = clamp(data.throttle or 0.25, Const.THROTTLE_MIN, Const.THROTTLE_MAX)
+    -- ADDON-WIDE since it stopped being a property of a window: a refresh rate
+    -- is one answer, not one per window. Still cached as an upvalue here, which
+    -- is the whole point of this function — NS.DataSetting walks two tables and
+    -- this is read on every OnUpdate tick.
+    local throttle   = (NS.DataSetting and NS.DataSetting("throttle")) or 0.25
+    self.throttle    = clamp(throttle, Const.THROTTLE_MIN, Const.THROTTLE_MAX)
     self.sessionType = data.sessionType or Const.SESSION_TYPE.Current
     self.sortColumn  = data.sortColumn or "DamageDone"
     self.locked      = (cfg.frame or {}).locked and true or false
@@ -883,8 +932,19 @@ function WindowProto:ApplyTitle()
     end
     frame.title:SetText(title)
     frame.title:SetShown((cfg.frame or {}).titleBar ~= false)
-    -- The title COLOR is ApplySkin's to set (frame.title is one of the two
-    -- members it tints), so nothing here touches it.
+
+    -- THE TITLE IS HEADER TEXT, and it now takes the header's colour like the
+    -- session line beside it. It used to be left to ApplySkin -- frame.title is
+    -- one of the two members the library tints -- which meant the Header text
+    -- group's colour and its class-colour checkbox styled every part of the
+    -- header strip EXCEPT the one word a player thinks of as the header. The
+    -- font, size, outline and shadow above always came from that group; only the
+    -- colour did not, and the inconsistency read as a bug because it was one.
+    --
+    -- After ApplySkin, not instead of it: ApplyConfig re-runs the skin and then
+    -- calls ApplyHeader, so the library still owns the backdrop and the accents
+    -- and this owns the one FontString the settings claim to govern.
+    frame.title:SetTextColor(headerColor(header))
 end
 
 --- The tinted block behind the header and the hairline that closes it off.
@@ -894,15 +954,20 @@ function WindowProto:ApplyHeaderStrip()
     local frame  = self.frame
     local pad    = layout.padding
 
-    -- The strip covers BOTH header rows — the title bar and the column labels —
-    -- because that is the block a player pointing at "the header" means.
+    -- THE TITLE BAR ONLY. It used to cover both header rows — the title bar and
+    -- the column labels — on the reading that "the header" is the whole block a
+    -- player points at. That was wrong twice over: the column strip has its OWN
+    -- background setting (`columnHeader.bgColor`), so a player who set both got
+    -- one drawn over the other with no way to see the lower one, and a colour
+    -- picked for the title bar silently restyled the grid's column labels too.
+    -- Two strips, two settings, two rectangles.
     local ar, ag, ab, aa = RGBA(header.bgColor, 0, 0, 0, 0.5)
     self.headerBG:ClearAllPoints()
     self.headerBG:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, -pad)
     self.headerBG:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, -pad)
-    self.headerBG:SetHeight(layout.titleHeight + layout.headerHeight)
+    self.headerBG:SetHeight(layout.titleHeight)
     self.headerBG:SetColorTexture(ar, ag, ab, aa)
-    self.headerBG:SetShown((layout.titleHeight + layout.headerHeight) > 0)
+    self.headerBG:SetShown(layout.titleHeight > 0)
 
     -- The drag strip covers exactly the title bar. Sized from the layout like
     -- every other coordinate — never measured off the title FontString.

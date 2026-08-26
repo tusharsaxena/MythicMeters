@@ -387,6 +387,31 @@ end
 -- row in front of it.
 Constants.NAME_COLUMN_WIDTH = 118
 
+-- What the Player column is worked out FROM, once `text.maxNameLength` is set to
+-- something (0 means "no cap", and a window with no cap keeps the width above).
+-- modules/Window.lua's nameColumnWidth is the one reader; these are here because
+-- a layout number belongs with the other layout numbers.
+--
+-- NAME_CHAR_RATIO is pixels of width per point of font size, per character. The
+-- width is COMPUTED rather than measured (rule R3 -- layout never reads a frame
+-- back), so it is an estimate whatever number goes here.
+--
+-- CALIBRATED AGAINST THE SHIPPED WIDTH ABOVE, deliberately, rather than picked
+-- for the look of it: these three numbers are set so that the shipped config --
+-- a 20-character cap at 11pt with the icon on -- lands on exactly
+-- NAME_COLUMN_WIDTH. 118 is a measured value that has been right in the client
+-- for as long as this addon has had a name column; anchoring the formula to it
+-- means the change is a NEW response to the setting rather than a new look for
+-- every window that never touched it. tests/test_window.lua pins that identity.
+Constants.NAME_CHAR_RATIO = 0.41
+-- Room for the text inset at each end, so the longest permitted name is not
+-- flush against the column seam.
+Constants.NAME_COLUMN_PAD = 9
+-- The floor. Below this the COLUMN HEADER -- the word "Player" -- stops fitting,
+-- and a column whose own label is clipped reads as broken however short the
+-- names in it are.
+Constants.NAME_COLUMN_MIN = 46
+
 -- ---------------------------------------------------------------------------
 -- The export channel catalog
 -- ---------------------------------------------------------------------------

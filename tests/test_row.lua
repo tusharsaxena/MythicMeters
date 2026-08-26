@@ -497,19 +497,119 @@ test("Text opacity fades the TEXT, and leaves the bar alone", function()
     assertEqual(cell.frame:GetAlpha(), 1, "the bar is not text")
 end)
 
-test("Bar opacity fades the bar, and the text rides on top of it", function()
-    -- The compounding the old code was reaching for still happens, and in the one
-    -- direction that is correct: a child's alpha is applied on top of its
-    -- parent's, so a bar at 50% carrying text at 50% renders that text at 25%.
-    -- The reverse — text fading the bar — is never true.
+test("The bar border takes the player's thickness and colour", function()
+    -- Both used to be constants: one pixel, in the library skin's own edge
+    -- colour, which no setting could reach — so "Bar border" was a switch with no
+    -- dial and no swatch beside it.
+    -- red under: restoring the hard-coded 1px skin edge.
+    local _, _, row = bench(function(cfg)
+        cfg.bars.border          = true
+        cfg.bars.borderThickness = 3
+        cfg.bars.borderColor     = { r = 1, g = 0, b = 0, a = 1 }
+    end)
+
+    local edges = row.cells.DamageDone.border
+    assertTrue(edges ~= nil, "no border was drawn at all")
+    assertEqual(edges.top:GetHeight(), 3)
+    assertEqual(edges.left:GetWidth(), 3)
+    assertEqual(edges.top.__colorTexture[1], 1, "the border ignored its colour")
+    assertEqual(edges.top.__colorTexture[2], 0)
+end)
+
+test("Border style None keeps the cheap flat outline and puts no backdrop on a cell", function()
+    -- "None" IS A CHOICE, NOT A MISSING VALUE. A resolver that fell back to the
+    -- library's own edge on "None" would draw a border the player had just
+    -- switched off — the same bug the window frame and the tooltip each have
+    -- their own case for — and it would also put a backdrop on every cell in the
+    -- grid to draw it, which is what the shipped default exists to avoid.
+    -- red under: borderEdge treating "None" as a failed fetch.
+    local _, _, row = bench(function(cfg)
+        cfg.bars.border      = true
+        cfg.bars.borderStyle = "None"
+    end)
+
+    local cell = row.cells.DamageDone
+    assertNil(cell.frame.__backdrop, "None put edge art on the cell")
+    assertTrue(cell.border ~= nil and cell.border.top:IsShown(),
+        "the flat outline is what None draws, and it did not")
+end)
+
+test("Border style art moves to a backdrop and takes the flat outline down", function()
+    -- An edgeFile is a nine-slice; four solid rectangles cannot draw one. Both
+    -- paths have to CLEAR the other, or a player switching between them keeps
+    -- whichever they left behind, drawn on top of the one they chose.
+    local inst, window, row = bench()
+    -- The media library answers only what has been registered with it, exactly
+    -- as the client's does — so the edge has to exist before it can be picked.
+    inst.mocks.__media.border["Ka0s Edge"] = "Interface\\Test\\Edge"
+
+    local cfg = window.config
+    cfg.bars.border          = true
+    cfg.bars.borderStyle     = "Ka0s Edge"
+    cfg.bars.borderThickness = 4
+    row:ApplyLayout(window.layout)
+
+    local cell = row.cells.DamageDone
+    local backdrop = cell.frame.__backdrop
+    assertTrue(backdrop ~= nil, "edge art did not reach a backdrop")
+    assertEqual(backdrop.edgeSize, 4, "the thickness slider does not reach the art")
+    -- A cell that went straight to art never built the flat textures at all,
+    -- which is the cheaper of the two right answers. If it did build them --
+    -- because the player had the flat outline on first -- they must be down.
+    if cell.border then
+        assertFalse(cell.border.top:IsShown(), "the flat outline was left under the art")
+    end
+
+    -- And switching back takes the art off rather than leaving it under the flat
+    -- outline, which is the other half of the same rule.
+    cfg.bars.borderStyle = "None"
+    row:ApplyLayout(window.layout)
+    assertNil(cell.frame.__backdrop, "the art outlived the style that asked for it")
+    assertTrue(cell.border.top:IsShown(), "the flat outline did not come back")
+end)
+
+test("A window that sets neither keeps the border it always had", function()
+    -- The skin's edge is the fallback for both, so this change cannot restyle a
+    -- window that never touched either setting.
+    local inst, _, row = bench(function(cfg) cfg.bars.border = true end)
+    local edges = row.cells.DamageDone.border
+    local skin = inst.NS.SKIN or {}
+
+    assertEqual(edges.top:GetHeight(), 1)
+    if skin.border then
+        assertEqual(edges.top.__colorTexture[1], skin.border.r or skin.border[1])
+    end
+end)
+
+test("Bar opacity fades the FILL, and nothing else in the cell", function()
+    -- The StatusBar is the CELL: it parents the fill, the backdrop behind it,
+    -- both text slots and the name column's icon. `bars.alpha` was set on it, so
+    -- dropping "Bar opacity" to 10% faded the entire grid — numbers, names and
+    -- icons — when what the setting names is the coloured fill alone.
+    -- red under: bar:SetAlpha(bars.alpha).
     local _, _, row = bench(function(cfg)
         cfg.bars.alpha = 0.5
         cfg.text.alpha = 1
     end)
 
     local cell = row.cells.DamageDone
-    assertEqual(cell.frame:GetAlpha(), 0.5)
-    assertEqual(cell.left:GetAlpha(), 1, "the text sets its own, not the product")
+    assertEqual(cell.frame:GetStatusBarTexture():GetAlpha(), 0.5, "the fill did not fade")
+    assertEqual(cell.frame:GetAlpha(), 1, "the cell itself must stay at full opacity")
+    assertEqual(cell.left:GetAlpha(), 1, "the text took the bar's opacity")
+end)
+
+test("Bar opacity and text opacity are independent, in both directions", function()
+    -- Three settings, three surfaces, none of them able to cancel another.
+    local _, _, row = bench(function(cfg)
+        cfg.bars.alpha = 0.2
+        cfg.text.alpha = 0.6
+    end)
+
+    local cell = row.cells.DamageDone
+    assertEqual(cell.frame:GetStatusBarTexture():GetAlpha(), 0.2)
+    assertEqual(cell.left:GetAlpha(), 0.6)
+    assertEqual(cell.right:GetAlpha(), 0.6)
+    assertEqual(cell.frame:GetAlpha(), 1)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -828,6 +928,46 @@ test("Turning the icon off hides it rather than destroying it", function()
     row:ApplyLayout(window.layout)
     assertEqual(row.nameCell.icons.unit:IsShown(), false,
         "an icon turned off is hidden, not destroyed")
+end)
+
+test("An icon turned off STAYS off across the next refresh", function()
+    -- THE BUG: the name text moved left with the setting and the picture came
+    -- straight back on the next row drawn. ApplyIcons hid the texture; SetPlayer
+    -- then drew into whatever texture it found and showed it again, because the
+    -- pool keeps the widget and the config was never re-consulted.
+    -- red under: SetPlayer drawing without asking whether the slot is wanted.
+    local _, window, row, cfg = bench()
+    cfg.icons.showIcon = false
+    row:ApplyLayout(window.layout)
+
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE", specIconID = 135771 }), 1)
+    assertEqual(row.nameCell.icons.unit:IsShown(), false,
+        "the icon came back on the first row drawn after it was turned off")
+
+    -- And turning it back on brings it back, on the next row and not a reload
+    -- later.
+    cfg.icons.showIcon = true
+    row:ApplyLayout(window.layout)
+    row:Update(entry({ DamageDone = { total = 1, maxAmount = 1 } },
+        { classFilename = "MAGE", specIconID = 135771 }), 1)
+    assertEqual(row.nameCell.icons.unit:IsShown(), true)
+end)
+
+test("The name starts clear of the icon, with a gap you can see", function()
+    -- The stride was the icon size plus ONE pixel, which reads as the two
+    -- touching at any icon size a player would actually pick.
+    -- red under: folding the gap back to 1.
+    local inst, window, row, cfg = bench(function(c) c.icons.showIcon = true end)
+    row:ApplyLayout(window.layout)
+
+    local gap = inst.NS.ICON_TEXT_GAP
+    assertTrue(gap >= 3, "a gap under three pixels is not a gap")
+
+    local left = row.nameCell.left
+    local _, _, _, xOfs = left:GetPoint(1)
+    assertEqual(xOfs, 2 + (cfg.icons.size or 14) + gap,
+        "the name does not start clear of the icon plus its gap")
 end)
 
 -- ---------------------------------------------------------------------------

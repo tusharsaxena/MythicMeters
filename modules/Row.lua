@@ -310,6 +310,20 @@ local function barTexture(name)
     return path or [[Interface\TargetingFrame\UI-StatusBar]]
 end
 
+--- The LSM edge file for a border style, or nil for "no art".
+---
+--- A CHOICE OF "None" IS NOT A FAILED FETCH, and the two must not share an
+--- answer: modules/Window.lua's borderPath and modules/Tooltip.lua's mediaPath
+--- both say the same thing, and both say it because a resolver that fell back to
+--- the library's own edge on "None" drew a border the player had just switched
+--- off. nil here means "draw the flat one", which is this file's own four
+--- textures.
+local function borderEdge(name)
+    if name == nil or name == "" or name == "None" then return nil end
+    local media = lsm()
+    return media and media:Fetch("border", name, true) or nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Mouse hand-off
 -- ---------------------------------------------------------------------------
@@ -477,7 +491,11 @@ Cell.__index = Cell
 --- @param key string     stat key, or "name"
 --- @return table
 local function newCell(row, key)
-    local bar = CreateFrame("StatusBar", nil, row.frame)
+    -- BackdropTemplate so `bars.borderStyle` can put LSM edge art around the
+    -- cell. It costs nothing until a border is actually set -- the template adds
+    -- the SetBackdrop methods, not a backdrop -- and the flat border below is
+    -- still four textures, so the DEFAULT install pays for no backdrop at all.
+    local bar = CreateFrame("StatusBar", nil, row.frame, "BackdropTemplate")
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
 
@@ -554,13 +572,49 @@ local BORDER_SIDES = { "top", "bottom", "left", "right" }
 --- file — a player toggling the setting off does not destroy them, because the
 --- pool's whole premise is that widget creation happens once.
 ---
---- The color is the collection's own edge (NS.SKIN.border) rather than a literal
---- picked here: `bars.border` is a yes/no setting with no color of its own, and
---- a hand-chosen outline would be the one line in this window that does not
---- match the frame around it.
+--- The color falls back to the collection's own edge (NS.SKIN.border) when the
+--- player has not picked one, so a window that never touches the setting keeps
+--- the outline it always had.
+---
+--- TWO IMPLEMENTATIONS, AND THE CHEAP ONE IS THE DEFAULT. A border style of
+--- "None" -- the shipped value -- is the four flat textures described above, and
+--- costs nothing new. Any LSM edge ART needs a real backdrop, because an
+--- edgeFile is a nine-slice and four solid rectangles cannot draw one, so that
+--- path calls SetBackdrop on the cell itself.
+---
+--- THE BACKDROP GOES ON THE BAR, NOT ON A CHILD FRAME, and that distinction is
+--- rule R3's: a child frame anchored to a StatusBar that has been handed a secret
+--- inherits its secret anchoring, while a backdrop is textures the frame owns.
+--- Nothing here reads anything back either way. It is still the one place this
+--- addon decorates a frame that carries meter values, which is why it is opt-in
+--- and why docs/smoke-tests.md asks for it to be checked mid-pull.
 function Cell:ApplyBorder(bars)
     local wanted = (bars and bars.border) and true or false
+    local edge = wanted and borderEdge(bars and bars.borderStyle) or nil
     local edges = self.border
+
+    -- The art path and the flat path are mutually exclusive, and BOTH have to be
+    -- cleared: a player switching between them mid-session would otherwise keep
+    -- whichever they left behind, drawn on top of the one they chose.
+    if self.frame.SetBackdrop then
+        if edge then
+            local size = (bars and bars.borderThickness) or 1
+            if type(size) ~= "number" or size < 1 then size = 1 end
+            self.frame:SetBackdrop({ edgeFile = edge, edgeSize = size })
+            if self.frame.SetBackdropBorderColor then
+                local skin = NS.SKIN or {}
+                local sr, sg, sb, sa = RGBA(skin.border, 0, 0, 0, 1)
+                local r, g, b, a = RGBA(bars and bars.borderColor, sr, sg, sb, sa)
+                self.frame:SetBackdropBorderColor(r, g, b, a)
+            end
+            if edges then
+                for _, side in ipairs(BORDER_SIDES) do edges[side]:Hide() end
+            end
+            return
+        end
+        self.frame:SetBackdrop(nil)
+    end
+
     if not (wanted or edges) then return end
 
     if not edges then
@@ -577,8 +631,19 @@ function Cell:ApplyBorder(bars)
     end
 
     local bar = self.frame
+
+    -- THE PLAYER'S COLOUR AND THE PLAYER'S THICKNESS. Both used to be constants:
+    -- one pixel, in the library skin's own edge colour, which no setting could
+    -- reach -- so "Bar border" was a switch with no dial and no swatch beside it.
+    -- The skin's edge is still the FALLBACK, so a window that never touches
+    -- either keeps exactly the border it had.
     local skin = NS.SKIN or {}
-    local r, g, b, a = RGBA(skin.border, 0, 0, 0, 1)
+    local sr, sg, sb, sa = RGBA(skin.border, 0, 0, 0, 1)
+    local r, g, b, a = RGBA(bars and bars.borderColor, sr, sg, sb, sa)
+    local size = (bars and bars.borderThickness) or 1
+    -- Clamped rather than trusted: this comes from a slider with a floor, and a
+    -- zero here is four invisible textures pretending to be a border.
+    if type(size) ~= "number" or size < 1 then size = 1 end
 
     for _, side in ipairs(BORDER_SIDES) do
         local tex = edges[side]
@@ -587,19 +652,19 @@ function Cell:ApplyBorder(bars)
         if side == "top" then
             tex:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
             tex:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-            tex:SetHeight(1)
+            tex:SetHeight(size)
         elseif side == "bottom" then
             tex:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
             tex:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-            tex:SetHeight(1)
+            tex:SetHeight(size)
         elseif side == "left" then
             tex:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
             tex:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
-            tex:SetWidth(1)
+            tex:SetWidth(size)
         else
             tex:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
             tex:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-            tex:SetWidth(1)
+            tex:SetWidth(size)
         end
         tex:Show()
     end
@@ -613,8 +678,22 @@ end
 function Cell:ApplyBarSkin(bars, _showBar)
     local bar = self.frame
     bar:SetStatusBarTexture(barTexture(bars and bars.texture))
-    bar:SetAlpha(bars and bars.alpha or 1)
     bar:SetOrientation("HORIZONTAL")
+
+    -- ON THE FILL TEXTURE, NEVER ON THE STATUSBAR. `bars.alpha` used to be
+    -- bar:SetAlpha, and the StatusBar is the CELL: it parents the fill, the
+    -- backdrop behind it, both text slots and the name column's icon. Dropping
+    -- "Bar opacity" to 10% therefore faded the whole grid to 10% -- numbers,
+    -- names and icons included -- when what the setting names is the coloured
+    -- fill alone.
+    --
+    -- The compounding a reader might expect still happens where it should: the
+    -- text carries `text.alpha` on its own FontStrings (ApplyTextStyle), and the
+    -- backdrop carries `bars.bgAlpha` in its own colour. Three settings, three
+    -- surfaces, none of them able to cancel another.
+    local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    if fill and fill.SetAlpha then fill:SetAlpha((bars and bars.alpha) or 1) end
+    bar:SetAlpha(1)
     -- fillDirection "LEFT" means the bar GROWS rightward from the left edge,
     -- which is SetReverseFill(false). The setting is named for where the fill
     -- starts because that is what a player looking at the window sees.
@@ -899,7 +978,17 @@ end
 -- `specIconID` are NeverSecret, so this column renders in full even when every
 -- number to its right is opaque.
 
+-- The gap between the name column's icon and the name beside it, in pixels. It
+-- was a literal 1 folded into the icon's own stride, which reads as the two
+-- touching at any icon size a player would actually pick. Named here because
+-- modules/Window.lua's name-column width has to reserve exactly this much
+-- (BuildLayout's nameColumnWidth) -- the same number in two files is how a name
+-- ends up clipped by the width the icon was promised.
+local ICON_TEXT_GAP = 4
+NS.ICON_TEXT_GAP = ICON_TEXT_GAP
+
 local function newIcon(cell)
+
     local tex = cell.frame:CreateTexture(nil, "ARTWORK")
     tex:Hide()
     return tex
@@ -919,10 +1008,18 @@ function Cell:ApplyIcons(layout)
     local slots = icons.showIcon and { "unit" } or {}
 
     self.iconOrder = slots
+    -- SetPlayer draws into whatever texture it finds and would otherwise SHOW an
+    -- icon this pass has just hidden -- the name text moved left with the
+    -- setting and the picture came straight back on the next refresh. The
+    -- textures are kept (pooling), so the answer is a flag rather than a nil.
+    self.iconsShown = #slots > 0
     self.icons = self.icons or {}
 
     local onRight = (icons.position == "RIGHT")
     local offset = 2
+    -- The gap between the icon and the name. It was 1px, which reads as the two
+    -- touching at any icon size a player would actually pick.
+    local gap = ICON_TEXT_GAP
     for i, kind in ipairs(slots) do
         local tex = self.icons[kind] or newIcon(self)
         self.icons[kind] = tex
@@ -930,9 +1027,9 @@ function Cell:ApplyIcons(layout)
         tex:SetSize(size, size)
         local y = (layout.rowHeight - size) * -0.5
         if onRight then
-            tex:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -(offset + (i - 1) * (size + 1)), y)
+            tex:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -(offset + (i - 1) * (size + gap)), y)
         else
-            tex:SetPoint("TOPLEFT", self.frame, "TOPLEFT", offset + (i - 1) * (size + 1), y)
+            tex:SetPoint("TOPLEFT", self.frame, "TOPLEFT", offset + (i - 1) * (size + gap), y)
         end
     end
 
@@ -950,7 +1047,7 @@ function Cell:ApplyIcons(layout)
     -- to draw, so a follower NPC with no spec icon leaves a gap where the icon
     -- would be instead of sliding its name left. A column whose text starts at a
     -- different x on every row is not a column.
-    local consumed = #slots > 0 and (offset + #slots * (size + 1)) or 2
+    local consumed = #slots > 0 and (offset + #slots * (size + gap)) or 2
 
     -- AN EXPLICIT WIDTH, NOT A SECOND ANCHOR. Two-point anchoring gives the
     -- FontString a width too, but it also lets it grow to whatever the frame
@@ -1206,7 +1303,7 @@ function Cell:SetPlayer(entry, _sortKey)
     self.right:SetText("")
 
     local icons = self.icons
-    if not icons then return end
+    if not (icons and self.iconsShown) then return end
     if icons.unit then drawUnitIcon(icons.unit, entry) end
 end
 

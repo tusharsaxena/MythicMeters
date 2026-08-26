@@ -323,7 +323,9 @@ end)
 test("Constants: the throttle window is a real range around the shipped default", function()
     assertTrue(Const.THROTTLE_MIN > 0, "a zero floor turns every meter event into a rebuild")
     assertTrue(Const.THROTTLE_MIN < Const.THROTTLE_MAX, "the throttle slider has no range")
-    local shipped = NS.WINDOW_TEMPLATE.data.throttle
+    -- Addon-wide since v5, so the shipped value is the PROFILE's rather than the
+    -- window template's.
+    local shipped = NS.defaults.profile.data.throttle
     assertTrue(shipped >= Const.THROTTLE_MIN and shipped <= Const.THROTTLE_MAX,
         "the shipped throttle " .. shipped .. " sits outside the slider's own clamp")
 end)

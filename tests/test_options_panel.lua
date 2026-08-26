@@ -33,9 +33,12 @@ local NS = T.NS
 -- from the same registry the assertions read, so a page that silently stopped
 -- registering is a failure rather than a shorter list that still agrees with
 -- itself.
+-- GENERAL IS FIRST, above Windows, because it is the only page that is not
+-- about one window. The order here is the TOC's registration order, which is the
+-- order the tree draws.
 local PAGES = {
-    "windows", "frame", "header", "rows", "bars", "text", "icons",
-    "tooltip", "visibility", "columns", "data", "general", "profiles",
+    "general", "windows", "frame", "header", "rows", "bars",
+    "tooltip", "visibility", "columns", "profiles",
 }
 
 -- The canvas frame name each page builds under. Used to reach a page's ctx while
@@ -48,12 +51,9 @@ local PANEL_NAME = {
     header     = "MultiMetersHeaderPanel",
     rows       = "MultiMetersRowsPanel",
     bars       = "MultiMetersBarsPanel",
-    text       = "MultiMetersTextPanel",
-    icons      = "MultiMetersIconsPanel",
     tooltip    = "MultiMetersTooltipPanel",
     visibility = "MultiMetersVisibilityPanel",
     columns    = "MultiMetersColumnsPanel",
-    data       = "MultiMetersDataPanel",
     general    = "MultiMetersGeneralPanel",
     profiles   = "MultiMetersProfilesPanel",
 }
@@ -101,6 +101,58 @@ end
 -- ---------------------------------------------------------------------------
 -- Eager registration
 -- ---------------------------------------------------------------------------
+
+test("Options: General is the FIRST page, above Windows", function()
+    -- The tree order IS the registration order, and registration order is the
+    -- TOC's. General is the only page that is not about one window, so it sits
+    -- above the picker that retargets the other nine rather than below them.
+    -- red under: moving settings\General.lua back down the TOC.
+    local built = NS.Helpers.__pages()
+    assertEqual(built[1] and built[1].key, "general")
+    assertEqual(built[2] and built[2].key, "windows")
+end)
+
+test("Options: every window page is marked as nested, and the two that are not are not", function()
+    -- Blizzard's Settings tree draws every canvas subcategory at the SAME depth,
+    -- so nine pages that silently retarget when the Windows picker moves would
+    -- read as peers of the two that never do. The mark is typography, prefixed
+    -- to the TREE LABEL only.
+    -- red under: marking General or Profiles, or dropping the mark from a page
+    -- the picker retargets.
+    -- INDENT PLUS HYPHEN, and the exact string matters: it shipped once as
+    -- U+21B3 (Friz Quadrata drew a hollow box) and once as "|- " (which read as
+    -- a bulleted list rather than as nesting). Leading whitespace is also the
+    -- one part of this a toolkit could silently TRIM, so this is the case that
+    -- would notice a mark that stopped arriving whole.
+    local MARK = "    - "
+    local NESTED = {
+        frame = true, header = true, rows = true, bars = true,
+        tooltip = true, visibility = true, columns = true,
+    }
+
+    local labels = T.mocks.__subcategories
+    for _, page in ipairs(NS.Helpers.__pages()) do
+        local marked = labels[MARK .. page.name] ~= nil
+        local plain  = labels[page.name] ~= nil
+        if NESTED[page.key] then
+            assertTrue(marked, page.key .. " is edited against the selected window and is not marked")
+            assertFalse(plain, page.key .. " registered an unmarked label as well")
+        else
+            assertTrue(plain, page.key .. " must keep its plain label")
+            assertFalse(marked, page.key .. " is not about one window and must not be marked")
+        end
+    end
+end)
+
+test("Options: the page HEADING keeps the plain name, mark or no mark", function()
+    -- The mark is an indent in a tree. Written across the top of the page it
+    -- reads as a typo, and the breadcrumb inherits the panel's own title.
+    -- red under: passing SubPageLabel to CreatePanel as well.
+    local ctx = panelFor(T, "frame")
+    assertTrue(ctx ~= nil)
+    assertEqual(ctx.panel.name, NS.L["Frame"],
+        "the canvas panel's own name carries the mark")
+end)
 
 test("Options: the parent category is registered at CreateOptionsPanel time", function()
     assertTrue(T.mocks.__mainPanel ~= nil, "no canvas category was registered")
@@ -389,7 +441,7 @@ test("Options: the panel and the CLI resolve a page's rows through the SAME func
     local calls = 0
     local real = inst.NS.SchemaForPage
     inst.NS.SchemaForPage = function(...) calls = calls + 1; return real(...) end
-    inst.NS.Helpers.RestoreDefaults("icons", nil)
+    inst.NS.Helpers.RestoreDefaults("bars", nil)
     inst.NS.SchemaForPage = real
     assertTrue(calls > 0,
         "the descriptor's rowsForPage must resolve NS.SchemaForPage, not re-implement it")

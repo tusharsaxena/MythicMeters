@@ -113,7 +113,6 @@ it *and* the order it lands in a new window if it ships enabled.
 | `Constants.STAT_BY_KEY` | built from the array |
 | `Constants.DEFAULT_STAT_KEYS` | derived from `defaultEnabled`; drives `NS.DefaultWindow`'s columns |
 | The Columns page's Add picker | `unusedStatList` walks `Const.STATS` |
-| The Data page's Sort column dropdown | `STATCOL_VALUES` is derived in `settings/Schema.lua` |
 | The name tooltip's all-statistics list | `modules/Tooltip.lua` walks `Const.STATS` |
 | The aggregator's per-stat read | `columnKeys(window)` filters the window's columns through `STAT_BY_KEY` |
 
@@ -318,7 +317,7 @@ the write succeeds, and nothing anywhere says so) and a default that disagrees w
 
 **Gotchas.**
 - A number row that carries `values` is inferred as an **enum** by both library majors and
-  constrained rather than clamped. That is what `window.data.sessionType` needs; it is not what a
+  constrained rather than clamped. That is what an enum-valued number row needs; it is not what a
   slider needs.
 - `type` is the widget dispatch key for the panel **and** the value parser for the CLI. There is
   deliberately no separate `widget` field.
@@ -331,7 +330,7 @@ the write succeeds, and nothing anywhere says so) and a default that disagrees w
 
 ## Add a settings page
 
-Only worth doing for a genuinely new group of settings; nine of the thirteen existing pages are one
+Only worth doing for a genuinely new group of settings; six of the ten existing pages are one
 `RenderSchema` call.
 
 **1. `settings/<Name>.lua`.** Copy `settings/Rows.lua` — it is the minimal shape.

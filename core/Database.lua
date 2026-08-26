@@ -37,7 +37,9 @@ NS.Database = Database
 -- v2 makes every column one uniform width (see migrations[1] below).
 -- v3 collapses the three row-icon toggles into one.
 -- v4 retires the export channel "AUTO".
-local CURRENT_DB_VERSION = 4
+-- v5 lifts mergePets and throttle from per-window to addon-wide.
+-- v6 prunes the two row-background keys nothing ever read.
+local CURRENT_DB_VERSION = 6
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -339,6 +341,83 @@ migrations[3] = function(db)
     end
 
     db.global.schemaVersion = 4
+end
+
+--- v4 -> v5: `mergePets` AND `throttle` BECOME ADDON-WIDE.
+---
+--- Neither was ever a property of a window. `mergePets` says what a pet's damage
+--- IS — one row or its owner's — and `throttle` is how often the addon redraws.
+--- Two windows on one screen disagreeing about either is two answers to one
+--- question, and the settings tree was the only thing asking it twice.
+---
+--- THE FIRST WINDOW'S VALUES WIN, per profile. There is no merge rule that is
+--- right for a player who set two windows differently, and the alternatives are
+--- worse than arbitrary: taking the shipped default would discard a deliberate
+--- choice from every profile that made one, and taking "any window that differs
+--- from the default" would let a window the player had forgotten about outvote
+--- the one they use. The first window is the one at the top of their own picker.
+---
+--- The per-window keys are then REMOVED. AceDB merges defaults in and never
+--- prunes what the defaults stopped naming, so leaving them would put a stale
+--- `throttle` in every saved window forever, next to the live one, with nothing
+--- to say which the addon honors.
+migrations[4] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        local windows = type(profile.windows) == "table" and profile.windows or {}
+        local first = windows[1]
+        local data = type(first) == "table" and type(first.data) == "table" and first.data or nil
+
+        -- THE WINDOW'S VALUE WINS OUTRIGHT, and the `== nil` rule that governs
+        -- EnsureWindowShape deliberately does not apply here. AceDB's defaults
+        -- merge has already run by the time a migration does, so `profile.data`
+        -- is never nil to test — it is sitting there filled with the shipped
+        -- values, and "already set" cannot be told from "just merged in". Before
+        -- this step the profile-level key did not exist and nothing read it, so
+        -- there is no player intent to preserve at that address and every
+        -- intent to preserve at the window's.
+        if data and (data.mergePets ~= nil or data.throttle ~= nil) then
+            local lifted = type(profile.data) == "table" and profile.data or {}
+            if data.mergePets ~= nil then lifted.mergePets = data.mergePets end
+            if data.throttle  ~= nil then lifted.throttle  = data.throttle  end
+            profile.data = lifted
+        end
+
+        for _, w in ipairs(windows) do
+            if type(w) == "table" and type(w.data) == "table" then
+                w.data.mergePets, w.data.throttle = nil, nil
+            end
+        end
+    end
+
+    db.global.schemaVersion = 5
+end
+
+--- v5 -> v6: THE TWO DEAD ROW-BACKGROUND KEYS ARE PRUNED.
+---
+--- `rows.classBackground` and `rows.classBackgroundAlpha` were settings-panel
+--- rows pointing at keys NOTHING READ. The row tint is painted per cell from
+--- `bars.bgColorMode` and `bars.bgAlpha` (modules/Row.lua's cellBackground) --
+--- it moved there when tinting the row itself turned out to tint the two-pixel
+--- seams between the columns and lose the separators the grid is read by -- and
+--- these two were left behind, answering a question already answered one page
+--- over, into a void.
+---
+--- Removed rather than left to rot, for the reason the v2 -> v3 icon step gives:
+--- AceDB merges defaults into a stored profile and never prunes what the defaults
+--- stopped naming, so without this they sit in every saved window forever and the
+--- next reader has to work out which of two keys the code honours. Neither had a
+--- reader, which is exactly why nobody would guess.
+migrations[5] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local rows = type(w) == "table" and w.rows
+            if type(rows) == "table" then
+                rows.classBackground, rows.classBackgroundAlpha = nil, nil
+            end
+        end
+    end
+
+    db.global.schemaVersion = 6
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

@@ -350,7 +350,9 @@ function Export.SessionConfig(win, sortColumn)
             sortColumn    = sortColumn,
             sortMode      = "value",
             sortAscending = false,
-            mergePets     = data.mergePets,
+            -- Addon-wide (defaults/Profile.lua's NS.DataSetting), so an export
+            -- merges pets exactly as the grid it was taken from does.
+            mergePets     = NS.DataSetting and NS.DataSetting("mergePets") or false,
         },
     }
 end

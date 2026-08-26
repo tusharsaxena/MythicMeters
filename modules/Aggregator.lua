@@ -505,7 +505,11 @@ local function newPass(window)
         -- Off by default: see rowForSource. Merging is arithmetic, and arithmetic
         -- on a secret raises, so the merged mode is exact out of combat and lossy
         -- inside it.
-        mergePets   = data.mergePets and true or false,
+        --
+        -- ADDON-WIDE, not this window's: it says what a pet's damage IS, which is
+        -- not a question two windows may answer differently. NS.DataSetting is
+        -- the one reader (defaults/Profile.lua).
+        mergePets   = NS.DataSetting and NS.DataSetting("mergePets") and true or false,
         applied     = nil,
         -- Whether this pass must build without the GUID join. Asked of
         -- core/Secrets.lua rather than of State.restricted, which is a mirror

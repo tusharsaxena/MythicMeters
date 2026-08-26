@@ -6,15 +6,15 @@
 -- so the page body is one RenderSchema call. Adding a frame option means adding
 -- one row in settings/Schema.lua and nothing here.
 --
--- The one bespoke control is "Reset position". Position is not a schema row and
--- deliberately cannot be one: it is stored as
--- `{ point, relativePoint, x, y }` — four values behind one concept — and the
--- flat path model the CLI shares with this panel expresses a scalar, not a
--- tuple. It is also the one piece of window state that must never be READ back
--- off the live frame (design rule R3): a cell that has been handed a secret
--- meter value makes its own geometry secret and propagates that to its parent,
--- so `GetPoint` on a drawn window is not something this addon may call. Writing
--- a known-good position is always legal; reading one is not.
+-- NO BESPOKE CONTROLS. "Reset position" used to sit at the bottom of this page
+-- and now sits on General beside "Reset all settings", where the player looks
+-- for a reset. It still acts on the ACTIVE window — position is per-window and
+-- there is nothing addon-wide about it — so settings/General.lua says which
+-- window it means rather than leaving the page's scope to imply the wrong one.
+--
+-- The Header controls group left this page too, for the Header page. Both moves
+-- are page placement only: `window.frame.*` is still where every one of those
+-- settings is STORED.
 --
 -- WHY THE BODY IS LAZY: the builder runs at enable time, when ctx.body still has
 -- zero width and AceGUI would lay every child out against it, and before the
@@ -60,24 +60,9 @@ local function Build(mainCategory)
         -- the first.
         H.ClearScroll(c)
         H.RenderSchema(c, PAGE)
-
-        H.InlineButtonPair(c, {
-            text    = L["Reset position"],
-            tooltip = L["Move the window back to the center of the screen."],
-            onClick = function()
-                local M = NS.WindowManager
-                if M and M.ResetPosition then
-                    M:ResetPosition(NS.State and NS.State.activeWindowId)
-                end
-            end,
-        }, nil)
-
-        -- InlineButtonPair adds after RenderRows already ran its layout pass,
-        -- so the row it just appended has no measured height until we ask again.
-        if H.Relayout then H.Relayout(c) end
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Frame"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Frame"]))
 end
 
 if NS.RegisterOptionsPage then

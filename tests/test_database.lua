@@ -400,7 +400,7 @@ test("Database v2: every stored column is lifted to the one uniform width", func
         assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
             col.stat .. " kept its old per-stat width")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 4,
+    assertEqual(inst.NS.db.global.schemaVersion, 6,
         "the walk must run all the way to the current version, not stop at v2")
 end)
 
@@ -478,7 +478,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 4)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -620,7 +620,7 @@ test("Database v3: the three dead keys are REMOVED, not left to rot", function()
     assertNil(icons.showClass, "showClass survived the migration")
     assertNil(icons.showSpec,  "showSpec survived the migration")
     assertNil(icons.showRole,  "showRole survived the migration")
-    assertEqual(inst.NS.db.global.schemaVersion, 4)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -651,7 +651,7 @@ test("Database v4: a stored AUTO channel folds to SELF, in EVERY profile", funct
 
     assertEqual(sv.profiles.Default.export.channel, "SELF")
     assertEqual(sv.profiles.Alt.export.channel, "SELF")
-    assertEqual(inst.NS.db.global.schemaVersion, 4)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
 end)
 
 test("Database v4: every other channel is left exactly as the player set it", function()
@@ -670,5 +670,110 @@ test("Database v4: a profile with no export block at all survives the step", fun
         profiles = { Default = { nextWindowId = 2, windows = { { id = 1 } } } },
         global   = { schemaVersion = 3 },
     })
-    assertEqual(inst.NS.db.global.schemaVersion, 4)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
+end)
+
+-- ---------------------------------------------------------------------------
+-- v4 -> v5: mergePets and throttle become addon-wide
+-- ---------------------------------------------------------------------------
+
+--- A v4 account whose windows carry the two lifted keys.
+local function v4Data(windows, existing)
+    return preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = #windows + 1,
+                windows = windows,
+                data = existing,
+            },
+        },
+        global = { schemaVersion = 4 },
+    })
+end
+
+test("Database v5: the FIRST window's values are the ones lifted", function()
+    -- There is no merge rule that is right for a player who set two windows
+    -- differently. The first window is the one at the top of their own picker.
+    -- red under: taking the last window, or taking the shipped default.
+    local inst = v4Data({
+        { id = 1, data = { mergePets = true,  throttle = 0.5 } },
+        { id = 2, data = { mergePets = false, throttle = 2   } },
+    })
+    local profile = inst.NS.db.profile
+
+    assertEqual(profile.data.mergePets, true)
+    assertEqual(profile.data.throttle, 0.5)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
+end)
+
+test("Database v5: the per-window keys are REMOVED from EVERY window", function()
+    -- AceDB merges defaults in and never prunes what they stopped naming, so a
+    -- stale `throttle` would sit in every saved window forever, beside the live
+    -- one, with nothing to say which the addon honors.
+    -- red under: lifting without clearing.
+    local inst = v4Data({
+        { id = 1, data = { mergePets = true, throttle = 0.5, sortColumn = "Healing" } },
+        { id = 2, data = { mergePets = true, throttle = 2 } },
+    })
+
+    for _, id in ipairs({ 1, 2 }) do
+        local data = inst.NS.Database.FindWindow(id).data
+        assertNil(data.mergePets, "window " .. id .. " kept mergePets")
+        assertNil(data.throttle,  "window " .. id .. " kept throttle")
+    end
+    -- And nothing else in the group was touched: the sort keys are still the
+    -- window's own, and the migration is not a rewrite of `data`.
+    assertEqual(inst.NS.Database.FindWindow(1).data.sortColumn, "Healing")
+end)
+
+test("Database v5: the window's value beats whatever sits at the profile address", function()
+    -- The `== nil` rule that governs EnsureWindowShape does NOT apply to this
+    -- step, and the reason is AceDB: its defaults merge runs before any
+    -- migration, so `profile.data` is already filled with the shipped values and
+    -- "the player set this" cannot be told from "the merge just wrote it". The
+    -- window's value is the only one that carries intent, because before v5 the
+    -- profile-level key did not exist and nothing read it.
+    -- red under: an `if profile.data.throttle == nil` guard, which would discard
+    -- every deliberate per-window value in favour of the merged default.
+    local inst = v4Data({ { id = 1, data = { throttle = 2 } } }, { throttle = 0.75 })
+    assertEqual(inst.NS.db.profile.data.throttle, 2)
+end)
+
+test("Database v5: a profile whose windows never carried the keys survives", function()
+    -- Every profile written before either setting existed is this one, and the
+    -- shipped defaults are what it should land on.
+    local inst = v4Data({ { id = 1, data = { sortColumn = "Healing" } } })
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
+    assertEqual(inst.NS.DataSetting("throttle"), 0.25)
+    assertEqual(inst.NS.DataSetting("mergePets"), false)
+end)
+
+test("Database v6: the two dead row-background keys are pruned from every window", function()
+    -- They were settings-panel rows pointing at keys NOTHING read: the row tint
+    -- is `bars.bgColorMode`, painted per cell. AceDB never prunes what the
+    -- defaults stopped naming, so without this they sit in every saved window
+    -- forever and the next reader has to work out which of two keys is honoured.
+    -- red under: deleting the schema rows and leaving the stored keys.
+    local inst = preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 3,
+                windows = {
+                    { id = 1, rows = { classBackground = true, classBackgroundAlpha = 0.4,
+                                       highlightSelf = false } },
+                    { id = 2, rows = { classBackground = false } },
+                },
+            },
+        },
+        global = { schemaVersion = 5 },
+    })
+
+    for _, id in ipairs({ 1, 2 }) do
+        local rows = inst.NS.Database.FindWindow(id).rows
+        assertNil(rows.classBackground, "window " .. id .. " kept classBackground")
+        assertNil(rows.classBackgroundAlpha, "window " .. id .. " kept classBackgroundAlpha")
+    end
+    -- And nothing else in the group was touched.
+    assertEqual(inst.NS.Database.FindWindow(1).rows.highlightSelf, false)
+    assertEqual(inst.NS.db.global.schemaVersion, 6)
 end)

@@ -104,9 +104,14 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
   already moved. **Sweep along the strip**: the bright one must follow the pointer control by
   control, without a flicker in the gaps and without the whole set coming up as you cross the title
   bar. **Check this on a LOCKED window too**: locking used to disable the title bar's mouse.
-- **The colours are both settings.** Frame → Header controls → **Control color** (white by default)
+- **The colours are both settings.** Header → Header controls → **Control color** (white by default)
   and **Control hover color** (gold). Change either and the strip must follow immediately, at rest
   and under the pointer.
+- **Each colour has its OWN class-colour flag.** Tick **Use class color** under Control color: the
+  strip goes to your class colour at rest and the **hover colour is unchanged**. Tick the one under
+  Control hover color instead: the resting colour is unchanged and the control under the pointer
+  takes your class. Both ticked is legal and makes hover indistinguishable from rest — that is the
+  player's choice to make, but one flag driving both would force it, which is why there are two.
 - **`Reveal controls on hover` OFF keeps every control at full alpha** — and the hover **colour**
   must still say which one the pointer is on, because it is the only channel left.
 - **Minimise collapses to the title bar** and the plus/minus flips. The column headers, the rows,
@@ -136,9 +141,14 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
 - Standing solo in the open world the window is **shown**: every context ships on and every hide
   rule ships off.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
-- Settings → AddOns shows a **Ka0s Multi Meters** parent with **thirteen** subcategories in this
-  order: Windows · Frame · Header · Rows · Bars · Text · Icons · Tooltip · Visibility · Columns ·
-  Data · General · Profiles.
+- Settings → AddOns shows a **Ka0s Multi Meters** parent with **twelve** subcategories in this
+  order: General · Windows · Frame · Header · Rows · Bars · Tooltip · Visibility · Columns ·
+  Profiles. **General is first**, and the seven between Windows and Profiles read as
+  `    - Frame` — four spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
+  Two failure modes to watch for: a **hollow box** in front of a page name means a non-ASCII glyph
+  has crept back in and the player's font does not have it, and a **flat list of hyphens** with no
+  indent means the client has started trimming leading whitespace — they are the pages the Windows picker retargets. General and Profiles
+  do not carry it, and no page's own heading does.
 - **No `schema error:` line and no "schema path does not resolve" line appears at any point.**
   `NS.ValidateSchema` runs from the options descriptor at panel creation; a line here means a schema
   row's path does not resolve against `defaults/Profile.lua`, or its default disagrees with the tree.
@@ -183,7 +193,7 @@ second edge to catch.
 
 ### 4. Settings panel sweep
 
-**Steps.** Open every one of the thirteen pages. On each, move one control of each type present
+**Steps.** Open every one of the ten pages. On each, move one control of each type present
 (checkbox, slider, dropdown, color, edit box) and watch the window.
 
 **Pass.**
@@ -216,11 +226,23 @@ second edge to catch.
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
 - **The Frame page's shape.** Three groups, in order: *Size and position*, *Border style*, *Frame
-  behavior* (**not** "Row behavior" — that heading belongs to the Rows page), then *Header controls*.
-  Each heading appears **once**; a heading printed twice means a row is filed under a group the page
-  has already left. **Show close** sits among the header controls, not under Frame behavior. There is
-  **no** "Show resize grip" checkbox and **no** "Minimised" checkbox — the lock governs the grip, and
-  the header's own minimise button governs the collapse.
+  behavior* (**not** "Row behavior" — that heading belongs to the Rows page). Each heading appears
+  **once**; a heading printed twice means a row is filed under a group the page has already left.
+  There is **no** *Header controls* group here any more — the whole group is on **Header** — and
+  **no** "Reset position" button, which is on **General**. There is also **no** "Show resize grip"
+  checkbox and **no** "Minimised" checkbox: the lock governs the grip, and the header's own minimise
+  button governs the collapse.
+- **The Header page's shape.** Three groups, top to bottom in the order the strips are drawn:
+  *Frame header* — everything about the title bar, its text, alignment, height and background, in one
+  group because they are one strip — then *Header controls*, the group that moved off Frame, then
+  *Column headers* for the strip below. **Show close** sits in the controls group. Those rows are
+  still **stored** at `window.frame.*` (`/mm get window.frame.showClose` answers), which is
+  deliberate: a row's page is where it is edited, its path is where it is stored.
+- **The header background stops at the title bar.** Header → Frame header → **Header background** to
+  something loud, and Column headers → **Background color** to something else: two distinct bands,
+  the second starting exactly where the first ends. One colour covering both rows is the old
+  behaviour, in which the column strip's own setting was invisible underneath and a colour picked for
+  the title bar restyled the grid's labels too.
 - **Scale scales the whole window.** Frame → Scale to 0.5, then 2.0. The window's **outline** grows
   and shrinks with its contents. A box that stays exactly the size it was while the grid inside it
   shrinks into one corner means the scale reached the visible frame but not its anchor.
@@ -230,7 +252,19 @@ second edge to catch.
   non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
   addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
   border style, checked in §23.
-- Ten pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
+- Seven pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
+- **The General page's shape and its three buttons.** It is the **first** page in the tree, above
+  Windows. It carries **Merge pets into their owner** and **Refresh interval**, both addon-wide:
+  change either and **every** window follows, not just the selected one. Its three buttons are
+  **Reset all settings** and **Reset position** — there is deliberately **no** Reset meter data
+  button here, or on any page; the header's own reset control is the one way to it. Reset position
+  is the one
+  control on the page that is **not** addon-wide — it moves the window selected on the Windows page
+  and nothing else, which its tooltip says.
+- **The window name takes the header's colour.** Header → Frame header → **Text color**: the title in
+  the window's title bar follows it, along with the font, size, outline and shadow it already
+  followed. Tick **Use class color** and the title takes your class colour, exactly as the session
+  line beside it does — the two are one header and must never differ.
   The Settings window's own footer Defaults control works on the same ten.
 - **Panel ↔ CLI parity.** With a page open, run `/mm set window.frame.width 640`. The Frame page's
   Width slider moves to 640 **without being reopened** (`RefreshScalars`). Conversely, move a slider
@@ -605,18 +639,15 @@ what confirms its verdict against a second meter.**
    the steps below are then confirmation rather than discovery.
 1. In a Mythic+ dungeon or a raid, with a full group and at least one completed pull, stand **out of
    combat**.
-2. Set the window to `sortMode = "provider"` and `sortColumn = "DamageDone"`:
-   ```
-   /mm set window.data.sortMode provider
-   /mm set window.data.sortColumn DamageDone
-   ```
-3. On the **Data** page, set **Session** to **Overall** so both meters are describing the same span.
-   (Current — the live pull — is the shipped default; Overall is the accumulated run. The stored
-   value is an `Enum.DamageMeterSessionType` number, so prefer the dropdown to
-   `/mm set window.data.sessionType 0`.)
+2. Put the window on **Damage** by clicking the **Damage** column header, and click it once more if
+   the arrow is not pointing down. The sort is the window's own control — there is no settings row
+   and no `/mm set` for it, deliberately: the click path writes `sortMode`, `sortColumn` and
+   `sortAscending` directly.
+3. Pick **Overall** from the header's **segment** dropdown, so both meters are describing the same
+   span. (Overall is the accumulated run and the shipped default; Current is the live pull.)
 4. Open **Blizzard's built-in damage meter** and put it on **Damage done**, same session scope.
 5. Compare the two lists **top to bottom, by name**, and write both orders down.
-6. Repeat for **Healing** (`/mm set window.data.sortColumn HealingDone`) and for a counting stat —
+6. Repeat for **Healing** (click the Healing column header) and for a counting stat —
    **Interrupts** is the sharpest test, because ties are common and a stable tie-break is exactly
    where an order assumption breaks.
 7. Repeat once **during** a pull, with the restriction active, comparing the order the addon holds
@@ -688,11 +719,12 @@ should correct itself within one refresh.
   the memoized availability answer) the rows come back **without a `/reload`**.
 
 **The other empty state.** With the meter **enabled** but no combat data yet — fresh login, or right
-after `/mm` → Data → **Reset meter data** — the window shows *"Waiting for combat data…"* instead.
+after the header's **reset** control wipes the sessions — the window shows *"Waiting for combat data…"* instead.
 These two messages must not be confused: one means "the meter is off", the other means "the meter is
 on and there is nothing in it yet", which is the normal state between pulls.
 
-**Reset meter data.** From the Data page, click it and confirm the popup. Blizzard's **own** meter
+**Reset meter data.** From the window header's **reset** control — there is no settings-page button
+for it — click it and confirm the popup. Blizzard's **own** meter
 window empties too — the call is `C_DamageMeter.ResetAllCombatSessions` and it is account-wide, which
 is why the popup exists. Every open drill-down closes and this module's caches are dropped.
 
@@ -894,7 +926,7 @@ this change set.
    follows the live pull.
 6. Pick `Current` from the menu. The pin clears and the window follows the live pull again.
 7. Pin a fight, then `/reload`. **The pin survives.**
-8. Pin a fight, then reset the meter from the Data settings page. On the next refresh the window
+8. Pin a fight, then reset the meter from the General settings page. On the next refresh the window
    **falls back to Current on its own** — it must not sit there empty.
 
 ### 22. v1 → v2 uniform column widths
@@ -1263,19 +1295,21 @@ misclick.
 #### What is remembered
 
 **Steps.** Set Metric = Healing, Channel = Party, Lines = 20, and a whisper name. Close the modal.
-`/reload`. Re-open it. Then open **Settings → General**.
+`/reload`. Re-open it.
 
 **Pass.**
 - Channel, Lines and the whisper name come back exactly as you left them. They live at `export.*` in
   the **profile** and are **addon-wide**, not per window — "I print the top five to party" is a habit
   rather than a window's appearance. Metric is not among them: the modal always seeds it from the
   window it was opened from, so there is nothing to remember there.
-- **The General page shows the same three values** under an **Export** group: Default channel,
-  Whisper recipient, Chat lines. The panel and the modal are two views of one preference, so
-  changing one must move the other — change Chat lines to 10 on the panel with the modal closed, then
-  re-open the modal and confirm it reads `Lines: 10`.
-- `/mm get export.channel` and `/mm set export.lines 10` work on the same rows, as they do for any
-  schema path.
+- **The General page shows NO Export group.** The modal's own three controls are the only ones: a
+  second copy on a settings page restated a control a player only ever meets in the dialog, and gave
+  the two a chance to disagree about what is selected. The rows still exist and are marked `hidden`,
+  which is what keeps the seam below working.
+- `/mm get export.channel` and `/mm set export.lines 10` still work, and the modal follows them —
+  set `/mm set export.lines 10` with the modal closed, re-open it and confirm it reads `Lines: 10`.
+  A "no such setting" answer means the rows were deleted rather than hidden, which also drops every
+  modal write onto the degraded fallback that skips validation and `CONFIG_CHANGED`.
 - Switch **profiles** and confirm the export choices switch with them.
 
 #### `/mm export`

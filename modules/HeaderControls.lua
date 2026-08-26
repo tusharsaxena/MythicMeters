@@ -469,6 +469,50 @@ function HeaderControls:Apply(window)
     HeaderControls.ApplyHoverAlpha(window)
 end
 
+--- One control's colour, at rest or under the pointer.
+---
+--- TWO COLOURS AND TWO CLASS-COLOUR FLAGS, because they are two independent
+--- answers: a player who wants their class colour under the pointer does not
+--- necessarily want the whole strip in it at rest, and one shared flag would make
+--- hover and rest the same colour for anyone who ticked it -- which is the one
+--- thing a hover colour must never be.
+---
+--- The LOCAL player's class, like every other header surface: the strip is about
+--- the window rather than about any row in it, so yours is the only class it can
+--- sensibly mean (modules/Window.lua's headerColor says the same thing about the
+--- title and the session line). A player whose class cannot be read keeps the
+--- configured colour, which is the honest answer rather than a fallback hue.
+---
+--- @param frameCfg table
+--- @param hovered boolean
+--- @return number r, number g, number b
+local function controlColor(frameCfg, hovered)
+    local r, g, b
+    if hovered then
+        r, g, b = color(frameCfg.controlHoverColor, 1, 0.82, 0)
+    else
+        r, g, b = color(frameCfg.controlColor, 1, 1, 1)
+    end
+
+    -- Spelled out rather than `hovered and A or B`: that idiom answers B whenever
+    -- A is false, so a window with the RESTING flag on and the hover flag off
+    -- would take the resting flag's answer while hovered — the two flags
+    -- collapsing back into the one this exists not to be.
+    local classed
+    if hovered then
+        classed = frameCfg.controlHoverClassColor
+    else
+        classed = frameCfg.controlClassColor
+    end
+
+    if classed and NS.PlayerClassRGB then
+        local cr, cg, cb = NS.PlayerClassRGB()
+        if cr then r, g, b = cr, cg, cb end
+    end
+
+    return r, g, b
+end
+
 --- The font and colour every control draws with, resolved once per Apply.
 ---
 --- Published so modules/Window.lua can hand over its own header font rather than
@@ -484,7 +528,7 @@ function HeaderControls.Style(window)
     -- colours, one at rest and one under the pointer, and neither is the colour
     -- the header text is drawn in.
     local frameCfg = (window.config or {}).frame or {}
-    style.r, style.g, style.b = color(frameCfg.controlColor, 1, 1, 1)
+    style.r, style.g, style.b = controlColor(frameCfg, false)
     return style
 end
 
@@ -530,12 +574,7 @@ local function applyTint(button, control, window, frameCfg)
     local hovered = (window.hoveredControl == control.key)
     local _, dimmed = artFor(control, frameCfg)
 
-    local r, g, b
-    if hovered then
-        r, g, b = color(frameCfg.controlHoverColor, 1, 0.82, 0)
-    else
-        r, g, b = color(frameCfg.controlColor, 1, 1, 1)
-    end
+    local r, g, b = controlColor(frameCfg, hovered)
 
     -- The "off" half of a two-state icon stays dimmed against its own state,
     -- and the pointer still lifts it clear so a click target is never faint.

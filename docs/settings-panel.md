@@ -27,24 +27,20 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 
 | # | Page | Panel key | Rows | Defaults button | What is on it |
 |---|---|---|---|---|---|
-| 1 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
-| 2 | Frame | `frame` | 24 | yes | Geometry, backdrop, LSM border, lock, title bar, the seven header controls (close among them) with their size and their two colours, hover reveal · **Reset position** button. 25 schema rows, one of them `hidden`: `frame.minimised` is state the header's own button writes, so it stays writable and listable without drawing a control |
-| 3 | Header | `header` | 20 | yes | Title text, session name / duration / totals, the four text controls (font, outline, shadow, colour + class colour), alignment, strip height and background — plus **Column headers**, which own the "Player \| Damage \| Healing" strip's own four |
-| 4 | Rows | `rows` | 10 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, alternating background |
-| 5 | Bars | `bars` | 9 | yes | Texture, color mode, custom color, opacity, fill direction, background color and opacity, outline |
-| 6 | Text | `text` | 12 | yes | Left slot, right slot, number format, death timestamps, max name length, the four text controls (font, outline, shadow, colour + class colour), size, opacity |
-| 7 | Icons | `icons` | 3 | yes | One icon per row — spec where known, class otherwise, never a role — plus its size and which side of the name it sits on |
-| 8 | Tooltip | `tooltip` | 20 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own four text controls, and the Targets section |
-| 9 | Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
-| 10 | Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
-| 11 | Data | `data` | 6 | yes | Session, sort mode, sort column, refresh interval · **Reset meter data** button |
-| 12 | General | `general` | 7 | yes | Master enable, minimap button, preview mode, debug console · **Reset all settings** button |
-| 13 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
+| 1 | General | `general` | 6 | yes | Master enable, minimap button, preview mode, debug console, **Merge pets** and **Refresh interval** (addon-wide since schemaVersion 5) · **Reset all settings** and **Reset position** buttons. 9 schema rows, three of them `hidden`: the export modal's three remembered choices live here so the write seam can reach them, and are drawn only in the modal |
+| 2 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
+| 3 | `    - `Frame | `frame` | 13 | yes | Geometry, backdrop, LSM border, lock, title bar. 14 schema rows, one of them `hidden`: `frame.minimised` is state the header's own button writes, so it stays writable and listable without drawing a control |
+| 4 | `    - `Header | `header` | 34 | yes | Three groups, in the order the strips are drawn. **Frame header** — the title bar: its text, session name / duration / totals, the four text controls (font, outline, shadow, colour + class colour), alignment, height and background. **Header controls** — the seven controls, their size, their two colours and a class-colour flag for each, and hover reveal. **Column headers** — the "Player \| Damage \| Healing" strip's own four text controls and its own background |
+| 5 | `    - `Rows | `rows` | 7 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, mouseover highlight. The alternating stripe moved to Bars, beside the tint it competes with; `rows.classBackground` and `rows.classBackgroundAlpha` were deleted outright — the row tint is `bars.bgColorMode`, and those two rows pointed at keys nothing read |
+| 6 | `    - `Bars | `bars` | 28 | yes | **Everything drawn inside a cell**, in five groups, back to front: **Bar appearance** (texture, colour mode, custom colour, opacity, fill direction), **Bar background color** (its mode, colour and opacity, plus the alternating row stripe that competes with it), **Bar border** (on/off, thickness, colour), **Cell text** (the two slots, number format, death timestamps, max name length, the four text controls, size, opacity) and **Row icons** (one icon per row, its size and which side of the name it sits on). The Text and Icons pages folded in here: styling one cell used to be three pages and two clicks between each change you wanted to compare |
+| 7 | `    - `Tooltip | `tooltip` | 20 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own four text controls, and the Targets section |
+| 8 | `    - `Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
+| 9 | `    - `Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
+| 10 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
 
-Seven of the thirteen — Header, Rows, Bars, Text, Icons, Tooltip, Visibility — are one
-`H.RenderSchema(c, PAGE)` call and nothing else. Frame and Data are the same plus a single bespoke
-button. Adding an option to any of those nine means adding one row in `settings/Schema.lua` and
-touching no page file at all.
+Six of the ten — Frame, Header, Rows, Bars, Tooltip, Visibility — are one
+`H.RenderSchema(c, PAGE)` call and nothing else. Adding an option to any of them means adding one row
+in `settings/Schema.lua` and touching no page file at all.
 
 Four are not:
 
@@ -52,8 +48,63 @@ Four are not:
   addresses, so both are bespoke.
 - **General** carries two session-only toggles drawn through `Helpers.SessionCheckbox`, which is
   wired to caller-supplied `get`/`set` instead of a settings path — so neither can accidentally
-  become a stored value.
+  become a stored value — plus the addon's three bespoke reset buttons.
 - **Profiles** hosts an options table this addon does not own.
+
+### The indent, and why the tree needs one
+
+Blizzard's Settings tree draws every canvas subcategory of one addon at the **same depth**, and these
+pages are not one flat set. Seven of them edit *the window the Windows page has selected*; General and
+Profiles edit the addon. Nine pages that silently retarget when a picker two pages up moves,
+presented as peers of the two that never do, is the tree lying about what a click will change.
+
+There is no API for a third level, so the mark is **typography**: four spaces, a hyphen and a space,
+prefixed by `NS.SubPageLabel` (`settings/OptionsSetup.lua`) to the **tree label only**. The canvas
+heading and the breadcrumb keep the plain name — a page heading that starts four spaces in reads as a
+layout bug. It is not a locale string: it is furniture, and a translator handed four spaces and a
+hyphen has nothing to translate and one more chance to drop a space.
+
+**The indent does the nesting; the hyphen marks the item.** Two earlier spellings got one of those
+and not the other, and both are recorded because each failed in its own way:
+
+| Tried | Why it went |
+|---|---|
+| `U+21B3` (↳) | Exactly the right character; Friz Quadrata does not have it. The client drew a **hollow box** in front of all seven pages, and the settings tree offers no way to hand the player a font that does have it. |
+| `\|- ` | Draws on any font, and reads as a bulleted **list** rather than as nesting: with nothing indenting it, the mark sat where the page name should start and competed with it for the eye. |
+| `    ` (four spaces) | Nests correctly and marks nothing — confirmed in the client, which is what made the hyphen safe to add on top. |
+| `    - ` | Both jobs, each done by the part that is good at it. |
+
+**Leading whitespace is the kind of thing a UI toolkit trims**, and this one was checked in-client
+rather than assumed. That check is also why the hyphen is decoration rather than load-bearing: if a
+future client does start trimming, the nine pages keep a visible `- ` and degrade to a flat bulleted
+list rather than to nothing at all.
+
+### Where a setting is edited is not where it is stored
+
+Two groups make the point, and both are deliberate:
+
+- **Header controls** are edited on **Header** and stored at `window.frame.*`. Every one of them
+  draws a control into the title bar, which is what a player looks for under Header — but renaming
+  the keys to `window.header.*` for symmetry would migrate every saved profile in exchange for a
+  tidiness nobody can see.
+- **Reset position** sits on **General** and acts on the **selected window**. It is the one control
+  on that page that is not addon-wide, which is why its tooltip names the window rather than saying
+  "the window".
+
+### What is no longer here
+
+- **The Data page is gone.** Session, sort mode, sort column and sort ascending were all reachable
+  from the window itself long before they were rows: the header's segment picker writes
+  `sessionType`, and one click on a column header writes all three sort fields
+  (`modules/Window.lua`'s `SortByColumn`). They were **deleted**, not hidden, so `/mm set
+  window.data.sortColumn` is gone too — the click path writes those fields directly rather than
+  through `NS.SetByPath`, so a CLI that could also write them was a second seam onto state the
+  window owns. Merge pets and Refresh interval moved to General and became addon-wide; the page's
+  **Reset meter data** button was **deleted rather than moved**: a reset that wipes the sessions
+  Blizzard's own meter is reading does not belong one click from the addon's front door, beside two
+  resets that touch only this addon. Its dialog lives on in `settings/General.lua` because the
+  header's own reset control still opens it — which is the deliberate way to reach it, on the window
+  whose numbers you are looking at.
 
 ### The three pages with no Defaults button, and why each
 
@@ -89,7 +140,7 @@ first OnShow      →  H.EnsureDefaultsButton(panel)                -- button bu
 
 ### Why the category is eager
 
-The parent category and all thirteen subcategories are registered during `OnInitialize`, before
+The parent category and all ten subcategories are registered during `OnInitialize`, before
 anything is drawn. That is what makes the addon appear in the Blizzard AddOns list, what makes
 `/mm config` have somewhere to go, and what makes the Settings window's own search find the pages.
 A category registered lazily is a category the player cannot find until they have already found it.
@@ -298,13 +349,13 @@ Five details worth knowing:
 
 ## The bespoke controls
 
-Five things on four pages are commands rather than settings — they have no stored value to get, set
+Four things on two pages are commands rather than settings — they have no stored value to get, set
 or restore, so none of them can be a schema row.
 
 | Control | Page | What it does |
 |---|---|---|
-| **Reset position** | Frame | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
-| **Reset meter data** | Data | Confirms, then `NS.Provider.Reset()`. Irreversible and reaches **outside** this addon: `C_DamageMeter.ResetAllCombatSessions` wipes the data Blizzard's own meter is showing too. Routed through the provider and never straight at the Compat shim — the provider is the only permitted caller of the meter shims, and it also forgets the memoized availability answer and announces `METER_RESET`. |
+| **Reset position** | General | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
+| **Reset meter data** | *the window header, not a page* | Confirms, then `NS.Provider.Reset()`. Irreversible and reaches **outside** this addon: `C_DamageMeter.ResetAllCombatSessions` wipes the data Blizzard's own meter is showing too. Routed through the provider and never straight at the Compat shim — the provider is the only permitted caller of the meter shims, and it also forgets the memoized availability answer and announces `METER_RESET`. |
 | **Reset all settings** | General | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
 | **Preview mode** | General | `Helpers.SessionCheckbox` over `NS.State.preview`. Fills every window with placeholder rows so columns can be laid out without being in combat. Session-only: persisting it would mean logging in to a screen full of fake numbers. Also reachable as `/mm preview`, and implied by unlocking a window. |
 | **Debug console** | General | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The spec comes from `LibKa0s-DebugLog-1.0` itself (`D:ConsoleCheckbox()`) rather than being hand-written, so its label, tooltip and show/hide are the library's. |
@@ -470,8 +521,8 @@ reset **cannot** reach — the `sessionOnly` rows (`state.testMode`, `state.debu
 storage is their own `set()` rather than the db.
 
 Window positions come back with the rest of the profile, so `afterRestoreAll` no longer calls
-`ResetPositions`. The **Reset position** button on the Frame page is unaffected and still moves the
-active window alone.
+`ResetPositions`. The **Reset position** button — on General since it moved off Frame — is
+unaffected and still moves the active window alone.
 
 **What was wrong before.** Every `window.` path resolves against ONE window — whichever
 `NS.State.activeWindowId` names — which is exactly right for a panel click and for `/mm set`. The

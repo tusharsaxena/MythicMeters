@@ -202,14 +202,19 @@ L["Show resize grip"] = "Show resize grip"
 L["Draw a drag handle in the bottom-right corner for resizing."] =
     "Draw a drag handle in the bottom-right corner for resizing."
 L["Reset position"] = "Reset position"
-L["Move the window back to the center of the screen."] =
-    "Move the window back to the center of the screen."
+L["Move the window selected on the Windows page back to the center of the screen. Only that window moves."] =
+    "Move the window selected on the Windows page back to the center of the screen. Only that window moves."
 
 -- ---------------------------------------------------------------------------
 -- Header page
 -- ---------------------------------------------------------------------------
 
-L["Header text"] = "Header text"
+-- ONE group for the whole title bar: its text, its alignment, its height and its
+-- background. It was two ("Header text" and "Header background") and the split
+-- put the height and the alignment of the text under a heading that said
+-- background. The column strip below it keeps its own group, because it is a
+-- different strip.
+L["Frame header"] = "Frame header"
 L["Title"] = "Title"
 L["Text shown in the header. Leave empty to use the window's name."] =
     "Text shown in the header. Leave empty to use the window's name."
@@ -225,7 +230,8 @@ L["Show the group total for the sort column."] =
 L["Header height"] = "Header height"
 L["Height of the header strip in pixels."] = "Height of the header strip in pixels."
 L["Header background"] = "Header background"
-L["Color drawn behind the header text."] = "Color drawn behind the header text."
+L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."] =
+    "Color drawn behind the title bar. The column-header strip has its own, under Column headers."
 L["Alignment"] = "Alignment"
 L["Where the header text sits horizontally."] = "Where the header text sits horizontally."
 
@@ -284,6 +290,13 @@ L["Opacity of the unfilled part of each bar."] =
 L["Bar opacity"] = "Bar opacity"
 L["Opacity of the filled part of each bar."] = "Opacity of the filled part of each bar."
 L["Bar border"] = "Bar border"
+L["Draw an outline around each bar."] = "Draw an outline around each bar."
+L["How thick the outline around each bar is, in pixels."] =
+    "How thick the outline around each bar is, in pixels."
+L["Color of the outline around each bar. It used to be the skin's own edge color, which no setting could reach."] =
+    "Color of the outline around each bar. It used to be the skin's own edge color, which no setting could reach."
+L["Shade every other row slightly so the grid is easier to read across. Sits behind the bar background above, so a strong tint will hide it."] =
+    "Shade every other row slightly so the grid is easier to read across. Sits behind the bar background above, so a strong tint will hide it."
 L["Draw a thin outline around each bar."] = "Draw a thin outline around each bar."
 L["Fill direction"] = "Fill direction"
 L["Which edge of the cell each bar grows from."] =
@@ -546,9 +559,11 @@ L["Which column's numbers decide the row order."] =
 L["Refresh interval"] = "Refresh interval"
 L["Seconds between refreshes. Lower is more responsive and costs more; the display updates at most this often no matter how fast the game reports numbers."] =
     "Seconds between refreshes. Lower is more responsive and costs more; the display updates at most this often no matter how fast the game reports numbers."
-L["Reset meter data"] = "Reset meter data"
-L["Clear every combat session the game is holding. This affects Blizzard's built-in meter too."] =
-    "Clear every combat session the game is holding. This affects Blizzard's built-in meter too."
+-- The confirmation the header's reset control opens. Its BUTTON label and
+-- tooltip went with the settings-page button that used to sit beside it: the
+-- one way to reach this now is the control on the window whose numbers you are
+-- looking at, which is the deliberate place for a reset that wipes the sessions
+-- Blizzard's own meter is reading.
 L["Clear every recorded combat session?"] = "Clear every recorded combat session?"
 
 -- ---------------------------------------------------------------------------

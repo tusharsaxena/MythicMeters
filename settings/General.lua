@@ -67,6 +67,83 @@ StaticPopupDialogs["MULTIMETERS_RESET_ALL"] = {
 }
 
 -- ---------------------------------------------------------------------------
+-- Reset meter data
+-- ---------------------------------------------------------------------------
+--
+-- NO BUTTON ON THIS PAGE, and the dialog is here anyway. The Data page carried
+-- both and no longer exists; the button went with the page, because a reset that
+-- wipes the sessions Blizzard's own meter is reading does not belong one click
+-- from the addon's front door beside two resets that only touch this addon.
+--
+-- The DIALOG stays because it is still opened -- by the header's own reset
+-- control (modules/HeaderControls.lua), which is the deliberate way to reach it:
+-- you press it on the window whose numbers you are looking at, having seen them.
+--
+-- The rest of the Data page's story: its four sort and session rows are written
+-- by the window's own controls and were deleted, and the two that were left --
+-- Merge pets and Refresh interval -- are addon-wide now and render on this page.
+--
+-- The dialog is declared at FILE LOAD rather than inside the builder, because
+-- the header's own reset control opens it (modules/HeaderControls.lua) on an
+-- install that has never opened the settings panel.
+
+-- Clearing the sessions is irreversible and reaches OUTSIDE this addon —
+-- C_DamageMeter.ResetAllCombatSessions wipes the data Blizzard's own meter is
+-- showing too, not just ours. A player who meant "clear my window" and got
+-- "clear the game's history" has no way back, so it confirms first.
+StaticPopupDialogs["MULTIMETERS_RESET_METER_DATA"] = {
+    text         = L["Clear every recorded combat session?"],
+    button1      = L["Yes"],
+    button2      = L["No"],
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    OnAccept     = function()
+        -- Through the PROVIDER, never straight at core/Compat.lua's shim.
+        -- modules/Provider.lua is the only permitted caller of the meter shims
+        -- (that is where the suspend-while-restricted state and the memo
+        -- invalidation live), and it publishes Reset() for exactly this button.
+        -- Resolved at call time because settings/ loads ahead of modules/, and
+        -- because a popup handler can fire long after either.
+        local Provider = NS.Provider
+        if Provider and Provider.Reset then Provider.Reset() end
+    end,
+}
+
+--- Open the reset confirmation, CENTRED ON THE SCREEN.
+---
+--- WHY IT IS NOT LEFT WHERE BLIZZARD PUTS IT. A StaticPopup is anchored into the
+--- popup STACK -- centred horizontally, pinned near the top of the screen -- so
+--- the one dialog in this addon that asks before it destroys data appeared
+--- nowhere near where the player was looking when they clicked, which for a
+--- header control is the middle of the screen at most. Re-anchoring is the
+--- narrowest fix: the dialog is still Blizzard's, still `hideOnEscape`, still in
+--- the stack it registered into.
+---
+--- The frame is repositioned and nothing else: a StaticPopup is not a protected
+--- frame, so moving one taints no secure code path.
+---
+--- ONCE, AS IT IS SHOWN. Blizzard re-stacks every dialog when another popup opens
+--- or closes, so a second popup arriving on top of this one can pull it back up
+--- to the stack. That is accepted rather than fixed: following the stack means
+--- hooking `StaticPopup_SetUpPosition` for a case -- two dialogs up at once --
+--- that this addon can produce only by accident.
+---
+--- Answers the dialog frame, or nil when every popup slot is already in use --
+--- which is a legitimate outcome of StaticPopup_Show and not an error here.
+function NS.ShowResetMeterData()
+    local show = _G.StaticPopup_Show
+    if not show then return nil end
+
+    local dialog = show("MULTIMETERS_RESET_METER_DATA")
+    if dialog and dialog.SetPoint and _G.UIParent then
+        dialog:ClearAllPoints()
+        dialog:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+    end
+    return dialog
+end
+
+-- ---------------------------------------------------------------------------
 -- Builder
 -- ---------------------------------------------------------------------------
 
@@ -88,12 +165,27 @@ local function Build(mainCategory)
         -- duplicate checkboxes and the duplicate "Debug" heading.
         H.RenderSchema(c, PAGE)
 
+        -- The page's two non-setting controls, side by side because both are
+        -- resets and a player looking for one is looking for the other.
+        --
+        -- RESET POSITION IS PER-WINDOW on an otherwise addon-wide page, and that
+        -- is why its tooltip names the window rather than saying "the window".
+        -- It moved here from Frame because a reset is what a player comes to
+        -- General for; what it resets did not change with the move.
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
             tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."],
             onClick = function() StaticPopup_Show("MULTIMETERS_RESET_ALL") end,
-        }, nil)
-
+        }, {
+            text    = L["Reset position"],
+            tooltip = L["Move the window selected on the Windows page back to the center of the screen. Only that window moves."],
+            onClick = function()
+                local M = NS.WindowManager
+                if M and M.ResetPosition then
+                    M:ResetPosition(NS.State and NS.State.activeWindowId)
+                end
+            end,
+        })
         if H.Relayout then H.Relayout(c) end
     end)
 

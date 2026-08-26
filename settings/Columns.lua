@@ -401,7 +401,7 @@ local function Build(mainCategory)
         render(c)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Columns"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Columns"]))
 end
 
 if NS.RegisterOptionsPage then

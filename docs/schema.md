@@ -67,6 +67,10 @@ db.profile = {
     windows      = { },       -- an ARRAY of window config tables, in picker order
     nextWindowId = 1,         -- monotonic id source; ids are never reused
     minimap      = { hide = false },   -- LibDBIcon-1.0 owns this table's shape
+    data         = {                   -- how the meter is read, addon-wide
+        mergePets = false,             -- a pet's own row, or added to its owner's
+        throttle  = 0.25,              -- seconds between refreshes
+    },
     export       = {                   -- how the player last exported a segment
         metric    = "",                -- a Constants.STATS key, or "" for
                                        -- "match the exporting window's sort column"
@@ -77,7 +81,7 @@ db.profile = {
 }
 ```
 
-Five keys, and that is the design working rather than the profile being thin. A window is an
+Six keys, and that is the design working rather than the profile being thin. A window is an
 **instance, not a singleton** (design §6): there are no global display settings, so `frame`,
 `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
 inside one window's config. What is left at profile level is the handful of things that cannot
@@ -110,18 +114,44 @@ treats it as its own — it reads `hide` and **writes** `minimapPos` (and a lock
 if the player drags the button off the minimap). The addon must never enumerate the table or
 normalize keys out of it, or a dragged button snaps back on the next login.
 
+### `data` — how the meter is read, addon-wide
+
+| Path | Type | Default | Control |
+|---|---|---|---|
+| `data.mergePets` | bool | `false` | checkbox on `general` |
+| `data.throttle` | number | `0.25` | slider, `THROTTLE_MIN` 0.05 .. `THROTTLE_MAX` 2.0 |
+
+Both were `window.data.*` until `schemaVersion` 5 and neither described a window — see
+[the window template's `data` group](#data) for the lift and the one-time migration. `NS.DataSetting`
+(`defaults/Profile.lua`) is the **one reader**: three modules want these two values
+(`modules/Aggregator.lua` and `modules/Export.lua` want `mergePets`, `modules/Window.lua` wants
+`throttle`), and each reaching into `NS.db` for itself would be three chances to disagree about what
+a missing db means. Its fallback is the defaults tree rather than a literal, so a second copy of
+`0.25` cannot drift from the schema row that claims to set it.
+
 ### `export` — the remembered export choices
 
 | Path | Type | Default | Control |
 |---|---|---|---|
-| `export.metric` | string | `""` | dropdown over `Constants.STATS`, led by `""` = *Match the window* |
-| `export.channel` | string | `"SELF"` | dropdown over `Constants.EXPORT_CHANNELS` |
-| `export.whisperTo` | string | `""` | `EditBox`, 48 letters |
-| `export.lines` | number | `5` | slider, 1..`Constants.MAX_ROWS` |
+| `export.metric` | string | `""` | no row — `Export.Open` reseeds it from the invoking window |
+| `export.channel` | string | `"SELF"` | `hidden` row; drawn in the export modal |
+| `export.whisperTo` | string | `""` | `hidden` row; drawn in the export modal |
+| `export.lines` | number | `5` | `hidden` row; drawn in the export modal |
 
-All four sit on page `general`, in group **Export**, and all four are **absolute** paths — there is no
-`window.` prefix to resolve. They are the **one group in the profile that is not a property of
-anything on screen**: every other setting here answers "how should this look", and these four answer
+The three rows are filed on page `general` and all marked **`hidden`**, so the panel draws none of
+them: the modal's own three controls are the ones a player uses, and a second copy on a settings page
+restated a control met only in the dialog — with a standing chance of the two disagreeing about what
+is selected.
+
+**Hidden rather than deleted**, unlike the sort and session rows that went with the Data page, and
+the difference is which seam writes them. Those were written directly by the window's own controls;
+these are written by the modal through `NS.SetByPath`, which **refuses a path with no row**. Deleting
+them would drop every export choice onto `writeExport`'s degraded fallback — the one that exists for
+a half-loaded install — losing the validation, the debug line and `CONFIG_CHANGED`, and would take
+`/mm set export.channel WHISPER` with it.
+
+All are **absolute** paths — there is no `window.` prefix to resolve. They are the **one group in the profile that is not a property of
+anything on screen**: every other setting here answers "how should this look", and these answer
 "how did you last export", which is an action rather than an appearance.
 
 That is why they are addon-wide despite an export always being started *from* a window. A player who
@@ -272,6 +302,15 @@ verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a
 `showTotals` shows the group total **for the sort column**, taken off the aggregate the render pass
 just parked on the window — never a second provider read.
 
+**`bgColor` paints the TITLE BAR and stops there.** It used to cover both header rows, on the reading
+that "the header" is the whole block a player points at — which meant `columnHeader.bgColor` was
+drawn underneath it and could not be seen, and a colour picked for the title bar restyled the grid's
+column labels too. Two strips, two settings, two rectangles.
+
+All of these are edited under one **Frame header** group on the Header page. It was two groups
+("Header text" and "Header background"), which put `align` and `height` — both properties of the
+text — under a heading that said background.
+
 ### `columnHeader` — the "Player | Damage | Healing" strip
 
 `font = "Friz Quadrata TT"` · `size = 11` · `outline = "OUTLINE"` ·
@@ -296,11 +335,32 @@ it defaults fully transparent.
 `alwaysShowSelf` spends the last visible slot on the local player rather than growing the list, so
 the row count stays exactly at the cap (`Aggregator.ApplyRowLimit`).
 
+**`alternatingBackground` lives here and is EDITED on the Bars page**, beside `bars.bgColorMode` —
+the two of them decide what colour sits behind a row, and choosing between them meant reading two
+pages. It stays a row-level key because it is a row-level fact: `RowProto:Update` draws it, not the
+cells.
+
+**`classBackground` and `classBackgroundAlpha` are gone, and they were doing nothing before they
+went.** The row tint is painted per CELL from `bars.bgColorMode` and `bars.bgAlpha` — it moved there
+when tinting the row itself turned out to tint the two-pixel seams between the columns and lose the
+separators the grid is read by — and those two keys were left behind with no reader at all. Two
+settings-panel controls answering a question that was already answered one page over, into a void.
+
 ### `bars` — the StatusBar in every cell
 
 `texture = "Blizzard Raid Bar"` (LSM `statusbar`) · `colorMode = "class"` · `customColor =
 { r=0.35, g=0.55, b=0.85, a=1 }` · `bgColor = { r=0, g=0, b=0, a=1 }` · `bgAlpha = 0.35` ·
-`border = false` · `alpha = 1.0` · `fillDirection = "LEFT"`.
+`border = false` · `borderThickness = 1` · `borderColor = { r=0, g=0, b=0, a=1 }` · `alpha = 1.0` ·
+`fillDirection = "LEFT"`.
+
+**`alpha` fades the FILL TEXTURE, not the cell.** It used to be `bar:SetAlpha`, and the StatusBar is
+the cell — it parents the fill, the backdrop, both text slots and the name column's icon — so
+dropping "Bar opacity" to 10% faded the whole grid. Three settings paint three surfaces (`alpha` the
+fill, `bgAlpha` the backdrop, `text.alpha` the two FontStrings) and none can cancel another.
+
+`borderThickness` and `borderColor` were constants until they were settings: one pixel, in the
+library skin's own edge colour, which no setting could reach. The skin's edge is still the fallback
+for the colour, so a window that never touched either keeps the border it had.
 
 `colorMode` is `class` / `stat` / `custom`. **`class` is the default because `classFilename` is
 `NeverSecret`** — a class-colored bar is still correct at the height of a pull, when every number on
@@ -527,8 +587,26 @@ the same source row as `totalAmount`, so one `DamageDone` read fills both halves
 
 ### `data`
 
-`sessionType = Const.SESSION_TYPE.Current` · `sortMode = "value"` · `sortColumn = "DamageDone"` ·
-`throttle = 0.25` (clamped to `Constants.THROTTLE_MIN` 0.05 / `THROTTLE_MAX` 2.0).
+`sessionType = Const.SESSION_TYPE.Overall` · `sortMode = "value"` · `sortColumn = "DamageDone"` ·
+`sortAscending = false`.
+
+**None of these four is a schema row, and that is the point.** Every one of them is written by a
+control on the window itself — the header's segment dropdown writes `sessionType`, and one click on
+a column header writes all three sort fields (`modules/Window.lua`'s `SortByColumn`) — so a settings
+page for them restated a control the player already has three inches from where they are looking.
+They were **deleted** rather than hidden, so there is no `/mm set` for them either: the click path
+writes the fields directly rather than through `NS.SetByPath`, and a CLI that could also write them
+was a second seam onto state the window owns.
+
+**`mergePets` and `throttle` used to live here** and are addon-wide from `schemaVersion` 5, at
+`profile.data`. Neither described a window: one says what a pet's damage *is*, the other is a refresh
+rate, and two windows disagreeing about either is two answers to one question. The migration lifts
+the **first** window's pair per profile and removes the keys from every window — there is no merge
+rule that is right for a player who set two windows differently, and the first window is the one at
+the top of their own picker. Note that the `== nil` rule that governs `EnsureWindowShape` deliberately
+does **not** apply to that step: AceDB's defaults merge runs before any migration, so `profile.data`
+is already filled with the shipped values and "the player set this" cannot be told from "the merge
+just wrote it" — the window's value is the only one carrying intent.
 
 `sortMode` is `value` / `name` / `provider` / `roster` — `name` is what the **Player** column header
 sorts by — and it governs the **unrestricted** build only. While

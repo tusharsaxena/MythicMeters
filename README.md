@@ -90,20 +90,20 @@ are currently looking at, not all of them.
 
 `/mm config`, or the Options → AddOns list. Thirteen pages:
 
+The seven pages between Windows and Profiles are **indented under it**, because they all configure
+*the window Windows has selected* — the two that are not indented configure the addon.
+
 | Page | What you set there |
 |---|---|
+| General | The addon master switch, the minimap button, Test mode, the debug console, whether pets are merged into their owner, and how often the display refreshes. Also two resets: all settings, and the selected window's position |
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
-| Frame | Size, scale, opacity, background, border, lock, title bar — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
-| Header | Title, session name, duration, totals, font, alignment, background |
-| Rows | Row height, spacing, how many, growth direction, self highlight, alternating backgrounds |
-| Bars | Texture, color mode, background, border, opacity, fill direction |
-| Text | Which text sits left and right, number format, max name length, font, size, outline, shadow, color |
-| Icons | Class, spec and role icons — which to show, how big, where |
-| Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
-| Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
-| Columns | Add, remove and reorder columns — eight statistics are catalogued and six are on by default; Absorbs and Damage Taken are there to be switched on. Per-column width, and whether the column draws a bar |
-| Data | Current or overall session, sort mode, sort column, refresh rate. Individual past fights are picked from the window header, not here |
-| General | The addon master switch, the minimap button, Test mode, the debug console, and what the export modal remembers — channel, whisper target, chat lines |
+| `    - `Frame | Size, scale, opacity, background, border, lock, title bar |
+| `    - `Header | Title, session name, duration, totals, font, alignment, background — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
+| `    - `Rows | Row height, spacing, how many, growth direction, self highlight, alternating backgrounds |
+| `    - `Bars | Everything drawn inside a cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
+| `    - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
+| `    - `Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
+| `    - `Columns | Add, remove and reorder columns — eight statistics are catalogued and six are on by default; Absorbs and Damage Taken are there to be switched on. Per-column width, and whether the column draws a bar |
 | Profiles | Share a setup between characters |
 
 ## How it works
@@ -160,9 +160,9 @@ Blizzard's meter is switched off or unavailable in your current situation. The w
 reason the game gave. Turn the built-in meter on and the rows appear.
 
 **The window is empty and says it is waiting for combat data.**
-Normal between pulls — nothing has happened yet in the session you are showing. Switch to Overall on
-the Data page, or pick a past fight from the window's header, to see something other than the current
-pull.
+Normal between pulls — nothing has happened yet in the session you are showing. Pick Overall, or a
+past fight, from the window header's segment dropdown to see something other than the current pull.
+There is no settings page for it: the header already has the control.
 
 **The window only shows placeholder rows.**
 The window is unlocked, and an unlocked window fills with placeholder data so you can position it

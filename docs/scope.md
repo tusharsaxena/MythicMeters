@@ -45,7 +45,7 @@ Retail only · English only.
 - **Cell drill-down** into a player's per-spell breakdown, rendered through the same row path as the
   grid, plus a hand-off to Blizzard's own death recap from the Deaths column.
 - **Pet folding** into owners, best-effort — see the caveat below.
-- **A thirteen-page settings panel** driven by one 124-row schema, with full `/mm` CLI parity for every
+- **A ten-page settings panel** driven by one 129-row schema, with full `/mm` CLI parity for every
   schema-shaped operation.
 - **Visibility rules** per window — **show everywhere, hide nowhere** out of the box. Seven contexts
   (dungeon, raid, arena, battleground, delve, scenario, open world), all on by default; ten hide
@@ -115,7 +115,8 @@ These have been considered and explicitly declined.
   one across time would mean holding a handle whose accessibility changes underneath us, and the
   client already keeps the session history the picker reads.
 - **Resetting the meter as part of any refresh path.** `Provider.Reset` exists, is reachable only
-  from the Data page's confirmation, and wipes the sessions Blizzard's *own* meter is showing too —
+  from the General page's confirmation and the header's reset control, and wipes the sessions
+  Blizzard's *own* meter is showing too —
   not just ours. An addon that can silently reset the meter is an addon that will be blamed for a
   lost log.
 - **Localization.** English only for the addon's own strings. `locales/enUS.lua` carries the mandated

@@ -43,7 +43,7 @@ local function Build(mainCategory)
         H.RenderSchema(c, PAGE)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Header"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Header"]))
 end
 
 if NS.RegisterOptionsPage then

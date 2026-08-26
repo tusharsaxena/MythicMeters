@@ -445,40 +445,116 @@ test("Schema: a `hidden` row is writable and listable but draws no control", fun
         "the seam must still accept it")
 end)
 
-test("Schema: the close button is a HEADER CONTROL, and Frame behavior is named for the frame", function()
-    -- It draws a control in the header strip, which is what every row of that
-    -- group is about; it sat under a group heading that said "Row behavior" on a
-    -- page with no rows on it.
-    -- red under: moving it back, or restoring the old heading.
+test("Schema: the export choices are hidden from the panel but NOT from the seam", function()
+    -- The modal's own three controls are the ones a player uses, so a second
+    -- copy on General was a settings group restating a control met elsewhere --
+    -- and a second chance for the two to disagree about what is selected.
+    --
+    -- HIDDEN RATHER THAN DELETED, and the difference is which seam writes them:
+    -- the modal writes through NS.SetByPath, which REFUSES a path with no row, so
+    -- deleting these would drop every export choice onto the degraded fallback
+    -- and take `/mm set export.channel` with it.
+    -- red under: deleting the rows, or leaving one of the three visible.
     local inst = T.load()
     local NS = inst.NS
 
-    local closeGroup, groups = nil, {}
-    for _, row in ipairs(NS.SchemaForPage("frame")) do
-        groups[row.group or ""] = true
-        if row.path == "window.frame.closeButton" then closeGroup = row.group end
+    for _, path in ipairs({ "export.channel", "export.whisperTo", "export.lines" }) do
+        local row = NS.FindSchemaRow(path)
+        assertTrue(row ~= nil, path .. " lost its row, and with it the write seam")
+        assertTrue(row.hidden, path .. " is still drawn on the panel")
     end
 
+    for _, row in ipairs(NS.SchemaForPage("general")) do
+        assertTrue(row.path:find("^export%.") == nil,
+            "an export row is still rendered on General: " .. row.path)
+    end
+
+    -- And the seam still takes a write, which is the whole reason they stayed.
+    assertTrue(NS.SetByPath("export.channel", "PARTY"))
+    assertEqual(NS.GetSetting("export.channel"), "PARTY")
+end)
+
+test("Schema: the Header page's three groups are named and ordered for the strip they describe",
+function()
+    -- Two strips, three groups, top to bottom in the order they are drawn:
+    -- everything about the TITLE BAR first (its text, its alignment, its height
+    -- and its background — one group, because they are one strip), then the
+    -- controls that sit in that bar, then the column-label strip below it.
+    --
+    -- "Header text" and "Header background" used to be two groups, which put the
+    -- height and the alignment of the TEXT under a heading that said background.
+    -- red under: splitting Frame header back up, or filing the controls below the
+    -- column labels.
+    local inst = T.load()
+    local L = inst.NS.L
+
+    local order, seen = {}, {}
+    for _, row in ipairs(inst.NS.SchemaForPage("header")) do
+        local g = row.group
+        if g and not seen[g] then
+            seen[g] = true
+            order[#order + 1] = g
+        end
+    end
+
+    assertEqual(table.concat(order, " | "),
+        table.concat({ L["Frame header"], L["Header controls"], L["Column headers"] }, " | "))
+end)
+
+test("Schema: the header controls are EDITED on Header and STORED under frame", function()
+    -- A row's page is where it is edited; its path is where it is stored, and the
+    -- two are allowed to disagree. Every one of these draws a control into the
+    -- title bar, so a player looks for them under Header — but they are stored at
+    -- `window.frame.*`, and renaming the keys for symmetry would migrate every
+    -- saved profile in exchange for a tidiness nobody can see.
+    -- red under: moving the group back to Frame, or renaming the paths.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local closeGroup, onHeader = nil, 0
+    for _, row in ipairs(NS.SchemaForPage("header")) do
+        if row.group == NS.L["Header controls"] then
+            onHeader = onHeader + 1
+            assertTrue(row.path:find("^window%.frame%."),
+                row.path .. " is a header control and must still be stored under frame")
+        end
+        if row.path == "window.frame.closeButton" then closeGroup = row.group end
+    end
     assertEqual(closeGroup, NS.L["Header controls"])
+    assertTrue(onHeader >= 10, "the whole group moved, not one row of it")
+
+    local groups = {}
+    for _, row in ipairs(NS.SchemaForPage("frame")) do groups[row.group or ""] = true end
+    assertFalse(groups[NS.L["Header controls"]] or false,
+        "the Frame page kept a header control")
     assertTrue(groups[NS.L["Frame behavior"]], "the Frame page lost its behavior group")
     assertFalse(groups[NS.L["Row behavior"]] or false,
         "\"Row behavior\" is the Rows page's heading, not this one's")
 end)
 
-test("Schema: every Frame page group is CONTIGUOUS, or a heading prints twice", function()
+test("Schema: every group on every page is CONTIGUOUS, or a heading prints twice", function()
     -- Group headings are emitted when `group` CHANGES between consecutive rows,
     -- so a row filed under a group that has already been left prints that
-    -- heading a second time further down the page. Moving the close button
-    -- across groups is exactly the edit that breaks this.
+    -- heading a second time further down the page. Moving a group between pages
+    -- -- the header controls, from Frame to Header -- is exactly the edit that
+    -- breaks this, and it can break the page it LEFT as well as the one it
+    -- joined, which is why this walks every page rather than only Frame.
     local inst = T.load()
-    local seen, previous = {}, nil
-    for _, row in ipairs(inst.NS.SchemaForPage("frame")) do
-        local group = row.group or ""
-        if group ~= previous then
-            assertFalse(seen[group] or false,
-                "group returned after being left: " .. tostring(group))
-            seen[group] = true
-            previous = group
+    local pages = {}
+    for _, row in ipairs(inst.NS.Schema) do
+        if row.page then pages[row.page] = true end
+    end
+
+    for page in pairs(pages) do
+        local seen, previous = {}, nil
+        for _, row in ipairs(inst.NS.SchemaForPage(page)) do
+            local group = row.group or ""
+            if group ~= previous then
+                assertFalse(seen[group] or false,
+                    page .. ": group returned after being left: " .. tostring(group))
+                seen[group] = true
+                previous = group
+            end
         end
     end
 end)
@@ -500,6 +576,8 @@ test("Schema: every LSM border setting is one this suite knows honours \"None\""
             "test_window.lua: Border style None draws NO edge, whatever the library's own is",
         ["window.tooltip.barBorderStyle"] =
             "test_tooltip.lua: A bar border is applied when asked and cleared off the POOLED line when not",
+        ["window.bars.borderStyle"] =
+            "test_row.lua: Border style None keeps the cheap flat outline and puts no backdrop on a cell",
     }
 
     local inst = T.load()

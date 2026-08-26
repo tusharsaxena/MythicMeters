@@ -1,9 +1,20 @@
 -- settings/Bars.lua
 --
--- The Bars page: the StatusBar that sits inside every cell — its texture, how
--- it is colored, its background, its opacity and which edge it fills from.
+-- The Bars page — EVERYTHING DRAWN INSIDE A CELL, in five groups: the StatusBar
+-- itself (texture, colour, opacity, fill direction), the tint behind it, its
+-- border, the two TEXT slots, and the name column's icon.
 --
--- Pure schema — every widget is a `window.bars.*` row in NS.Schema.
+-- THE TEXT AND ICONS PAGES FOLDED IN HERE. They were their own tree entries and
+-- their own canvases, which meant styling one cell — the bar behind the number,
+-- the number, and the icon beside the name — was three pages and two clicks
+-- between each change you wanted to compare. Everything a cell draws is on one
+-- page now, in the order it is drawn: back to front.
+--
+-- Pure schema — every widget is a `window.bars.*`, `window.text.*` or
+-- `window.icons.*` row in NS.Schema. The PATHS did not move with the page and
+-- must not: a row's page is where it is edited, its path is where it is stored,
+-- and renaming `text.size` to `bars.textSize` for tidiness would migrate every
+-- saved profile in the collection for nothing anybody can see.
 --
 -- THE CONSTRAINT BEHIND THE COLOR MODES. A bar's LENGTH comes from
 -- `SetMinMaxValues(0, maxAmount)` + `SetValue(totalAmount)`, and under
@@ -46,7 +57,7 @@ local function Build(mainCategory)
         H.RenderSchema(c, PAGE)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Bars"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Bars"]))
 end
 
 if NS.RegisterOptionsPage then

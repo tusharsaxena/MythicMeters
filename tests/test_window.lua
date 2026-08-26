@@ -330,15 +330,18 @@ test("BuildLayout derives how many rows FIT, capped by maxRows and MAX_ROWS", fu
 end)
 
 test("The throttle is clamped to the constants, whatever the profile says", function()
-    local inst, window, cfg = scene()
+    -- ADDON-WIDE since schemaVersion 5: a refresh rate is one answer, not one
+    -- per window, so it is read off the profile rather than off the config.
+    local inst, window = scene()
     local Const = inst.NS.Constants
+    local data = inst.NS.db.profile.data
 
-    cfg.data.throttle = 0
+    data.throttle = 0
     window:RefreshUpvalues()
     assertEqual(window.throttle, Const.THROTTLE_MIN,
         "zero would turn every meter event into a full rebuild")
 
-    cfg.data.throttle = 99
+    data.throttle = 99
     window:RefreshUpvalues()
     assertEqual(window.throttle, Const.THROTTLE_MAX)
 end)
@@ -348,8 +351,8 @@ end)
 -- ---------------------------------------------------------------------------
 
 test("The throttle coalesces N events into ONE refresh", function()
-    local _, window, cfg = scene()
-    cfg.data.throttle = 0.25
+    local inst, window = scene()
+    inst.NS.db.profile.data.throttle = 0.25
     window:RefreshUpvalues()
 
     local refreshes = 0
@@ -2058,6 +2061,132 @@ test("Header class color is the LOCAL player's, since the header has no row", fu
     window:ApplyConfig()
     assertEqual(window.sessionText.__textColor[1], 1, "the gold did not come back")
     assertEqual(window.sessionText.__textColor[2], 0.82)
+end)
+
+test("The Player column is the shipped width for the shipped config, exactly", function()
+    -- The formula is CALIBRATED against NAME_COLUMN_WIDTH: 118 is a measured
+    -- value that has been right in the client for as long as this addon has had a
+    -- name column, so a window nobody has touched must still get it. Otherwise
+    -- "the column follows Max name length" would be a new look for every window
+    -- that never asked for one.
+    -- red under: moving NAME_CHAR_RATIO or NAME_COLUMN_PAD without re-anchoring.
+    local inst, window = scene()
+    assertEqual(window.config.text.maxNameLength, 20, "the calibration point moved")
+    assertEqual(window.config.icons.showIcon, true)
+    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_WIDTH)
+end)
+
+test("The Player column follows Max name length, and the icon's share with it", function()
+    -- The cap names a number of CHARACTERS, so the column it lives in is the one
+    -- thing that should follow it. It did not: the cap shortened the text and the
+    -- column stayed at 118px, so lowering it left a wide column with a short name
+    -- rattling around and raising it clipped the name the setting had permitted.
+    -- red under: a fixed nameColumn.width.
+    local _, window, cfg = scene()
+    local wide = window.layout.nameColumn.width
+
+    cfg.text.maxNameLength = 6
+    window:ApplyConfig()
+    local narrow = window.layout.nameColumn.width
+    assertTrue(narrow < wide, "a shorter cap must give the width back")
+
+    cfg.text.maxNameLength = 40
+    window:ApplyConfig()
+    assertTrue(window.layout.nameColumn.width > wide, "a longer cap must make room")
+
+    -- Turning the icon off gives its share to the name rather than leaving a hole
+    -- where a picture was.
+    cfg.text.maxNameLength = 20
+    window:ApplyConfig()
+    local withIcon = window.layout.nameColumn.width
+    cfg.icons.showIcon = false
+    window:ApplyConfig()
+    local withoutIcon = window.layout.nameColumn.width
+    assertEqual(withIcon - withoutIcon, (cfg.icons.size or 14) + 4,
+        "the icon's allowance is its size plus the gap Row.lua reserves")
+end)
+
+test("A bigger font widens the Player column, because the cap is in characters", function()
+    local _, window, cfg = scene()
+    cfg.text.maxNameLength = 20
+    window:ApplyConfig()
+    local small = window.layout.nameColumn.width
+
+    cfg.text.size = 22
+    window:ApplyConfig()
+    assertTrue(window.layout.nameColumn.width > small,
+        "twenty characters at 22pt need more room than twenty at 11pt")
+end)
+
+test("No name cap keeps the shipped width, and nothing goes below the floor", function()
+    -- 0 is the documented "no cap", and a window with no cap has no length to
+    -- size itself from.
+    local inst, window, cfg = scene()
+    cfg.text.maxNameLength = 0
+    window:ApplyConfig()
+    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_WIDTH)
+
+    -- And a one-character cap with no icon must still hold the word "Player".
+    cfg.text.maxNameLength = 1
+    cfg.icons.showIcon = false
+    cfg.text.size = 6
+    window:ApplyConfig()
+    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_MIN)
+end)
+
+test("The header background covers the TITLE BAR only, not the column strip", function()
+    -- It used to cover both header rows, on the reading that "the header" is the
+    -- whole block a player points at. That was wrong twice: the column strip has
+    -- its OWN background setting, so a player who set both got one drawn over the
+    -- other with no way to see the lower one, and a colour picked for the title
+    -- bar silently restyled the grid's column labels too.
+    -- red under: SetHeight(titleHeight + headerHeight).
+    local _, window, cfg = scene()
+    cfg.header.height = 18
+    window:ApplyConfig()
+
+    local layout = window.layout
+    assertTrue(layout.headerHeight > 0, "the scene has no column strip to be wrong about")
+    assertEqual(window.headerBG:GetHeight(), layout.titleHeight)
+    assertTrue(window.headerBG:GetHeight() < layout.titleHeight + layout.headerHeight,
+        "the background still reaches the column labels")
+end)
+
+test("A window with no title bar draws no header background at all", function()
+    -- The strip is sized off the title row now, so "no title row" has to mean
+    -- "no rectangle" rather than "a rectangle the height of the column labels".
+    local _, window, cfg = scene()
+    cfg.frame.titleBar = false
+    window:ApplyConfig()
+    assertFalse(window.headerBG:IsShown())
+end)
+
+test("The window NAME takes the header's colour, class colour and all", function()
+    -- The title used to be left to the library's skin, so the Header text group
+    -- styled every part of the strip except the one word a player thinks of as
+    -- the header: font, size, outline and shadow all came from that group and
+    -- only the colour did not.
+    -- red under: dropping the SetTextColor from ApplyTitle, or letting ApplySkin
+    -- run after it.
+    local inst, window, cfg = scene()
+    inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
+
+    cfg.header.color      = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+    cfg.header.classColor = false
+    window:ApplyConfig()
+
+    local c = window.frame.title.__textColor
+    assertEqual(c[1], 0.2, "the title ignored the header colour")
+    assertEqual(c[3], 0.6)
+
+    -- And the same class-colour reading the session line beside it takes.
+    cfg.header.classColor = true
+    window:ApplyConfig()
+    c = window.frame.title.__textColor
+    assertEqual(c[1], 0.41)
+    assertEqual(c[3], 0.94)
+    assertEqual(c[1], window.sessionText.__textColor[1],
+        "the title and the session line are one header and must not differ")
 end)
 
 test("Column header class color is the local player's too", function()

@@ -83,16 +83,16 @@ modules\Minimap.lua
 settings\Schema.lua
 settings\Slash.lua
 settings\OptionsSetup.lua
+# General FIRST, above Windows. It is the only page that is not about one
+# window, and the page order IS the registration order (LibKa0s-Options-1.0
+# builds pages in the order they register, and each file registers at load).
+settings\General.lua
 settings\Windows.lua
 settings\Frame.lua
 settings\Header.lua
 settings\Rows.lua
 settings\Bars.lua
-settings\Text.lua
-settings\Icons.lua
 settings\Tooltip.lua
 settings\Visibility.lua
 settings\Columns.lua
-settings\Data.lua
-settings\General.lua
 settings\Profiles.lua

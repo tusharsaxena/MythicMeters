@@ -59,7 +59,7 @@ local function Build(mainCategory)
         H.RenderSchema(c, PAGE)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["Visibility"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Visibility"]))
 end
 
 if NS.RegisterOptionsPage then

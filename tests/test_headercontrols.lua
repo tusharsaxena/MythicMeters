@@ -212,6 +212,58 @@ test("HeaderControls: both colours come from config", function()
     assertEqual(r .. "," .. g .. "," .. b, "0,1,0")
 end)
 
+test("HeaderControls: each colour has its OWN class-colour flag", function()
+    -- Two flags rather than one, because hover and rest are two independent
+    -- answers. A shared flag would make the pointer's colour identical to the
+    -- resting one for anybody who ticked it, which is the one thing a hover
+    -- colour must never be.
+    -- red under: a single `classColor` key driving both.
+    local inst, window = scene(function(cfg)
+        cfg.frame.controlColor      = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlClassColor = true
+    end)
+    -- Compared against the reader itself rather than against a literal: whose
+    -- class it is, is the subject of the case above this one, and hard-coding a
+    -- hue here would only re-test the mock.
+    local cr, cg, cb = inst.NS.PlayerClassRGB()
+    assertTrue(cr ~= nil, "the scene has no readable class to colour with")
+
+    local r, g, b = tintOf(window.controls.settings)
+    assertEqual(r .. "," .. g .. "," .. b, cr .. "," .. cg .. "," .. cb,
+        "the resting colour is not classed")
+
+    -- The hover colour is untouched by the resting flag.
+    window.controls.settings:_run("OnEnter")
+    local hr, hg, hb = tintOf(window.controls.settings)
+    assertEqual(hr .. "," .. hg .. "," .. hb, "0,1,0",
+        "the resting flag classed the hover colour too")
+end)
+
+test("HeaderControls: the hover flag classes the hover colour and nothing else", function()
+    local inst, window = scene(function(cfg)
+        cfg.frame.controlColor           = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor      = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlHoverClassColor = true
+    end)
+    local cr, cg, cb = inst.NS.PlayerClassRGB()
+    assertTrue(cr ~= nil, "the scene has no readable class to colour with")
+
+    local r, g, b = tintOf(window.controls.settings)
+    assertEqual(r .. "," .. g .. "," .. b, "0,0,1", "the hover flag classed the resting colour")
+
+    window.controls.settings:_run("OnEnter")
+    local hr, hg, hb = tintOf(window.controls.settings)
+    assertEqual(hr .. "," .. hg .. "," .. hb, cr .. "," .. cg .. "," .. cb)
+end)
+
+test("HeaderControls: both flags off is the shipped look, unchanged", function()
+    -- Every existing window is this one, and neither flag ships on.
+    local _, window = scene()
+    local r, g, b = tintOf(window.controls.settings)
+    assertEqual(r .. "," .. g .. "," .. b, "1,1,1")
+end)
+
 test("HeaderControls: control size comes from config", function()
     local _, window = scene(function(cfg) cfg.frame.controlSize = 24 end)
     assertEqual(window.controls.settings.__w, 24)
