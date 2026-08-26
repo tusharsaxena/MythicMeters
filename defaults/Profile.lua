@@ -113,6 +113,11 @@ local WINDOW_TEMPLATE = {
         showMinimise    = true,
         showLock        = true,
         showSettings    = true,
+        -- The header LINE naming the current fight, and the picker BUTTON that
+        -- changes it. Two settings because they are two things: one is a click
+        -- target in the strip, the other is the only place the window says which
+        -- fight you are looking at.
+        showSegmentText = true,
         showSegment     = true,
         showReset       = true,
         showExport      = true,

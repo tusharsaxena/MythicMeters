@@ -747,19 +747,51 @@ test("The header folds its parts with `..`, and survives a secret piece", functi
     assertTrue(#line > 0, "the line said nothing at all")
 end)
 
-test("The header line says only what has nowhere else to be said", function()
-    -- The session NAME, the DURATION and the TOTAL were three checkboxes and are
-    -- gone: the name repeated the window's own title, the duration belongs to the
-    -- segment the picker already names, and the total is a figure the column
-    -- under it holds per player. What is left is the drill-down title and the
-    -- restricted notice -- state, not preference.
-    -- red under: putting any of the three back into UpdateHeaderText.
+test("The header line says which fight, and stays out of the way otherwise", function()
+    -- The DURATION and the TOTAL were checkboxes and are still gone: the duration
+    -- belongs to the segment the picker already names, and the total is a figure
+    -- the column under it holds per player.
+    --
+    -- The segment NAME came back. It was dropped on the argument that it repeated
+    -- the window's own title -- true of a window still called "Overall", and false
+    -- the moment the player pins a stored segment or renames the window.
+    -- red under: putting the duration or the total back into UpdateHeaderText.
     local _, window = scene()
     window:ApplyConfig()
     window:Refresh()
 
     local line = window.sessionText:GetText() or ""
-    assertEqual(line, "", "an ordinary grid must leave the header line blank")
+    assertEqual(line, "Current", "the header names the fight this window is showing")
+end)
+
+test("Show segment off leaves the header line blank again", function()
+    -- The whole point of it being a setting: a player who keeps the strip tidy
+    -- gets the header back the way it was before the line returned.
+    -- red under: UpdateHeaderText adding the label unconditionally.
+    local _, window, cfg = scene()
+    cfg.frame.showSegmentText = false
+    window:ApplyConfig()
+    window:Refresh()
+
+    assertEqual(window.sessionText:GetText() or "", "",
+        "an unticked Show segment must leave nothing behind")
+end)
+
+test("The segment name sits LAST, nearest the picker that changes it", function()
+    -- The line is right-aligned and the picker is the control immediately to its
+    -- right, so the two read as one thing rather than as a caption and an
+    -- unrelated button. A notice that fires at the same time goes to its left.
+    -- red under: adding the label before RestrictedNotice.
+    local _, window = scene{ restricted = true, sortMode = "value" }
+    window:ApplyConfig()
+    window:Refresh()
+
+    local line = window.sessionText:GetText() or ""
+    local notice = line:find("restricted", 1, true)
+    local label  = line:find("Current", 1, true)
+    assertTrue(notice ~= nil, "got: " .. line)
+    assertTrue(label ~= nil, "got: " .. line)
+    assertTrue(notice < label, "the segment name must be the rightmost piece, got: " .. line)
 end)
 
 test("The header says the grid was built the restricted way", function()

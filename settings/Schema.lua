@@ -847,6 +847,17 @@ NS.Schema = {
         label = L["Show settings"], desc = L["Open this addon's settings at the window you clicked."],
     },
     {
+        -- THE TEXT, not the button below it, and they are deliberately two rows.
+        -- The picker is a click target in the icon strip; this is the line that
+        -- says which fight you are looking at. A player who keeps the strip tidy
+        -- and still wants to know what the window is showing needs to be able to
+        -- turn one off without the other.
+        path = "window.frame.showSegmentText", type = "bool", default = true,
+        page = "header", group = L["Header controls"],
+        label = L["Show segment"],
+        desc = L["Name the fight this window is showing, in the header to the left of the controls."],
+    },
+    {
         path = "window.frame.showSegment", type = "bool", default = true,
         page = "header", group = L["Header controls"],
         label = L["Show segment picker"], desc = L["Choose which fight this window shows. The session line stays clickable either way."],

@@ -2184,6 +2184,22 @@ function WindowProto:UpdateHeaderText(preview, isDrill, drillTitle)
     add(preview and L["Test"] or nil)
     add(self:RestrictedNotice(preview))
 
+    -- WHICH FIGHT THIS IS. It was dropped from the header on the argument that it
+    -- repeated the window's own title -- true of a window still called "Overall",
+    -- and false the moment the player pins a stored segment out of the picker, or
+    -- renames the window, which is most of them. So it is back, behind a setting,
+    -- rather than back unconditionally.
+    --
+    -- LAST, so it lands nearest the icon strip: the line is right-aligned and the
+    -- picker that changes this label is the control immediately to its right, so
+    -- the two read as one thing rather than as a caption and an unrelated button.
+    --
+    -- SessionLabel(false), never SessionLabel(preview) -- it answers "Test" under
+    -- preview, which the first piece above has already said.
+    if (self.config.frame or {}).showSegmentText ~= false then
+        add(self:SessionLabel(false))
+    end
+
     self.sessionText:SetText(line == nil and "" or line)
 end
 
