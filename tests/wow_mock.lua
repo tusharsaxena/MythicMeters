@@ -135,7 +135,7 @@
 --
 -- Secrets      mocks.secret(v) · mocks.secretTable(t) · mocks.reveal(v)
 --              mocks.isSimulatedSecret(v) · mocks.SECRET_ERROR
---              mocks.setRestricted(b) · mocks.setSecretValues(b)
+--              mocks.setRestricted(b) · mocks.setSecretValues(b) · mocks.setCursor(x, y)
 --              mocks.setSecretsAccessible(b) · mocks.setRestrictionState(n)
 -- Meter        mocks.setMeterAvailable(ok, reason) · mocks.setSession(...)
 --              mocks.setSourceDetail(...) · mocks.buildSession(opts)
@@ -984,6 +984,16 @@ local function build()
     }
 
     M.InCombatLockdown = function() return M.__restricted end
+
+    -- ── the cursor ─────────────────────────────────────────────────────────
+    --
+    -- settings/ColumnBlocks.lua's drag reads this on every OnUpdate frame, and a
+    -- drag nothing offline can drive is a drag that ships untested -- which is
+    -- exactly how a page's button once shipped wired to nothing at all. Scaled
+    -- coordinates, like the real one: callers divide by GetEffectiveScale().
+    M.__cursorX, M.__cursorY = 0, 0
+    M.GetCursorPosition = function() return M.__cursorX, M.__cursorY end
+    function M.setCursor(x, y) M.__cursorX, M.__cursorY = x or 0, y or 0 end
 
     -- ── the four detection globals ─────────────────────────────────────────
     --

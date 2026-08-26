@@ -228,6 +228,7 @@ local SUITES = {
     "test_schema_defaults",
     "test_slash",
     "test_options_panel",
+    "test_columnblocks",
     "test_columns",
     -- and the whole addon with LibKa0s absent
     "test_degraded",

@@ -93,5 +93,6 @@ settings\Header.lua
 settings\Bars.lua
 settings\Tooltip.lua
 settings\Visibility.lua
+settings\ColumnBlocks.lua
 settings\Columns.lua
 settings\Profiles.lua
