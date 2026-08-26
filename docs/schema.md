@@ -368,6 +368,10 @@ it defaults fully transparent.
 
 ### `rows` — one per group member
 
+Edited on the **Bars page**, at the top of it: how tall a row is, how many there are and which way
+they grow decide the shape of every bar drawn under them, so the two groups sit above the bar's own.
+The Rows page is gone; the paths did not move with it.
+
 `maxRows = 0` (0 means "as many as fit the frame"; a positive value caps it, hard-ceilinged at
 `Constants.MAX_ROWS = 40`) · `height = 16` · `spacing = 1` · `growthDirection = "DOWN"` ·
 `alwaysShowSelf = true` · `highlightSelf = true` · `alternatingBackground = true` ·
@@ -533,7 +537,8 @@ every number to its right is opaque.
 
 Its own appearance, kept separate from `bars` and `text` on purpose — a 14px spell line and a 90px
 cell are different surfaces, and a texture or a size that reads across one often does not across the
-other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `barBorderStyle = "None"` ·
+other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `scale = 1.0` · `barColorMode = "class"` · `barAlpha = 0.85` · `barBgColorMode = "custom"` ·
+`barBgAlpha = 0.35` · `barBorderStyle = "None"` ·
 `barBorderSize = 1` · `barBorderColor = { r = 0, g = 0, b = 0, a = 1 }` ·
 `font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"` ·
 `textColor = { r = 1, g = 1, b = 1, a = 1 }`. One colour for **both** number slots: the amount used

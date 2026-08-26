@@ -31,14 +31,13 @@ order, `defaults/Profile.lua`'s group order, `modules/WindowManager.lua`'s `COPY
 | 2 | Windows | `windows` | 1 (`window.name`) | **no** | The picker, New / Duplicate / Delete, and Copy settings from |
 | 3 | `  - `Frame | `frame` | 13 | yes | Geometry, backdrop, LSM border, lock, title bar. 14 schema rows, one of them `hidden`: `frame.minimised` is state the header's own button writes, so it stays writable and listable without drawing a control |
 | 4 | `  - `Header | `header` | 34 | yes | Three groups, in the order the strips are drawn. **Frame header** — the title bar: its text, session name / duration / totals, the five text controls (font, outline, shadow, colour, colour mode), alignment, height and background. **Header controls** — the seven controls, their size, their two colours and a class-colour flag for each, and hover reveal. **Column headers** — the "Player \| Damage \| Healing" strip's own five text controls, its own background and that background's own colour mode |
-| 5 | `  - `Rows | `rows` | 7 | yes | Max rows, height, spacing, growth direction, self-pin, highlights, mouseover highlight. The alternating stripe moved to Bars, beside the tint it competes with; `rows.classBackground` and `rows.classBackgroundAlpha` were deleted outright — the row tint is `bars.bgColorMode`, and those two rows pointed at keys nothing read |
 | 6 | `  - `Bars | `bars` | 28 | yes | **Everything drawn inside a cell**, in five groups, back to front: **Bar appearance** (texture, colour mode, custom colour, opacity, fill direction), **Bar background color** (its mode, colour and opacity, plus the alternating row stripe that competes with it), **Bar border** (on/off, thickness, colour), **Cell text** (the two slots, number format, death timestamps, max name length, the four text controls, size, opacity) and **Row icons** (one icon per row, its size and which side of the name it sits on). The Text and Icons pages folded in here: styling one cell used to be three pages and two clicks between each change you wanted to compare |
 | 7 | `  - `Tooltip | `tooltip` | 20 | yes | Anchor and x/y offset, spell breakdown, max spells (0 = all), summarize-on-name, hide in combat, its own bar texture/spacing/border, its own four text controls, and the Targets section |
-| 8 | `  - `Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
-| 9 | `  - `Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
-| 10 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
+| 7 | `  - `Visibility | `visibility` | 17 | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on · **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off · **Combat** — hide in combat, hide out of combat, both off |
+| 8 | `  - `Columns | `columns` | **0** | **no** | The ordered column list — add, remove, reorder, width, show-bar |
+| 9 | Profiles | `profiles` | **0** | **no** | AceDBOptions' create / switch / copy / reset / delete |
 
-Six of the ten — Frame, Header, Rows, Bars, Tooltip, Visibility — are one
+Five of the nine — Frame, Header, Bars, Tooltip, Visibility — are one
 `H.RenderSchema(c, PAGE)` call and nothing else. Adding an option to any of them means adding one row
 in `settings/Schema.lua` and touching no page file at all.
 
@@ -54,7 +53,7 @@ Four are not:
 ### The indent, and why the tree needs one
 
 Blizzard's Settings tree draws every canvas subcategory of one addon at the **same depth**, and these
-pages are not one flat set. Seven of them edit *the window the Windows page has selected*; General and
+pages are not one flat set. Six of them edit *the window the Windows page has selected*; General and
 Profiles edit the addon. Nine pages that silently retarget when a picker two pages up moves,
 presented as peers of the two that never do, is the tree lying about what a click will change.
 
@@ -69,7 +68,7 @@ and not the other, and both are recorded because each failed in its own way:
 
 | Tried | Why it went |
 |---|---|
-| `U+21B3` (↳) | Exactly the right character; Friz Quadrata does not have it. The client drew a **hollow box** in front of all seven pages, and the settings tree offers no way to hand the player a font that does have it. |
+| `U+21B3` (↳) | Exactly the right character; Friz Quadrata does not have it. The client drew a **hollow box** in front of all six pages, and the settings tree offers no way to hand the player a font that does have it. |
 | `\|- ` | Draws on any font, and reads as a bulleted **list** rather than as nesting: with nothing indenting it, the mark sat where the page name should start and competed with it for the eye. |
 | `    ` (four spaces) | Nests correctly and marks nothing — confirmed in the client, which is what made the hyphen safe to add on top. |
 | `  - ` | Both jobs, each done by the part that is good at it. |
@@ -140,7 +139,7 @@ first OnShow      →  H.EnsureDefaultsButton(panel)                -- button bu
 
 ### Why the category is eager
 
-The parent category and all ten subcategories are registered during `OnInitialize`, before
+The parent category and all nine subcategories are registered during `OnInitialize`, before
 anything is drawn. That is what makes the addon appear in the Blizzard AddOns list, what makes
 `/mm config` have somewhere to go, and what makes the Settings window's own search find the pages.
 A category registered lazily is a category the player cannot find until they have already found it.

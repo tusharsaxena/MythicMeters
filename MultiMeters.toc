@@ -90,7 +90,6 @@ settings\General.lua
 settings\Windows.lua
 settings\Frame.lua
 settings\Header.lua
-settings\Rows.lua
 settings\Bars.lua
 settings\Tooltip.lua
 settings\Visibility.lua

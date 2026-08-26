@@ -125,16 +125,16 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (129 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (138 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
     │                     schema adapters, and the six host verbs
     ├── OptionsSetup.lua — LibKa0s-Options-1.0 seam: NS.Helpers IS the library
     │                     instance, plus the panel registry and the reset-all veto
-    └── General · Windows · Frame · Header · Rows · Bars · Tooltip ·
+    └── General · Windows · Frame · Header · Bars · Tooltip ·
         Visibility · Columns · Profiles
-                          — the 10 panel pages, in panel order. General is FIRST;
+                          — the 9 panel pages, in panel order. General is FIRST;
                           the nine between Windows and Profiles are drawn with a
                           "  - " indent, because the Windows picker retargets them
 ```
@@ -208,21 +208,20 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 129-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Schema.lua` | The 138-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
 | `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the six host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, `NS.Export`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — **the only writer of `NS.State.activeWindowId`** — and the five registry buttons plus the copy-from group filter | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
 | `Frame.lua` | The Frame page (13 rows). Pure schema — the header controls moved to Header and "Reset position" to General | a page registration | `NS.Helpers` |
 | `Header.lua` | The Header page (34 rows): the header text, the column-header strip, and the **Header controls** group, whose rows are edited here and stored at `window.frame.*`. Pure schema | a page registration | `NS.Helpers` |
-| `Rows.lua` | The Rows page (7 rows). Pure schema | a page registration | `NS.Helpers` |
-| `Bars.lua` | The Bars page (28 rows across five groups): the bar, its background, its border, the cell's two text slots and the row icon. The Text and Icons pages folded in here; their PATHS did not move with them. Pure schema | a page registration | `NS.Helpers` |
+| `Bars.lua` | The Bars page (35 rows across seven groups): the bar, its background, its border, the cell's two text slots and the row icon. The Text and Icons pages folded in here; their PATHS did not move with them. Pure schema | a page registration | `NS.Helpers` |
 | `Tooltip.lua` | The Tooltip page (18 rows). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (17 rows across three groups — where, extra rules, combat). Pure schema | a page registration | `NS.Helpers` |
 | `Columns.lua` | The column editor — add, remove, reorder, width, show-bar. **No schema rows**: every write hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
 | `General.lua` | The General page (9 rows) and both of the addon's bespoke buttons: the master enable, the minimap toggle, the two session-only checkboxes (test mode, debug console), the three addon-wide export preferences and the two addon-wide data settings — plus the reset-everything confirmation and "Reset position", the one per-window control on the page. Also hosts the **reset-meter-data dialog**, which has no button on any page: the header's own reset control is the one way to open it, and it routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration, `NS.ShowResetMeterData` | `NS.Helpers`, `NS.State`, `NS.DebugLog`, `NS.WindowManager.ResetPosition`, `NS.Provider.Reset` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 129 across 8 page keys. `columns` and `profiles` are pages with zero schema rows —
+Schema rows total 138 across 7 page keys. `columns` and `profiles` are pages with zero schema rows —
 both are bespoke by necessity, and both say why in their file headers.
 
 ## Load order

@@ -142,8 +142,7 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
   rule ships off.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
 - Settings → AddOns shows a **Ka0s Multi Meters** parent with **twelve** subcategories in this
-  order: General · Windows · Frame · Header · Rows · Bars · Tooltip · Visibility · Columns ·
-  Profiles. **General is first**, and the seven between Windows and Profiles read as
+  order: General · Windows · Frame · Header · Bars · Tooltip · Visibility · Columns · Profiles. **General is first**, and the six between Windows and Profiles read as
   `    - Frame` — four spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
   Two failure modes to watch for: a **hollow box** in front of a page name means a non-ASCII glyph
   has crept back in and the player's font does not have it, and a **flat list of hyphens** with no
@@ -193,7 +192,7 @@ second edge to catch.
 
 ### 4. Settings panel sweep
 
-**Steps.** Open every one of the ten pages. On each, move one control of each type present
+**Steps.** Open every one of the nine pages. On each, move one control of each type present
 (checkbox, slider, dropdown, color, edit box) and watch the window.
 
 **Pass.**
@@ -202,6 +201,15 @@ second edge to catch.
   symptoms are the lazy-build rules failing; see
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
+- **The tooltip.** *Tooltip behavior* now holds the **scale** slider and the **Targets** pair (they
+  had a group of their own for two rows). **Top left** and **Top right** grow the way **Bottom left**
+  and **Bottom right** do — pick each of the four and watch which way the tooltip opens; a top corner
+  growing across the grid is the bug this replaced. Every **target line carries an icon** now, in the
+  column where the spell lines put theirs. The **player's name is class-coloured** on every tooltip
+  that names one. **Text color mode reaches the spell name as well as the numbers** — all the text on
+  a bar, not two thirds of it. The **fill and the backdrop** each have their own colour, mode and
+  opacity. And **Bar border draws something**: it is on the bar rather than under it now, so a style
+  and a thickness are visible at last.
 - **The five text controls, on all four surfaces.** Bars → Cell text, Header → Frame header, Header →
   Column headers, and Tooltip each carry a **font** picker, a **font outline** dropdown, a **text
   shadow** checkbox, a **text colour** picker and a **Text color mode** dropdown of Class /
@@ -233,12 +241,16 @@ second edge to catch.
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
 - **The Frame page's shape.** Three groups, in order: *Size and position*, *Border style*, *Frame
-  behavior* (**not** "Row behavior" — that heading belongs to the Rows page). Each heading appears
+  behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears
   **once**; a heading printed twice means a row is filed under a group the page has already left.
   There is **no** *Header controls* group here any more — the whole group is on **Header** — and
   **no** "Reset position" button, which is on **General**. There is also **no** "Show resize grip"
   checkbox and **no** "Minimised" checkbox: the lock governs the grip, and the header's own minimise
   button governs the collapse.
+- **The Bars page's shape.** Seven groups, outside in: *Row layout*, *Row behavior*, *Bar
+  appearance*, *Bar background color*, *Bar border*, *Cell text*, *Row icons*. The Rows, Text and
+  Icons pages all folded in here, and their paths did not move with them — `/mm get
+  window.rows.height` and `/mm get window.text.size` both still answer.
 - **The Header page's shape.** Three groups, top to bottom in the order the strips are drawn:
   *Frame header* — everything about the title bar, its text, alignment, height and background, in one
   group because they are one strip — then *Header controls*, the group that moved off Frame, then
@@ -259,7 +271,7 @@ second edge to catch.
   non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
   addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
   border style, checked in §23.
-- Seven pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
+- Six pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
 - **The General page's shape and its three buttons.** It is the **first** page in the tree, above
   Windows. It carries **Merge pets into their owner** and **Refresh interval**, both addon-wide:
   change either and **every** window follows, not just the selected one. Its three buttons are

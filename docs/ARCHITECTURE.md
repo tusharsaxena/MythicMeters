@@ -91,7 +91,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `HeaderControls`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
-| `settings/` | `Schema`, `Slash`, `OptionsSetup` + 10 pages | One schema drives the panel, the CLI and the defaults reset. |
+| `settings/` | `Schema`, `Slash`, `OptionsSetup` + 9 pages | One schema drives the panel, the CLI and the defaults reset. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
 identity build, the formatter and the widget setters — is **[data-flow.md](data-flow.md)**. Read it before
@@ -99,7 +99,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **129 rows across 8 page keys**,
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **138 rows across 7 page keys**,
 each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
 per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
 
@@ -603,7 +603,7 @@ issue needs a picture, and expect it to empty itself again.
 | `scope.md` | What the addon does and deliberately does not, including why scoring cannot be computed in combat |
 | `module-map.md` | Every non-vendored file, its responsibility, TOC load order, the AceAddon lifecycle |
 | `schema.md` | The persisted shape, every default, and the migration seam |
-| `settings-panel.md` | The ten pages, per-option behavior, and the write seam |
+| `settings-panel.md` | The nine pages, per-option behavior, and the write seam |
 | `data-flow.md` | `C_DamageMeter` → pixel, and the secret-value rules that shape every hop |
 | `common-tasks.md` | Recipes for the changes made most often here |
 | `superpowers/` | Tier 3 planning history, frozen — the approved design specs and build plans behind each feature, under `specs/` and `plans/`, dated and never revised after the fact |

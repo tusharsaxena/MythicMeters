@@ -90,7 +90,7 @@ are currently looking at, not all of them.
 
 `/mm config`, or the Options → AddOns list. Thirteen pages:
 
-The seven pages between Windows and Profiles are **indented under it**, because they all configure
+The six pages between Windows and Profiles are **indented under it**, because they all configure
 *the window Windows has selected* — the two that are not indented configure the addon.
 
 | Page | What you set there |
@@ -99,8 +99,7 @@ The seven pages between Windows and Profiles are **indented under it**, because 
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
 | `  - `Frame | Size, scale, opacity, background, border, lock, title bar |
 | `  - `Header | Title, session name, duration, totals, font, alignment, background — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
-| `  - `Rows | Row height, spacing, how many, growth direction, self highlight, alternating backgrounds |
-| `  - `Bars | Everything drawn inside a cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
+| `  - `Bars | The grid and everything drawn in it — row height, count, spacing and growth direction, and then, per cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
 | `  - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
 | `  - `Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
 | `  - `Columns | Add, remove and reorder columns — eight statistics are catalogued and six are on by default; Absorbs and Damage Taken are there to be switched on. Per-column width, and whether the column draws a bar |

@@ -358,6 +358,10 @@ local WINDOW_TEMPLATE = {
         -- CURSOR | TOP | BOTTOM | LEFT | RIGHT
         --        | TOPLEFT | TOPRIGHT | BOTTOMLEFT | BOTTOMRIGHT
         anchor             = "CURSOR",
+        -- The TOOLTIP's scale, not the window's: a player who wants a bigger grid
+        -- and a small tooltip is asking two questions. Put back to 1 when the
+        -- tooltip closes, because GameTooltip is Blizzard's and shared.
+        scale              = 1.0,
         -- Nudge applied on top of whichever anchor is chosen, in pixels. Passed
         -- to GameTooltip:SetOwner, which takes the pair natively — so the client
         -- still does the placing and nothing here reads geometry back off a
@@ -383,6 +387,15 @@ local WINDOW_TEMPLATE = {
         -- reads well across a 90px cell often does not across a 14px line.
         barTexture         = "Blizzard Raid Bar",  -- LSM "statusbar" key
         barSpacing         = 1,                    -- px between tooltip lines
+        -- The fill and the backdrop each carry a colour, a MODE and an opacity.
+        -- The fill was the hovered player's class with no setting reaching it; the
+        -- backdrop was a hard-coded black at 0.35 with none either.
+        barColor           = { r = 0.6, g = 0.6, b = 0.6, a = 1 },
+        barColorMode       = "class",
+        barAlpha           = 0.85,
+        barBgColor         = { r = 0, g = 0, b = 0, a = 1 },
+        barBgColorMode     = "custom",
+        barBgAlpha         = 0.35,
         barBorderStyle     = "None",               -- LSM "border" key
         barBorderSize      = 1,
         barBorderColor     = { r = 0, g = 0, b = 0, a = 1 },

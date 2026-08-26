@@ -19,6 +19,7 @@ local test        = T.test
 local assertEqual = T.assertEqual
 local assertTrue  = T.assertTrue
 local assertFalse = T.assertFalse
+local assertNil   = T.assertNil
 
 local CURRENT = 1
 local ALPHA   = "Player-1-0000000A"
@@ -669,12 +670,129 @@ test("A bar clears the icon rather than running underneath it", function()
     assertEqual(left.x, 14, "the track does not begin at the icon's right edge")
 end)
 
+test("The player's name is class-coloured on every tooltip that names one", function()
+    -- Every other name this addon draws is class-coloured -- the Player column
+    -- has been since the first build -- and the tooltip header was the one place
+    -- a name came out white, so a hover read as belonging to nothing.
+    -- red under: passing 1, 1, 1 to AddDoubleLine's first colour triple.
+    local inst, cfg, anchor = bench()
+    local want = inst.mocks.RAID_CLASS_COLORS.MAGE
+    assertTrue(want ~= nil, "the mock has no MAGE colour to compare against")
+
+    -- The cell tooltip's header is a DOUBLE line -- name on the left, statistic
+    -- on the right -- so its colours are the pair recorded for each side.
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+    local first = inst.mocks.GameTooltip.__lines[1]
+    assertEqual(first.leftColor[1], want.r, "the cell tooltip's name is not class-coloured")
+    assertEqual(first.leftColor[3], want.b)
+    assertEqual(first.rightColor[1], 1, "the statistic beside it lost its gold")
+
+    -- The name tooltip's is a single line.
+    inst.NS.Tooltip:NameTooltip(row(), anchor, cfg)
+    first = inst.mocks.GameTooltip.__lines[1]
+    assertEqual(first.r, want.r, "the name tooltip's name is not class-coloured")
+end)
+
+test("A row with no class keeps a white name rather than an invented colour", function()
+    local inst, cfg, anchor = bench()
+    local r = row()
+    r.classFilename = nil
+    inst.NS.Tooltip:CellTooltip(r, "DamageDone", anchor, cfg)
+    assertEqual(inst.mocks.GameTooltip.__lines[1].leftColor[1], 1)
+end)
+
+test("The scale reaches the tooltip BEFORE it is placed, and is put back after", function()
+    -- Set after SetOwner, the placement is computed against the old size and a
+    -- scaled-up tooltip runs off the edge of the screen it was just fitted to.
+    -- And GameTooltip is Blizzard's: a scale left behind rescales the next quest
+    -- text anybody hovers, with nothing on screen to connect it to this addon.
+    -- red under: dropping the restore, or scaling after SetOwner.
+    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.scale = 1.4 end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+    assertEqual(inst.mocks.GameTooltip.__scale, 1.4)
+
+    inst.NS.Tooltip:Hide()
+    assertEqual(inst.mocks.GameTooltip.__scale, 1, "the shared tooltip was left scaled")
+end)
+
+test("A nonsense scale is bounded rather than handed to the client", function()
+    for _, bad in ipairs({ 0, -3, 99, "big" }) do
+        local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.scale = bad end }
+        inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+        local got = inst.mocks.GameTooltip.__scale
+        assertTrue(got >= 0.5 and got <= 2,
+            "scale " .. tostring(bad) .. " reached the client as " .. tostring(got))
+    end
+end)
+
+test("The bar's fill and its backdrop each take their own colour and opacity", function()
+    -- The fill used to be the hovered player's class and nothing else, with no
+    -- setting reaching it; the backdrop was a hard-coded black at 0.35 set once
+    -- at creation, which no setting reached and which a POOLED line carried from
+    -- one hover to the next.
+    -- red under: hard-coding either.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barColorMode   = "custom"
+        c.tooltip.barColor       = { r = 1, g = 0, b = 0, a = 1 }
+        c.tooltip.barAlpha       = 0.5
+        c.tooltip.barBgColorMode = "custom"
+        c.tooltip.barBgColor     = { r = 0, g = 0, b = 1, a = 1 }
+        c.tooltip.barBgAlpha     = 0.25
+    end }
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    assertTrue(b ~= nil, "no bar was drawn")
+    assertEqual(b.__barColor[1], 1, "the fill ignored its colour")
+    assertEqual(b.__barColor[4], 0.5, "the fill ignored its opacity")
+    assertEqual(b.bg.__colorTexture[3], 1, "the backdrop ignored its colour")
+    assertEqual(b.bg.__colorTexture[4], 0.25, "the backdrop ignored its opacity")
+end)
+
+test("Class mode paints the bar with the hovered player's class", function()
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barColorMode = "class"
+    end }
+    local want = inst.mocks.RAID_CLASS_COLORS.MAGE
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    assertEqual(b.__barColor[1], want.r)
+    assertEqual(b.__barColor[3], want.b)
+end)
+
+test("The bar border is drawn on the BAR, where it can be seen", function()
+    -- IT DID NOTHING AT ANY THICKNESS. The carrier is the parent and the bar is a
+    -- child covering it edge to edge, so a backdrop on the carrier was drawn
+    -- underneath the bar.
+    -- red under: putting the backdrop back on the carrier.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barBorderStyle = "Ka0s Edge"
+        c.tooltip.barBorderSize  = 4
+    end }
+    inst.mocks.__media.border["Ka0s Edge"] = "Interface\\Test\\Edge"
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    assertTrue(b ~= nil, "no bar was drawn")
+    assertTrue(b.__backdrop ~= nil, "the border did not reach the bar")
+    assertEqual(b.__backdrop.edgeSize, 4, "the thickness slider does not reach the art")
+    assertNil(b.__parent.__backdrop, "the carrier kept a backdrop nobody can see")
+end)
+
 test("A bar sits UNDER the tooltip's text, not over it", function()
     -- GameTooltip draws its line FontStrings in ARTWORK, and a frame at the
     -- tooltip's own level interleaves its draw layers with the tooltip's. So the
-    -- fill goes in BORDER: any higher and a full-width bar paints over the very
-    -- spell name it is behind.
-    -- red under: leaving the fill on the StatusBar's default layer.
+    -- fill goes at the BOTTOM of the stack: any higher and a full-width bar paints
+    -- over the very spell name it is behind.
+    --
+    -- BACKGROUND rather than BORDER, and the sublevel is the point. BORDER is
+    -- where a BACKDROP draws its edge, so a fill sitting there was level with the
+    -- border that is supposed to outline it -- which is why "Bar border" appeared
+    -- to do nothing at any thickness. Sublevel 1 keeps it above the bar's own
+    -- backdrop texture at sublevel 0.
+    -- red under: leaving the fill on the StatusBar's default layer, or putting it
+    -- back on BORDER where the outline lives.
     local inst, cfg, anchor = bench()
     inst.NS.Tooltip:CellTooltip(row{ classFilename = "MAGE" }, "DamageDone", anchor, cfg)
 
@@ -687,8 +805,10 @@ test("A bar sits UNDER the tooltip's text, not over it", function()
 
     local fill = b:GetStatusBarTexture()
     assertTrue(fill ~= nil, "a StatusBar with no texture draws nothing at all")
-    assertEqual(fill.__drawLayer and fill.__drawLayer[1], "BORDER",
+    assertEqual(fill.__drawLayer and fill.__drawLayer[1], "BACKGROUND",
         "the fill must draw below the tooltip's ARTWORK text")
+    assertEqual(fill.__drawLayer and fill.__drawLayer[2], 1,
+        "the fill must still sit above the bar's own backdrop")
 end)
 
 test("Bars come down when GameTooltip closes, whoever closed it", function()
@@ -890,15 +1010,23 @@ test("Every anchor the schema offers resolves to a real GameTooltip token", func
     -- typo'd "ANCHOR_BOTTOMRIGHT" and a silent fallback to the cursor. Every value
     -- the dropdown can produce is walked, which is what makes adding a ninth
     -- anchor without adding its token a failing test rather than a shrug.
-    -- red under: dropping any entry from ANCHOR_TOKENS.
+    --
+    -- THE TWO TOP CORNERS ARE CROSSED, and that is the interesting row of this
+    -- table rather than a typo in it. Blizzard's top pair grows the opposite way
+    -- from its bottom pair of the same names, so "Top left" put the tooltip's
+    -- left edge on the cell and grew it rightward across the grid while "Bottom
+    -- left" grew leftward away from it. The SETTING's names describe the
+    -- direction; the map translates.
+    -- red under: dropping any entry from ANCHOR_TOKENS, or "fixing" the crossed
+    -- pair back to matching names.
     local expected = {
         CURSOR      = "ANCHOR_CURSOR",
         TOP         = "ANCHOR_TOP",
         BOTTOM      = "ANCHOR_BOTTOM",
         LEFT        = "ANCHOR_LEFT",
         RIGHT       = "ANCHOR_RIGHT",
-        TOPLEFT     = "ANCHOR_TOPLEFT",
-        TOPRIGHT    = "ANCHOR_TOPRIGHT",
+        TOPLEFT     = "ANCHOR_TOPRIGHT",
+        TOPRIGHT    = "ANCHOR_TOPLEFT",
         BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
         BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
     }

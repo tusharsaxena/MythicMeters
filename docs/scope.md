@@ -45,7 +45,7 @@ Retail only · English only.
 - **Cell drill-down** into a player's per-spell breakdown, rendered through the same row path as the
   grid, plus a hand-off to Blizzard's own death recap from the Deaths column.
 - **Pet folding** into owners, best-effort — see the caveat below.
-- **A ten-page settings panel** driven by one 129-row schema, with full `/mm` CLI parity for every
+- **A nine-page settings panel** driven by one 138-row schema, with full `/mm` CLI parity for every
   schema-shaped operation.
 - **Visibility rules** per window — **show everywhere, hide nowhere** out of the box. Seven contexts
   (dungeon, raid, arena, battleground, delve, scenario, open world), all on by default; ten hide

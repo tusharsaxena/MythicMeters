@@ -1,17 +1,20 @@
 -- settings/Bars.lua
 --
--- The Bars page — EVERYTHING DRAWN INSIDE A CELL, in five groups: the StatusBar
--- itself (texture, colour, opacity, fill direction), the tint behind it, its
--- border, the two TEXT slots, and the name column's icon.
+-- The Bars page — THE GRID AND EVERYTHING DRAWN IN IT, in seven groups, from the
+-- outside in: the row (how tall, how many, which way they grow, who is pinned and
+-- highlighted), then the StatusBar itself (texture, colour, opacity, fill
+-- direction), the tint behind it, its border, the two TEXT slots, and the name
+-- column's icon.
 --
--- THE TEXT AND ICONS PAGES FOLDED IN HERE. They were their own tree entries and
+-- THE ROWS, TEXT AND ICONS PAGES ALL FOLDED IN HERE. They were their own tree entries and
 -- their own canvases, which meant styling one cell — the bar behind the number,
 -- the number, and the icon beside the name — was three pages and two clicks
 -- between each change you wanted to compare. Everything a cell draws is on one
--- page now, in the order it is drawn: back to front.
+-- page now, in the order it is drawn: the row first, because its height and its
+-- count decide the shape of every bar under them, and then back to front.
 --
--- Pure schema — every widget is a `window.bars.*`, `window.text.*` or
--- `window.icons.*` row in NS.Schema. The PATHS did not move with the page and
+-- Pure schema — every widget is a `window.rows.*`, `window.bars.*`,
+-- `window.text.*` or `window.icons.*` row in NS.Schema. The PATHS did not move with the page and
 -- must not: a row's page is where it is edited, its path is where it is stored,
 -- and renaming `text.size` to `bars.textSize` for tidiness would migrate every
 -- saved profile in the collection for nothing anybody can see.

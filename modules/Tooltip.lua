@@ -68,6 +68,17 @@ local Perf = NS.Perf or {}
 -- broken layout.
 local FALLBACK_ICON = [[Interface\ICONS\INV_Misc_QuestionMark]]
 
+-- The icon every TARGET line wears. A target is a unit rather than a spell, so
+-- there is no per-row icon to look up and the slot sat empty -- one section of
+-- the tooltip indented past an icon column with nothing in it, which reads as a
+-- missing icon rather than as a section that has none. One shared texture is
+-- honest about that: its job is to hold the column where every spell line puts
+-- its icon, not to tell one target from another.
+--
+-- Ability_hunter_focusedaim: a reticle over a target, which is the closest thing
+-- the shipped icon set has to "the thing you were hitting".
+local TARGET_ICON = [[Interface\ICONS\Ability_Hunter_FocusedAim]]
+
 -- Icon edge length inside a tooltip line, in pixels. Sized to sit on the text
 -- baseline at the game's default tooltip font rather than to match the row
 -- icons, which are configurable and live in a different frame entirely.
@@ -206,6 +217,27 @@ local function displayName(row)
     return name
 end
 
+--- The colour a tooltip's first line draws the player's name in.
+---
+--- BY CLASS, ALWAYS, and not behind a setting. Every other name this addon draws
+--- is class-coloured -- the Player column has been since the first build -- and
+--- the tooltip's own header was the one place a name came out white, so a hover
+--- read as belonging to nothing in particular. `classFilename` is NeverSecret,
+--- which is why this keeps working mid-pull when the numbers under it do not.
+---
+--- Three returns, for AddDoubleLine's first colour triple. A row with no class --
+--- an NPC, an enemy, a spell in a breakdown -- keeps white, which is the honest
+--- answer rather than a tenth palette entry.
+---
+--- @param row table|nil
+--- @return number r, number g, number b
+local function nameColor(row)
+    local classes = _G.RAID_CLASS_COLORS
+    local c = classes and row and row.classFilename and classes[row.classFilename]
+    if c then return c.r, c.g, c.b end
+    return 1, 1, 1
+end
+
 -- ---------------------------------------------------------------------------
 -- Configuration
 -- ---------------------------------------------------------------------------
@@ -225,6 +257,7 @@ local function tooltipConfig(window)
 
     return {
         anchor             = field("anchor", "CURSOR"),
+        scale              = field("scale", 1.0),
         offsetX            = field("offsetX", 0),
         offsetY            = field("offsetY", 0),
         showSpells         = field("showSpells", true),
@@ -233,6 +266,12 @@ local function tooltipConfig(window)
         hideInCombat       = field("hideInCombat", false),
         textColor          = field("textColor", nil),
         barTexture         = field("barTexture", "Blizzard Raid Bar"),
+        barColor           = field("barColor", nil),
+        barColorMode       = field("barColorMode", "class"),
+        barAlpha           = field("barAlpha", 0.85),
+        barBgColor         = field("barBgColor", nil),
+        barBgColorMode     = field("barBgColorMode", "custom"),
+        barBgAlpha         = field("barBgAlpha", 0.35),
         barSpacing         = field("barSpacing", 1),
         barBorderStyle     = field("barBorderStyle", "None"),
         barBorderSize      = field("barBorderSize", 1),
@@ -370,17 +409,38 @@ end
 -- ANCHOR_NONE and ANCHOR_PRESERVE are deliberately absent. Both mean "the owner
 -- places the tooltip itself", and placing it ourselves would mean computing a
 -- point from the anchor frame — which is the read rule R3 forbids.
+--
+-- THE TWO TOP CORNERS ARE CROSSED, DELIBERATELY. Blizzard's ANCHOR_TOPLEFT and
+-- ANCHOR_TOPRIGHT grow the opposite way from the bottom pair of the same names:
+-- picking "Top left" put the tooltip's left edge on the cell and grew it
+-- RIGHTWARD, across the grid, while "Bottom left" grew leftward away from it.
+-- Two settings that read as a matched pair behaving as opposites is the setting
+-- lying about itself, so the SETTING's names describe the direction and the map
+-- translates. A player picking "Top left" gets a tooltip that grows left, like
+-- the Bottom left they already have.
 local ANCHOR_TOKENS = {
     CURSOR      = "ANCHOR_CURSOR",
     TOP         = "ANCHOR_TOP",
     BOTTOM      = "ANCHOR_BOTTOM",
     LEFT        = "ANCHOR_LEFT",
     RIGHT       = "ANCHOR_RIGHT",
-    TOPLEFT     = "ANCHOR_TOPLEFT",
-    TOPRIGHT    = "ANCHOR_TOPRIGHT",
+    TOPLEFT     = "ANCHOR_TOPRIGHT",
+    TOPRIGHT    = "ANCHOR_TOPLEFT",
     BOTTOMLEFT  = "ANCHOR_BOTTOMLEFT",
     BOTTOMRIGHT = "ANCHOR_BOTTOMRIGHT",
 }
+
+--- A scale that is safe to hand to SetScale: a real number, bounded to the range
+--- the schema offers. Zero or a negative would make the tooltip invisible or
+--- inside-out, and a saved profile carrying a string would raise inside
+--- Blizzard's own code where the traceback names neither this file nor the
+--- setting.
+local function tooltipScale(v)
+    if type(v) ~= "number" then return 1 end
+    if v < 0.5 then return 0.5 end
+    if v > 2 then return 2 end
+    return v
+end
 
 --- An offset that is safe to hand to SetOwner: a real number, bounded to the
 --- range the schema offers. A saved profile carrying a string here would
@@ -414,6 +474,18 @@ local function openTooltip(anchorFrame, config)
     -- SetPoint of our own: the client still does the placing, and it still keeps
     -- the tooltip on screen. Nudging it ourselves would mean reading a point back
     -- off a frame that has held a secret (rule R3).
+    -- SCALE BEFORE SetOwner, so the client places a tooltip of the size it is
+    -- actually going to be. Set afterwards, the placement is computed against the
+    -- old size and a scaled-up tooltip runs off the edge of the screen it was
+    -- just fitted to.
+    --
+    -- RESTORED ON HIDE like the fonts are (see ensureTooltipHook): GameTooltip is
+    -- Blizzard's and is shared with every other addon, so leaving it at 1.4
+    -- rescales the next quest text somebody hovers.
+    if GameTooltip.SetScale then
+        GameTooltip:SetScale(tooltipScale(config.scale))
+    end
+
     GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_CURSOR",
         offset(config.offsetX), offset(config.offsetY))
     GameTooltip:ClearLines()
@@ -701,9 +773,19 @@ Tooltip.__fontProbe = nil
 --- because they are not all the same: a section gap gets the same face at half
 --- the size, and a single remembered font would have the post-layout pass stamp
 --- full size back over it and quietly restore the gap this addon just halved.
-local function applyLineFont(fontString, index, path, size, flags, shadowX, shadowY)
+local function applyLineFont(fontString, index, path, size, flags, shadowX, shadowY, textColor)
     if not (fontString and fontString.SetFont) then return end
     fontString:SetFont(path, size, flags)
+
+    -- THE SPELL NAME IS TEXT INSIDE THE BAR, and the colour mode governs it. It
+    -- is the tooltip's OWN FontString rather than one of ours -- the name is
+    -- added through AddLine so the icon escape renders -- so it used to keep
+    -- AddLine's white while the amount and the share beside it took the player's
+    -- colour: one line, two colours, and the setting apparently working on half
+    -- of it. Restored by restoreFonts with the face, for the same reason.
+    if textColor and fontString.SetTextColor then
+        fontString:SetTextColor(textColor[1], textColor[2], textColor[3])
+    end
     -- THE SHADOW RIDES WITH THE FONT, and is recorded with it, because
     -- `reapplyFonts` runs after Show and would otherwise put back the face
     -- without the shadow the same setting asked for. Restated on every line for
@@ -713,7 +795,8 @@ local function applyLineFont(fontString, index, path, size, flags, shadowX, shad
         fontString:SetShadowOffset(shadowX or 0, shadowY or 0)
     end
     fontedLines[index] = { fs = fontString, path = path, size = size, flags = flags,
-                           shadowX = shadowX or 0, shadowY = shadowY or 0 }
+                           shadowX = shadowX or 0, shadowY = shadowY or 0,
+                           recolored = textColor ~= nil }
 
     if State.debug and fontString.GetFont then
         local gotPath, gotSize, gotFlags = fontString:GetFont()
@@ -805,6 +888,12 @@ local function restoreFonts()
         -- so ours would otherwise stay on a shared line and turn up under the
         -- next addon's item tooltip -- the same class of leak as a bar left Shown.
         if fontString.SetShadowOffset then fontString:SetShadowOffset(0, 0) end
+        -- And the colour, which a font OBJECT does not carry either. A line left
+        -- in a class colour turns up under the next addon's item tooltip exactly
+        -- as a left-behind shadow does.
+        if entry.recolored and fontString.SetTextColor then
+            fontString:SetTextColor(1, 1, 1)
+        end
         fontedLines[index] = nil
     end
 end
@@ -837,6 +926,12 @@ local function releaseLines()
     -- inherits our spacing for no reason it can discover.
     if _G.GameTooltip and GameTooltip.SetCustomLineSpacing then
         GameTooltip:SetCustomLineSpacing(0)
+    end
+    -- And the scale, for exactly the same reason and with more consequence: a
+    -- tooltip left at 1.4 rescales the next quest text anybody hovers, anywhere
+    -- in the UI, with nothing on screen to connect it to this addon.
+    if _G.GameTooltip and GameTooltip.SetScale then
+        GameTooltip:SetScale(1)
     end
 end
 
@@ -885,7 +980,10 @@ local function lineWidget(index)
     -- The tooltip's own level, NOT one above it: see the layering note above.
     frame:SetFrameLevel(GameTooltip:GetFrameLevel())
 
-    local b = CreateFrame("StatusBar", nil, frame)
+    -- BackdropTemplate on the BAR as well as on the carrier: the border is drawn
+    -- on the bar (see applyLineBorder), and a template cannot be added to a frame
+    -- after it exists.
+    local b = CreateFrame("StatusBar", nil, frame, "BackdropTemplate")
     b:SetAllPoints(frame)
     b:SetFrameLevel(frame:GetFrameLevel())
     local bg = b:CreateTexture(nil, "BACKGROUND")
@@ -1185,6 +1283,45 @@ end
 --- @param config table      the resolved tooltip config
 --- @param color table|nil   the hovered player's class color, or nil
 --- @return table
+--- Resolve one of the tooltip's three colour modes onto a starting colour.
+---
+--- ONE READER FOR THE THREE SURFACES a tooltip line draws -- its text, its fill
+--- and its backdrop -- because they are one question asked three times, and three
+--- private answers is how a tooltip ends up with a class-coloured bar behind
+--- stat-coloured writing for no reason a player can discover.
+---
+--- CLASS IS THE HOVERED PLAYER'S: `color` is that same table, resolved by the
+--- caller off `row.classFilename`. A tooltip is about ONE player, which is what
+--- makes the question answerable here where the window header has to fall back to
+--- the local player's class instead.
+---
+--- STAT IS THE WINDOW'S SORT COLUMN, the statistic the grid being hovered is
+--- ranked by. A tooltip lists several statistics at once and is not "about" any
+--- one of them, so per-column would have no meaning here; the sort column is the
+--- same answer the title bar gives (modules/Window.lua's surfaceColor).
+---
+--- With nothing to read either way the passed-in colour stands, which is the
+--- configured one at every call site.
+local function modeColor(mode, statKey, classColor, r, g, b)
+    if mode == "class" then
+        if classColor then return classColor.r, classColor.g, classColor.b end
+    elseif mode == "stat" then
+        local c = Const.STAT_COLORS[statKey or ""]
+        if c then return c[1], c[2], c[3] end
+    end
+    return r, g, b
+end
+
+--- An opacity that is safe to hand to a widget: a real number in 0..1, with the
+--- shipped value standing in for anything else. A saved profile carrying a string
+--- here would raise inside the setter.
+local function alphaOf(v, fallback)
+    if type(v) ~= "number" then return fallback end
+    if v < 0 then return 0 end
+    if v > 1 then return 1 end
+    return v
+end
+
 local function lineStyle(config, color)
     local path, size, flags = tooltipFont(config)
     local borderSize = config.barBorderSize
@@ -1205,12 +1342,17 @@ local function lineStyle(config, color)
     -- reason (modules/Window.lua's surfaceColor).
     --
     -- With nothing to read either way, the configured colour stands.
-    if config.colorMode == "class" and color then
-        tr, tg, tb = color.r, color.g, color.b
-    elseif config.colorMode == "stat" then
-        local c = Const.STAT_COLORS[config.statKey or ""]
-        if c then tr, tg, tb = c[1], c[2], c[3] end
-    end
+    tr, tg, tb = modeColor(config.colorMode, config.statKey, color, tr, tg, tb)
+
+    -- THE BAR AND ITS BACKDROP ANSWER THE SAME THREE, each with its own colour,
+    -- its own mode and its own opacity. The fill used to be the hovered player's
+    -- class and nothing else -- no setting reached it, and the backdrop was a
+    -- hard-coded black at 0.35 that no setting reached either.
+    local fr, fg, fb = rgba(config.barColor, 0.6, 0.6, 0.6, 1)
+    fr, fg, fb = modeColor(config.barColorMode, config.statKey, color, fr, fg, fb)
+
+    local br, bg_, bb = rgba(config.barBgColor, 0, 0, 0, 1)
+    br, bg_, bb = modeColor(config.barBgColorMode, config.statKey, color, br, bg_, bb)
 
     local shadowX, shadowY = 0, 0
     if config.fontShadow then shadowX, shadowY = 1, -1 end
@@ -1218,6 +1360,8 @@ local function lineStyle(config, color)
     return {
         color      = color,
         textColor  = { tr, tg, tb },
+        barColor   = { fr, fg, fb, alphaOf(config.barAlpha, 0.85) },
+        barBgColor = { br, bg_, bb, alphaOf(config.barBgAlpha, 0.35) },
         shadowX    = shadowX,
         shadowY    = shadowY,
         texture    = mediaPath("statusbar", config.barTexture),
@@ -1241,6 +1385,14 @@ end
 --- player who turned the border off between the two would otherwise keep it.
 --- Clearing is an explicit SetBackdrop(nil) for exactly that reason.
 local function applyLineBorder(frame, style)
+    -- ON THE BAR, NOT ON THE CARRIER, and that is the whole of why this setting
+    -- appeared to do nothing. The carrier is the parent; the bar is a child that
+    -- covers it edge to edge, so a backdrop drawn on the carrier was drawn
+    -- underneath the bar and could not be seen at any thickness or style. The bar
+    -- carries the BackdropTemplate too (see lineWidget), and its fill sits at
+    -- BACKGROUND so the edge lands above it -- the same fix modules/Row.lua's
+    -- cell border needed, for the same reason.
+    frame = frame.bar or frame
     if not frame.SetBackdrop then return end
 
     if not style.border then
@@ -1315,7 +1467,7 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, mode
     frame.share:SetTextColor(tc[1], tc[2], tc[3])
     frame.label:SetTextColor(tc[1], tc[2], tc[3])
     applyLineFont(left, lineIndex, style.fontPath, style.fontSize, style.fontFlags,
-        style.shadowX, style.shadowY)
+        style.shadowX, style.shadowY, tc)
 
     applyLineBorder(frame, style)
 
@@ -1358,20 +1510,27 @@ local function drawLine(lineIndex, amount, share, value, max, style, label, mode
     -- bar may be read back. Layout here is computed from config (rule R3).
     local b = frame.bar
     b:SetStatusBarTexture(style.texture or BAR_FALLBACK_TEXTURE)
-    -- BORDER, so the tooltip's ARTWORK spell name reads on top of the fill rather
-    -- than under it. SetStatusBarTexture replaces the texture object, so the layer
-    -- has to be re-stated every draw and not once at creation.
+    -- BACKGROUND at sublevel 1: above the bar's own backdrop texture (sublevel 0)
+    -- and below everything else, so the tooltip's ARTWORK spell name reads on top
+    -- of the fill and the BORDER-layer backdrop edge does too. It used to sit at
+    -- BORDER, which put it level with the edge that is supposed to outline it.
+    -- SetStatusBarTexture replaces the texture object, so the layer has to be
+    -- re-stated every draw and not once at creation.
     local fill = b.GetStatusBarTexture and b:GetStatusBarTexture()
-    if fill and fill.SetDrawLayer then fill:SetDrawLayer("BORDER") end
+    if fill and fill.SetDrawLayer then fill:SetDrawLayer("BACKGROUND", 1) end
     if max == nil then
         b:SetMinMaxValues(0, 1)
     else
         b:SetMinMaxValues(0, max)
     end
     b:SetValue(value == nil and 0 or value)
-    local color = style.color
-    b:SetStatusBarColor((color and color.r) or 0.6, (color and color.g) or 0.6,
-        (color and color.b) or 0.6, 0.85)
+    local bc = style.barColor
+    b:SetStatusBarColor(bc[1], bc[2], bc[3], bc[4])
+    -- The backdrop was a hard-coded black at 0.35 set once at creation, which no
+    -- setting could reach and which a POOLED line would carry from one hover to
+    -- the next anyway. Re-stated every draw, like the font and the border.
+    local bbc = style.barBgColor
+    if b.bg then b.bg:SetColorTexture(bbc[1], bbc[2], bbc[3], bbc[4]) end
     b:Show()
 end
 
@@ -1712,9 +1871,10 @@ local function addDeathBreakdown(row, style, numberStyle)
     -- It earns its place besides: the row says only "Death 3", so this is where
     -- a reader finds out whose death and when. Both terms go through one
     -- AddDoubleLine rather than any concatenation — `displayName` may be secret.
+    local nr, ng, nb = nameColor(row)
     GameTooltip:AddDoubleLine(displayName(row),
         row.deathClock or L["Death recap"] or "Death recap",
-        1, 1, 1, 1, 0.82, 0)
+        nr, ng, nb, 1, 0.82, 0)
 
     -- THE SAME GAP AND CAPTION EVERY OTHER SECTION IN THIS FILE GETS. Without
     -- them the header sat flush against the first bar, which nothing else here
@@ -1931,12 +2091,13 @@ local function addTargetBreakdown(row, statKey, config, style, numberStyle, wind
 
     for i = 1, #list do
         local entry = list[i]
-        -- The tooltip line is deliberately BLANK. Its only job is to exist, so
-        -- the carrier has something to anchor to and the tooltip reserves a row
-        -- of height; the visible name is drawn on the carrier's own label slot,
-        -- which is the only way to start it where a spell name starts rather
-        -- than where a spell icon starts. See `lineWidget`.
-        GameTooltip:AddLine(" ", 1, 1, 1)
+        -- The tooltip line carries ONLY THE ICON, in the same `|T…|t` escape a
+        -- spell line uses, so the target section lines up with the spell section
+        -- above it column for column. The NAME is drawn on the carrier's own
+        -- label slot, which is the only way to start it where a spell NAME starts
+        -- rather than where a spell ICON starts. See `lineWidget`.
+        GameTooltip:AddLine(string.format("|T%s:%d:%d:0:0|t",
+            TARGET_ICON, TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE), 1, 1, 1)
         drawLine(GameTooltip:NumLines(),
             formatNumber(entry.total, numberStyle),
             formatShare(entry.total, total),
@@ -1981,8 +2142,9 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     if not openTooltip(anchorFrame, config) then return end
 
     local stat = Const.STAT_BY_KEY[statKey]
+    local nr, ng, nb = nameColor(row)
     GameTooltip:AddDoubleLine(displayName(row), stat and L[stat.label] or statKey,
-        1, 1, 1, 1, 0.82, 0)
+        nr, ng, nb, 1, 0.82, 0)
 
     -- The bars wear the hovered player's class color, so a tooltip reads as
     -- belonging to the row it came off. `classFilename` is NeverSecret, which is
@@ -2145,7 +2307,7 @@ function Tooltip:NameTooltip(row, anchorFrame, window)
     releaseLines()
     if not openTooltip(anchorFrame, config) then return end
 
-    GameTooltip:AddLine(displayName(row), 1, 1, 1)
+    GameTooltip:AddLine(displayName(row), nameColor(row))
 
     if not config.showAllStatsOnName then
         GameTooltip:Show()

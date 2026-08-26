@@ -37,7 +37,7 @@ local NS = T.NS
 -- about one window. The order here is the TOC's registration order, which is the
 -- order the tree draws.
 local PAGES = {
-    "general", "windows", "frame", "header", "rows", "bars",
+    "general", "windows", "frame", "header", "bars",
     "tooltip", "visibility", "columns", "profiles",
 }
 
@@ -49,7 +49,6 @@ local PANEL_NAME = {
     windows    = "MultiMetersWindowsPanel",
     frame      = "MultiMetersFramePanel",
     header     = "MultiMetersHeaderPanel",
-    rows       = "MultiMetersRowsPanel",
     bars       = "MultiMetersBarsPanel",
     tooltip    = "MultiMetersTooltipPanel",
     visibility = "MultiMetersVisibilityPanel",
@@ -126,7 +125,7 @@ test("Options: every window page is marked as nested, and the two that are not a
     -- would notice a mark that stopped arriving whole.
     local MARK = "  - "
     local NESTED = {
-        frame = true, header = true, rows = true, bars = true,
+        frame = true, header = true, bars = true,
         tooltip = true, visibility = true, columns = true,
     }
 

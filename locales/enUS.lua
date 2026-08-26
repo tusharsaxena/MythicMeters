@@ -373,6 +373,22 @@ L["Which side of the player's name the icons sit on."] =
 -- Tooltip page
 -- ---------------------------------------------------------------------------
 
+L["Tooltip scale"] = "Tooltip scale"
+L["How large the tooltip is drawn. It is put back to normal when the tooltip closes, so nothing else in the interface inherits it."] =
+    "How large the tooltip is drawn. It is put back to normal when the tooltip closes, so nothing else in the interface inherits it."
+L["What colors the filled part of each tooltip bar. Class is the player you are hovering; Per-statistic is the color of the column the grid is sorted by."] =
+    "What colors the filled part of each tooltip bar. Class is the player you are hovering; Per-statistic is the color of the column the grid is sorted by."
+L["Color of the filled part, when the mode above is Custom."] =
+    "Color of the filled part, when the mode above is Custom."
+L["Opacity of the filled part of each tooltip bar."] =
+    "Opacity of the filled part of each tooltip bar."
+L["What colors the unfilled part of each tooltip bar."] =
+    "What colors the unfilled part of each tooltip bar."
+L["Color of the unfilled part, when the mode above is Custom."] =
+    "Color of the unfilled part, when the mode above is Custom."
+L["Opacity of the unfilled part of each tooltip bar."] =
+    "Opacity of the unfilled part of each tooltip bar."
+
 L["Tooltip behavior"] = "Tooltip behavior"
 L["Tooltip anchor"] = "Tooltip anchor"
 L["Where the tooltip appears relative to the cursor or the window."] =

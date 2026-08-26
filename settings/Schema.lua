@@ -822,10 +822,20 @@ NS.Schema = {
     },
 
     -- ── Rows ─────────────────────────────────────────────────────────────────
+    --
+    -- ON THE BARS PAGE, AT THE TOP OF IT, and the Rows page is gone. Two groups
+    -- did not fill a page, and what they describe is the grid a bar is drawn in:
+    -- how tall a row is, how many there are and which way they grow decide the
+    -- shape of every bar on the page below them. The order is back to front and
+    -- then outside in -- the row, then the bar, then its background, its border,
+    -- its text and its icon.
+    --
+    -- The PATHS stay `window.rows.*`. A row's page is where it is edited; its
+    -- path is where it is stored.
     {
         path = "window.rows.maxRows", type = "number", default = 0,
         min = 0, max = Const.MAX_ROWS, step = 1,
-        page = "rows", group = L["Row layout"],
+        page = "bars", group = L["Row layout"],
         label = L["Maximum rows"],
         desc = L["Largest number of rows to draw. Set to 0 to draw as many as the window has room for."],
         validate = isNumberIn(0, Const.MAX_ROWS),
@@ -833,30 +843,30 @@ NS.Schema = {
     {
         path = "window.rows.height", type = "number", default = 16,
         min = 8, max = 40, step = 1, fmt = "%d px",
-        page = "rows", group = L["Row layout"],
+        page = "bars", group = L["Row layout"],
         label = L["Row height"], desc = L["Height of one row in pixels."],
     },
     {
         path = "window.rows.spacing", type = "number", default = 1,
         min = 0, max = 10, step = 1, fmt = "%d px",
-        page = "rows", group = L["Row layout"],
+        page = "bars", group = L["Row layout"],
         label = L["Row spacing"], desc = L["Gap in pixels between adjacent rows."],
     },
     {
         path = "window.rows.growthDirection", type = "string", default = "DOWN",
         values = GROWTH_VALUES, sorting = GROWTH_SORT,
-        page = "rows", group = L["Row layout"],
+        page = "bars", group = L["Row layout"],
         label = L["Growth direction"], desc = L["Whether rows stack downward from the header or upward from the bottom."],
     },
     {
         path = "window.rows.alwaysShowSelf", type = "bool", default = true,
-        page = "rows", group = L["Row behavior"],
+        page = "bars", group = L["Row behavior"],
         label = L["Always show yourself"],
         desc = L["Keep your own row visible even when it would fall outside the maximum row count."],
     },
     {
         path = "window.rows.highlightSelf", type = "bool", default = true,
-        page = "rows", group = L["Row behavior"],
+        page = "bars", group = L["Row behavior"],
         label = L["Highlight yourself"], desc = L["Mark your own row so it stands out at a glance."],
     },
     -- `rows.classBackground` AND `rows.classBackgroundAlpha` ARE GONE, and they
@@ -871,7 +881,7 @@ NS.Schema = {
     -- choosing between them meant reading two pages.
     {
         path = "window.rows.mouseoverHighlight", type = "bool", default = true,
-        page = "rows", group = L["Row behavior"],
+        page = "bars", group = L["Row behavior"],
         label = L["Highlight on mouseover"], desc = L["Brighten the row under the cursor."],
     },
 
@@ -1095,6 +1105,18 @@ NS.Schema = {
         label = L["Tooltip anchor"], desc = L["Where the tooltip appears relative to the cursor or the window."],
     },
     {
+        -- The tooltip's own, not the window's: a player who wants a bigger grid
+        -- and a small tooltip, or the reverse, is asking two questions. Bounded
+        -- rather than free -- below 0.5 the text stops being readable and above 2
+        -- the tooltip stops fitting beside the window it came from.
+        path = "window.tooltip.scale", type = "number", default = 1.0,
+        min = 0.5, max = 2.0, step = 0.05, fmt = "%.2fx",
+        page = "tooltip", group = L["Tooltip behavior"],
+        label = L["Tooltip scale"],
+        desc = L["How large the tooltip is drawn. It is put back to normal when the tooltip closes, so nothing else in the interface inherits it."],
+        validate = isNumberIn(0.5, 2.0),
+    },
+    {
         path = "window.tooltip.offsetX", type = "number", default = 0,
         min = -400, max = 400, step = 1, fmt = "%d px",
         page = "tooltip", group = L["Tooltip behavior"],
@@ -1147,6 +1169,30 @@ NS.Schema = {
     -- inherited from `window.bars`. They are a different surface at a different
     -- size — a 14px spell line against a 90px cell — and a texture that reads
     -- well across one often does not across the other.
+    -- IN Tooltip behavior RATHER THAN A GROUP OF THEIR OWN. Two rows do not earn
+    -- a heading, and what they decide -- whether a section of the tooltip exists
+    -- at all, and how long it is -- is the same kind of question as the spell cap
+    -- three rows above them, not a kind of styling.
+    --
+    -- OFF by default, and for two reasons that are worth stating separately.
+    -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
+    -- built once per session), and it is a SUMMATION — so it is absent for a pull
+    -- rather than approximated. A player who wants it gets it; nobody pays for it
+    -- without asking.
+    {
+        path = "window.tooltip.showTargets", type = "bool", default = false,
+        page = "tooltip", group = L["Tooltip behavior"],
+        label = L["Show targets"],
+        desc = L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."],
+    },
+    {
+        path = "window.tooltip.maxTargets", type = "number", default = 3,
+        min = 1, max = 10, step = 1,
+        page = "tooltip", group = L["Tooltip behavior"],
+        label = L["Maximum targets"], desc = L["How many enemies to list before stopping."],
+        validate = isNumberIn(1, 10),
+    },
+
     {
         path = "window.tooltip.barTexture", type = "string", default = "Blizzard Raid Bar",
         values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
@@ -1164,6 +1210,52 @@ NS.Schema = {
     -- carries an 8-16px corner inset, and a spell bar is 14px tall — so on a
     -- majority of the list the corners eat the whole edge. The option is here
     -- because it was asked for; the default is the one that always looks right.
+    {
+        -- THE FILL AND THE BACKDROP EACH ANSWER THE SAME THREE MODES, the same
+        -- three every text surface answers. The fill used to be the hovered
+        -- player's class and nothing else, with no setting reaching it, and the
+        -- backdrop was a hard-coded black at 0.35 that no setting reached either.
+        path = "window.tooltip.barColorMode", type = "string", default = "class",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar color mode"],
+        desc = L["What colors the filled part of each tooltip bar. Class is the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
+    },
+    {
+        path = "window.tooltip.barColor", type = "color",
+        default = { r = 0.6, g = 0.6, b = 0.6, a = 1 },
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar color"], desc = L["Color of the filled part, when the mode above is Custom."],
+    },
+    {
+        path = "window.tooltip.barAlpha", type = "number", default = 0.85,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar opacity"], desc = L["Opacity of the filled part of each tooltip bar."],
+        validate = isNumberIn(0, 1),
+    },
+    {
+        path = "window.tooltip.barBgColorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar background color mode"],
+        desc = L["What colors the unfilled part of each tooltip bar."],
+    },
+    {
+        path = "window.tooltip.barBgColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 1 },
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar background color"],
+        desc = L["Color of the unfilled part, when the mode above is Custom."],
+    },
+    {
+        path = "window.tooltip.barBgAlpha", type = "number", default = 0.35,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "tooltip", group = L["Tooltip bars"],
+        label = L["Bar background opacity"],
+        desc = L["Opacity of the unfilled part of each tooltip bar."],
+        validate = isNumberIn(0, 1),
+    },
     {
         path = "window.tooltip.barBorderStyle", type = "string", default = "None",
         values = lsmValues("border"), dialogControl = "LSM30_Border",
@@ -1225,25 +1317,6 @@ NS.Schema = {
         page = "tooltip", group = L["Tooltip text"],
         label = L["Text color mode"],
         desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
-    },
-
-    -- OFF by default, and for two reasons that are worth stating separately.
-    -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
-    -- built once per session), and it is a SUMMATION — so it is absent for a pull
-    -- rather than approximated. A player who wants it gets it; nobody pays for it
-    -- without asking.
-    {
-        path = "window.tooltip.showTargets", type = "bool", default = false,
-        page = "tooltip", group = L["Tooltip targets"],
-        label = L["Show targets"],
-        desc = L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."],
-    },
-    {
-        path = "window.tooltip.maxTargets", type = "number", default = 3,
-        min = 1, max = 10, step = 1,
-        page = "tooltip", group = L["Tooltip targets"],
-        label = L["Maximum targets"], desc = L["How many enemies to list before stopping."],
-        validate = isNumberIn(1, 10),
     },
 
     -- ── Visibility ───────────────────────────────────────────────────────────

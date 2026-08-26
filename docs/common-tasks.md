@@ -290,7 +290,7 @@ screen).
 ```lua
 {
     path = "window.rows.compactMode", type = "bool", default = false,
-    page = "rows", group = L["Row layout"],
+    page = "bars", group = L["Row layout"],
     label = L["Compact mode"], desc = L["Draw rows without spacing."],
 },
 ```
@@ -330,10 +330,10 @@ the write succeeds, and nothing anywhere says so) and a default that disagrees w
 
 ## Add a settings page
 
-Only worth doing for a genuinely new group of settings; six of the ten existing pages are one
+Only worth doing for a genuinely new group of settings; five of the nine existing pages are one
 `RenderSchema` call.
 
-**1. `settings/<Name>.lua`.** Copy `settings/Rows.lua` — it is the minimal shape.
+**1. `settings/<Name>.lua`.** Copy `settings/Visibility.lua` — it is the minimal shape.
 
 ```lua
 local addonName, NS = ...
