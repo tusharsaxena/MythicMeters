@@ -304,18 +304,24 @@ local BARBG_VALUES = {
 }
 local BARBG_SORT = { "class", "stat", "custom", "none" }
 
--- ONE set for both slots. They used to take different three-value sets that
--- overlapped on two, which made "show me the total on the right" unexpressible
--- for no reason anyone could state. A counting stat still drops `rate` at render
--- time — modules/Row.lua — because "0.42 interrupts per second" is not a thing a
--- meter should say; that is a property of the STAT, not of the slot.
+-- ONE set for both slots, and EVERY VALUE IS LITERAL — modules/Row.lua renders
+-- exactly what is asked for and never falls back to another figure. `none` in
+-- particular means nothing at all, which it did not always: both slots set to
+-- None used to still print the total, so the setting appeared to do nothing.
+--
+-- `smart` is the only value whose meaning depends on the column — the per-second
+-- figure where the stat has one, the absolute figure everywhere else — and it is
+-- what the left slot ships as. A counting stat still renders nothing for `rate`,
+-- because "0.42 interrupts per second" is not a thing a meter should say; that is
+-- a property of the STAT, not of the slot.
 local SLOT_VALUES = {
     none    = L["None"],
-    total   = L["Total"],
-    rate    = L["Per second"],
+    smart   = L["Smart value"],
+    total   = L["Absolute value"],
+    rate    = L["Per second value"],
     percent = L["Percent"],
 }
-local SLOT_SORT   = { "none", "total", "rate", "percent" }
+local SLOT_SORT   = { "none", "smart", "total", "rate", "percent" }
 
 local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
 local NUMFMT_SORT    = { "abbreviated", "full" }
@@ -862,17 +868,17 @@ NS.Schema = {
     -- formatter does the division natively — the only legal way to render "12.4M"
     -- from a secret (design §4).
     {
-        path = "window.text.leftSlot", type = "string", default = "total",
+        path = "window.text.leftSlot", type = "string", default = "smart",
         values = SLOT_VALUES, sorting = SLOT_SORT,
         page = "text", group = L["Cell text"],
-        label = L["Left text"], desc = L["What to show on the left of each cell. Set it to Total for the `1.41M  83.2K` pair; leave it empty for the per-second figure alone."],
+        label = L["Left text"], desc = L["What to show on the left of each cell. Smart value is the per-second figure on Damage and Healing and the absolute figure everywhere else. None means none: the cell is left empty."],
     },
     {
         path = "window.text.rightSlot", type = "string", default = "none",
         values = SLOT_VALUES, sorting = SLOT_SORT,
         page = "text", group = L["Cell text"],
         label = L["Right text"],
-        desc = L["What to show on the right of each cell. Per-second figures are only shown for Damage and Healing."],
+        desc = L["What to show on the right of each cell, beside the left figure. Per-second figures exist only for Damage and Healing; a column without one renders nothing rather than substituting its total."],
     },
     {
         path = "window.text.numberFormat", type = "string", default = "abbreviated",

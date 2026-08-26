@@ -676,6 +676,20 @@ function Cell:ApplyTextStyle(text)
     self.left:SetShadowOffset(shadowX, shadowY)
     self.right:SetShadowOffset(shadowX, shadowY)
 
+    -- ON THE TWO FONTSTRINGS, NEVER ON THE BAR. `text.alpha` used to be
+    -- multiplied into the StatusBar's own alpha, on the reasoning that the two
+    -- alphas should compound — but the FontStrings are CHILDREN of that bar, so
+    -- fading it faded the fill, the backdrop, the borders and the name column's
+    -- icons along with the writing. Dropping the text to 10% dropped the whole
+    -- grid to 10%, which is `bars.alpha`'s job and not this setting's.
+    --
+    -- The compounding the old code wanted still happens, and correctly: a child's
+    -- alpha is applied on top of its parent's, so a bar at 50% carrying text at
+    -- 50% renders that text at 25% — without the reverse ever being true.
+    local alpha = text.alpha or 1
+    self.left:SetAlpha(alpha)
+    self.right:SetAlpha(alpha)
+
     -- LAST, and deliberately after the color above: the name column's color is
     -- the player's class, not the window's text color, and this pass would
     -- otherwise leave it white until the next refresh drew the row again.
@@ -697,11 +711,12 @@ function Cell:ApplyLayout(layout, col)
     self:ApplyBarSkin(bars, showBar)
     self:ApplyBorder(bars)
 
+    -- `text.alpha` is applied INSIDE ApplyTextStyle, to the two FontStrings. The
+    -- bar's own alpha is `bars.alpha` alone (ApplyBarSkin, just above) — it is the
+    -- parent of everything in the cell, so folding the text setting into it faded
+    -- the fill and the icons too.
     local text = cfg.text or {}
     self:ApplyTextStyle(text)
-    -- The two alphas multiply rather than override: `bars.alpha` fades the whole
-    -- cell and `text.alpha` fades only the writing on top of it.
-    bar:SetAlpha((bars and bars.alpha or 1) * (text.alpha or 1))
 
     self.showBar = showBar
 end
@@ -750,53 +765,58 @@ function Cell:SetValue(entry)
     -- announcing "0.42 interrupts per second".
     local isRate = self.stat and self.stat.isRate
 
-    -- TWO SLOTS, FILLED LEFT FIRST.
-    --
-    -- The left one is anchored to the cell's left edge and is left-aligned, under
-    -- a left-aligned column header. So whatever the cell has to say goes THERE,
-    -- and the right slot is only used when there are genuinely two figures. The
-    -- earlier version filled the right slot first, which put a lone number hard
-    -- against the cell's right edge and a column header hard against its left —
-    -- reading as two columns rather than one.
-    --- One slot's text, for any of the four things a slot may be set to.
+    --- One slot's text, for any of the five things a slot may be set to.
     ---
-    --- Both slots take the same four values now — None, Total, Per second,
-    --- Percent — where they used to take different three-value sets that only
-    --- overlapped on two. That asymmetry was not a design: it made "show me the
-    --- total on the right" unexpressible for no reason anyone could state.
+    --- EVERY VALUE IS LITERAL, and that is the contract this function exists to
+    --- keep. There is no fallback: a slot set to None renders nothing, a slot
+    --- whose figure the stat does not have renders nothing, and a cell whose
+    --- slots both come back nil renders no text at all. It used to fall back to
+    --- the total whenever it would otherwise have been empty, which meant a
+    --- player who set both slots to None watched their numbers stay exactly where
+    --- they were — the setting silently did nothing, and a setting that does
+    --- nothing is worse than one that is missing.
     ---
-    --- `rate` on a COUNTING stat answers nil rather than a number, because
-    --- "0.42 interrupts per second" is not a thing a meter should say.
+    --- The five, and what each one answers with:
+    ---
+    ---   none    nothing, always.
+    ---   smart   the per-second figure on a stat that HAS one (Damage, Healing),
+    ---           the total on every other. The one value whose meaning depends on
+    ---           the column, and the shipped default for the left slot.
+    ---   total   the absolute figure, always. Never a rate, never a fallback.
+    ---   rate    the per-second figure, and NOTHING on a counting stat — "0.42
+    ---           interrupts per second" is not a thing a meter should say. That is
+    ---           a property of the STAT (`isRate`, core/Constants.lua), not of the
+    ---           slot, which is why the slot does not get to override it.
+    ---   percent this row's share of the column, which goes quiet mid-pull: the
+    ---           aggregator only produces it when the division was legal.
+    ---
+    --- Both slots take all five, in either position. They used to take different
+    --- three-value sets that only overlapped on two, which made "show me the total
+    --- on the right" unexpressible for no reason anyone could state.
     local function slotText(which)
         if which == "percent" then return renderPercent(percent, mode) end
         if which == "total" then return renderValue(total, "total", mode) end
-        if which == "rate" and isRate then return renderValue(rate, "rate", mode) end
+        if which == "rate" then
+            if not isRate then return nil end
+            return renderValue(rate, "rate", mode)
+        end
+        if which == "smart" then
+            if isRate then return renderValue(rate, "rate", mode) end
+            return renderValue(total, "total", mode)
+        end
         return nil
     end
 
-    -- TWO SLOTS, FILLED LEFT FIRST.
-    --
-    -- The left one is anchored to the cell's left edge and is left-aligned, under
-    -- a left-aligned column header. So whatever the cell has to say goes THERE,
-    -- and the right slot is only used when there are genuinely two figures. The
-    -- earlier version filled the right slot first, which put a lone number hard
-    -- against the cell's right edge and a column header hard against its left —
-    -- reading as two columns rather than one.
+    -- EACH SLOT RENDERS ITS OWN SETTING, WHERE IT SITS. The left one is anchored
+    -- to the cell's left edge under a left-aligned column header, the right one to
+    -- the right edge; neither borrows the other's figure. An earlier version slid
+    -- a lone right-slot figure over to the left, on the reasoning that a single
+    -- number hard against the cell's right edge reads as a second column. It also
+    -- meant "put the number on the right and nothing on the left" could not be
+    -- asked for, and a slot that quietly relocates is the same broken promise as a
+    -- slot that quietly fills itself.
     local secondary = slotText(text.rightSlot or "none")
-
-    -- A CELL WITH NOTHING TO SAY FALLS BACK TO ITS TOTAL. Both slots can be set
-    -- to None, and a counting stat silently drops a `rate` slot — either way the
-    -- column would render a header, a bar and no number at all. Showing the one
-    -- figure the stat has beats showing none.
-    local primary = slotText(text.leftSlot or "total")
-    if primary == nil and secondary == nil then
-        primary = renderValue(total, "total", mode)
-    end
-
-    -- One figure sits at the left edge; two span the cell.
-    if primary == nil then
-        primary, secondary = secondary, nil
-    end
+    local primary   = slotText(text.leftSlot or "smart")
 
     -- A CELL CAN CARRY A CAPTION INSTEAD OF A FIGURE, and when it does the
     -- caption is the whole cell. A death row's Deaths cell holds the wall-clock

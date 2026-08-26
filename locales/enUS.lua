@@ -73,6 +73,9 @@ L["EDT"] = "EDT"
 L["Player"] = "Player"
 L["Total"] = "Total"
 L["Per second"] = "Per second"
+L["Smart value"] = "Smart value"
+L["Absolute value"] = "Absolute value"
+L["Per second value"] = "Per second value"
 L["Percent"] = "Percent"
 
 -- ---------------------------------------------------------------------------

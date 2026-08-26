@@ -915,11 +915,11 @@ end
 --- column whatever the group size.
 ---
 --- THE RATE IS NOT OPTIONAL, which is what its absence proved. The shipped text
---- layout is `leftSlot = "none"` / `rightSlot = "rate"`, so for a RATE stat the
---- figure on screen IS `amountPerSecond`: a cell carrying only the total draws
---- its bar and renders no text at all (modules/Row.lua). Damage looked right
---- because it is the sort column and goes through setCell; every other rate
---- column was silent.
+--- layout is `leftSlot = "smart"`, which on a RATE stat is `amountPerSecond`, so
+--- for Damage and Healing the figure on screen IS the rate: a cell carrying only
+--- the total draws its bar and renders no text at all (modules/Row.lua, where no
+--- slot has a fallback). Damage looked right because it is the sort column and
+--- goes through setCell; every other rate column was silent.
 ---
 --- A counted stat (Deaths) reports one source row per event, so repeats of a key
 --- are the same player dying twice and are TALLIED. For every other stat a

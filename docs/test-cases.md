@@ -797,7 +797,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (66)
+### test_row.lua (71)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -805,19 +805,24 @@ badge and any count quoted in the docs must agree with it.
 - modules/Row.lua contains no geometry getter at all
 - Cell:SetValue hands the raw handle to SetValue and SetMinMaxValues
 - Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden one
-- A rate-capable column renders the TOTAL ALONE by default
+- A rate-capable column renders its RATE ALONE by default
+- Smart falls to the ABSOLUTE figure on a stat that has no rate
 - Both figures appear when the right slot is turned on
 - A counting column renders the total only
 - The text slots are configurable, and percent is the one that goes quiet
 - A 'none' text slot renders nothing
-- A cell with BOTH slots off still shows its total
-- Both slots take the same four values, in either position
+- A cell with BOTH slots off shows NOTHING — none means none
+- A counting stat set to Per second renders nothing, not its total
+- A lone RIGHT-slot figure stays on the right
+- Both slots take the same five values, in either position
 - Cell figures are read out of EITHER row shape the addon produces
 - Class color comes from classFilename, which keeps working while restricted
 - Every color mode falls back to one neutral, never to a fourth palette
 - Role and stat color modes read their own tables
 - A custom color comes from the setting, not from the last-resort literal
 - A cell with its bar switched off keeps its text
+- Text opacity fades the TEXT, and leaves the bar alone
+- Bar opacity fades the bar, and the text rides on top of it
 - The name cell is never handed a meter value at all
 - The name cell colors the NAME by class, now that no bar carries it
 - An unknown class reads as white, not as a tenth palette entry
@@ -862,7 +867,7 @@ badge and any count quoted in the docs must agree with it.
 - A right click on the GRID is a harmless no-op
 - Cells register for BOTH buttons, or the right click never arrives
 - Row: a cell renders displayText in place of its number
-- Row: displayText wins over BOTH slots and over the fallback
+- Row: displayText wins over BOTH slots
 - Row: a cell with no displayText is completely unaffected
 - Row: a death row's bar draws FULL without comparing anything
 
@@ -1413,7 +1418,7 @@ badge and any count quoted in the docs must agree with it.
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 107 |
 | test_headercontrols.lua | 43 |
-| test_row.lua | 66 |
+| test_row.lua | 71 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 101 |
 | test_drilldown.lua | 50 |
@@ -1427,4 +1432,4 @@ badge and any count quoted in the docs must agree with it.
 | test_options_panel.lua | 22 |
 | test_columns.lua | 23 |
 | test_degraded.lua | 27 |
-| **Total** | **1265** |
+| **Total** | **1270** |

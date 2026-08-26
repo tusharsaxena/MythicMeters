@@ -330,7 +330,10 @@ of a pull, where nobody can see it until BugSack fills up.
 - **Bars move.** Every cell's `StatusBar` fills and drains as the fight progresses. A bar frozen at
   zero for the whole pull means `SetValue` is being handed something it should not be, or
   `maxAmount` never arrived.
-- **Text renders, and it is abbreviated.** Damage reads `12.4M`, not `12400000` and not `<secret>`.
+- **Text renders, and it is abbreviated.** Damage reads `188K`, not `188000` and not `<secret>` — the
+  shipped `leftSlot = "smart"` puts the PER-SECOND figure in a rate column's cell and the absolute
+  one in every column without a rate, so Damage and Healing read as rates while Interrupts, Dispels,
+  Avoidable Damage and Deaths read as counts and totals.
   `<secret>` in a cell means the `NumericRuleFormatter` was unreachable and the addon fell all the
   way to its third degradation rung — honest, but it means `C_StringUtil` is missing or the formatter
   cache is broken.
@@ -342,6 +345,22 @@ of a pull, where nobody can see it until BugSack fills up.
   group total for the sort column. All three are built from secret values and folded together with
   `..` — a `table.concat` here would be a Lua error on every refresh, so a header that goes blank or
   errors is this exact bug.
+- **Text opacity fades only the text.** Settings → Text → **Text opacity** at 10%: the numbers and
+  names go faint while the bars, the cell backgrounds, the borders and the class icons stay exactly
+  as bright as they were. If the whole grid dims, `text.alpha` has been folded back into the cell's
+  StatusBar alpha and is fading every child of it. **Bar opacity** (Settings → Bars) is the one that
+  dims everything, and setting both to 50% must leave the text at 25% — a child's alpha rides on top
+  of its parent's.
+- **The text slots are literal — walk all five.** On the Text page set **Left text** and **Right
+  text** in turn and confirm each does exactly what it says, with no substitution anywhere:
+  **None** on both leaves the cells with a bar and no text at all (this is the check that matters —
+  it used to fall back to the total and the setting appeared to do nothing); **Smart value** shows
+  the rate on Damage and Healing and the absolute figure on Interrupts, Dispels, Avoidable and
+  Deaths; **Absolute value** shows the total on every column including the rate ones; **Per second
+  value** shows a figure on Damage and Healing and leaves Interrupts, Dispels, Avoidable and Deaths
+  **empty** rather than substituting their totals; **Percent** behaves as below. Left None with Right
+  set to anything must leave the figure on the RIGHT — it must not slide over into the empty left
+  slot.
 - **Percent slots, if you configured any, go empty in combat.** That is correct and by design: a
   percentage is a division, and an empty slot means "cannot be known right now", never "zero
   percent". Set `text.leftSlot = "percent"` for one pull and confirm the slot empties on pull and

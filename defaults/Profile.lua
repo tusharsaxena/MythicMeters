@@ -234,27 +234,28 @@ local WINDOW_TEMPLATE = {
     -- text — the FontString inside every cell
     -- -----------------------------------------------------------------------
     --
-    -- Two slots per cell. `leftSlot` is conventionally the name (in the name
-    -- column) or the total; `rightSlot` is the per-second figure where the stat
-    -- has one (Constants.STATS[].isRate) and empty where it does not.
+    -- Two slots per cell, each rendering exactly what it is set to and nothing
+    -- else — none | smart | total | rate | percent, the same five in either
+    -- position. `rate` is empty on a stat that has no per-second figure
+    -- (Constants.STATS[].isRate), and `smart` is what reads that flag for you.
     --
     -- `numberFormat` picks which NumericRuleFormatter instance modules/Format.lua
     -- hands the value to. NOTHING here divides: abbreviating is arithmetic and
     -- arithmetic on a secret raises (design §4).
     text = {
-        -- RATE ONLY by default. The left slot is the total and ships EMPTY:
-        -- "who is doing the most damage right now" is what a meter is read for,
-        -- and the running total is the number that answers it least well. Set
-        -- leftSlot = "total" to get the reference layout's `1.41M  83.2K` pair.
+        -- ONE FIGURE, AND IT IS THE ONE THE COLUMN IS ABOUT. `smart` is the
+        -- per-second figure on a stat that has one — "who is doing the most
+        -- damage right now" is what a meter is read for, and the running total
+        -- answers it least well — and the absolute figure on every stat that
+        -- does not, because a kick count per second is not a number. The right
+        -- slot ships empty; a player who wants `12.4M  188K` sets it to `total`.
         --
-        -- A stat with no rate (interrupts, deaths) ignores rightSlot and renders
-        -- its total in the left slot regardless — a column that showed nothing
-        -- would be worse than one that shows the only number it has.
-        -- Both slots take the same four values. The shipped pair is the TOTAL
-        -- alone, which is what a meter is read for; a player who wants the rate
-        -- beside it sets the right slot to "rate".
-        leftSlot     = "total",   -- none | total | rate | percent
-        rightSlot    = "none",    -- none | total | rate | percent
+        -- EVERY VALUE IS LITERAL. There is no fallback anywhere in modules/Row.lua:
+        -- `none` renders nothing, `rate` on a counting stat renders nothing, and
+        -- a cell whose slots both come back empty stays empty. Both slots take all
+        -- five values in either position.
+        leftSlot     = "smart",   -- none | smart | total | rate | percent
+        rightSlot    = "none",    -- none | smart | total | rate | percent
         numberFormat = "abbreviated",  -- abbreviated | full
         -- How a death is labelled in the Deaths tooltip and the death list.
         deathTimeFormat = "clock",     -- clock | ago

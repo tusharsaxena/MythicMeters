@@ -172,10 +172,11 @@ test("Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden o
     assertEqual(bar:HasSecretValues(), false)
 end)
 
-test("A rate-capable column renders the TOTAL ALONE by default", function()
-    -- The shipped layout: `leftSlot = "total"`, `rightSlot = "none"`. Both slots
-    -- take the same four values now, and the total is the figure a player reads
-    -- a meter for; anyone who wants the rate beside it sets the right slot.
+test("A rate-capable column renders its RATE ALONE by default", function()
+    -- The shipped layout: `leftSlot = "smart"`, `rightSlot = "none"`. Smart is the
+    -- per-second figure on a stat that has one — "who is doing the most damage
+    -- right now" is what a meter is read for, and the running total answers it
+    -- least well. Anyone who wants the total beside it sets the right slot.
     local inst, _, row = bench()
     inst.mocks.setRestricted(true)
 
@@ -186,15 +187,30 @@ test("A rate-capable column renders the TOTAL ALONE by default", function()
     }, 1)
 
     -- ONE figure sits in the LEFT slot, at the cell's left edge, under a
-    -- left-aligned column header. Filling the right slot first put a lone number
-    -- hard against the cell's right edge and the header hard against its left.
+    -- left-aligned column header.
     local cell = row.cells.DamageDone
-    assertEqual(cell.left:GetText(), "4.2M")
-    assertEqual(cell.right:GetText(), "", "the rate is off unless it is asked for")
+    assertEqual(cell.left:GetText(), "14.0K")
+    assertEqual(cell.right:GetText(), "", "the right slot ships empty")
+end)
+
+test("Smart falls to the ABSOLUTE figure on a stat that has no rate", function()
+    -- The one value whose meaning depends on the column. It is not a fallback in
+    -- the sense the old code had one — nothing failed and was rescued — it is
+    -- `isRate` being read for you, so one setting says "the figure this column is
+    -- about" across a grid that mixes both kinds.
+    -- red under: smart answering nil, or a rate, on a counting stat.
+    local _, _, row = bench(function(cfg) cfg.text.leftSlot = "smart" end)
+    row:Update(entry{ Interrupts  = { total = 9, rate = 3, maxAmount = 9 },
+                      DamageDone  = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+
+    assertEqual(row.cells.Interrupts.left:GetText(), "9", "a kick count per second is not a number")
+    assertEqual(row.cells.DamageDone.left:GetText(), "10")
 end)
 
 test("Both figures appear when the right slot is turned on", function()
-    local inst, _, row = bench(function(c) c.text.rightSlot = "rate" end)
+    local inst, _, row = bench(function(c)
+        c.text.leftSlot, c.text.rightSlot = "total", "rate"
+    end)
     inst.mocks.setRestricted(true)
 
     row:Update(entry{
@@ -243,27 +259,56 @@ test("The text slots are configurable, and percent is the one that goes quiet", 
 end)
 
 test("A 'none' text slot renders nothing", function()
-    -- The RIGHT slot, because a cell whose slots are both None falls back to its
-    -- total rather than rendering a header, a bar and no number — see the case
-    -- below, which pins that fallback.
     local _, _, row = bench(function(cfg) cfg.text.rightSlot = "none" end)
     row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
     assertEqual(row.cells.DamageDone.right:GetText(), "")
 end)
 
-test("A cell with BOTH slots off still shows its total", function()
-    -- Otherwise the column renders a header, a bar and no number at all, which
-    -- reads as a broken addon rather than as a deliberate setting. The same
-    -- fallback covers a counting stat whose only slot is set to Per second.
-    -- red under: honouring "none" on both slots literally.
+test("A cell with BOTH slots off shows NOTHING — none means none", function()
+    -- This used to fall back to the total, on the reasoning that a header and a
+    -- bar with no number reads as a broken addon. What it actually produced was a
+    -- broken SETTING: a player who set both slots to None watched their numbers
+    -- stay exactly where they were, and a control that silently does nothing is
+    -- worse than one that is missing. A bar with no text is a legitimate thing to
+    -- want, and it is now the thing you get when you ask for it.
+    -- red under: restoring the "nothing to say falls back to its total" branch.
     local _, _, row = bench(function(cfg)
         cfg.text.leftSlot, cfg.text.rightSlot = "none", "none"
     end)
     row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
-    assertEqual(row.cells.DamageDone.left:GetText(), "100")
+    assertEqual(row.cells.DamageDone.left:GetText(), "")
+    assertEqual(row.cells.DamageDone.right:GetText(), "")
 end)
 
-test("Both slots take the same four values, in either position", function()
+test("A counting stat set to Per second renders nothing, not its total", function()
+    -- The other half of the same promise. "0.42 interrupts per second" is not a
+    -- thing a meter should say, so the slot goes quiet — it does not quietly
+    -- substitute the figure the player did not ask for.
+    -- red under: rate falling through to the total on a counting stat.
+    local _, _, row = bench(function(cfg)
+        cfg.text.leftSlot, cfg.text.rightSlot = "rate", "none"
+    end)
+    row:Update(entry{ Interrupts = { total = 9, rate = 3, maxAmount = 9 } }, 1)
+    assertEqual(row.cells.Interrupts.left:GetText(), "")
+end)
+
+test("A lone RIGHT-slot figure stays on the right", function()
+    -- It used to slide over to the left slot when the left one was empty, so that
+    -- a single number was never left hard against the cell's right edge. That is a
+    -- real layout argument and it lost to a simpler one: it made "the number on
+    -- the right, nothing on the left" impossible to ask for, and a slot that
+    -- relocates is the same broken promise as a slot that fills itself.
+    -- red under: restoring the `if primary == nil then primary, secondary = ...`
+    -- swap.
+    local _, _, row = bench(function(cfg)
+        cfg.text.leftSlot, cfg.text.rightSlot = "none", "total"
+    end)
+    row:Update(entry{ DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+    assertEqual(row.cells.DamageDone.left:GetText(), "")
+    assertEqual(row.cells.DamageDone.right:GetText(), "100")
+end)
+
+test("Both slots take the same five values, in either position", function()
     -- They used to take different three-value sets overlapping on two, which
     -- made "the total on the right" unexpressible for no reason anyone could
     -- state.
@@ -367,6 +412,39 @@ test("A cell with its bar switched off keeps its text", function()
     -- The BACKGROUND stays: a bar-less column still carries its class tint, it
     -- just stops competing for attention with a filled bar.
     assertEqual(row.cells.DamageDone.bg:IsShown(), true)
+end)
+
+test("Text opacity fades the TEXT, and leaves the bar alone", function()
+    -- It used to be multiplied into the StatusBar's alpha, and the two
+    -- FontStrings are children of that bar — so dropping the text to 10% dropped
+    -- the fill, the backdrop, the borders and the name column's icons to 10% too.
+    -- Fading the whole grid is `bars.alpha`'s job; this setting writes on top of
+    -- it.
+    -- red under: `bar:SetAlpha(bars.alpha * text.alpha)`.
+    local _, _, row = bench(function(cfg)
+        cfg.text.alpha = 0.1
+        cfg.bars.alpha = 1
+    end)
+
+    local cell = row.cells.DamageDone
+    assertEqual(cell.left:GetAlpha(), 0.1)
+    assertEqual(cell.right:GetAlpha(), 0.1)
+    assertEqual(cell.frame:GetAlpha(), 1, "the bar is not text")
+end)
+
+test("Bar opacity fades the bar, and the text rides on top of it", function()
+    -- The compounding the old code was reaching for still happens, and in the one
+    -- direction that is correct: a child's alpha is applied on top of its
+    -- parent's, so a bar at 50% carrying text at 50% renders that text at 25%.
+    -- The reverse — text fading the bar — is never true.
+    local _, _, row = bench(function(cfg)
+        cfg.bars.alpha = 0.5
+        cfg.text.alpha = 1
+    end)
+
+    local cell = row.cells.DamageDone
+    assertEqual(cell.frame:GetAlpha(), 0.5)
+    assertEqual(cell.left:GetAlpha(), 1, "the text sets its own, not the product")
 end)
 
 -- ---------------------------------------------------------------------------
@@ -1077,10 +1155,10 @@ test("Row: a cell renders displayText in place of its number", function()
     assertEqual(row.cells.DamageDone.left:GetText(), "13:01:06")
 end)
 
-test("Row: displayText wins over BOTH slots and over the fallback", function()
-    -- The shipped default is leftSlot="none", rightSlot="rate". A death row
-    -- under that profile would render the rate — or, with both slots off, fall
-    -- back to the total and print the number 1 where the time should be.
+test("Row: displayText wins over BOTH slots", function()
+    -- A caption is the whole cell. Whatever the slots resolve to, a death row's
+    -- Deaths cell holds the wall-clock time of the death, and a figure beside it
+    -- would read as two columns.
     -- red under: applying the override before the slot resolution rather than
     -- after it.
     local _, _, row = bench(function(cfg)

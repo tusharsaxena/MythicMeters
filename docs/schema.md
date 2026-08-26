@@ -299,12 +299,31 @@ property of hiding: `OnUpdate` is installed on the frame, and the frame stays sh
 
 ### `text` — the FontString in every cell
 
-`leftSlot = "total"` · `rightSlot = "none"` — **both take the same four values**, `none` / `total` /
-`rate` / `percent`. They used to take different three-value sets overlapping on two, which made "the
-total on the right" unexpressible for no reason anyone could state. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) ·
+`leftSlot = "smart"` · `rightSlot = "none"` — **both take the same five values**, `none` / `smart` /
+`total` / `rate` / `percent`, in either position. They used to take different three-value sets
+overlapping on two, which made "the total on the right" unexpressible for no reason anyone could
+state.
+
+**Every value is literal and nothing falls back.** `none` renders nothing, `rate` renders nothing on
+a stat with no per-second figure, and a cell whose slots both come back empty stays empty — a bar
+with no text is a legitimate thing to want. The old code substituted the total whenever a cell would
+otherwise have been blank, which meant setting both slots to None appeared to do nothing at all. A
+lone right-slot figure likewise stays on the right rather than sliding into the empty left slot.
+
+`smart` is the one value whose meaning depends on the column: the per-second figure where the stat
+has one (`Constants.STATS[].isRate` — Damage and Healing), the absolute figure everywhere else. It is
+`isRate` read for you, so one setting says "the figure this column is about" across a grid that mixes
+both kinds, and it is what the left slot ships as. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) ·
 `deathTimeFormat = "clock"` (`clock` / `ago`) · `maxNameLength = 20` (0 = no
 cap) · `font = Const.FONT_MONO_NAME` ("JetBrains Mono") · `size = 11` · `outline = "NONE"` ·
 `shadow = true` · `color = { r=1, g=1, b=1, a=1 }` · `alpha = 1.0`.
+
+`text.alpha` is applied to the two **FontStrings**, never to the cell's StatusBar. The FontStrings
+are children of that bar, so folding this setting into the bar's own alpha faded the fill, the
+backdrop, the borders and the name column's icons along with the writing — fading the whole grid is
+`bars.alpha`'s job. The compounding still happens in the one direction that is correct: a child's
+alpha applies on top of its parent's, so a bar at 50% carrying text at 50% renders that text at 25%,
+and never the reverse.
 
 `maxNameLength` counts **characters, not bytes** — a byte slice can land inside a multi-byte
 character and emit half a code point, and the names most likely to need truncating are exactly the

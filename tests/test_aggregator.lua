@@ -347,17 +347,15 @@ test("An ambiguous key gets no invented row, because no column could ever fill i
 end)
 
 test("A correlated cell carries the RATE, or a rate column renders no text", function()
-    -- THE EMPTY HEALING COLUMN. The shipped text layout is
-    -- `leftSlot = "none"` / `rightSlot = "rate"`, so for a RATE stat — Damage,
-    -- Healing — the figure on screen is `amountPerSecond`, not the total.
-    -- Correlation carried only the total, so mid-pull every rate column but the
-    -- sort one drew its bar from the total and its text from a nil rate: a bar
-    -- with no number beside it.
+    -- THE EMPTY HEALING COLUMN. The shipped text layout is `leftSlot = "smart"`,
+    -- which on a RATE stat — Damage, Healing — is `amountPerSecond` rather than
+    -- the total. Correlation carried only the total, so mid-pull every rate
+    -- column but the sort one drew its bar from the total and its text from a nil
+    -- rate: a bar with no number beside it.
     --
     -- Avoidable and Interrupts hid the bug, because neither is a rate stat and
-    -- both fall back to rendering the total (modules/Row.lua's counting-stat
-    -- branch). Only the rate columns were blank, which is exactly what was
-    -- reported.
+    -- smart renders their absolute figure instead. Only the rate columns were
+    -- blank, which is exactly what was reported.
     -- red under: `row.values[statKey] = { total = value, maxAmount = ... }`.
     local inst = loaded()
     inst.mocks.setRestricted(true)

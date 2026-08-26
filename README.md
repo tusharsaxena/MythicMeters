@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1265%2F1265_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1270%2F1270_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -23,13 +23,19 @@ Ashvane     |  6.7M  102K  | 0.2M    3K  |  4  |  2   |     22K   |   0
 Every column is the same width, the player's name is in their class color, and the per-second figure
 sits beside the total with no `/s` cluttering it — the column header already says what it is.
 
+That is the **paired** layout, one setting away: out of the box each cell carries a single figure —
+the per-second one on Damage and Healing, the absolute one on every column that has no rate. Set
+**Right text** to **Absolute value** on the Text page for the two-figure grid above.
+
 ## What's new in 0.1.0
 
 The first release.
 
 - **One window, every statistic.** Damage, Healing, Interrupts, Dispels, Avoidable Damage and Deaths
-  as columns of a single grid, each cell with its own bar and text. Damage and Healing show the total
-  and the per-second figure together.
+  as columns of a single grid, each cell with its own bar and text. Each cell has a left and a right
+  text slot, and each takes the same five values — None, Smart value, Absolute value, Per second
+  value, Percent — so "the rate alone", "the total and the rate", "a bar with no text at all" and
+  "share of the column" are all one dropdown away.
 - **Current or overall.** Switch between the pull you are in and the whole run.
 - **As many windows as you want.** Each one configured separately, with "copy settings from" so you
   do not have to set up the second one by hand.
