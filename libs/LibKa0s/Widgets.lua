@@ -33,7 +33,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 7
+local MAJOR, MINOR = "LibKa0s-Widgets-1.0", 8
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -47,6 +47,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 -- that "what does a host with no LibKa0s-Media draw?" is answerable by reading two lines.
 local CHEVRON_FALLBACK = "Interface\\Buttons\\Arrow-Down-Up"
 local CHECK_FALLBACK   = "Interface\\Buttons\\UI-CheckBox-Check"
+local HANDLE_FALLBACK  = "Interface\\Buttons\\UI-SortArrow"
 
 local MENU_ROW_H = 16
 
@@ -615,4 +616,355 @@ function lib.CopyWindow(d)
   end
 
   return win
+end
+
+-- ── ReorderList ───────────────────────────────────────────────────────────────────────────────
+--
+-- Drag a row of a list to a new position. The library owns the GESTURE and everything you see
+-- while it is happening; the host owns the rows.
+--
+-- ── WHERE THE LINE IS DRAWN, AND WHY THERE ────────────────────────────────────────────────────
+--
+-- The two shipped consumers draw completely different rows. MultiMeters' Columns page is a state
+-- glyph and a statistic name; ConsumableMaster's priority list is a live item tooltip, a
+-- crafting-quality glyph, a pick star, a score button and a remove button. Neither would accept a
+-- widget that owned its row content, and a `render(row, item)` callback wide enough for both is
+-- not an abstraction -- it is a hole shaped like two addons.
+--
+-- So this owns no row content at all. It owns the handle, the copy that follows the cursor, the
+-- insertion line, the index arithmetic, the clamp, and nothing else. A host builds its rows however
+-- it already does -- AceGUI, raw frames, anything -- hands each one over, and gets `onMove` back.
+-- That is also the whole of what was hard: the gesture took four rounds to get right in a client,
+-- and the row content took none.
+--
+-- ── WHAT THE HOST STILL DECIDES ───────────────────────────────────────────────────────────────
+--
+-- Where the handle sits, how big it is, what art it wears, how tall a row is, whether the list has
+-- two groups or one. All parameters. What it does NOT decide is what a drag LOOKS like, because
+-- that is the thing every list in the collection should share -- the same ghost at the same alpha,
+-- the same gold insertion line, the same fade on the row you picked up.
+--
+-- ── WHY THE ART ARRIVES AS A PARAMETER ────────────────────────────────────────────────────────
+--
+-- Same reason `chevron` and `check` do, and it is the reason stated at the top of this file:
+-- `Media.Icon` takes the CONSUMING ADDON'S name to build a path, and a vendored copy cannot know
+-- which addon folder it was copied into. `handleIcon` is a resolved path or nil, and nil falls to a
+-- Blizzard texture, so a host with no LibKa0s-Media still gets a working handle.
+
+-- The one copy carried under the cursor, process-wide. A singleton for the same reason the dropdown
+-- menu is one: it lives on UIParent so it can follow the pointer OUT of whatever scroll frame the
+-- list sits in, and a per-list copy would clip at the first edge it met.
+local ghost
+
+local function ensureGhost()
+  if ghost then return ghost end
+
+  ghost = CreateFrame("Frame", nil, UIParent)
+  ghost:SetFrameStrata("TOOLTIP")
+  ghost:SetSize(300, 30)
+  -- LOAD-BEARING, NOT TIDY: a frame sitting under the pointer that accepts the mouse eats the very
+  -- button-release that ends the drag it is drawing.
+  ghost:EnableMouse(false)
+  ghost:SetAlpha(0.9)
+  ghost:Hide()
+
+  ghost.bg = ghost:CreateTexture(nil, "BACKGROUND")
+  ghost.bg:SetAllPoints(ghost)
+  ghost.bg:SetColorTexture(0.12, 0.12, 0.12, 0.95)
+
+  ghost.icon = ghost:CreateTexture(nil, "ARTWORK")
+  ghost.icon:SetSize(18, 18)
+  ghost.icon:SetPoint("LEFT", ghost, "LEFT", 8, 0)
+
+  ghost.text = ghost:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  ghost.text:SetPoint("LEFT", ghost.icon, "RIGHT", 6, 0)
+  ghost.text:SetPoint("RIGHT", ghost, "RIGHT", -8, 0)
+  ghost.text:SetJustifyH("RIGHT")
+
+  -- `__`-PREFIXED IS INTERNAL, the same contract `dd.__check` carries: published so a suite can
+  -- ask whether the carried copy exists, is shown, reads as the right row and follows the cursor,
+  -- none of which is reachable from the controller. A host must not touch it -- what it draws is
+  -- the one part of a drag this library deliberately does not let a host restyle.
+  lib.__DragGhost = ghost
+
+  return ghost
+end
+
+--- Put the ghost under the cursor, offset right so the pointer sits ON what it is carrying.
+local function moveGhost()
+  if not (ghost and ghost:IsShown()) then return end
+  local x, y = GetCursorPosition()
+  local scale = UIParent:GetEffectiveScale()
+  if type(x) ~= "number" or type(y) ~= "number" or type(scale) ~= "number" or scale == 0 then
+    return
+  end
+  ghost:ClearAllPoints()
+  ghost:SetPoint("LEFT", UIParent, "BOTTOMLEFT", (x / scale) + 14, y / scale)
+end
+
+--- The insertion line for one container, built once and cached on it.
+---
+--- A FRAME CARRYING A TEXTURE, not a bare texture. A texture belongs to its own frame's draw layers,
+--- so one created on the container draws UNDER every row -- each row is a child frame with its own
+--- layers, and a parent's OVERLAY still loses to a child. The line has to be a sibling that
+--- outranks them.
+local function ensureLine(container, color)
+  if not container then return nil end
+  if container.__ka0sDropLine then return container.__ka0sDropLine end
+
+  local line = CreateFrame("Frame", nil, container)
+  line:SetHeight(3)
+  -- Guarded on the ANSWER rather than on the method existing: a stub that returns itself for
+  -- anything it does not implement answers a table here, and adding to it raises.
+  local level = container.GetFrameLevel and container:GetFrameLevel()
+  if type(level) == "number" then line:SetFrameLevel(level + 20) end
+
+  local tex = line:CreateTexture(nil, "OVERLAY")
+  tex:SetAllPoints(line)
+  tex:SetColorTexture(color[1], color[2], color[3], color[4])
+
+  line:Hide()
+  container.__ka0sDropLine = line
+  return line
+end
+
+--- Where a row dropped `rows` rows from `from` lands, clamped to its own group.
+---
+--- THE CLAMP IS AN INTERACTION RULE, not a safety check, and it only exists when the host says the
+--- list has two groups. A flat list clamps to its own ends and nothing else.
+local function dropIndex(from, rows, count, boundary)
+  local lo, hi = 1, count
+  if boundary and boundary > 0 and boundary < count then
+    if from <= boundary then hi = boundary else lo = boundary + 1 end
+  end
+
+  local to = from + rows
+  if to < lo then to = lo end
+  if to > hi then to = hi end
+  return to
+end
+
+--- Is the left button still down? Answers nil when the question cannot be asked.
+local function mouseHeld()
+  if type(IsMouseButtonDown) ~= "function" then return nil end
+  local ok, held = pcall(IsMouseButtonDown, "LeftButton")
+  if not ok then return nil end
+  return held and true or false
+end
+
+--- Build a reorderable list controller.
+---
+--- One controller per RENDER, not one per list: it holds the rows of the pass that built it, and a
+--- repaint builds a new one. `Cancel` on the old one is what stops a drag outliving the list it
+--- was describing.
+---
+--- @param opts table
+---   stride     number            row top to next row top, in pixels. Required -- the drop target is
+---                                arithmetic on this, never a hit test, so nothing depends on the
+---                                rows having been laid out yet.
+---   onMove     function(from,to) called once when a drag lands somewhere new. Never called for a
+---                                drag that lands where it started.
+---   boundary   number|nil        how many rows are in the FIRST group. nil or 0 means one flat
+---                                list, which is the common case; MultiMeters' Columns page is the
+---                                other one, where shown columns may not be dragged among hidden.
+---   handleIcon string|nil        resolved texture path for the handle art; nil falls back.
+---   handleSize number|nil        the handle's hit area, defaults to 24 x the row stride.
+---   iconSize   number|nil        the art drawn inside it, defaults to 16.
+---   lineColor  table|nil         { r, g, b, a } for the insertion line; defaults to gold.
+---   debug      function|nil      called as debug(fmt, ...) on grab and drop.
+--- @return table controller
+function lib.ReorderList(opts)
+  opts = opts or {}
+
+  local list = {
+    stride   = opts.stride or 30,
+    boundary = opts.boundary,
+    onMove   = opts.onMove,
+    color    = opts.lineColor or { 1, 0.82, 0, 0.9 },
+    rows     = {},
+    dead     = false,
+  }
+
+  local function say(fmt, ...)
+    if opts.debug then opts.debug(fmt, ...) end
+  end
+
+  --- Stop any drag in flight and put the chrome away. Idempotent.
+  function list:Cancel()
+    self.dead = true
+    if ghost then ghost:Hide() end
+    if self.line then self.line:Hide() end
+    local row = self.dragging
+    if row then
+      row.frame:SetScript("OnUpdate", nil)
+      if row.frame.SetAlpha then row.frame:SetAlpha(1) end
+    end
+    self.dragging = nil
+  end
+
+  local function showLine(row, to)
+    local target = list.rows[to]
+    if not (list.line and target) then return end
+    local f = target.frame
+    list.line:ClearAllPoints()
+    -- ANCHORED TO THE TARGET ROW, never positioned by arithmetic. The index comes from the cursor,
+    -- but where that index sits on screen is a question only the frames can answer -- and anchoring
+    -- asks it without reading a single coordinate back.
+    if to <= row.index then
+      list.line:SetPoint("BOTTOMLEFT",  f, "TOPLEFT",  0, 0)
+      list.line:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
+    else
+      list.line:SetPoint("TOPLEFT",  f, "BOTTOMLEFT",  0, 0)
+      list.line:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, 0)
+    end
+    list.line:Show()
+  end
+
+  local function finish(row)
+    row.frame:SetScript("OnUpdate", nil)
+    if ghost then ghost:Hide() end
+    if list.line then list.line:Hide() end
+    if row.frame.SetAlpha then row.frame:SetAlpha(1) end
+
+    if not row.startY then return end
+    row.startY  = nil
+    row.sawDown = nil
+    list.dragging = nil
+
+    local to = dropIndex(row.index, row.rows or 0, #list.rows, list.boundary)
+    say("drop %d -> %d (%d rows)", row.index, to, row.rows or 0)
+    -- A drag that lands where it started is not a reorder, and reporting one would have the host
+    -- rewrite its list and repaint for no change at all.
+    if to ~= row.index and list.onMove and not list.dead then
+      list.onMove(row.index, to)
+    end
+  end
+
+  local function track(row)
+    if not row.startY then return end
+
+    local _, y = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    if type(y) == "number" and type(scale) == "number" and scale ~= 0 then
+      -- +0.5 then floor is round-to-nearest: a row dragged 60% of the way to the next slot has
+      -- visibly left its own, and rounding down would drop it back where it started.
+      row.rows = math.floor(((row.startY - (y / scale)) / list.stride) + 0.5)
+    end
+
+    moveGhost()
+    showLine(row, dropIndex(row.index, row.rows or 0, #list.rows, list.boundary))
+
+    -- THE POLL MAY NOT ACT ALONE, and this is why it has to see the button held first. If
+    -- IsMouseButtonDown is unavailable, protected, or simply not true yet on the first frame, a
+    -- poll that ended the drag on `not held` would finish it with zero rows travelled -- no error,
+    -- no message, and indistinguishable from a press that was never received.
+    local held = mouseHeld()
+    if held then
+      row.sawDown = true
+    elseif held == false and row.sawDown then
+      finish(row)
+    end
+  end
+
+  local function begin(row)
+    if row.startY or list.dead then return end
+    local _, y = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    if type(y) ~= "number" or type(scale) ~= "number" or scale == 0 then return end
+
+    row.startY  = y / scale
+    row.rows    = 0
+    row.sawDown = nil
+    list.dragging = row
+    row.frame:SetScript("OnUpdate", function() track(row) end)
+    -- The row you picked up fades IN THE LIST, because the copy under the cursor is the one you are
+    -- looking at now.
+    if row.frame.SetAlpha then row.frame:SetAlpha(0.35) end
+
+    local g = ensureGhost()
+    local w = row.frame.GetWidth and row.frame:GetWidth()
+    if type(w) == "number" and w > 0 then g:SetWidth(w) end
+    g:SetHeight(row.height or list.stride)
+    g.icon:SetTexture(row.ghostIcon or opts.handleIcon or HANDLE_FALLBACK)
+    if row.ghostIconColor then
+      g.icon:SetVertexColor(row.ghostIconColor[1], row.ghostIconColor[2], row.ghostIconColor[3])
+    else
+      g.icon:SetVertexColor(1, 1, 1)
+    end
+    g.text:SetText(row.ghostText or "")
+    local c = row.ghostTextColor or { 1, 0.82, 0 }
+    g.text:SetTextColor(c[1], c[2], c[3])
+    g:Show()
+    moveGhost()
+
+    say("grab %d at y=%.1f", row.index, row.startY)
+  end
+
+  --- Register one row, in display order, and get back the handle that drags it.
+  ---
+  --- The handle is created here rather than accepted from the host because it is the one piece of
+  --- the row this widget must own: it is what a player has to recognize as "drag me", and a
+  --- collection whose lists each invented their own would defeat the point of sharing this at all.
+  --- The host still decides where it sits -- re-anchor the returned frame -- and how big it is.
+  ---
+  --- @param frame table  the row's own frame, whatever built it
+  --- @param spec table|nil
+  ---   ghostText  string|nil  what the carried copy reads; usually the row's own label
+  ---   ghostIcon  string|nil  art for the carried copy; defaults to the handle's
+  ---   ghostIconColor table|nil  { r, g, b }
+  ---   ghostTextColor table|nil  { r, g, b }
+  ---   height     number|nil  the row's own height, for the carried copy. Defaults to the stride.
+  ---   parent     table|nil   what to parent the handle to; defaults to `frame`
+  --- @return table handle
+  function list:AddRow(frame, spec)
+    spec = spec or {}
+
+    local row = {
+      frame          = frame,
+      index          = #self.rows + 1,
+      ghostText      = spec.ghostText,
+      ghostIcon      = spec.ghostIcon,
+      ghostIconColor = spec.ghostIconColor,
+      ghostTextColor = spec.ghostTextColor,
+      height         = spec.height,
+    }
+    self.rows[row.index] = row
+
+    local handle = CreateFrame("Button", nil, spec.parent or frame)
+    handle:SetSize(opts.handleSize or 24, spec.height or self.stride)
+    handle:SetPoint("LEFT", spec.parent or frame, "LEFT", 0, 0)
+    handle:EnableMouse(true)
+    handle:RegisterForDrag("LeftButton")
+
+    local art = handle:CreateTexture(nil, "ARTWORK")
+    local size = opts.iconSize or 16
+    art:SetSize(size, size)
+    art:SetPoint("CENTER", handle, "CENTER", 0, 0)
+    art:SetTexture(opts.handleIcon or HANDLE_FALLBACK)
+    art:SetVertexColor(0.7, 0.7, 0.7)
+    handle.art = art
+
+    -- EVERY DELIVERY PATH CAN START IT AND EVERY PATH CAN END IT, and that redundancy is
+    -- deliberate. Which of these a client actually sends turned out not to be something worth
+    -- betting on: OnDragStart waits for the client's own drag threshold, and OnDragStop needs the
+    -- release delivered back to this frame. `begin` and `finish` are both idempotent, so whichever
+    -- order they arrive in, one grab begins once and completes once.
+    handle:SetScript("OnMouseDown", function() begin(row) end)
+    handle:SetScript("OnDragStart", function() begin(row) end)
+    handle:SetScript("OnMouseUp",   function() finish(row) end)
+    handle:SetScript("OnDragStop",  function() finish(row) end)
+
+    row.handle = handle
+    return handle
+  end
+
+  --- Name the frame the insertion line should live on -- normally the scroll's content frame, or
+  --- whatever the rows share as a parent. Call it once, after the rows.
+  function list:Finish(container)
+    self.line = ensureLine(container, self.color)
+    if self.line then self.line:Hide() end
+    return self.line
+  end
+
+  return list
 end

@@ -351,10 +351,12 @@ Five details worth knowing:
   depends on the blocks having been laid out yet, on the scroll position, or on AceGUI having
   finished its layout pass — all three of which are true at different moments during a drag.
 
-The blocks themselves live in **`settings/ColumnBlocks.lua`** and know nothing about statistics: they
-take `items` and answer with indices. That is a generic options widget living outside LibKa0s, which
-is a [documented deviation](ARCHITECTURE.md#documented-deviations) tracked as
-[issue #21](https://github.com/tusharsaxena/MultiMeters/issues/21).
+The **gesture** — the handle, the copy carried under the cursor, the insertion line, the index
+arithmetic and the clamp — is `LibKa0s-Widgets-1.0`'s `ReorderList`, shared with ConsumableMaster's
+priority list since Widgets minor 8. **`settings/ColumnBlocks.lua`** keeps the row: the glyph, the
+label, the dimming and the rule. The library owns no row content at all, deliberately — the two
+adopting lists draw nothing alike, and a callback wide enough for both would be a hole shaped like
+two addons.
 
 ---
 
