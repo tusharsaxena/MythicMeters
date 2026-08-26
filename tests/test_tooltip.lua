@@ -1091,7 +1091,7 @@ test("Tooltip text takes the HOVERED player's class color when asked", function(
     -- red under: colouring the tooltip from NS.PlayerClassRGB, or ignoring the
     -- setting.
     local inst, cfg, anchorFrame = bench{ configure = function(c)
-        c.tooltip.classColor = true
+        c.tooltip.colorMode = "class"
         c.tooltip.textColor  = { r = 1, g = 1, b = 1, a = 1 }
     end }
     -- The mock ships every class the same colour, so one is given its own.
@@ -1109,7 +1109,7 @@ end)
 test("With the class colour off, the tooltip keeps its configured text colour", function()
     -- red under: the class colour applying whether or not it was asked for.
     local inst, cfg, anchorFrame = bench{ configure = function(c)
-        c.tooltip.classColor = false
+        c.tooltip.colorMode = "custom"
         c.tooltip.textColor  = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
     end }
     inst.mocks.RAID_CLASS_COLORS.MAGE = { r = 0.41, g = 0.8, b = 0.94 }

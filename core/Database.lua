@@ -39,7 +39,8 @@ NS.Database = Database
 -- v4 retires the export channel "AUTO".
 -- v5 lifts mergePets and throttle from per-window to addon-wide.
 -- v6 prunes the two row-background keys nothing ever read.
-local CURRENT_DB_VERSION = 6
+-- v7 turns four class-colour booleans into three-way colour modes.
+local CURRENT_DB_VERSION = 7
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -418,6 +419,43 @@ migrations[5] = function(db)
     end
 
     db.global.schemaVersion = 6
+end
+
+--- v6 -> v7: FOUR CLASS-COLOUR BOOLEANS BECOME COLOUR MODES.
+---
+--- Every text surface -- the cells, the title bar, the column labels and the
+--- tooltip -- carried a `classColor` checkbox, which could only ever answer two
+--- thirds of the question a player was asking: class, the statistic's own colour,
+--- or the one they picked. `colorMode` answers all three, and the two header
+--- BACKGROUNDS gained the same three, which they had none of before.
+---
+--- `true` becomes "class" and `false` becomes "custom", which is exactly what the
+--- boolean meant. The key is REMOVED afterwards for the reason the v2 -> v3 icon
+--- step gives: AceDB merges defaults in and never prunes what they stopped
+--- naming, so a stale `classColor` would sit beside the live `colorMode` in every
+--- saved profile with nothing to say which the addon honours.
+---
+--- The tooltip's key is in the same group as its `fontOutline` and `fontShadow`
+--- siblings rather than under `text`, which is why this walks a list of GROUPS
+--- rather than assuming one shape.
+migrations[6] = function(db)
+    local GROUPS = { "text", "header", "columnHeader", "tooltip" }
+
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            for _, key in ipairs(GROUPS) do
+                local group = type(w) == "table" and w[key]
+                if type(group) == "table" and group.classColor ~= nil then
+                    if group.colorMode == nil then
+                        group.colorMode = group.classColor and "class" or "custom"
+                    end
+                    group.classColor = nil
+                end
+            end
+        end
+    end
+
+    db.global.schemaVersion = 7
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

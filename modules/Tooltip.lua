@@ -241,7 +241,13 @@ local function tooltipConfig(window)
         fontSize           = field("fontSize", 12),
         fontOutline        = field("fontOutline", "NONE"),
         fontShadow         = field("fontShadow", false),
-        classColor         = field("classColor", false),
+        colorMode          = field("colorMode", "custom"),
+        -- WHICH statistic `colorMode == "stat"` means: the window's sort column,
+        -- the one the grid being hovered is ranked by. Resolved here, with the
+        -- rest of the config, so lineStyle stays a pure function of what it is
+        -- handed rather than reaching back into the window for one field.
+        statKey            = (type(window) == "table" and window.data
+                              and window.data.sortColumn) or "DamageDone",
         showTargets        = field("showTargets", false),
         maxTargets         = field("maxTargets", 3),
     }
@@ -1187,13 +1193,23 @@ local function lineStyle(config, color)
     local tr, tg, tb = rgba(config.textColor,
         SLOT_COLOR_DEFAULT[1], SLOT_COLOR_DEFAULT[2], SLOT_COLOR_DEFAULT[3], 1)
 
-    -- THE HOVERED PLAYER'S CLASS, which the bars already wear -- `color` is that
-    -- same table, resolved by the caller off `row.classFilename`. A tooltip is
-    -- about ONE player, which is what makes the question answerable here where
+    -- CLASS IS THE HOVERED PLAYER'S, which the bars already wear -- `color` is
+    -- that same table, resolved by the caller off `row.classFilename`. A tooltip
+    -- is about ONE player, which is what makes the question answerable here where
     -- the window header has to fall back to the local player's class instead.
-    -- With no class to read, the configured color stands.
-    if config.classColor and color then
+    --
+    -- STAT IS THE WINDOW'S SORT COLUMN, the statistic the grid the player is
+    -- hovering is currently ranked by. A tooltip lists several statistics at once
+    -- and is not "about" any one of them, so per-column would have no meaning
+    -- here; the sort column is the same answer the title bar gives, for the same
+    -- reason (modules/Window.lua's surfaceColor).
+    --
+    -- With nothing to read either way, the configured colour stands.
+    if config.colorMode == "class" and color then
         tr, tg, tb = color.r, color.g, color.b
+    elseif config.colorMode == "stat" then
+        local c = Const.STAT_COLORS[config.statKey or ""]
+        if c then tr, tg, tb = c[1], c[2], c[3] end
     end
 
     local shadowX, shadowY = 0, 0

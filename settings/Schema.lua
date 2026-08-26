@@ -296,6 +296,24 @@ local BARCOLOR_SORT  = { "class", "stat", "custom" }
 
 -- The same three, plus an off switch. The background is decoration in a way the
 -- bar is not, so it is the one of the two that a player may want gone entirely.
+-- The colour MODE every text surface offers, and the one the two header
+-- backgrounds offer too. Three entries rather than the bar background's four:
+-- `none` is a legal answer for a tint drawn behind something and never for the
+-- writing itself, and a text surface set to "no colour" is one nobody can read.
+--
+-- WHAT `stat` MEANS DEPENDS ON THE SURFACE, and each reader names which it took.
+-- A CELL is about the statistic in its own column; a COLUMN HEADER about the
+-- column it labels -- the one surface where "per statistic" is literally per
+-- column; the TITLE BAR and the TOOLTIP about the window's SORT COLUMN, the
+-- statistic the grid is currently ranked by. One question, answered by whichever
+-- statistic the surface actually describes.
+local TEXTCOLOR_VALUES = {
+    class  = L["Class color"],
+    stat   = L["Per-statistic color"],
+    custom = L["Custom color"],
+}
+local TEXTCOLOR_SORT = { "class", "stat", "custom" }
+
 local BARBG_VALUES = {
     class  = L["Class color"],
     stat   = L["Per-statistic color"],
@@ -599,9 +617,11 @@ NS.Schema = {
         label = L["Text color"], desc = L["Color of the header's own lines."],
     },
     {
-        path = "window.header.classColor", type = "bool", default = false,
+        path = "window.header.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "header", group = L["Frame header"],
-        label = L["Use class color"], desc = L["Draw the header lines in your own class color instead of the color above. The header is about the window rather than about any one player, so the class it takes is yours."],
+        label = L["Text color mode"],
+        desc = L["What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."],
     },
     {
         path = "window.header.align", type = "string", default = "LEFT",
@@ -616,10 +636,17 @@ NS.Schema = {
         label = L["Header height"], desc = L["Height of the header strip in pixels."],
     },
     {
+        path = "window.header.bgColorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "header", group = L["Frame header"],
+        label = L["Background color mode"],
+        desc = L["What colors the strip behind the title bar. The configured opacity is kept whichever mode is picked, so a class or statistic color arrives as a tint rather than as a slab."],
+    },
+    {
         path = "window.header.bgColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 0.5 },
         page = "header", group = L["Frame header"],
-        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."],
+        label = L["Header background"], desc = L["Color drawn behind the title bar, when the mode above is Custom. The column-header strip has its own, under Column headers."],
     },
 
     -- ── The header's controls (issue #6) ─────────────────────────────────────
@@ -773,9 +800,18 @@ NS.Schema = {
         label = L["Text color"], desc = L["Color of the column header labels."],
     },
     {
-        path = "window.columnHeader.classColor", type = "bool", default = false,
+        path = "window.columnHeader.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "header", group = L["Column headers"],
-        label = L["Use class color"], desc = L["Draw the column labels in your own class color instead of the color above. The strip is about the window rather than about any one player, so the class it takes is yours."],
+        label = L["Text color mode"],
+        desc = L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."],
+    },
+    {
+        path = "window.columnHeader.bgColorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "header", group = L["Column headers"],
+        label = L["Background color mode"],
+        desc = L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."],
     },
     {
         path = "window.columnHeader.bgColor", type = "color",
@@ -1015,9 +1051,11 @@ NS.Schema = {
         label = L["Text color"], desc = L["Color of the numbers and names."],
     },
     {
-        path = "window.text.classColor", type = "bool", default = false,
+        path = "window.text.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "bars", group = L["Cell text"],
-        label = L["Use class color"], desc = L["Draw each cell's text in that row's class color instead of the color above. The Player column has always been drawn this way; this extends it to the numbers."],
+        label = L["Text color mode"],
+        desc = L["What colors the numbers and names. Class is the class of the row being drawn; Per-statistic is the color of the column each cell sits in."],
     },
     {
         path = "window.text.alpha", type = "number", default = 1.0,
@@ -1182,9 +1220,11 @@ NS.Schema = {
         label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
     },
     {
-        path = "window.tooltip.classColor", type = "bool", default = false,
+        path = "window.tooltip.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
         page = "tooltip", group = L["Tooltip text"],
-        label = L["Use class color"], desc = L["Draw the tooltip's text in the class color of the player you are hovering, instead of the color above."],
+        label = L["Text color mode"],
+        desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
     },
 
     -- OFF by default, and for two reasons that are worth stating separately.

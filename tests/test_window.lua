@@ -2049,7 +2049,7 @@ test("Header class color is the LOCAL player's, since the header has no row", fu
     -- colour" would pass for "took the LOCAL player's".
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
     cfg.header.color      = { r = 1, g = 0.82, b = 0, a = 1 }
-    cfg.header.classColor = true
+    cfg.header.colorMode = "class"
     window:ApplyConfig()
 
     local c = window.sessionText.__textColor
@@ -2057,10 +2057,101 @@ test("Header class color is the LOCAL player's, since the header has no row", fu
     assertEqual(c[3], 0.94)
     assertEqual(c[4], 1, "the configured alpha must survive the class colour")
 
-    cfg.header.classColor = false
+    cfg.header.colorMode = "custom"
     window:ApplyConfig()
     assertEqual(window.sessionText.__textColor[1], 1, "the gold did not come back")
     assertEqual(window.sessionText.__textColor[2], 0.82)
+end)
+
+test("Per-statistic colour on the header is the SORT COLUMN's", function()
+    -- A title bar is not "about" one column the way a cell is, so `stat` has to
+    -- mean something for a surface that is not a statistic: the statistic the
+    -- grid is currently ranked by is the only one it describes.
+    -- red under: resolving it to the first column, or to nothing.
+    local inst, window, cfg = scene()
+    local Const = inst.NS.Constants
+    cfg.header.colorMode  = "stat"
+    cfg.data.sortColumn   = "HealingDone"
+    window:ApplyConfig()
+
+    local want = Const.STAT_COLORS.HealingDone
+    assertTrue(want ~= nil, "the palette has no HealingDone entry to compare against")
+    assertEqual(window.frame.title.__textColor[1], want[1])
+    assertEqual(window.sessionText.__textColor[1], want[1],
+        "the title and the session line are one header and must not differ")
+
+    -- And it follows the sort, because that is what it names.
+    cfg.data.sortColumn = "DamageDone"
+    window:ApplyConfig()
+    assertEqual(window.frame.title.__textColor[1], Const.STAT_COLORS.DamageDone[1])
+end)
+
+test("Per-statistic colour on the COLUMN strip is per column", function()
+    -- The one surface where "per statistic" is literally per column: each label
+    -- takes the colour of the column it labels, rather than one colour for the
+    -- strip.
+    -- red under: resolving the strip once and painting every label with it.
+    local inst, window, cfg = scene()
+    local Const = inst.NS.Constants
+    cfg.columnHeader.colorMode = "stat"
+    window:ApplyConfig()
+
+    local seen = {}
+    for _, button in ipairs(window.columnHeaders or {}) do
+        if button.mmKey and button.mmKey ~= "name" then
+            local want = Const.STAT_COLORS[button.mmKey]
+            if want then
+                assertEqual(button.text.__textColor[1], want[1],
+                    button.mmKey .. "'s label is not in its own column's colour")
+                seen[#seen + 1] = button.mmKey
+            end
+        end
+    end
+    assertTrue(#seen >= 2, "the scene needs two coloured columns to prove per-column")
+end)
+
+test("Per-statistic BACKGROUND on the column strip paints each label, not the strip", function()
+    -- A class is not a property of a column, so every other mode stays on the one
+    -- strip-wide texture; `stat` is the one that has to become several.
+    local inst, window, cfg = scene()
+    local Const = inst.NS.Constants
+    cfg.columnHeader.bgColorMode = "stat"
+    cfg.columnHeader.bgColor     = { r = 0, g = 0, b = 0, a = 0.8 }
+    window:ApplyConfig()
+
+    assertFalse(window.headerBg:IsShown(), "the strip-wide texture was left drawn under the columns")
+
+    local painted = 0
+    for _, button in ipairs(window.columnHeaders or {}) do
+        if button.mmKey and button.mmKey ~= "name" and Const.STAT_COLORS[button.mmKey] then
+            assertTrue(button.bg:IsShown(), button.mmKey .. " has no background of its own")
+            assertEqual(button.bg.__colorTexture[1], Const.STAT_COLORS[button.mmKey][1])
+            assertEqual(button.bg.__colorTexture[4], 0.8, "the configured opacity was dropped")
+            painted = painted + 1
+        end
+    end
+    assertTrue(painted >= 2)
+
+    -- Switching back takes them down and brings the strip back, or a player who
+    -- changes their mind keeps both.
+    cfg.columnHeader.bgColorMode = "custom"
+    window:ApplyConfig()
+    assertTrue(window.headerBg:IsShown())
+    for _, button in ipairs(window.columnHeaders or {}) do
+        assertFalse(button.bg:IsShown(), "a per-column background outlived the mode that asked for it")
+    end
+end)
+
+test("The header background keeps its opacity in every colour mode", function()
+    -- The alpha is what makes a colour a tint rather than a slab, and neither the
+    -- class palette nor the stat palette carries one.
+    local _, window, cfg = scene()
+    cfg.header.bgColor = { r = 0, g = 0, b = 0, a = 0.4 }
+    for _, mode in ipairs({ "custom", "class", "stat" }) do
+        cfg.header.bgColorMode = mode
+        window:ApplyConfig()
+        assertEqual(window.headerBG.__colorTexture[4], 0.4, "mode " .. mode .. " dropped the alpha")
+    end
 end)
 
 test("The Player column is the shipped width for the shipped config, exactly", function()
@@ -2172,7 +2263,7 @@ test("The window NAME takes the header's colour, class colour and all", function
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
 
     cfg.header.color      = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
-    cfg.header.classColor = false
+    cfg.header.colorMode = "custom"
     window:ApplyConfig()
 
     local c = window.frame.title.__textColor
@@ -2180,7 +2271,7 @@ test("The window NAME takes the header's colour, class colour and all", function
     assertEqual(c[3], 0.6)
 
     -- And the same class-colour reading the session line beside it takes.
-    cfg.header.classColor = true
+    cfg.header.colorMode = "class"
     window:ApplyConfig()
     c = window.frame.title.__textColor
     assertEqual(c[1], 0.41)
@@ -2195,7 +2286,7 @@ test("Column header class color is the local player's too", function()
     -- red under: the two strips disagreeing about whose class they mean.
     local inst, window, cfg = scene()
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
-    cfg.columnHeader.classColor = true
+    cfg.columnHeader.colorMode = "class"
     window:ApplyConfig()
 
     local button = window.columnHeaders and window.columnHeaders[1]

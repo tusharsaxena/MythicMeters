@@ -781,23 +781,65 @@ local function headerFont(header)
     return fontPath(header.font), header.size or 12, flags
 end
 
---- The header's text color, defaulting to the gold WoW uses for its own headers.
+--- Resolve one of the header surfaces' three colour modes.
 ---
---- `classColor` swaps the hue for the LOCAL PLAYER'S — the header is about the
---- window rather than about any one row, so yours is the only class it can
---- sensibly mean. (A cell's text answers the same setting with the class of the
---- row it is drawing; see modules/Row.lua's ApplyEntryTextColor.) The configured
---- ALPHA is kept either way: RAID_CLASS_COLORS carries none, and a class color
---- that silently reset transparency would be one setting cancelling another. A
---- player whose class cannot be read keeps the configured color, which is the
---- honest answer rather than a fallback hue.
-local function headerColor(header)
-    local r, g, b, a = RGBA(header.color, 1, 0.82, 0, 1)
-    if header.classColor then
+--- ONE READER FOR BOTH HEADER STRIPS AND BOTH OF THEIR BACKGROUNDS, because they
+--- are one question asked four times and four private answers is how the title
+--- bar and the strip under it end up disagreeing about what "class" means.
+---
+--- `class` IS THE LOCAL PLAYER'S. A header is about the WINDOW rather than about
+--- any one row, so yours is the only class it can sensibly mean. (A cell answers
+--- the same setting with the class of the row it is drawing; see
+--- modules/Row.lua's ApplyEntryTextColor.)
+---
+--- `stat` IS THE SORT COLUMN'S — the statistic the grid is currently ranked by,
+--- which is the only statistic the title bar is about. The column-header strip
+--- passes its own column's key instead, and is the one surface where "per
+--- statistic" is literally per column.
+---
+--- THE CONFIGURED ALPHA SURVIVES EVERY MODE. Neither RAID_CLASS_COLORS nor the
+--- stat palette carries one, and a mode that silently reset transparency would be
+--- one setting cancelling another — which matters most for the two BACKGROUNDS,
+--- where the alpha is what makes a colour a tint rather than a slab.
+---
+--- A colour that cannot be resolved — an unknown class, a stat with no palette
+--- entry — falls back to the CONFIGURED one, which is the honest answer rather
+--- than an invented hue.
+---
+--- @param mode string|nil    "class" | "stat" | "custom"
+--- @param stored table|nil   the configured colour
+--- @param statKey string|nil which statistic `stat` means here
+--- @param dr number @param dg number @param db number @param da number
+--- @return number r, number g, number b, number a
+local function surfaceColor(mode, stored, statKey, dr, dg, db, da)
+    local r, g, b, a = RGBA(stored, dr, dg, db, da)
+
+    if mode == "class" then
         local cr, cg, cb = PlayerClassRGB()
         if cr then r, g, b = cr, cg, cb end
+    elseif mode == "stat" then
+        local c = Const.STAT_COLORS[statKey or ""]
+        if c then r, g, b = c[1], c[2], c[3] end
     end
+
     return r, g, b, a
+end
+
+NS.SurfaceColor = surfaceColor
+
+--- Which statistic the WINDOW is about, for the two header surfaces that answer
+--- "per statistic" with one colour rather than one per column: the sort column.
+---
+--- Read off the config rather than off `self.sortColumn`, so this is callable
+--- from NS.HeaderStyle with a bare window and gives the same answer either way.
+local function windowStat(window)
+    local data = (window and window.config or {}).data
+    return (data and data.sortColumn) or "DamageDone"
+end
+
+--- The header's text color, defaulting to the gold WoW uses for its own headers.
+local function headerColor(header, statKey)
+    return surfaceColor(header.colorMode, header.color, statKey, 1, 0.82, 0, 1)
 end
 
 --- How far the text is offset to draw its drop shadow, or 0, 0 for none.
@@ -831,7 +873,7 @@ end
 function NS.HeaderStyle(window)
     local header = (window.config or {}).header or {}
     local path, size, flags = headerFont(header)
-    local r, g, b = headerColor(header)
+    local r, g, b = headerColor(header, windowStat(window))
     return { path = path, size = size, flags = flags, r = r, g = g, b = b }
 end
 
@@ -944,7 +986,7 @@ function WindowProto:ApplyTitle()
     -- After ApplySkin, not instead of it: ApplyConfig re-runs the skin and then
     -- calls ApplyHeader, so the library still owns the backdrop and the accents
     -- and this owns the one FontString the settings claim to govern.
-    frame.title:SetTextColor(headerColor(header))
+    frame.title:SetTextColor(headerColor(header, windowStat(self)))
 end
 
 --- The tinted block behind the header and the hairline that closes it off.
@@ -961,7 +1003,8 @@ function WindowProto:ApplyHeaderStrip()
     -- one drawn over the other with no way to see the lower one, and a colour
     -- picked for the title bar silently restyled the grid's column labels too.
     -- Two strips, two settings, two rectangles.
-    local ar, ag, ab, aa = RGBA(header.bgColor, 0, 0, 0, 0.5)
+    local ar, ag, ab, aa = surfaceColor(header.bgColorMode, header.bgColor,
+        windowStat(self), 0, 0, 0, 0.5)
     self.headerBG:ClearAllPoints()
     self.headerBG:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, -pad)
     self.headerBG:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, -pad)
@@ -1006,7 +1049,7 @@ function WindowProto:ApplySessionLine()
 
     self.sessionText:SetFont(path, size, flags)
     self.sessionText:SetShadowOffset(shadowOffset(header.shadow))
-    self.sessionText:SetTextColor(headerColor(header))
+    self.sessionText:SetTextColor(headerColor(header, windowStat(self)))
     self.sessionText:SetShown(shown)
 end
 
@@ -1018,14 +1061,15 @@ function WindowProto:ApplyColumnHeaders()
     local colHeader = cfg.columnHeader or {}
     local colFont, colSize, flags = columnHeaderFont(colHeader)
     local shadowX, shadowY = shadowOffset(colHeader.shadow)
-    local hr, hg, hb, ha = RGBA(colHeader.color, 1, 0.82, 0, 1)
-    -- The STRIP labels the grid rather than any row in it, so its class color is
-    -- the local player's -- the same reading `header.classColor` takes, and for
-    -- the same reason. See headerColor.
-    if colHeader.classColor then
-        local cr, cg, cb = PlayerClassRGB()
-        if cr then hr, hg, hb = cr, cg, cb end
-    end
+    -- The STRIP labels the grid rather than any row in it, so its class colour is
+    -- the local player's -- the same reading the title bar takes, and for the
+    -- same reason. Its `stat` colour is NOT the same, though, and that is the
+    -- point of resolving it per column below: this is the one surface where "per
+    -- statistic" is literally per column, so each label can take the colour of
+    -- the column it labels. The values here are the fallback the name column and
+    -- any unresolvable stat land on.
+    local hr, hg, hb, ha = surfaceColor(colHeader.colorMode, colHeader.color,
+        windowStat(self), 1, 0.82, 0, 1)
 
     -- One FontString per drawn column plus the name column's, placed at the same
     -- x offsets the cells will use — from the SAME layout table, so a header can
@@ -1034,8 +1078,16 @@ function WindowProto:ApplyColumnHeaders()
     self.headerFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", pad, -(pad + layout.titleHeight))
     self.headerFrame:SetSize(layout.rowWidth, layout.headerHeight)
 
-    local bgr, bgg, bgb, bga = RGBA(colHeader.bgColor, 0, 0, 0, 0)
+    -- PER STATISTIC IS PER COLUMN HERE, so `stat` mode paints each header button
+    -- rather than the strip: one rectangle behind each label, in that column's
+    -- own colour. Every other mode is one colour for the whole strip and stays on
+    -- the single texture, which is both cheaper and the only way "class" could be
+    -- drawn at all -- a class is not a property of a column.
+    local perColumnBG = (colHeader.bgColorMode == "stat")
+    local bgr, bgg, bgb, bga = surfaceColor(perColumnBG and "custom" or colHeader.bgColorMode,
+        colHeader.bgColor, windowStat(self), 0, 0, 0, 0)
     self.headerBg:SetColorTexture(bgr, bgg, bgb, bga)
+    self.headerBg:SetShown(not perColumnBG)
 
     local data = cfg.data or {}
     -- The arrow belongs on whichever header the CURRENT order came from, and in
@@ -1071,6 +1123,13 @@ function WindowProto:ApplyColumnHeaders()
             button.arrow:SetPoint("LEFT", button.text, "LEFT", 0, 0)
             button.arrow:SetJustifyH("LEFT")
             button.arrow:Hide()
+            -- The per-column background, for `bgColorMode == "stat"`. BACKGROUND
+            -- layer so the label and the sort arrow stay above it, and built with
+            -- the button rather than on demand: these are pooled for the life of
+            -- the window like every other widget here.
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints(button)
+            button.bg:Hide()
             button.arrowTex = button:CreateTexture(nil, "OVERLAY")
             button.arrowTex:SetSize(10, 10)
             button.arrowTex:Hide()
@@ -1092,9 +1151,31 @@ function WindowProto:ApplyColumnHeaders()
         button.text:SetHeight(layout.headerHeight)
         button.text:SetFont(colFont, colSize, flags)
         button.text:SetShadowOffset(shadowX, shadowY)
-        button.text:SetTextColor(hr, hg, hb, ha)
+        -- PER COLUMN, and only here. `stat` mode on every other surface resolves
+        -- to one colour for the whole surface; this strip is the one place where
+        -- "per statistic" is literally per column, so each label takes the colour
+        -- of the column it labels. The name column has no statistic and keeps the
+        -- resolved fallback, which is what `hr, hg, hb` already hold.
+        if colHeader.colorMode == "stat" and key ~= "name" then
+            local cr, cg, cb, ca = surfaceColor("stat", colHeader.color, key, hr, hg, hb, ha)
+            button.text:SetTextColor(cr, cg, cb, ca)
+        else
+            button.text:SetTextColor(hr, hg, hb, ha)
+        end
         button.text:SetJustifyH("LEFT")
         button.text:SetText(label)
+
+        -- The strip-wide texture and the per-column ones are mutually exclusive,
+        -- and both are set every pass: a player switching modes would otherwise
+        -- keep whichever they left behind, drawn under the one they chose.
+        if perColumnBG and key ~= "name" then
+            local cr, cg, cb, ca = surfaceColor("stat", colHeader.bgColor, key,
+                bgr, bgg, bgb, bga)
+            button.bg:SetColorTexture(cr, cg, cb, ca)
+            button.bg:Show()
+        else
+            button.bg:Hide()
+        end
 
         if key == sortKey then
             -- Placed after the label rather than at a fixed offset, so it follows

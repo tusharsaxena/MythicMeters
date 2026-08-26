@@ -170,9 +170,14 @@ local WINDOW_TEMPLATE = {
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
         -- The header is about the WINDOW, not about any one player, so the class
         -- it can wear is the local player's (NS.PlayerClassRGB).
-        classColor      = false,
+        -- WHAT colours the header text: "class" (yours, because the header is
+        -- about the window rather than any one row), "stat" (the colour of the
+        -- column the grid is sorted by) or "custom" (the picker above). It was a
+        -- `classColor` boolean, which could only ever answer two of the three.
+        colorMode       = "custom",
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
+        bgColorMode     = "custom",
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },
     },
 
@@ -199,9 +204,10 @@ local WINDOW_TEMPLATE = {
         color    = { r = 1, g = 0.82, b = 0, a = 1 },   -- Blizzard gold
         -- The local player's class, like the header's -- the strip labels the
         -- grid rather than any row in it.
-        classColor = false,
+        colorMode  = "custom",
         -- Transparent: the strip has never had a backdrop, and defaulting one on
         -- would change every existing window's appearance to introduce a setting.
+        bgColorMode = "custom",
         bgColor  = { r = 0, g = 0, b = 0, a = 0 },
     },
 
@@ -323,7 +329,7 @@ local WINDOW_TEMPLATE = {
         -- that way; this extends it to the numbers. Off by default, because the
         -- numbers reading white against nine bar colors is what makes a grid
         -- scannable.
-        classColor   = false,
+        colorMode    = "custom",
         alpha        = 1.0,
     },
 
@@ -395,7 +401,7 @@ local WINDOW_TEMPLATE = {
         textColor          = { r = 1, g = 1, b = 1, a = 1 },
         -- The HOVERED row's class. A tooltip is already about one player, which
         -- is what makes the question answerable here and not on the header.
-        classColor         = false,
+        colorMode          = "custom",
 
         -- Which enemies this player hit, cross-referenced out of the meter's
         -- EnemyDamageTaken data by modules/Targets.lua — which is NOT a column in

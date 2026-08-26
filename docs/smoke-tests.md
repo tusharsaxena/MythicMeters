@@ -202,9 +202,16 @@ second edge to catch.
   symptoms are the lazy-build rules failing; see
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
-- **The four text controls, on all four surfaces.** Text, Header, Header → Column headers, and
-  Tooltip each carry a **font** picker, a **font outline** dropdown, a **text shadow** checkbox and a
-  **text colour** picker with **Use class color** beside it. Walk all four on each page and watch the
+- **The five text controls, on all four surfaces.** Bars → Cell text, Header → Frame header, Header →
+  Column headers, and Tooltip each carry a **font** picker, a **font outline** dropdown, a **text
+  shadow** checkbox, a **text colour** picker and a **Text color mode** dropdown of Class /
+  Per-statistic / Custom. **Per-statistic means a different statistic on each**: the cell takes its
+  own column's colour, the title bar and the tooltip take the **sort column's** (change the sort and
+  watch them follow), and each **column label takes its own column's** — that last one is the check
+  that catches the strip being resolved once and painted uniformly. The two header strips also carry
+  a **Background color mode** over the same three; on Column headers, Per-statistic paints one
+  rectangle behind each label rather than one across the strip. **The configured opacity survives
+  every mode** — a class or statistic background must arrive as a tint, not a slab. Walk all four on each page and watch the
   right thing change: the cells, the title bar and session line, the "Player | Damage | Healing"
   strip, and a hovered tooltip. A control that moves the wrong surface means two groups are sharing a
   key that is supposed to be their own.

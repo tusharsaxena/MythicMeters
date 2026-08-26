@@ -229,30 +229,39 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 ### The four text controls
 
 Four groups draw text — `text` (the cells), `header` (the title bar), `columnHeader` (the label
-strip) and `tooltip` — and each of them offers the **same four controls**: an LSM **font** picker, an
-**outline** dropdown over one shared value set, a **shadow** checkbox, and a **colour** picker with a
-**Use class color** checkbox beside it. They did not always: only `text` had a shadow, none had a
-class colour, and a player styling a window had to discover which surface had grown which control.
+strip) and `tooltip` — and each of them offers the **same five controls**: an LSM **font** picker, an
+**outline** dropdown over one shared value set, a **shadow** checkbox, a **colour** picker and a
+**`colorMode`** dropdown. They did not always: only `text` had a shadow, none had a class colour, and
+a player styling a window had to discover which surface had grown which control.
 `tests/test_schema.lua`'s *every text surface offers face, outline, shadow and colour* is the
-contract — a fifth surface, or a fifth control, is a row added to that table and then made to pass.
+contract — a fifth surface, or a sixth control, is a row added to that table and then made to pass.
 
-**"Use class color" means a different class on different surfaces, and the difference is not an
-inconsistency.** A cell is about the player whose row it is, so `text.classColor` takes **that row's**
-class — the same reading the Player column has always had and the same one `bars.colorMode = "class"`
-has. A tooltip is about the player you are hovering, so `tooltip.classColor` takes **that** player's.
-The two header strips are about the **window** rather than about any row, so `header.classColor` and
-`columnHeader.classColor` take the **local player's** — the only class those surfaces can sensibly
-mean. One reader answers all four: `NS.ClassRGB(classFilename)` and `NS.PlayerClassRGB()` in
-`core/Namespace.lua`, so the header and a row of the grid can never disagree about what a warlock
-looks like.
+**`class` means a different class on different surfaces, and the difference is not an
+inconsistency.** A cell is about the player whose row it is, so `text.colorMode = "class"` takes
+**that row's** — the same reading the Player column has always had and the same one
+`bars.colorMode = "class"` has. A tooltip is about the player you are hovering, so it takes **that**
+player's. The two header strips are about the **window** rather than about any row, so they take the
+**local player's** — the only class those surfaces can sensibly mean. One reader answers all four:
+`NS.ClassRGB(classFilename)` and `NS.PlayerClassRGB()` in `core/Namespace.lua`, so the header and a
+row of the grid can never disagree about what a warlock looks like.
 
-The configured **alpha survives** a class colour on every surface. `RAID_CLASS_COLORS` carries none,
-so taking one from it would make Use class color silently cancel Text opacity — one setting
-overruling another. A class that cannot be read keeps the configured colour rather than falling back
-to a hue invented for the occasion.
+`stat` is resolved the same way — see [the table above](#the-four-text-surfaces-and-their-colour-modes)
+— and `modules/Window.lua`'s `NS.SurfaceColor` is the one reader for both header strips and both of
+their backgrounds.
+
+The configured **alpha survives** every mode on every surface. Neither `RAID_CLASS_COLORS` nor
+`Constants.STAT_COLORS` carries one, so taking one from them would make a colour mode silently cancel
+Text opacity — one setting overruling another. A class or statistic that cannot be read keeps the
+configured colour rather than falling back to a hue invented for the occasion.
+
+**Text opacity is folded INTO that alpha**, in `modules/Row.lua`'s `textAlpha`, rather than living
+only on `FontString:SetAlpha`. The per-row colour passes write their own alpha through
+`SetTextColor` after the style pass has run, and in the client the numbers came back to full opacity
+while the names stayed faded — one setting working on half the grid. Folding it in means every colour
+write carries the opacity and a later write cannot undo it.
 
 Every one of the new keys ships **off**: `header.shadow`, `columnHeader.shadow`,
-`tooltip.fontShadow` and all four `classColor` keys are `false`. A setting added to a shipped window
+`tooltip.fontShadow` are `false`, and all six `colorMode` / `bgColorMode` keys ship `"custom"`. A setting added to a shipped window
 must not change how that window already looks, and a shadow under an outlined face is heavier than
 either alone. `text.shadow` keeps its long-standing `true`.
 
@@ -296,8 +305,8 @@ verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a
 
 `title = ""` (empty falls back to the window's name) · `showSessionName = true` ·
 `showDuration = true` · `showTotals = true` · `font = "Friz Quadrata TT"` · `size = 12` ·
-`outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `align = "LEFT"` · `height = 18` ·
-`bgColor = { r=0, g=0, b=0, a=0.5 }`.
+`outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `colorMode = "custom"` ·
+`align = "LEFT"` · `height = 18` · `bgColor = { r=0, g=0, b=0, a=0.5 }` · `bgColorMode = "custom"`.
 
 `showTotals` shows the group total **for the sort column**, taken off the aggregate the render pass
 just parked on the window — never a second provider read.
@@ -311,10 +320,42 @@ All of these are edited under one **Frame header** group on the Header page. It 
 ("Header text" and "Header background"), which put `align` and `height` — both properties of the
 text — under a heading that said background.
 
+### The four text surfaces and their colour modes
+
+`text`, `header`, `columnHeader` and `tooltip` each carry the same five controls — face, outline,
+shadow, colour, and a **`colorMode`** of `class` / `stat` / `custom`. The two header strips carry a
+`bgColorMode` over the same three. `schemaVersion` 7 migrates the `classColor` boolean each of them
+used to have: `true` → `"class"`, `false` → `"custom"`, which is exactly what it meant, and the dead
+key is pruned.
+
+**`stat` means a different statistic per surface, and that is the point** — it is one question ("which
+statistic is this text about?") answered by whichever statistic the surface actually describes:
+
+| Surface | What `class` is | What `stat` is |
+|---|---|---|
+| `text` (cells) | the class of the row being drawn | the column the cell sits in |
+| `header` (title bar) | **yours** — a header is about the window, not a row | the window's **sort column** |
+| `columnHeader` | yours, for the same reason | **each label's own column** — the one surface where it is literally per column |
+| `tooltip` | the class of the player being hovered | the window's sort column |
+
+`none` is deliberately **not** offered. It is a legal answer for a tint drawn behind something and
+never for the writing itself, and a text surface set to "no colour" is one nobody can read.
+
+The configured **alpha survives every mode**: neither `RAID_CLASS_COLORS` nor `Constants.STAT_COLORS`
+carries one, and a mode that silently reset transparency would be one setting cancelling another.
+That matters most for the two backgrounds, where the alpha is what makes a colour a tint rather than
+a slab. A colour that cannot be resolved — an unknown class, a stat with no palette entry — falls
+back to the configured one.
+
+`columnHeader.bgColorMode == "stat"` is the only mode that paints **per column**: it puts a texture
+behind each label rather than one across the strip, because a class is not a property of a column and
+every other mode has exactly one colour to draw.
+
 ### `columnHeader` — the "Player | Damage | Healing" strip
 
 `font = "Friz Quadrata TT"` · `size = 11` · `outline = "OUTLINE"` ·
-`color = { r=1, g=0.82, b=0, a=1 }` · `bgColor = { r=0, g=0, b=0, a=0 }`.
+`color = { r=1, g=0.82, b=0, a=1 }` · `colorMode = "custom"` · `bgColor = { r=0, g=0, b=0, a=0 }` ·
+`bgColorMode = "custom"`.
 
 **Separate from both neighbours, and it was not before.** The strip used to take its font path and
 size from `text` and its outline and colour from `header`, so changing the cell font silently

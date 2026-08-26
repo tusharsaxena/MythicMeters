@@ -612,22 +612,28 @@ test("Schema: every text surface offers face, outline, shadow and colour", funct
     -- The table is the contract. A fifth surface, or a fifth control, is a row
     -- added here and then made to pass -- which is the point: it fails until the
     -- surface actually offers it.
+    --
+    -- THE CLASS-COLOUR CHECKBOX BECAME A THREE-WAY MODE on all four at once, and
+    -- "at once" is the property this case is really defending: class / per-
+    -- statistic / custom answers a question the checkbox could only answer two
+    -- thirds of, and a surface left on the old boolean would be the one a player
+    -- discovers by finding it missing.
     -- red under: dropping any row below, on any surface.
     local SURFACES = {
         { label = "Cell text",      prefix = "window.text.",
           font = "font", outline = "outline", shadow = "shadow",
-          color = "color", classColor = "classColor" },
-        { label = "Header text",    prefix = "window.header.",
+          color = "color", colorMode = "colorMode" },
+        { label = "Frame header",   prefix = "window.header.",
           font = "font", outline = "outline", shadow = "shadow",
-          color = "color", classColor = "classColor" },
+          color = "color", colorMode = "colorMode" },
         { label = "Column headers", prefix = "window.columnHeader.",
           font = "font", outline = "outline", shadow = "shadow",
-          color = "color", classColor = "classColor" },
+          color = "color", colorMode = "colorMode" },
         -- The tooltip's keys carry a `font` prefix of their own, which is why
         -- this is a table of names rather than four suffixes assumed to be equal.
         { label = "Tooltip text",   prefix = "window.tooltip.",
           font = "font", outline = "fontOutline", shadow = "fontShadow",
-          color = "textColor", classColor = "classColor" },
+          color = "textColor", colorMode = "colorMode" },
     }
 
     local inst = T.load()
@@ -671,7 +677,21 @@ test("Schema: every text surface offers face, outline, shadow and colour", funct
 
         need("shadow checkbox", surface.shadow, "bool")
         need("colour picker", surface.color, "color")
-        need("class colour checkbox", surface.classColor, "bool")
+
+        -- THREE MODES, THE SAME THREE, ON ALL FOUR. A surface offering a subset
+        -- is the drift this table exists to catch: `stat` means a different
+        -- statistic per surface, but it has to be OFFERED by every one of them.
+        local mode = need("colour mode dropdown", surface.colorMode, "string")
+        if mode then
+            assertTrue(type(mode.values) == "table",
+                surface.label .. "'s colour mode has no value list")
+            for _, key in ipairs({ "class", "stat", "custom" }) do
+                assertTrue(mode.values[key] ~= nil,
+                    surface.label .. "'s colour mode is missing " .. key)
+            end
+            assertTrue(mode.values.none == nil,
+                surface.label .. " offers 'none', which is text nobody can read")
+        end
     end
 
     assertEqual(#missing, 0, table.concat(missing, "; "))

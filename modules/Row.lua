@@ -620,7 +620,12 @@ function Cell:ApplyBorder(bars)
     if not edges then
         edges = {}
         for _, side in ipairs(BORDER_SIDES) do
-            edges[side] = self.frame:CreateTexture(nil, "OVERLAY")
+            -- SUBLEVEL 7, the top of the OVERLAY layer. A border drawn at the
+            -- default sublevel shares it with the two FontStrings and with
+            -- whatever the fill texture's own layer resolves to, and "shares"
+            -- means the draw order is not defined -- which is how an outline
+            -- ends up UNDER the bar it is supposed to be outlining.
+            edges[side] = self.frame:CreateTexture(nil, "OVERLAY", nil, 7)
         end
         self.border = edges
     end
@@ -694,6 +699,16 @@ function Cell:ApplyBarSkin(bars, _showBar)
     local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
     if fill and fill.SetAlpha then fill:SetAlpha((bars and bars.alpha) or 1) end
     bar:SetAlpha(1)
+
+    -- THE FILL SITS AT THE BOTTOM OF THE STACK, one sublevel above the cell's own
+    -- background and below everything else. A StatusBar's texture defaults to a
+    -- layer that a BACKDROP cannot get above -- a backdrop's edge draws in the
+    -- BORDER layer -- so LSM edge art around a cell was drawn BEHIND the bar it
+    -- was supposed to be outlining, correctly above the background and wrongly
+    -- below the fill. Moving the fill down is what lets both border
+    -- implementations land on top of it: the flat one at OVERLAY, the art at
+    -- BORDER. The text is OVERLAY and stays above both.
+    if fill and fill.SetDrawLayer then fill:SetDrawLayer("BACKGROUND", 1) end
     -- fillDirection "LEFT" means the bar GROWS rightward from the left edge,
     -- which is SetReverseFill(false). The setting is named for where the fill
     -- starts because that is what a player looking at the window sees.
@@ -731,22 +746,50 @@ end
 --- was moving. Re-applying it at the end of the styling pass closes that window
 --- entirely rather than shortening it.
 ---
+--- The alpha every piece of cell text is drawn at: "Text opacity" and the
+--- colour's own alpha channel, multiplied.
+---
+--- ONE READER, AND IT IS FOLDED INTO THE COLOUR, because the two mechanisms are
+--- not equally reliable here. `text.alpha` used to be applied only as
+--- FontString:SetAlpha, while the per-ROW colour passes (ApplyEntryTextColor for
+--- a stat cell, ApplyNameColor for the name) each wrote their own alpha through
+--- SetTextColor afterwards -- and in the client the numbers came back to full
+--- opacity while the names stayed faded, which is one setting appearing to work
+--- on half the grid.
+---
+--- Folding it in means every colour write carries the opacity, so a later write
+--- cannot undo it whichever of the two the client is honouring. The SetAlpha in
+--- ApplyTextStyle stays as well: a slot that no per-row pass ever recolours --
+--- the right-hand one, on a cell whose class is unknown -- still needs it.
+---
+--- @param text table  the window's `text` config group
+--- @return number
+local function textAlpha(text)
+    local _, _, _, colorAlpha = RGBA(text and text.color, 1, 1, 1, 1)
+    local setting = (text and text.alpha) or 1
+    if type(setting) ~= "number" then setting = 1 end
+    return colorAlpha * setting
+end
+
 --- @param entry table|nil  defaults to the cell's current row
 function Cell:ApplyNameColor(entry)
     if self.key ~= "name" then return end
     entry = entry or self.entry
+    local text = self.window.config.text or {}
+    local a = textAlpha(text)
+
     local r, g, b = ClassRGB(entry and entry.classFilename)
     if r then
-        self.left:SetTextColor(r, g, b)
+        self.left:SetTextColor(r, g, b, a)
     else
         -- An unknown class reads as "no class information", not as a tenth color.
-        self.left:SetTextColor(1, 1, 1)
+        self.left:SetTextColor(1, 1, 1, a)
     end
 end
 
 --- Re-color a STAT cell's two slots for the row it is about to draw.
 ---
---- `text.classColor` is the setting, and the subject is THIS ROW'S PLAYER -- a
+--- `text.colorMode` is the setting, and `class` means THIS ROW'S PLAYER -- a
 --- cell is about the player whose row it is, which is the same reading the Player
 --- column has always had and the same one `bars.colorMode == "class"` has. The
 --- header surfaces answer the question differently because they have no row to
@@ -766,16 +809,27 @@ end
 function Cell:ApplyEntryTextColor(entry)
     if self.key == "name" then return end
     local text = self.window.config.text or {}
-    if not text.classColor then return end
+    local mode = text.colorMode
+    if mode ~= "class" and mode ~= "stat" then return end
 
-    local r, g, b = ClassRGB(entry and entry.classFilename)
-    if not r then
-        -- No class information, so no class color -- the configured one is the
-        -- honest answer rather than a tenth palette entry.
-        local cr, cg, cb = RGBA(text.color, 1, 1, 1, 1)
-        r, g, b = cr, cg, cb
+    -- The configured colour is the fallback for BOTH modes, and it is resolved
+    -- first: an unknown class and a statistic with no palette entry are both "no
+    -- colour information", which is honestly answered by the colour the player
+    -- picked rather than by an invented hue.
+    local r, g, b = RGBA(text.color, 1, 1, 1, 1)
+
+    if mode == "class" then
+        local cr, cg, cb = ClassRGB(entry and entry.classFilename)
+        if cr then r, g, b = cr, cg, cb end
+    else
+        -- PER STATISTIC IS PER COLUMN in a cell: `self.key` is the stat this cell
+        -- draws, so the number takes the colour of the column it is in — the same
+        -- palette `bars.colorMode == "stat"` paints the bar behind it with.
+        local c = STAT_COLORS[self.key or ""]
+        if c then r, g, b = c[1], c[2], c[3] end
     end
-    local _, _, _, a = RGBA(text.color, 1, 1, 1, 1)
+
+    local a = textAlpha(text)
     self.left:SetTextColor(r, g, b, a)
     self.right:SetTextColor(r, g, b, a)
 end
@@ -784,7 +838,8 @@ function Cell:ApplyTextStyle(text)
     local path = fontPath(text.font)
     local flags = (text.outline ~= "NONE") and text.outline or nil
     local size = text.size or 11
-    local tr, tg, tb, ta = RGBA(text.color, 1, 1, 1, 1)
+    local tr, tg, tb = RGBA(text.color, 1, 1, 1, 1)
+    local ta = textAlpha(text)
     local shadowX = text.shadow and 1 or 0
     local shadowY = text.shadow and -1 or 0
 
@@ -956,7 +1011,7 @@ function Cell:SetValue(entry)
 
     -- LAST, and after the text: the color is per ROW where ApplyTextStyle's is
     -- per LAYOUT, so this is the only place the entry is in hand. A no-op unless
-    -- `text.classColor` is on.
+    -- `text.colorMode` asks for one.
     self:ApplyEntryTextColor(entry)
 end
 

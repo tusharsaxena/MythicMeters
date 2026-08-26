@@ -422,7 +422,7 @@ test("Cell text takes the ROW's class color when asked", function()
     -- red under: colouring cell text from NS.PlayerClassRGB, or from a layout
     -- pass that has no entry to read.
     local inst, _, row = bench(function(cfg)
-        cfg.text.classColor = true
+        cfg.text.colorMode = "class"
         cfg.text.color = { r = 1, g = 1, b = 1, a = 1 }
     end)
 
@@ -455,7 +455,7 @@ test("Class color keeps the configured ALPHA, not the class's own", function()
     -- setting overruling another.
     -- red under: SetTextColor(r, g, b) with no fourth argument.
     local _, _, row = bench(function(cfg)
-        cfg.text.classColor = true
+        cfg.text.colorMode = "class"
         cfg.text.color = { r = 1, g = 1, b = 1, a = 0.4 }
     end)
     row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
@@ -468,7 +468,7 @@ test("With no class to read, cell text keeps its configured color", function()
     -- colour the player chose -- never a tenth palette entry invented here.
     -- red under: falling back to white, or leaving the slot uncoloured.
     local _, _, row = bench(function(cfg)
-        cfg.text.classColor = true
+        cfg.text.colorMode = "class"
         cfg.text.color = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
     end)
     -- A class this client has never heard of -- which is what a stored row from a
@@ -514,6 +514,28 @@ test("The bar border takes the player's thickness and colour", function()
     assertEqual(edges.left:GetWidth(), 3)
     assertEqual(edges.top.__colorTexture[1], 1, "the border ignored its colour")
     assertEqual(edges.top.__colorTexture[2], 0)
+end)
+
+test("The bar border is drawn ABOVE the fill, not under it", function()
+    -- It was under it. The flat outline shared the OVERLAY layer with the text
+    -- and with whatever the StatusBar's own fill resolved to, and "shares a
+    -- layer" means the draw order is undefined; the LSM art was worse, because a
+    -- backdrop's edge draws in the BORDER layer and a StatusBar's fill defaults
+    -- above it. Either way the outline ended up behind the bar it outlines --
+    -- correctly above the background, wrongly below the fill.
+    -- red under: dropping the sublevel, or leaving the fill on its default layer.
+    local _, _, row = bench(function(cfg)
+        cfg.bars.border = true
+    end)
+
+    local cell = row.cells.DamageDone
+    local fill = cell.frame:GetStatusBarTexture()
+    assertEqual(fill.__drawLayer[1], "BACKGROUND", "the fill is not at the bottom of the stack")
+    assertEqual(fill.__drawLayer[2], 1, "the fill must still sit above the cell's own background")
+
+    assertEqual(cell.border.top.__layer, "OVERLAY")
+    assertEqual(cell.border.top.__sublevel, 7,
+        "the outline shares its layer with the text and has no defined order against it")
 end)
 
 test("Border style None keeps the cheap flat outline and puts no backdrop on a cell", function()
@@ -579,6 +601,65 @@ test("A window that sets neither keeps the border it always had", function()
     if skin.border then
         assertEqual(edges.top.__colorTexture[1], skin.border.r or skin.border[1])
     end
+end)
+
+test("Per-statistic cell text is the colour of the column the cell is in", function()
+    -- PER STATISTIC IS PER COLUMN in a cell: the number takes the colour of the
+    -- column it sits in, which is the same palette the bar behind it uses in
+    -- `bars.colorMode == "stat"`.
+    -- red under: resolving one colour for every cell in the row.
+    local inst, _, row = bench(function(cfg) cfg.text.colorMode = "stat" end)
+    local Const = inst.NS.Constants
+    row:Update(entry({
+        DamageDone = { total = 5, maxAmount = 10 },
+        Interrupts = { total = 2, maxAmount = 10 },
+    }), 1)
+
+    for _, key in ipairs({ "DamageDone", "Interrupts" }) do
+        local want = Const.STAT_COLORS[key]
+        if want then
+            assertEqual(row.cells[key].left.__textColor[1], want[1],
+                key .. "'s number is not in its own column's colour")
+        end
+    end
+
+    -- The NAME column has no statistic and is not touched by this mode: it is
+    -- the one cell that has always been drawn in its player's class.
+    assertTrue(row.nameCell.left.__textColor ~= nil)
+end)
+
+test("Text opacity reaches the NAME and the numbers alike, class colour or not", function()
+    -- IT REACHED ONLY THE NAME in the client, with Use class color on: the
+    -- per-row colour passes wrote their own alpha through SetTextColor after
+    -- ApplyTextStyle had set the opacity through SetAlpha, and the numbers came
+    -- back to full while the names stayed faded. One setting working on half the
+    -- grid.
+    -- red under: an alpha of 1 in ApplyEntryTextColor or ApplyNameColor.
+    for _, mode in ipairs({ "class", "stat", "custom" }) do
+        local _, _, row = bench(function(cfg)
+            cfg.text.alpha     = 0.25
+            cfg.text.colorMode = mode
+            cfg.text.color     = { r = 1, g = 1, b = 1, a = 1 }
+        end)
+        row:Update(entry({ DamageDone = { total = 5, maxAmount = 10 } }), 1)
+
+        local name = row.nameCell.left.__textColor
+        local stat = row.cells.DamageDone.left.__textColor
+        local why  = " (colour mode " .. mode .. ")"
+        assertEqual(name[4], 0.25, "the name ignored Text opacity" .. why)
+        assertEqual(stat[4], 0.25, "the numbers ignored Text opacity" .. why)
+    end
+end)
+
+test("Text opacity and the colour's own alpha multiply, rather than one winning", function()
+    -- They are two different questions -- "how transparent is this text" and
+    -- "what colour is it" -- and a player who has answered both means both.
+    local _, _, row = bench(function(cfg)
+        cfg.text.alpha = 0.5
+        cfg.text.color = { r = 1, g = 1, b = 1, a = 0.5 }
+    end)
+    row:Update(entry({ DamageDone = { total = 5, maxAmount = 10 } }), 1)
+    assertEqual(row.cells.DamageDone.left.__textColor[4], 0.25)
 end)
 
 test("Bar opacity fades the FILL, and nothing else in the cell", function()

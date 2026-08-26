@@ -681,9 +681,14 @@ local function createRegion(self, objectType, template)
     self.__regions[#self.__regions + 1] = r
     return r
 end
-function FRAME.CreateTexture(self, _name, layer, template)
+function FRAME.CreateTexture(self, _name, layer, template, sublevel)
     local r = createRegion(self, "Texture", template)
+    -- The SUBLEVEL is recorded as well as the layer. Two textures on one layer
+    -- have no defined draw order between them, so "which of these is on top" is
+    -- only answerable when the sublevel is known -- and modules/Row.lua's cell
+    -- border is exactly that question (it was drawn under the bar it outlines).
     r.__layer = layer
+    r.__sublevel = sublevel
     return r
 end
 function FRAME.CreateFontString(self, _name, layer, template)
