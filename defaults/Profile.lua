@@ -177,15 +177,12 @@ local WINDOW_TEMPLATE = {
         -- an outlined face is heavier than either alone, and a class-colored
         -- header is a taste rather than an improvement.
         shadow          = false,
+        -- The ONE thing that colours the header text, and there is deliberately no
+        -- mode beside it. The title bar is one strip over the whole window, so
+        -- "per statistic" could only ever paint it the sort column's colour -- a
+        -- fact already on screen twice over -- and "class" could only be the local
+        -- player's, which the title bar is not about either: it names the window.
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
-        -- The header is about the WINDOW, not about any one player, so the class
-        -- it can wear is the local player's (NS.PlayerClassRGB).
-        --
-        -- WHAT colours the header text: "class" (yours, because the header is
-        -- about the window rather than any one row), "stat" (the colour of the
-        -- column the grid is sorted by) or "custom" (the picker above). It was a
-        -- `classColor` boolean, which could only ever answer two of the three.
-        colorMode       = "custom",
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },

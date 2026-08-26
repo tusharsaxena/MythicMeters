@@ -492,7 +492,6 @@ test("The meta colour mode sets every bar and header in the window at once", fun
 
     for _, path in ipairs({
         "window.bars.colorMode", "window.bars.bgColorMode",
-        "window.header.colorMode",
         "window.columnHeader.colorMode", "window.columnHeader.bgColorMode",
         "window.tooltip.barColorMode", "window.tooltip.barBgColorMode",
     }) do
@@ -737,9 +736,14 @@ test("Schema: every text surface offers face, outline, shadow and colour", funct
         { label = "Cell text",      prefix = "window.text.",
           font = "font", outline = "outline", shadow = "shadow",
           color = "color", colorMode = "colorMode" },
+        -- NO colorMode. The Frame header is the one text surface with a colour
+        -- picker and no mode beside it: the title bar is one strip over the whole
+        -- window, so "per statistic" could only ever paint it the sort column's
+        -- colour and "class" only the local player's, and it is about neither --
+        -- it names the window.
         { label = "Frame header",   prefix = "window.header.",
           font = "font", outline = "outline", shadow = "shadow",
-          color = "color", colorMode = "colorMode" },
+          color = "color" },
         { label = "Column headers", prefix = "window.columnHeader.",
           font = "font", outline = "outline", shadow = "shadow",
           color = "color", colorMode = "colorMode" },
@@ -792,10 +796,18 @@ test("Schema: every text surface offers face, outline, shadow and colour", funct
         need("shadow checkbox", surface.shadow, "bool")
         need("colour picker", surface.color, "color")
 
-        -- THREE MODES, THE SAME THREE, ON ALL FOUR. A surface offering a subset
-        -- is the drift this table exists to catch: `stat` means a different
-        -- statistic per surface, but it has to be OFFERED by every one of them.
-        local mode = need("colour mode dropdown", surface.colorMode, "string")
+        -- THREE MODES, THE SAME THREE, ON EVERY SURFACE THAT HAS ONE. A surface
+        -- offering a SUBSET is the drift this table exists to catch: `stat` means
+        -- a different statistic per surface, but a surface that offers a mode at
+        -- all has to offer all three of them.
+        --
+        -- Having no mode is a different thing entirely and is not drift -- the
+        -- Frame header deliberately has none, because neither `class` nor `stat`
+        -- can say anything true about one strip that names the whole window. So
+        -- the check is keyed on the table declaring a mode, and the day someone
+        -- adds one back it starts applying again on its own.
+        local mode = surface.colorMode
+            and need("colour mode dropdown", surface.colorMode, "string")
         if mode then
             assertTrue(type(mode.values) == "table",
                 surface.label .. "'s colour mode has no value list")

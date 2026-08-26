@@ -211,8 +211,6 @@ L["Move the window selected on the Windows page back to the center of the screen
 
 L["Text color mode"] = "Text color mode"
 L["Background color mode"] = "Background color mode"
-L["What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."] =
-    "What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."
 L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."] =
     "What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."
 L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."] =

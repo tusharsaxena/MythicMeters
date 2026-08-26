@@ -2160,242 +2160,53 @@ test("Column header shadow is its OWN setting, not the header's", function()
         "the title took the column strip's shadow")
 end)
 
-test("Header class color is the LOCAL player's, since the header has no row", function()
-    -- The header is about the WINDOW. A cell answers the same setting with the
-    -- class of the row it is drawing (modules/Row.lua); this one has no row to
-    -- ask about, so yours is the only class it can sensibly mean.
-    -- red under: colouring the header from a row, or ignoring the setting.
+test("The header's text colour is the picker, and nothing resolves a mode", function()
+    -- The title bar used to answer the same three modes every text surface does,
+    -- and neither of the two it added could say anything true about it. It is ONE
+    -- strip over the whole window: "per statistic" could only ever paint it the
+    -- SORT column's colour -- already on screen in that column's own header and
+    -- in its arrow -- and "class" could only be the local player's, which the
+    -- title bar is not about either. It names the window.
+    --
+    -- Same argument that took the mode off the title bar's BACKGROUND at v9,
+    -- arriving at its text a release later.
+    -- red under: headerColor reading header.colorMode again.
     local inst, window, cfg = scene()
-    -- The scene's `player` unit is Alpha, a paladin. The mock ships every class
-    -- the same colour, so one is given its own -- otherwise "took SOME class
-    -- colour" would pass for "took the LOCAL player's".
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
-    cfg.header.color      = { r = 1, g = 0.82, b = 0, a = 1 }
+    cfg.header.color = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+
+    -- A stored mode from a profile that predates the prune must change NOTHING,
+    -- which is the property that makes the migration safe to have missed a window.
     cfg.header.colorMode = "class"
+    cfg.data.sortColumn  = "HealingDone"
     window:ApplyConfig()
 
-    local c = window.sessionText.__textColor
-    assertEqual(c[1], 0.41)
-    assertEqual(c[3], 0.94)
-    assertEqual(c[4], 1, "the configured alpha must survive the class colour")
+    local c = window.frame.title.__textColor
+    assertEqual(c[1], 0.2, "the title took something other than the picker")
+    assertEqual(c[2], 0.4)
+    assertEqual(c[3], 0.6)
+    assertEqual(c[4], 1, "the configured alpha must survive")
 
-    cfg.header.colorMode = "custom"
-    window:ApplyConfig()
-    assertEqual(window.sessionText.__textColor[1], 1, "the gold did not come back")
-    assertEqual(window.sessionText.__textColor[2], 0.82)
+    assertEqual(window.sessionText.__textColor[1], c[1],
+        "the title and the session line are one header and must not differ")
 end)
 
-test("Per-statistic colour on the header is the SORT COLUMN's", function()
-    -- A title bar is not "about" one column the way a cell is, so `stat` has to
-    -- mean something for a surface that is not a statistic: the statistic the
-    -- grid is currently ranked by is the only one it describes.
-    -- red under: resolving it to the first column, or to nothing.
-    local inst, window, cfg = scene()
-    local Const = inst.NS.Constants
-    cfg.header.colorMode  = "stat"
-    cfg.data.sortColumn   = "HealingDone"
+test("The header colour survives a sort change, having nothing to do with it", function()
+    -- The old `stat` mode made the title bar change colour whenever the sort
+    -- moved, which is a relationship the title bar does not have.
+    local _, window, cfg = scene()
+    cfg.header.color    = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+    cfg.data.sortColumn = "HealingDone"
     window:ApplyConfig()
+    local before = window.frame.title.__textColor[1]
 
-    local want = Const.STAT_COLORS.HealingDone
-    assertTrue(want ~= nil, "the palette has no HealingDone entry to compare against")
-    assertEqual(window.frame.title.__textColor[1], want[1])
-    assertEqual(window.sessionText.__textColor[1], want[1],
-        "the title and the session line are one header and must not differ")
-
-    -- And it follows the sort, because that is what it names.
     cfg.data.sortColumn = "DamageDone"
     window:ApplyConfig()
-    assertEqual(window.frame.title.__textColor[1], Const.STAT_COLORS.DamageDone[1])
+    assertEqual(window.frame.title.__textColor[1], before,
+        "the title bar is not about the sorted column")
 end)
 
-test("Per-statistic colour on the COLUMN strip is per column", function()
-    -- The one surface where "per statistic" is literally per column: each label
-    -- takes the colour of the column it labels, rather than one colour for the
-    -- strip.
-    -- red under: resolving the strip once and painting every label with it.
-    local inst, window, cfg = scene()
-    local Const = inst.NS.Constants
-    cfg.columnHeader.colorMode = "stat"
-    window:ApplyConfig()
-
-    local seen = {}
-    for _, button in ipairs(window.columnHeaders or {}) do
-        if button.mmKey and button.mmKey ~= "name" then
-            local want = Const.STAT_COLORS[button.mmKey]
-            if want then
-                assertEqual(button.text.__textColor[1], want[1],
-                    button.mmKey .. "'s label is not in its own column's colour")
-                seen[#seen + 1] = button.mmKey
-            end
-        end
-    end
-    assertTrue(#seen >= 2, "the scene needs two coloured columns to prove per-column")
-end)
-
-test("Per-statistic BACKGROUND on the column strip paints each label, not the strip", function()
-    -- A class is not a property of a column, so every other mode stays on the one
-    -- strip-wide texture; `stat` is the one that has to become several.
-    local inst, window, cfg = scene()
-    local Const = inst.NS.Constants
-    cfg.columnHeader.bgColorMode = "stat"
-    cfg.columnHeader.bgColor     = { r = 0, g = 0, b = 0, a = 0.8 }
-    window:ApplyConfig()
-
-    assertFalse(window.headerBg:IsShown(), "the strip-wide texture was left drawn under the columns")
-
-    local painted = 0
-    for _, button in ipairs(window.columnHeaders or {}) do
-        if button.mmKey and button.mmKey ~= "name" and Const.STAT_COLORS[button.mmKey] then
-            assertTrue(button.bg:IsShown(), button.mmKey .. " has no background of its own")
-            assertEqual(button.bg.__colorTexture[1], Const.STAT_COLORS[button.mmKey][1])
-            assertEqual(button.bg.__colorTexture[4], 0.8, "the configured opacity was dropped")
-            painted = painted + 1
-        end
-    end
-    assertTrue(painted >= 2)
-
-    -- Switching back takes them down and brings the strip back, or a player who
-    -- changes their mind keeps both.
-    cfg.columnHeader.bgColorMode = "custom"
-    window:ApplyConfig()
-    assertTrue(window.headerBg:IsShown())
-    for _, button in ipairs(window.columnHeaders or {}) do
-        assertFalse(button.bg:IsShown(), "a per-column background outlived the mode that asked for it")
-    end
-end)
-
-test("The title bar's background is a plain colour, with no mode of its own", function()
-    -- It is ONE strip over the whole window, so a per-statistic mode could only
-    -- paint it the sort column's colour -- a fact on screen twice already. The
-    -- column strip below it keeps its mode, because there "per statistic" tints
-    -- each label with its own column's colour and means something.
-    -- red under: giving the title bar a bgColorMode back.
-    local inst, window, cfg = scene()
-    cfg.header.bgColor = { r = 0.2, g = 0.4, b = 0.6, a = 0.4 }
-    window:ApplyConfig()
-
-    local c = window.headerBG.__colorTexture
-    assertEqual(c[1], 0.2)
-    assertEqual(c[4], 0.4, "the configured opacity was dropped")
-    assertNil(inst.NS.FindSchemaRow("window.header.bgColorMode"),
-        "the title bar grew a background mode back")
-end)
-
-test("The Player column is the shipped width for the shipped config, exactly", function()
-    -- The formula is CALIBRATED against NAME_COLUMN_WIDTH: 118 is a measured
-    -- value that has been right in the client for as long as this addon has had a
-    -- name column, so a window nobody has touched must still get it. Otherwise
-    -- "the column follows Max name length" would be a new look for every window
-    -- that never asked for one.
-    -- red under: moving NAME_CHAR_RATIO or NAME_COLUMN_PAD without re-anchoring.
-    local inst, window = scene()
-    assertEqual(window.config.text.maxNameLength, 20, "the calibration point moved")
-    assertEqual(window.config.icons.showIcon, true)
-    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_WIDTH)
-end)
-
-test("The Player column follows Max name length, and the icon's share with it", function()
-    -- The cap names a number of CHARACTERS, so the column it lives in is the one
-    -- thing that should follow it. It did not: the cap shortened the text and the
-    -- column stayed at 118px, so lowering it left a wide column with a short name
-    -- rattling around and raising it clipped the name the setting had permitted.
-    -- red under: a fixed nameColumn.width.
-    local _, window, cfg = scene()
-    local wide = window.layout.nameColumn.width
-
-    cfg.text.maxNameLength = 6
-    window:ApplyConfig()
-    local narrow = window.layout.nameColumn.width
-    assertTrue(narrow < wide, "a shorter cap must give the width back")
-
-    cfg.text.maxNameLength = 40
-    window:ApplyConfig()
-    assertTrue(window.layout.nameColumn.width > wide, "a longer cap must make room")
-
-    -- Turning the icon off gives its share to the name rather than leaving a hole
-    -- where a picture was.
-    cfg.text.maxNameLength = 20
-    window:ApplyConfig()
-    local withIcon = window.layout.nameColumn.width
-    cfg.icons.showIcon = false
-    window:ApplyConfig()
-    local withoutIcon = window.layout.nameColumn.width
-    assertEqual(withIcon - withoutIcon, (cfg.icons.size or 14) + 4,
-        "the icon's allowance is its size plus the gap Row.lua reserves")
-end)
-
-test("A bigger font widens the Player column, because the cap is in characters", function()
-    local _, window, cfg = scene()
-    cfg.text.maxNameLength = 20
-    window:ApplyConfig()
-    local small = window.layout.nameColumn.width
-
-    cfg.text.size = 22
-    window:ApplyConfig()
-    assertTrue(window.layout.nameColumn.width > small,
-        "twenty characters at 22pt need more room than twenty at 11pt")
-end)
-
-test("No name cap keeps the shipped width, and nothing goes below the floor", function()
-    -- 0 is the documented "no cap", and a window with no cap has no length to
-    -- size itself from.
-    local inst, window, cfg = scene()
-    cfg.text.maxNameLength = 0
-    window:ApplyConfig()
-    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_WIDTH)
-
-    -- And a one-character cap with no icon must still hold the word "Player".
-    cfg.text.maxNameLength = 1
-    cfg.icons.showIcon = false
-    cfg.text.size = 6
-    window:ApplyConfig()
-    assertEqual(window.layout.nameColumn.width, inst.NS.Constants.NAME_COLUMN_MIN)
-end)
-
-test("The header background covers the TITLE BAR only, not the column strip", function()
-    -- It used to cover both header rows, on the reading that "the header" is the
-    -- whole block a player points at. That was wrong twice: the column strip has
-    -- its OWN background setting, so a player who set both got one drawn over the
-    -- other with no way to see the lower one, and a colour picked for the title
-    -- bar silently restyled the grid's column labels too.
-    -- red under: SetHeight(titleHeight + headerHeight).
-    local _, window, cfg = scene()
-    cfg.header.height = 18
-    window:ApplyConfig()
-
-    local layout = window.layout
-    assertTrue(layout.headerHeight > 0, "the scene has no column strip to be wrong about")
-    assertEqual(window.headerBG:GetHeight(), layout.titleHeight)
-    assertTrue(window.headerBG:GetHeight() < layout.titleHeight + layout.headerHeight,
-        "the background still reaches the column labels")
-end)
-
-test("A window with no title bar draws no header background at all", function()
-    -- The strip is sized off the title row now, so "no title row" has to mean
-    -- "no rectangle" rather than "a rectangle the height of the column labels".
-    local _, window, cfg = scene()
-    cfg.frame.titleBar = false
-    window:ApplyConfig()
-    assertFalse(window.headerBG:IsShown())
-end)
-
-test("The header draws the WINDOW'S NAME, and follows a rename", function()
-    -- `header.title` was a second name for a window that already has one, and two
-    -- names for one thing is two things that can disagree: a window renamed in
-    -- the picker kept whatever its header had been set to, so the header could
-    -- not be used to tell which window you were looking at.
-    -- red under: restoring the title override.
-    local _, window, cfg = scene()
-    cfg.name = "Raid frame"
-    window:ApplyConfig()
-    assertEqual(window.frame.title:GetText(), "Raid frame")
-
-    cfg.name = "Mythic+"
-    window:ApplyConfig()
-    assertEqual(window.frame.title:GetText(), "Mythic+", "the header did not follow the rename")
-end)
-
-test("The window NAME takes the header's colour, class colour and all", function()
+test("The window NAME takes the header's colour", function()
     -- The title used to be left to the library's skin, so the Header text group
     -- styled every part of the strip except the one word a player thinks of as
     -- the header: font, size, outline and shadow all came from that group and
@@ -2405,20 +2216,12 @@ test("The window NAME takes the header's colour, class colour and all", function
     local inst, window, cfg = scene()
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
 
-    cfg.header.color      = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
-    cfg.header.colorMode = "custom"
+    cfg.header.color = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
     window:ApplyConfig()
 
     local c = window.frame.title.__textColor
     assertEqual(c[1], 0.2, "the title ignored the header colour")
     assertEqual(c[3], 0.6)
-
-    -- And the same class-colour reading the session line beside it takes.
-    cfg.header.colorMode = "class"
-    window:ApplyConfig()
-    c = window.frame.title.__textColor
-    assertEqual(c[1], 0.41)
-    assertEqual(c[3], 0.94)
     assertEqual(c[1], window.sessionText.__textColor[1],
         "the title and the session line are one header and must not differ")
 end)

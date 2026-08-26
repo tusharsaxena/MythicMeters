@@ -299,7 +299,6 @@ local OUTLINE_PATHS = {
 local COLOR_MODE_PATHS = {
     "window.bars.colorMode",
     "window.bars.bgColorMode",
-    "window.header.colorMode",
     "window.columnHeader.colorMode",
     "window.columnHeader.bgColorMode",
     "window.tooltip.barColorMode",
@@ -773,13 +772,16 @@ NS.Schema = {
         page = "header", group = L["Frame header"],
         label = L["Text color"], desc = L["Color of the header's own lines."],
     },
-    {
-        path = "window.header.colorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "header", group = L["Frame header"],
-        label = L["Text color mode"],
-        desc = L["What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."],
-    },
+    -- NO `header.colorMode` ROW, and no setting behind it. The title bar is ONE
+    -- strip over the whole window, so neither of the two modes it offered could
+    -- say anything true about it. Per-statistic could only ever paint it the SORT
+    -- column's colour -- a fact already on screen twice, in that column's own
+    -- header and in its arrow -- and class could only be the local player's,
+    -- which the title bar is not about either: it names the window.
+    --
+    -- This is the same argument that took the mode off the title bar's BACKGROUND
+    -- one change earlier, arriving at the text a step later. The colour picker
+    -- above is what the setting was before a mode was added to it.
     {
         path = "window.header.align", type = "string", default = "LEFT",
         values = ALIGN_VALUES, sorting = ALIGN_SORT,

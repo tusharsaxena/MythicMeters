@@ -43,7 +43,7 @@ NS.Database = Database
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
 -- v10 retires the "At cursor" tooltip anchor.
-local CURRENT_DB_VERSION = 10
+local CURRENT_DB_VERSION = 11
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -543,6 +543,30 @@ migrations[9] = function(db)
     end
 
     db.global.schemaVersion = 10
+end
+
+--- v10 -> v11: THE TITLE BAR'S TEXT LOSES ITS COLOUR MODE.
+---
+--- Same argument that took the mode off the title bar's BACKGROUND at v8,
+--- arriving at its TEXT a release later. The title bar is ONE strip over the
+--- whole window, so neither mode it offered could say anything true about it:
+--- "per statistic" could only ever paint it the sort column's colour -- already
+--- on screen in that column's own header and in its arrow -- and "class" could
+--- only be the local player's, which the title bar is not about either. It names
+--- the window. The colour picker is the whole setting now.
+---
+--- Pruned rather than left, for the reason every step here gives: AceDB merges
+--- defaults in and never removes what they stopped naming, so a field nobody
+--- prunes is a field that outlives its reader.
+migrations[10] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local header = type(w) == "table" and w.header
+            if type(header) == "table" then header.colorMode = nil end
+        end
+    end
+
+    db.global.schemaVersion = 11
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

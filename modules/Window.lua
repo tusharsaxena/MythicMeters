@@ -838,8 +838,16 @@ local function windowStat(window)
 end
 
 --- The header's text color, defaulting to the gold WoW uses for its own headers.
-local function headerColor(header, statKey)
-    return surfaceColor(header.colorMode, header.color, statKey, 1, 0.82, 0, 1)
+---
+--- NO MODE, AND NO STATISTIC. The title bar is one strip over the whole window,
+--- so neither mode this used to answer could say anything true about it:
+--- "per statistic" could only ever paint it the SORT column's colour, which is
+--- already on screen in that column's own header and in its arrow, and "class"
+--- could only be the local player's, which the title bar is not about either --
+--- it names the window. The picker is the whole setting now.
+local function headerColor(header)
+    local c = header.color
+    return RGBA(c, 1, 0.82, 0, 1)
 end
 
 --- How far the text is offset to draw its drop shadow, or 0, 0 for none.
@@ -873,7 +881,7 @@ end
 function NS.HeaderStyle(window)
     local header = (window.config or {}).header or {}
     local path, size, flags = headerFont(header)
-    local r, g, b = headerColor(header, windowStat(window))
+    local r, g, b = headerColor(header)
     return { path = path, size = size, flags = flags, r = r, g = g, b = b }
 end
 
@@ -991,7 +999,7 @@ function WindowProto:ApplyTitle()
     -- After ApplySkin, not instead of it: ApplyConfig re-runs the skin and then
     -- calls ApplyHeader, so the library still owns the backdrop and the accents
     -- and this owns the one FontString the settings claim to govern.
-    frame.title:SetTextColor(headerColor(header, windowStat(self)))
+    frame.title:SetTextColor(headerColor(header))
 end
 
 --- The tinted block behind the header and the hairline that closes it off.
@@ -1070,7 +1078,7 @@ function WindowProto:ApplySessionLine()
 
     self.sessionText:SetFont(path, size, flags)
     self.sessionText:SetShadowOffset(shadowOffset(header.shadow))
-    self.sessionText:SetTextColor(headerColor(header, windowStat(self)))
+    self.sessionText:SetTextColor(headerColor(header))
     self.sessionText:SetShown(shown)
 end
 
