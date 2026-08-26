@@ -12,10 +12,12 @@
 --
 --   2. THE COLUMNS CARVE-OUT. `window.columns` is an ordered array, which a path
 --      model has no vocabulary for, so it is written WHOLE through the same seam
---      and validated there instead of by a row's `validate`. That validation is
---      the only thing standing between a hand-edited SavedVariables and a
---      renderer that indexes `stat`, `width` and `showBar` without re-checking
---      any of them, so every refusal it can make is exercised here.
+--      and validated there instead of by a row's `validate`. That validator
+--      REPAIRS rather than rejects -- it drops a statistic this build does not
+--      have, appends one it gained, and sorts the enabled ones ahead of the
+--      disabled ones -- so what is exercised here is both halves: what it fixes
+--      silently, and the short list of shapes it genuinely cannot invent an
+--      answer for.
 --
 -- Everything mutates, so every case builds its OWN instance through T.load()
 -- rather than sharing one: a suite whose cases can only pass in the order they
@@ -268,26 +270,123 @@ end)
 
 local function goodColumns()
     return {
-        { stat = "DamageDone",  width = 92, showBar = true },
-        { stat = "HealingDone", width = 80, showBar = false },
+        { stat = "DamageDone",  enabled = true },
+        { stat = "HealingDone", enabled = true },
     }
 end
 
-test("SetByPath: window.columns ACCEPTS a well-formed ordered array and stores it", function()
+--- How many of the stored columns are shown.
+local function shownCount(cols)
+    local n = 0
+    for _, c in ipairs(cols) do
+        if c.enabled then n = n + 1 end
+    end
+    return n
+end
+
+test("SetByPath: window.columns repairs any array into the WHOLE catalog", function()
+    -- The array used to be the SUBSET the player had assembled. It is the catalog
+    -- now -- one entry per statistic, each carrying `enabled` -- because the page
+    -- that reads it is a fixed list of blocks you tick rather than a list you add
+    -- to, and a page that cannot add a column needs every column already there.
+    local inst, first = twoWindows()
+    local NS = inst.NS
+    local Const = NS.Constants
+    NS.State.SetActiveWindow(first)
+
+    local ok, err = NS.SetByPath("window.columns", {
+        { stat = "HealingDone", enabled = true },
+        { stat = "DamageDone",  enabled = true },
+    })
+    assertTrue(ok, tostring(err))
+
+    local stored = NS.Database.FindWindow(first).columns
+    assertEqual(#stored, #Const.STATS,
+        "the stored array IS the catalog now, however short the input was")
+    assertEqual(stored[1].stat, "HealingDone", "the caller's order is kept for the enabled ones")
+    assertEqual(stored[2].stat, "DamageDone")
+    assertTrue(stored[1].enabled)
+    assertTrue(stored[2].enabled)
+    for i = 3, #stored do
+        assertFalse(stored[i].enabled,
+            "every statistic the caller did not name arrives disabled, not missing")
+    end
+    assertEqual(stored[1].width, nil, "width is not part of the shape any more")
+    assertEqual(stored[1].showBar, nil, "showBar is not part of the shape any more")
+end)
+
+test("SetByPath: window.columns DROPS a statistic this build does not have", function()
+    -- The old code STORED an unknown stat and listed it so the player could remove
+    -- it. There is no remove button now and the list IS the catalog, so there is
+    -- nothing they could do with the row -- self-healing beats surfacing a dead
+    -- one.
     local inst, first = twoWindows()
     local NS = inst.NS
     NS.State.SetActiveWindow(first)
 
-    local ok, err = NS.SetByPath("window.columns", goodColumns())
-    assertTrue(ok, tostring(err))
+    local ok, err = NS.SetByPath("window.columns", {
+        { stat = "DamageDone", enabled = true },
+        { stat = "FutureStat", enabled = true },
+    })
+    assertTrue(ok, "an unknown statistic must not fail the whole write: " .. tostring(err))
 
     local stored = NS.Database.FindWindow(first).columns
-    assertEqual(#stored, 2)
+    for _, c in ipairs(stored) do
+        assertFalse(c.stat == "FutureStat", "the unknown statistic must not be stored")
+    end
+    assertEqual(#stored, #NS.Constants.STATS)
+end)
+
+test("SetByPath: window.columns keeps a repeated statistic's FIRST appearance only", function()
+    local inst, first = twoWindows()
+    local NS = inst.NS
+    NS.State.SetActiveWindow(first)
+
+    assertTrue((NS.SetByPath("window.columns", {
+        { stat = "DamageDone",  enabled = true },
+        { stat = "HealingDone", enabled = true },
+        { stat = "DamageDone",  enabled = false },
+    })))
+
+    local stored = NS.Database.FindWindow(first).columns
+    local seen = 0
+    for _, c in ipairs(stored) do
+        if c.stat == "DamageDone" then seen = seen + 1 end
+    end
+    assertEqual(seen, 1, "two Damage columns show identical numbers twice")
     assertEqual(stored[1].stat, "DamageDone")
-    assertEqual(stored[1].width, 92)
-    assertEqual(stored[1].showBar, true)
-    assertEqual(stored[2].stat, "HealingDone")
-    assertEqual(stored[2].showBar, false)
+    assertTrue(stored[1].enabled,
+        "the first appearance wins, so a later duplicate cannot quietly untick it")
+end)
+
+test("SetByPath: window.columns stores the enabled ones ahead of the disabled ones", function()
+    -- Sink-to-bottom is a STORED invariant rather than something the page
+    -- maintains. `/mm set window.columns ...` and a hand-edited SavedVariables
+    -- reach this seam without ever drawing a block, and three routes to one shape
+    -- is three chances to disagree about it.
+    local inst, first = twoWindows()
+    local NS = inst.NS
+    NS.State.SetActiveWindow(first)
+
+    assertTrue((NS.SetByPath("window.columns", {
+        { stat = "DamageDone",  enabled = false },
+        { stat = "HealingDone", enabled = true },
+        { stat = "Interrupts",  enabled = false },
+        { stat = "Dispels",     enabled = true },
+    })))
+
+    local stored = NS.Database.FindWindow(first).columns
+    assertEqual(stored[1].stat, "HealingDone", "relative order inside a group is the caller's")
+    assertEqual(stored[2].stat, "Dispels")
+
+    local sawDisabled = false
+    for i, c in ipairs(stored) do
+        if not c.enabled then sawDisabled = true end
+        if c.enabled then
+            assertFalse(sawDisabled,
+                "entry " .. i .. " is enabled and follows a disabled one")
+        end
+    end
 end)
 
 test("SetByPath: window.columns REBUILDS the array rather than adopting the caller's", function()
@@ -304,8 +403,8 @@ test("SetByPath: window.columns REBUILDS the array rather than adopting the call
     assertTrue(stored[1] ~= mine[1], "nor any of its entries")
     assertEqual(stored[1].smuggled, nil, "an extra key is dropped, not persisted")
 
-    mine[1].width = 999
-    assertEqual(stored[1].width, 92, "the caller can no longer reach into the profile")
+    mine[1].stat = "Deaths"
+    assertEqual(stored[1].stat, "DamageDone", "the caller can no longer reach into the profile")
 end)
 
 test("SetByPath: window.columns takes the same log, message and refresh a scalar takes", function()
@@ -341,31 +440,30 @@ test("SetByPath: window.columns is readable through the generic resolver", funct
 
     local read = NS.GetSetting("window.columns")
     assertEqual(type(read), "table")
-    assertEqual(#read, 2)
+    assertEqual(#read, #NS.Constants.STATS)
     assertEqual(read[1].stat, "DamageDone")
+    assertEqual(shownCount(read), 2)
 end)
 
 -- Each refusal, one case per rule, because "it refused" without saying which rule
 -- fired passes just as happily on a typo in the fixture.
+--
+-- THE LIST IS SHORTER THAN IT WAS, and that is the change rather than a gap in
+-- coverage. An unknown statistic, a repeat, a width outside its range and a
+-- non-boolean show-bar flag were four separate refusals; the first two are
+-- repaired now and the last two name fields that no longer exist. What is left is
+-- what the normalizer genuinely cannot invent an answer for.
 
 local REFUSALS = {
     { "a non-table value",            "not a table" },
     { "an empty array",               {} },
-    { "a gap or a string key",        { { stat = "DamageDone", width = 92, showBar = true },
+    { "a gap or a string key",        { { stat = "DamageDone", enabled = true },
                                         extra = true } },
     { "an entry that is not a table", { "DamageDone" } },
-    { "a statistic this build does not have",
-                                      { { stat = "Nonsense", width = 92, showBar = true } } },
-    { "the same statistic twice",     { { stat = "DamageDone", width = 92, showBar = true },
-                                        { stat = "DamageDone", width = 92, showBar = true } } },
-    { "a width below the slider's floor",
-                                      { { stat = "DamageDone", width = 23, showBar = true } } },
-    { "a width above the slider's ceiling",
-                                      { { stat = "DamageDone", width = 241, showBar = true } } },
-    { "a non-numeric width",          { { stat = "DamageDone", width = "92", showBar = true } } },
-    { "a NaN width",                  { { stat = "DamageDone", width = 0 / 0, showBar = true } } },
-    { "a show-bar flag that is not a boolean",
-                                      { { stat = "DamageDone", width = 92, showBar = 1 } } },
+    { "an array with nothing enabled",
+                                      { { stat = "DamageDone", enabled = false } } },
+    { "an array whose every statistic this build dropped",
+                                      { { stat = "Nonsense", enabled = true } } },
 }
 
 for _, case in ipairs(REFUSALS) do
@@ -387,31 +485,30 @@ end
 
 test("SetByPath: a path INTO the column array is refused by name", function()
     local inst = T.load()
-    local ok, err = inst.NS.SetByPath("window.columns.2.width", 120)
+    local ok, err = inst.NS.SetByPath("window.columns.2.enabled", true)
     assertFalse(ok)
     assertEqual(type(err), "string")
-    -- The ordinal moves on the next add, remove or reorder, so a stored reference
-    -- to it is wrong by the next edit. It must not fall through to "not a row".
+    -- The ordinal moves on the next toggle or drag, so a stored reference to it is
+    -- wrong by the next edit. It must not fall through to "not a row".
     assertTrue(err:find("Columns page", 1, true) ~= nil,
         "the refusal should point at the page that CAN do it, got: " .. err)
 end)
 
-test("SetByPath: the columns validator agrees with the width slider's own range", function()
-    -- settings/Columns.lua builds its slider with SetSliderValues(24, 240, 1), and
-    -- the carve-out restates those bounds because the CLI and a hand-edited
-    -- SavedVariables reach the seam without ever touching that slider. The two
-    -- statements are checked against each other here.
-    local inst, first = twoWindows()
+test("Schema: NS.NormalizeColumns is published for the migration ladder", function()
+    -- core/Database.lua's migrations[10] needs this rule and cannot reach a local
+    -- in a file eighteen TOC entries later. A private copy there is how the
+    -- migration and the write seam end up disagreeing about the shape.
+    local inst = T.load()
     local NS = inst.NS
-    NS.State.SetActiveWindow(first)
+    assertEqual(type(NS.NormalizeColumns), "function")
 
-    local function widthOK(w)
-        return (NS.SetByPath("window.columns", { { stat = "DamageDone", width = w, showBar = true } }))
-    end
-    assertTrue(widthOK(24),  "24 is the slider's floor and must be accepted")
-    assertTrue(widthOK(240), "240 is the slider's ceiling and must be accepted")
-    assertFalse(widthOK(23))
-    assertFalse(widthOK(241))
+    local out = NS.NormalizeColumns({ { stat = "Deaths", enabled = true } })
+    assertEqual(type(out), "table")
+    assertEqual(#out, #NS.Constants.STATS)
+    assertEqual(out[1].stat, "Deaths")
+    assertTrue(out[1].enabled)
+
+    assertEqual(NS.NormalizeColumns({}), nil, "it refuses what it cannot repair")
 end)
 
 -- ---------------------------------------------------------------------------
@@ -864,7 +961,7 @@ test("RestoreAllDefaults is the equivalent of a NEW PROFILE", function()
     for _, w in ipairs(NS.Database.GetWindows()) do
         w.name        = "Renamed " .. w.id
         w.frame.width = 999
-        w.columns     = { { stat = "Deaths", width = 44, showBar = true } }
+        w.columns     = { { stat = "Deaths", enabled = true } }
     end
 
     NS.Helpers.RestoreAllDefaults()

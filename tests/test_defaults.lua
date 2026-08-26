@@ -77,36 +77,57 @@ test("Defaults: editing one window leaves the other and the template untouched",
     local shippedAlpha = TPL.frame.backdropColor.a
     a.frame.backdropColor.a = 0.1
     a.header.font = "Something Else"
-    a.columns[1].width = 1234
+    a.columns[1].enabled = false
 
     assertEqual(b.frame.backdropColor.a, shippedAlpha, "window 2's backdrop moved with window 1's")
     assertEqual(b.header.font, TPL.header.font)
-    assertEqual(b.columns[1].width, Const.STAT_BY_KEY[Const.DEFAULT_STAT_KEYS[1]].defaultWidth)
+    assertEqual(b.columns[1].enabled, true, "window 2's first column followed window 1's")
     assertEqual(TPL.frame.backdropColor.a, shippedAlpha, "the shipped template itself was edited")
 end)
 
 -- ── the derived columns ─────────────────────────────────────────────────────
 
-test("Defaults: a new window's columns are the catalog's default set, in catalog order", function()
-    -- Derived rather than literal, so adding a stat with defaultEnabled = true
-    -- needs no edit here — and the ORDER is the display order.
+test("Defaults: a new window carries the WHOLE catalog, defaults ticked and first", function()
+    -- The array used to be the default SUBSET. It is the catalog now, because the
+    -- Columns page is a fixed list of blocks you tick rather than a list you add
+    -- to -- and a page with no add button needs every statistic already present.
+    -- Derived rather than literal, so adding one to core/Constants.lua still needs
+    -- no edit here.
     local w = NS.DefaultWindow(1)
-    local keys = {}
-    for _, column in ipairs(w.columns) do keys[#keys + 1] = column.stat end
-    assertEqual(table.concat(keys, ","), table.concat(Const.DEFAULT_STAT_KEYS, ","))
-end)
+    assertEqual(#w.columns, #Const.STATS, "the column array IS the catalog")
 
-test("Defaults: every default column takes its width from the catalog and ships its bar on",
-function()
-    -- The bar is what makes the grid readable at a glance; a player who wants
-    -- numbers only turns it off per column.
-    local w = NS.DefaultWindow(1)
-    assertTrue(#w.columns > 0, "a new window with no columns would draw nothing")
+    local on = {}
+    for _, key in ipairs(Const.DEFAULT_STAT_KEYS) do on[key] = true end
+
+    local enabledKeys, sawDisabled = {}, false
     for i, column in ipairs(w.columns) do
         local stat = Const.STAT_BY_KEY[column.stat]
         assertTrue(stat ~= nil, "column " .. i .. " names a stat the catalog does not have")
-        assertEqual(column.width, stat.defaultWidth, "column " .. i .. " width")
-        assertEqual(column.showBar, true, "column " .. i .. " must ship with its bar")
+        assertEqual(column.enabled, on[column.stat] == true,
+            "column " .. i .. " (" .. column.stat .. ") does not match its defaultEnabled flag")
+
+        if column.enabled then
+            enabledKeys[#enabledKeys + 1] = column.stat
+            assertFalse(sawDisabled, "an enabled column must never follow a disabled one")
+        else
+            sawDisabled = true
+        end
+    end
+
+    -- The ticked prefix is DEFAULT_STAT_KEYS, in its order, which is the display
+    -- order left to right.
+    assertEqual(table.concat(enabledKeys, ","), table.concat(Const.DEFAULT_STAT_KEYS, ","))
+end)
+
+test("Defaults: no column carries a width or a show-bar flag", function()
+    -- Width has been dead since the window began auto-sizing, and the bar is not
+    -- optional. AceDB merges defaults in and never removes what they stopped
+    -- naming, so shipping either key would resurrect it on every profile.
+    local w = NS.DefaultWindow(1)
+    assertTrue(#w.columns > 0, "a new window with no columns would draw nothing")
+    for i, column in ipairs(w.columns) do
+        assertEqual(column.width, nil, "column " .. i .. " ships a dead width")
+        assertEqual(column.showBar, nil, "column " .. i .. " ships a dead show-bar flag")
     end
 end)
 

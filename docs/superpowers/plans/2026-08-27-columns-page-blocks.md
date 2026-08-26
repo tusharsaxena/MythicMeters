@@ -31,7 +31,7 @@
 |---|---|---|
 | `settings/Schema.lua` | The single write seam. Owns the columns carve-out's validator. | Modify: `normalizeColumns` rewritten as repairing; published as `NS.NormalizeColumns`. |
 | `defaults/Profile.lua` | The shipped profile. Owns `NS.DefaultWindow`. | Modify: `DefaultWindow` emits the full catalog. |
-| `core/Database.lua` | AceDB wiring and the migration ladder. | Modify: `CURRENT_DB_VERSION` 10 → 11, new `migrations[10]`. |
+| `core/Database.lua` | AceDB wiring and the migration ladder. | Modify: `CURRENT_DB_VERSION` 11 → 12, new `migrations[11]`. |
 | `modules/Window.lua` | Builds the layout from config. | Modify: `BuildLayout` filters on `enabled`, stops emitting `showBar`. |
 | `modules/Row.lua` | Draws one row's cells. | Modify: the bar is unconditional. |
 | `settings/ColumnBlocks.lua` | **New.** A generic reorderable block list: draws blocks, owns the drag, owns the toggle glyph. Knows nothing about statistics. | Create. |
@@ -51,7 +51,7 @@
 **Files:**
 - Modify: `settings/Schema.lua` — `normalizeColumns` (currently lines 1896-1952), `setColumns` (1955-1969), and the `COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH` local (1884)
 - Modify: `defaults/Profile.lua:536-546` — `NS.DefaultWindow`'s column loop
-- Modify: `core/Database.lua:46` — `CURRENT_DB_VERSION`; append `migrations[10]` after `migrations[9]` (ends line 546)
+- Modify: `core/Database.lua:46` — `CURRENT_DB_VERSION`; append `migrations[11]` after `migrations[10]`
 - Test: `tests/test_schema.lua`, `tests/test_defaults.lua`, `tests/test_database.lua`, `tests/test_windowmanager.lua`
 
 **Interfaces:**
@@ -342,10 +342,10 @@ Also fix the stale comment at `defaults/Profile.lua:487`, which says the array i
 
 - [ ] **Step 5: Add the migration**
 
-In `core/Database.lua`, change line 46 to `local CURRENT_DB_VERSION = 11`, then append after `migrations[9]` (which ends at line 546):
+In `core/Database.lua`, change line 46 to `local CURRENT_DB_VERSION = 12`, then append after `migrations[10]`:
 
 ```lua
---- v10 -> v11: THE COLUMN ARRAY BECOMES THE CATALOG.
+--- v11 -> v12: THE COLUMN ARRAY BECOMES THE CATALOG.
 ---
 --- `window.columns` was the columns the player had CHOSEN; it is now every
 --- statistic this build offers, in their order, each carrying `enabled`. The
@@ -365,7 +365,7 @@ In `core/Database.lua`, change line 46 to `local CURRENT_DB_VERSION = 11`, then 
 --- is the same deferred read `migrations[1]` already makes for NS.WINDOW_TEMPLATE.
 --- A private copy of "what shape is a column array" here is how the migration and
 --- the write seam end up disagreeing about it.
-migrations[10] = function(db)
+migrations[11] = function(db)
     local normalize = NS.NormalizeColumns
 
     for _, profile in ipairs(allProfiles(db)) do
@@ -392,7 +392,7 @@ migrations[10] = function(db)
         end
     end
 
-    db.global.schemaVersion = 11
+    db.global.schemaVersion = 12
 end
 ```
 
@@ -443,12 +443,12 @@ In `tests/test_database.lua`:
 Add:
 
 ```lua
-test("Database: v10 -> v11 turns the chosen columns into the whole catalog", function()
+test("Database: v11 -> v12 turns the chosen columns into the whole catalog", function()
     local inst = T.load()
     local NS = inst.NS
     local Const = NS.Constants
 
-    NS.db.global.schemaVersion = 10
+    NS.db.global.schemaVersion = 11
     local w = NS.Database.GetWindows()[1]
     w.columns = {
         { stat = "Deaths",     width = 44, showBar = true },
@@ -457,7 +457,7 @@ test("Database: v10 -> v11 turns the chosen columns into the whole catalog", fun
 
     NS:RunMigrations()
 
-    assertEqual(NS.db.global.schemaVersion, 11)
+    assertEqual(NS.db.global.schemaVersion, 12)
     local cols = NS.Database.GetWindows()[1].columns
     assertEqual(#cols, #Const.STATS, "every statistic must be present after the migration")
     assertEqual(cols[1].stat, "Deaths", "the player's order survives")
@@ -471,13 +471,13 @@ test("Database: v10 -> v11 turns the chosen columns into the whole catalog", fun
     assertEqual(cols[1].showBar, nil, "showBar must be pruned")
 end)
 
-test("Database: v10 -> v11 falls back to the shipped list when nothing survives", function()
+test("Database: v11 -> v12 falls back to the shipped list when nothing survives", function()
     -- A profile whose every column named a stat this build dropped leaves nothing
     -- enabled, and there is no way to guess what the player meant.
     local inst = T.load()
     local NS = inst.NS
 
-    NS.db.global.schemaVersion = 10
+    NS.db.global.schemaVersion = 11
     NS.Database.GetWindows()[1].columns = {
         { stat = "GoneStat",    width = 44, showBar = true },
         { stat = "AlsoGoneStat", width = 44, showBar = true },

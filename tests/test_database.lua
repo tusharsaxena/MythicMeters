@@ -388,20 +388,31 @@ local function v1Account(frameWidth)
     })
 end
 
-test("Database v2: every stored column is lifted to the one uniform width", function()
-    -- A width is written into a window when it is CREATED, not read live off the
-    -- catalog, so moving Const.COLUMN_WIDTH alone reaches new windows only. This
-    -- step is what reaches the window the player already has.
-    -- red under: bumping CURRENT_DB_VERSION without registering migrations[1].
+test("Database v1: a v1 account walks all the way to the catalog shape", function()
+    -- v2 lifted every column to one uniform width, and v12 deleted width
+    -- altogether -- so the END state of a full walk is the new shape, not v2's.
+    -- The step still runs and still matters to the frame widening below; what it
+    -- wrote to the columns is simply not what survives the ladder.
+    -- red under: bumping CURRENT_DB_VERSION without registering every step.
     local inst = v1Account(480)
+    local Const = inst.NS.Constants
     local w = inst.NS.Database.FindWindow(1)
 
-    for _, col in ipairs(w.columns) do
-        assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
-            col.stat .. " kept its old per-stat width")
+    assertEqual(#w.columns, #Const.STATS, "the array is the catalog after the walk")
+    assertEqual(w.columns[1].stat, "DamageDone", "the player's order survives every step")
+    assertEqual(w.columns[2].stat, "Interrupts")
+    assertEqual(w.columns[3].stat, "Deaths")
+    for i = 1, 3 do
+        assertTrue(w.columns[i].enabled, "a column that was SHOWN arrives enabled")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 11,
-        "the walk must run all the way to the current version, not stop at v2")
+    for i = 4, #w.columns do
+        assertFalse(w.columns[i].enabled, "a statistic that was not a column arrives disabled")
+    end
+    assertEqual(w.columns[1].width, nil, "width must not survive the walk")
+    assertEqual(w.columns[1].showBar, nil, "showBar must not survive the walk")
+
+    assertEqual(inst.NS.db.global.schemaVersion, 12,
+        "the walk must run all the way to the current version, not stop partway")
 end)
 
 test("Database v2: the frame is widened to hold the new grid", function()
@@ -445,7 +456,7 @@ test("Database v2: a frame already wider than the grid is left alone", function(
     assertEqual(inst.NS.Database.FindWindow(1).frame.width, 900)
 end)
 
-test("Database v2: EVERY saved profile is lifted, not just the active one", function()
+test("Database: EVERY saved profile is walked, not just the active one", function()
     -- A profile the player has not activated this session is still theirs. Lifting
     -- only db.profile leaves the others stale AFTER schemaVersion has been stamped
     -- forward, so the step never gets a second chance at them.
@@ -463,8 +474,11 @@ test("Database v2: EVERY saved profile is lifted, not just the active one", func
     })
 
     local raid = inst.NS.db.sv.profiles.Raid
-    assertEqual(raid.windows[1].columns[1].width, inst.NS.Constants.COLUMN_WIDTH,
-        "the inactive Raid profile was left at the old width")
+    assertEqual(#raid.windows[1].columns, #inst.NS.Constants.STATS,
+        "the inactive Raid profile was left in the old shape")
+    assertEqual(raid.windows[1].columns[1].stat, "Deaths")
+    assertTrue(raid.windows[1].columns[1].enabled)
+    assertEqual(raid.windows[1].columns[1].width, nil)
 end)
 
 test("Database v2: the step is idempotent and survives a malformed window", function()
@@ -478,7 +492,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -620,7 +634,7 @@ test("Database v3: the three dead keys are REMOVED, not left to rot", function()
     assertNil(icons.showClass, "showClass survived the migration")
     assertNil(icons.showSpec,  "showSpec survived the migration")
     assertNil(icons.showRole,  "showRole survived the migration")
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -651,7 +665,7 @@ test("Database v4: a stored AUTO channel folds to SELF, in EVERY profile", funct
 
     assertEqual(sv.profiles.Default.export.channel, "SELF")
     assertEqual(sv.profiles.Alt.export.channel, "SELF")
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v4: every other channel is left exactly as the player set it", function()
@@ -670,7 +684,7 @@ test("Database v4: a profile with no export block at all survives the step", fun
         profiles = { Default = { nextWindowId = 2, windows = { { id = 1 } } } },
         global   = { schemaVersion = 3 },
     })
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -703,7 +717,7 @@ test("Database v5: the FIRST window's values are the ones lifted", function()
 
     assertEqual(profile.data.mergePets, true)
     assertEqual(profile.data.throttle, 0.5)
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v5: the per-window keys are REMOVED from EVERY window", function()
@@ -743,7 +757,7 @@ test("Database v5: a profile whose windows never carried the keys survives", fun
     -- Every profile written before either setting existed is this one, and the
     -- shipped defaults are what it should land on.
     local inst = v4Data({ { id = 1, data = { sortColumn = "Healing" } } })
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
     assertEqual(inst.NS.DataSetting("throttle"), 0.25)
     assertEqual(inst.NS.DataSetting("mergePets"), false)
 end)
@@ -775,7 +789,7 @@ test("Database v6: the two dead row-background keys are pruned from every window
     end
     -- And nothing else in the group was touched.
     assertEqual(inst.NS.Database.FindWindow(1).rows.highlightSelf, false)
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v7: a class-colour boolean becomes a colour mode, on every surface", function()
@@ -815,7 +829,7 @@ test("Database v7: a class-colour boolean becomes a colour mode, on every surfac
     end
     -- Nothing else in a migrated group was touched.
     assertEqual(w.tooltip.fontSize, 14)
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v7: a window that never set one is left to the shipped default", function()
@@ -850,7 +864,7 @@ test("Database v8: the four redundant header keys are pruned from every window",
         assertNil(header[key], "the header kept " .. key)
     end
     assertEqual(header.size, 14, "the rest of the group was touched")
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v8: a typed header title becomes the window's NAME, not nothing", function()
@@ -907,7 +921,7 @@ test("Database v9: the title bar's background mode is pruned, the column strip's
     assertNil(w.header.bgColorMode, "the title bar kept a mode it no longer has")
     assertEqual(w.columnHeader.bgColorMode, "stat", "the column strip lost the mode it keeps")
     assertEqual(w.header.bgColor.r, 1, "the colour picker went with the dropdown")
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)
 
 test("Database v10: a stored cursor anchor becomes TOP, and other anchors are left alone", function()
@@ -929,5 +943,5 @@ test("Database v10: a stored cursor anchor becomes TOP, and other anchors are le
 
     assertEqual(inst.NS.Database.FindWindow(1).tooltip.anchor, "TOP")
     assertEqual(inst.NS.Database.FindWindow(2).tooltip.anchor, "BOTTOMLEFT")
-    assertEqual(inst.NS.db.global.schemaVersion, 11)
+    assertEqual(inst.NS.db.global.schemaVersion, 12)
 end)

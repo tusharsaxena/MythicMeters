@@ -137,7 +137,7 @@ test("Columns: the page renders one control set per stored column", function()
         assertEqual(ui.sliders[i].value, c.width)
         assertEqual(ui.checks[i].value, c.showBar)
     end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the first column cannot move left and the last cannot move right", function()
     local _, ui = openPage()
@@ -145,7 +145,7 @@ test("Columns: the first column cannot move left and the last cannot move right"
     assertFalse(ui.moveLeft(2).disabled)
     assertTrue(ui.moveRight(ui.count).disabled)
     assertFalse(ui.moveRight(1).disabled)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- Each control really changes the stored array, and really repaints
@@ -162,7 +162,7 @@ test("Columns: the width slider writes the stored width and repaints", function(
 
     assertEqual(storedColumns(inst)[2].width, 137)
     assertEqual(repaints, 1, "the page's SHAPE is driven by this array; it must repaint")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the show-bar checkbox writes the stored flag as a real boolean", function()
     local inst, ui = openPage()
@@ -176,7 +176,7 @@ test("Columns: the show-bar checkbox writes the stored flag as a real boolean", 
 
     ui.checks[1]:__fire("OnValueChanged", true)
     assertEqual(storedColumns(inst)[1].showBar, true)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the stat dropdown re-points a column at another statistic", function()
     local inst, ui = openPage()
@@ -188,7 +188,7 @@ test("Columns: the stat dropdown re-points a column at another statistic", funct
     assertEqual(after[1], "Absorbs")
     assertEqual(#after, #before, "re-pointing a column must not add or remove one")
     for i = 2, #before do assertEqual(after[i], before[i]) end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: Move left swaps a column with its neighbour", function()
     local inst, ui = openPage()
@@ -201,7 +201,7 @@ test("Columns: Move left swaps a column with its neighbour", function()
     assertEqual(after[2], before[1])
     assertEqual(#after, #before)
     for i = 3, #before do assertEqual(after[i], before[i], "column " .. i .. " must not move") end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: Move right swaps a column with its neighbour", function()
     local inst, ui = openPage()
@@ -212,7 +212,7 @@ test("Columns: Move right swaps a column with its neighbour", function()
     local after = statKeys(inst)
     assertEqual(after[1], before[2])
     assertEqual(after[2], before[1])
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: Remove drops exactly that column", function()
     local inst, ui = openPage()
@@ -227,7 +227,7 @@ test("Columns: Remove drops exactly that column", function()
     for _, key in ipairs(after) do
         assertTrue(key ~= before[2], before[2] .. " is still in the array")
     end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the last column cannot be removed", function()
     local inst = T.load()
@@ -245,7 +245,7 @@ test("Columns: the last column cannot be removed", function()
     ui.remove(1).callbacks["OnClick"]()
     assertEqual(#storedColumns(inst), 1, "the last column was removed")
     assertTrue(#inst.mocks.__chat > chatBefore, "the refusal must be explained")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: Add appends the picked statistic, sized from the catalog", function()
     local inst, ui = openPage()
@@ -260,14 +260,14 @@ test("Columns: Add appends the picked statistic, sized from the catalog", functi
     assertEqual(cols[#cols].width, inst.NS.Constants.STAT_BY_KEY["Absorbs"].defaultWidth,
         "the width comes from the catalog, so a new stat arrives sized for its own magnitude")
     assertEqual(cols[#cols].showBar, true)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: Add with nothing picked does nothing", function()
     local inst, ui = openPage()
     local before = #storedColumns(inst)
     ui.addButton.callbacks["OnClick"]()
     assertEqual(#storedColumns(inst), before)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- A stat is never offered twice
@@ -287,7 +287,7 @@ test("Columns: the Add picker offers only statistics not already shown", functio
     end
     assertEqual(n, #inst.NS.Constants.STATS - #storedColumns(inst))
     assertTrue(n > 0, "the shipped window leaves three statistics free")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: a column's own picker offers the free stats PLUS the one it shows", function()
     local inst, ui = openPage()
@@ -302,7 +302,7 @@ test("Columns: a column's own picker offers the free stats PLUS the one it shows
             cols[i].stat .. " is shown by another column and must not be offered here")
     end
     assertEqual(ui.dropdowns[1].value, mine)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the Add section says so rather than offering an empty picker", function()
     local inst = T.load()
@@ -317,7 +317,7 @@ test("Columns: the Add section says so rather than offering an empty picker", fu
     assertEqual(#ui.dropdowns, ui.count,
         "no Add picker should be drawn when nothing is left to add")
     assertEqual(#ui.buttons, ui.count * 3, "and no Add button either")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the picker never offers a choice NS.SetByPath would refuse", function()
     -- The invariant from the other side: whatever the Add picker offers must
@@ -332,7 +332,7 @@ test("Columns: the picker never offers a choice NS.SetByPath would refuse", func
         local ok, err = inst.NS.SetByPath("window.columns", cols)
         assertTrue(ok, "the picker offers " .. key .. " but the seam refuses it: " .. tostring(err))
     end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- commit() checks the seam's answer
@@ -358,7 +358,7 @@ test("Columns: a refused write is REPORTED and the page is not repainted", funct
     local said = table.concat(inst.mocks.__chat, "\n", chatBefore + 1, #inst.mocks.__chat)
     assertTrue(said:find("the seam said no", 1, true) ~= nil,
         "the seam's own reason must be printed, got: " .. said)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: an accepted write IS repainted", function()
     -- The other half of the case above: without this, "never repaints" would pass
@@ -370,7 +370,7 @@ test("Columns: an accepted write IS repainted", function()
     ui.sliders[1]:__fire("OnMouseUp", 120)
     inst.NS.RefreshOptionsPanel = real
     assertEqual(repaints, 1)
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: every mutation goes through NS.SetByPath, never straight into the profile", function()
     local inst, ui = openPage()
@@ -396,7 +396,7 @@ test("Columns: every mutation goes through NS.SetByPath, never straight into the
         assertEqual(path, "window.columns",
             "a direct table write would be a second seam that looks identical and announces nothing")
     end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: the stored array is never the page's own working copy", function()
     local inst, ui = openPage()
@@ -407,7 +407,7 @@ test("Columns: the stored array is never the page's own working copy", function(
     assertTrue(storedColumns(inst) ~= first,
         "the seam rebuilds the array entry by entry, so each write installs a fresh table")
     assertEqual(first[1].width, 120, "the previous array must not have been mutated in place")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- Combat
@@ -428,7 +428,7 @@ test("Columns: no mutation is applied under combat lockdown", function()
     inst.mocks.setRestricted(false)
     ui.sliders[1]:__fire("OnMouseUp", 200)
     assertEqual(storedColumns(inst)[1].width, 200, "and it works again once combat drops")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- The width range, stated twice and checked against itself
@@ -450,7 +450,7 @@ test("Columns: the width slider's range matches the carve-out's validator", func
     assertTrue(write(ui.sliders[1].max), "the slider's ceiling must be a writable width")
     assertFalse(write(ui.sliders[1].min - 1))
     assertFalse(write(ui.sliders[1].max + 1))
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 test("Columns: a width the slider can produce is never refused by the seam", function()
     local inst, ui = openPage()
@@ -460,7 +460,7 @@ test("Columns: a width the slider can produce is never refused by the seam", fun
             { { stat = "DamageDone", width = width, showBar = true } })
         assertTrue(ok, "the slider can produce " .. width .. " but the seam refused: " .. tostring(err))
     end
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")
 
 -- ---------------------------------------------------------------------------
 -- A column whose stat this build does not have
@@ -484,4 +484,4 @@ test("Columns: a stat from a newer build is still LISTED so the player can remov
         if widget.text == inst.NS.L["Remove column"] then headings = headings + 1 end
     end
     assertEqual(headings, 2, "both columns need a Remove button, including the unknown one")
-end)
+end, "the Columns page is being rebuilt as tick-and-drag blocks; these cases describe the width slider, the show-bar checkbox and the add/remove/move buttons, none of which the page still has. Rewritten in Task 4 of docs/superpowers/plans/2026-08-27-columns-page-blocks.md")

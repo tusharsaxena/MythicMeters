@@ -488,7 +488,8 @@ local WINDOW_TEMPLATE = {
     -- columns — the ordered stat list, left to right
     -- -----------------------------------------------------------------------
     --
-    -- Filled by NS.DefaultWindow from Constants.DEFAULT_STAT_KEYS rather than
+    -- Filled by NS.DefaultWindow from Constants.STATS -- the whole catalog, with
+    -- Constants.DEFAULT_STAT_KEYS choosing which of them ship enabled -- rather than
     -- written out here, so the catalog stays the single source of truth for
     -- which stats exist and which ship enabled (core/Constants.lua).
     columns = {},
@@ -535,18 +536,25 @@ function NS.DefaultWindow(id, name)
     w.id = id
     if name then w.name = name end
 
-    -- Columns are derived rather than literal: adding a stat to the catalog with
-    -- defaultEnabled = true puts it in every new window with no edit here, and
-    -- the ORDER is the catalog's order. `showBar` is true for every default
-    -- column — the bar is what makes the grid readable at a glance, and a
-    -- player who wants numbers only turns it off per column.
+    -- Columns are derived rather than literal, and THE CATALOG IS THE LIST now:
+    -- every statistic gets an entry, and DEFAULT_STAT_KEYS names the prefix of it
+    -- that ships ON. Adding a statistic to the catalog therefore puts it on every
+    -- new window with no edit here -- ticked if it carries `defaultEnabled`,
+    -- present and unticked if it does not, where before it was simply absent and
+    -- had to be added by hand on a page that no longer has an add button.
+    --
+    -- The two loops are also what makes the enabled-first invariant true of a
+    -- fresh window without a sort: everything the first emits is enabled and
+    -- everything the second emits is not.
+    local shipped = {}
     for _, key in ipairs(Const.DEFAULT_STAT_KEYS) do
-        local stat = Const.STAT_BY_KEY[key]
-        w.columns[#w.columns + 1] = {
-            stat    = key,
-            width   = stat and stat.defaultWidth or 80,
-            showBar = true,
-        }
+        shipped[key] = true
+        w.columns[#w.columns + 1] = { stat = key, enabled = true }
+    end
+    for _, stat in ipairs(Const.STATS) do
+        if not shipped[stat.key] then
+            w.columns[#w.columns + 1] = { stat = stat.key, enabled = false }
+        end
     end
 
     return w
