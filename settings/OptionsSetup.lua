@@ -27,7 +27,7 @@ local addonName, NS = ...
 -- which is not what "restore defaults" means to anyone (options-ui-§3).
 --
 -- EVERYTHING ELSE IN THE PROFILE IS VETOED TOO, and that is not the loophole it
--- looks like. "Reset all settings" IS a profile reset now -- `afterRestoreAll`
+-- looks like. "Reset all settings" IS a profile reset now -- `resetProfile`
 -- below hands the whole thing to AceDB -- so walking the schema first and writing
 -- each row's default into the profile would announce CONFIG_CHANGED once per row
 -- for values that are about to be discarded whole, and would still leave the
@@ -104,29 +104,32 @@ local descriptor = {
 
     skipRestoreAll = vetoedFromResetAll,
 
-    -- RESET ALL SETTINGS IS A PROFILE RESET. The player asked for the equivalent
-    -- of a brand-new profile, and that is one call: AceDB empties this profile
-    -- (and only this one -- the profile LIST is untouched, which is the rule the
-    -- Profiles veto above exists for), the defaults merge back, and
-    -- `OnProfileReset` lands on core/Database.lua's OnProfileChanged, which runs
-    -- the migrations, re-seeds a single default window through SeedWindows and
-    -- publishes PROFILE_CHANGED. Every window, the open panel and the
-    -- aggregator's caches rebuild off that one message, exactly as they do for a
-    -- profile switch.
+    -- RESET ALL SETTINGS IS A PROFILE RESET (options-ui-§12), and `resetProfile` is the
+    -- library field that says so (LibKa0s-Options-1.0 minor 9). It used to be a
+    -- hand-written `afterRestoreAll` here, and in eight sibling addons -- one policy
+    -- the standard forbids varying, restated once per repo.
+    --
+    -- With the field supplied the library narrows its own row walk to the sessionOnly
+    -- rows before calling this, so the veto above is belt to that braces on the live
+    -- path; it is the WHOLE policy on the degraded one, where there is no library to
+    -- do the narrowing.
+    --
+    -- The player asked for the equivalent of a brand-new profile, and that is one
+    -- call: AceDB empties this profile (and only this one -- the profile LIST is
+    -- untouched, which is the rule the Profiles veto exists for), the defaults merge
+    -- back, and `OnProfileReset` lands on core/Database.lua's OnProfileChanged, which
+    -- runs the migrations, re-seeds a single default window through SeedWindows and
+    -- publishes PROFILE_CHANGED. Every window, the open panel and the aggregator's
+    -- caches rebuild off that one message, exactly as they do for a profile switch.
     --
     -- It is deliberately DESTRUCTIVE in the one way the old sweep was not: extra
     -- windows are deleted rather than restyled, and window names go back to the
     -- shipped one. That is what "a new profile" means, and the popup asks first.
     --
-    -- The row walk above is not a second implementation of this: it is vetoed
-    -- down to the sessionOnly rows, which are the only settings NOT in the
-    -- profile and therefore the only ones a profile reset cannot reach.
-    --
     -- Positions come back for free -- they live in the profile -- so there is no
-    -- ResetPositions call here any more. A degraded install with no db has
-    -- nothing to reset and says so by doing nothing, which is honest: there is no
-    -- storage to restore.
-    afterRestoreAll = function()
+    -- ResetPositions call any more. A degraded install with no db has nothing to
+    -- reset and says so by doing nothing, which is honest.
+    resetProfile = function()
         local db = NS.db
         if db and db.ResetProfile then db:ResetProfile() end
     end,
@@ -267,7 +270,12 @@ if not lib then
                 NS.ApplyDefault(row)
             end
         end
-        if descriptor.afterRestoreAll then descriptor.afterRestoreAll() end
+        -- Then the profile itself, which IS the reset. On the live path the library
+        -- calls this (LibKa0s-Options-1.0 minor 9's `resetProfile`); here there is no
+        -- library, so the stub makes the same call. It exists because the LIBRARY is
+        -- missing, not the db, and the user whose panel will not open is exactly the
+        -- user who needs "reset everything".
+        if descriptor.resetProfile then descriptor.resetProfile() end
     end
 
     NS.RegisterOptionsPage = function() end

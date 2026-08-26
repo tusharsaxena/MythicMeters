@@ -438,11 +438,17 @@ They are now the **same act**, deliberately: **General → Reset all settings** 
 AceDB and is the equivalent of starting a brand-new profile.
 
 ```lua
-afterRestoreAll = function()
+resetProfile = function()
     local db = NS.db
     if db and db.ResetProfile then db:ResetProfile() end
 end,
 ```
+
+`resetProfile` is `LibKa0s-Options-1.0` **minor 9**'s descriptor field, added so this policy stops
+being restated once per addon — nine repos were writing the same hand-rolled `afterRestoreAll`. With
+it supplied the library narrows its own row walk to the `sessionOnly` rows *before* consulting
+`skipRestoreAll`, so the veto below is belt to that braces on the live path and the whole policy on
+the degraded one, where there is no library to do the narrowing.
 
 `db:ResetProfile()` empties the **active** profile — and only that one; the profile *list* is
 untouched, which is the line the Profiles veto has always been about — the defaults merge back, and
