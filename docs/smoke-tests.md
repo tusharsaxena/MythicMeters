@@ -1203,7 +1203,8 @@ misclick.
 **Steps.**
 1. Channel = **Print to myself**. Metric = **Damage**. Lines = **5**. Click **Print to Chat**.
 2. Read your own chat frame. Ask someone in the group whether they saw anything.
-3. Only once that is clean, work outward: Say · Party · Raid · Instance · Guild · Whisper.
+3. Only once that is clean, work outward: Say · Party · Raid · Instance · Guild · Whisper ·
+   Whisper my target.
 
 **Pass.**
 - **Self prints to your own frame and reaches nobody.** Every line carries the cyan `[MM]` banner,
@@ -1242,6 +1243,14 @@ misclick.
   a beat, five more. That extra second per batch is what keeps the server's message counter from
   swallowing the tail.
 - **Whisper** with a name in the box reaches that character and nobody else.
+- **Whisper my target** takes the recipient off your current target instead of the box, and the box
+  is hidden for it. Target a group member and send: they get it. Target a **cross-realm** member and
+  confirm it still arrives — the name is read with its realm, and dropping the realm would whisper
+  whoever holds that name on yours. With **nothing targeted** it says "You have no target to whisper
+  to."; with a **boss or an NPC** targeted, "Your target is not a player." Neither sends anything,
+  and neither may silently print to you instead.
+- **The target is read at the click, not when the modal opened.** Open the modal with one target,
+  switch targets, then send: it goes to the second.
 - **Whisper to a name nobody is playing stops after the first line.** Type a nonsense name and send
   20 lines: the game answers with its own "No player named ... is currently playing", the addon says
   **"There is nobody called '...' to whisper to. The rest of the export was not sent."** once, and
@@ -1262,7 +1271,7 @@ misclick.
   rather than a window's appearance. Metric is not among them: the modal always seeds it from the
   window it was opened from, so there is nothing to remember there.
 - **The General page shows the same three values** under an **Export** group: Default channel,
-  Whisper target, Chat lines. The panel and the modal are two views of one preference, so
+  Whisper recipient, Chat lines. The panel and the modal are two views of one preference, so
   changing one must move the other — change Chat lines to 10 on the panel with the modal closed, then
   re-open the modal and confirm it reads `Lines: 10`.
 - `/mm get export.channel` and `/mm set export.lines 10` work on the same rows, as they do for any

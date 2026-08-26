@@ -1437,7 +1437,7 @@ NS.Schema = {
         path = "export.whisperTo", type = "string", default = "",
         dialogControl = "EditBox", maxLetters = 48,
         page = "general", group = L["Export"],
-        label = L["Whisper target"],
+        label = L["Whisper recipient"],
         desc = L["Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."],
         validate = function(v) return type(v) == "string" end,
     },

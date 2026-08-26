@@ -856,10 +856,69 @@ test("Export.ResolveChannel trims a whisper target and refuses an empty one", fu
     assertNil((ResolveChannel("WHISPER", nil)))
 end)
 
+test("The TARGET channel whispers whoever the player has targeted", function()
+    -- The whole feature: the recipient comes off the game rather than out of a
+    -- box. Clicking a name in the grid beats typing it correctly.
+    local inst = T.load()
+    local ResolveChannel = inst.NS.Export.ResolveChannel
+
+    inst.mocks.setUnit("target", { guid = "Player-1-00000001", name = "Kaosz" })
+    local chatType, target = ResolveChannel("TARGET")
+    assertEqual(chatType, "WHISPER")
+    assertEqual(target, "Kaosz")
+
+    -- The stored whisper name is NOT consulted: these are two channels, not one
+    -- channel with a mode, and reading the box here would send a target whisper
+    -- to whoever was last typed.
+    -- red under: falling through to the WHISPER branch.
+    local _, ignored = ResolveChannel("TARGET", "Somebodyelse")
+    assertEqual(ignored, "Kaosz")
+end)
+
+test("A cross-realm target keeps its realm, because a whisper needs it", function()
+    -- UnitName drops the realm, which would address the whisper to whoever holds
+    -- that name on THIS realm — a stranger.
+    -- red under: reading UnitName instead of GetUnitName(unit, true).
+    local inst = T.load()
+    inst.mocks.setUnit("target",
+        { guid = "Player-2-00000001", name = "Kaosz", realm = "Draenor" })
+    assertEqual(inst.NS.Export.TargetName(), "Kaosz-Draenor")
+end)
+
+test("TargetName refuses no target and a target that is not a player, separately", function()
+    -- Two mistakes, two sentences: nothing targeted at all, and a target that
+    -- cannot read a whisper. One message for both would leave the player looking
+    -- for a typo in a name they never typed.
+    local inst = T.load()
+    local TargetName = inst.NS.Export.TargetName
+
+    inst.mocks.setUnit("target", nil)
+    local name, reason = TargetName()
+    assertNil(name)
+    assertEqual(reason, inst.NS.L["You have no target to whisper to."])
+
+    inst.mocks.setUnit("target",
+        { guid = "Creature-1-00000001", name = "Ulgrax", isPlayer = false })
+    name, reason = TargetName()
+    assertNil(name)
+    assertEqual(reason, inst.NS.L["Your target is not a player."])
+end)
+
+test("TARGET with nothing targeted resolves to SELF rather than to a broken send", function()
+    -- The safe landing, and the reason onPrintToChat asks TargetName first: this
+    -- one is silent, and a button that silently prints to you when you asked it
+    -- to whisper somebody reads as broken.
+    local inst = T.load()
+    inst.mocks.setUnit("target", nil)
+    assertNil((inst.NS.Export.ResolveChannel("TARGET")))
+end)
+
 test("Export.ResolveChannel takes every other key from the catalog", function()
     local ResolveChannel = T.NS.Export.ResolveChannel
     for _, channel in ipairs(Const.EXPORT_CHANNELS) do
-        if channel.chatType and channel.key ~= "WHISPER" then
+        -- The two whisper rows are excluded: neither takes its recipient from
+        -- the key, so neither can be resolved without one.
+        if channel.chatType and channel.key ~= "WHISPER" and channel.key ~= "TARGET" then
             assertEqual((ResolveChannel(channel.key)), channel.chatType,
                 channel.key .. " must resolve to its own chat type")
         end

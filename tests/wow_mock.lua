@@ -1362,6 +1362,13 @@ local function build()
             name      = spec.name,
             classFile = spec.classFile or spec.class or "WARRIOR",
             role      = spec.role or "NONE",
+            -- An NPC is a unit too. `isPlayer = false` is the target
+            -- modules/Export.lua's "Whisper my target" channel has to refuse.
+            isPlayer  = spec.isPlayer ~= false,
+            -- The realm a cross-realm name carries, for GetUnitName's
+            -- showServerName form. Absent for a same-realm unit, which is what
+            -- makes the two forms distinguishable in a test.
+            realm     = spec.realm,
         }
     end
     M.setUnit = setUnit
@@ -1515,7 +1522,20 @@ local function build()
         local ua, ub = unit(a), unit(b)
         return ua ~= nil and ub ~= nil and ua.guid == ub.guid
     end
-    M.UnitIsPlayer = function(token) return unit(token) ~= nil end
+    M.UnitIsPlayer = function(token)
+        local u = unit(token)
+        return u ~= nil and u.isPlayer ~= false
+    end
+
+    --- Blizzard's realm-qualifying name reader. With `showServerName` a
+    --- cross-realm unit answers "Name-Realm", which is the form a whisper needs;
+    --- without it, and for a same-realm unit, it is the plain name.
+    M.GetUnitName = function(token, showServerName)
+        local u = unit(token)
+        if not u then return nil end
+        if showServerName and u.realm then return u.name .. "-" .. u.realm end
+        return u.name
+    end
     M.UnitIsDead   = function() return false end
 
     -- Unit health, for the feign-death filter in modules/Feign.lua. There was no

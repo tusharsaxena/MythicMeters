@@ -624,6 +624,49 @@ local function channelRow(key)
     return nil
 end
 
+--- Who the player currently has targeted, as a name a whisper can be addressed to.
+---
+--- THE POINT OF THE "Whisper my target" CHANNEL. It is not a mode of the Whisper
+--- row: the two differ in where the name comes from — a box the player types
+--- into, or the game — and that is the whole feature. Clicking a name in the
+--- grid and pressing the glyph beats typing "Kaosz-Draenor" correctly.
+---
+--- READ AT SEND TIME, never stored. A remembered target is a name that was true
+--- when the modal was opened and is a stranger by the time the button is pressed.
+---
+--- GetUnitName with `showServerName` is what qualifies a cross-realm target as
+--- Name-Realm, which is the form a whisper needs; UnitName drops the realm and
+--- would address the whisper to whoever holds that name on THIS realm. It falls
+--- back to UnitName only where the client has no GetUnitName at all.
+---
+--- The two refusals are separate strings because they are separate mistakes:
+--- nothing targeted at all, and a target that cannot read a whisper.
+---
+--- @return string|nil name, string|nil reason  exactly one is non-nil
+function Export.TargetName()
+    local exists = _G.UnitExists
+    if exists and not exists("target") then
+        return nil, L["You have no target to whisper to."]
+    end
+
+    local isPlayer = _G.UnitIsPlayer
+    if isPlayer and not isPlayer("target") then
+        return nil, L["Your target is not a player."]
+    end
+
+    local get = _G.GetUnitName
+    local name = get and get("target", true)
+    if type(name) ~= "string" or name == "" then
+        local plain = _G.UnitName
+        name = plain and plain("target")
+    end
+    if type(name) ~= "string" or name == "" then
+        return nil, L["You have no target to whisper to."]
+    end
+
+    return name, nil
+end
+
 --- Turn a stored channel choice into the pair SendChatMessage wants.
 ---
 --- SELF answers nil, and that is why it is the default: a misclick on a modal
@@ -649,6 +692,16 @@ function Export.ResolveChannel(channel, target)
     channel = channel:upper()
 
     if channel == "SELF" then return nil, nil end
+
+    -- The recipient comes off the game rather than off the profile, and a
+    -- missing one lands on the same "keep it to yourself" nil the empty box
+    -- does. onPrintToChat asks FIRST, where there is a specific sentence to say
+    -- about which of the two mistakes it was.
+    if channel == "TARGET" then
+        local name = Export.TargetName()
+        if not name then return nil, nil end
+        return "WHISPER", name
+    end
 
     if channel == "WHISPER" then
         if type(target) ~= "string" then target = nil end
@@ -1386,6 +1439,18 @@ local function onPrintToChat()
     if channel == "WHISPER" and tostring(whisperTo):match("^%s*$") then
         if NS.Print then NS.Print(L["Enter a name to whisper to."]) end
         return
+    end
+
+    -- The same catch for the channel that reads its recipient off the game: no
+    -- target, or a target that cannot be whispered, would resolve to the silent
+    -- SELF as well. Asked here, at the click, because the answer changes between
+    -- opening the modal and pressing the button.
+    if channel == "TARGET" then
+        local _, noTarget = Export.TargetName()
+        if noTarget then
+            if NS.Print then NS.Print(noTarget) end
+            return
+        end
     end
 
     local statKey = Export.ResolveMetric()

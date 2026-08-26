@@ -407,6 +407,10 @@ Constants.NAME_COLUMN_WIDTH = 118
 --                nothing to hand it: SELF never sends at all.
 --   selfOnly     print through NS.Print and send nothing.
 --   needsTarget  the whisper-name field is meaningful for this row.
+--   usesUnitTarget  the recipient is whoever the player has TARGETED, read at
+--                send time. The two whisper rows differ only in where the name
+--                comes from — a box the player types into, or the game — which
+--                is why they share a chatType and neither is the other's mode.
 --
 -- SELF IS THE SHIPPED DEFAULT, and that is a safety decision rather than a
 -- timid one: every other row puts the player's numbers in front of other
@@ -430,6 +434,7 @@ Constants.EXPORT_CHANNELS = {
     { key = "INSTANCE_CHAT", label = "Instance",        chatType = "INSTANCE_CHAT" },
     { key = "GUILD",         label = "Guild",           chatType = "GUILD" },
     { key = "WHISPER",       label = "Whisper",         chatType = "WHISPER", needsTarget = true },
+    { key = "TARGET",        label = "Whisper my target", chatType = "WHISPER", usesUnitTarget = true },
     { key = "SELF",          label = "Self only",       chatType = nil,             selfOnly = true },
 }
 

@@ -151,6 +151,11 @@ and `Export.NoteSystemMessage` catches the server's *"no player named …"* answ
 filled in but wrong, cancelling the rest of the dump so one mistyped name is one message rather than
 one per line.
 
+The catalog carries **two whisper rows**, and they are two channels rather than one channel with a
+mode: `WHISPER` takes its recipient from `export.whisperTo`, and `TARGET` reads it off whoever the
+player has targeted at the moment the button is pressed. Nothing about the target is stored — a
+remembered one is a name that was true when the modal opened.
+
 `schemaVersion` 4 retires the channel `AUTO`, which used to resolve its own destination at send time
 and was removed as ambiguous: choosing to print is choosing an audience, and a row that picks the
 audience leaves the one fact the player needs unstated. A stored `AUTO` folds to `SELF`.

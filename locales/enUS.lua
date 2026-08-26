@@ -583,7 +583,7 @@ L["Export"] = "Export"
 L["Default channel"] = "Default channel"
 L["Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."] =
     "Where 'Print to Chat' sends its lines. Self only prints to your own chat frame and sends nothing to the group, which is why it is the default: a misclick cannot reach a raid."
-L["Whisper target"] = "Whisper target"
+L["Whisper recipient"] = "Whisper recipient"
 L["Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."] =
     "Who to whisper when the channel is Whisper. Cross-realm names need the realm, as Name-Realm."
 L["Chat lines"] = "Chat lines"
@@ -666,6 +666,7 @@ L["Raid"] = "Raid"
 L["Instance"] = "Instance"
 L["Guild"] = "Guild"
 L["Whisper"] = "Whisper"
+L["Whisper my target"] = "Whisper my target"
 L["Self only"] = "Self only"
 
 -- The refusal, shown in red in the modal and printed by the slash verb. Both
@@ -679,6 +680,10 @@ L["Export is not available while the game restricts combat data."] =
 -- which of the several possible nothings it was.
 L["There is nothing to export."] = "There is nothing to export."
 L["Enter a name to whisper to."] = "Enter a name to whisper to."
+-- "Whisper my target" reads the recipient off the game rather than off the box,
+-- so its two failures are the player's target rather than their typing.
+L["You have no target to whisper to."] = "You have no target to whisper to."
+L["Your target is not a player."] = "Your target is not a player."
 L["No window named '%s'."] = "No window named '%s'."
 L["Exported %d rows to chat."] = "Exported %d rows to chat."
 
