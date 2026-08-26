@@ -60,6 +60,11 @@ local PAGE = "columns"
 
 local H = NS.Helpers or {}
 
+-- The gap between the page's explanatory line and the block list under it. The
+-- same number LibKa0s puts below a section heading, so this page's spacing is
+-- the collection's spacing rather than one file's taste.
+local SECTION_GAP = 10
+
 local function print_(line)
     if NS.Print then NS.Print(line) end
 end
@@ -242,6 +247,14 @@ local function render(ctx)
     end
 
     H.TextRow(ctx, L["Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."])
+
+    -- The blocks are a LIST, and a list that starts flush against the paragraph
+    -- explaining it reads as part of the same paragraph. Every other page gets
+    -- this gap from H.Section's own bottom spacer; this page has no heading to
+    -- carry one, so it asks for the same measurement directly rather than
+    -- inventing a second opinion about what a gap is.
+    local scroll = H.EnsureScroll and H.EnsureScroll(ctx)
+    if scroll and H.AddSpacer then H.AddSpacer(scroll, SECTION_GAP) end
 
     NS.ReorderableBlocks(ctx, {
         items    = items(w),
