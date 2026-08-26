@@ -569,10 +569,10 @@ L["Debug console"] = "Debug console"
 L["Show or hide the on-screen debug console. Session only; it does not turn debug logging on."] =
     "Show or hide the on-screen debug console. Session only; it does not turn debug logging on."
 L["Reset all settings"] = "Reset all settings"
-L["Reset every setting on every page, for every window, back to the addon defaults. Profiles are left alone."] =
-    "Reset every setting on every page, for every window, back to the addon defaults. Profiles are left alone."
-L["Reset every window and every setting to the addon defaults? The active profile is the only one affected."] =
-    "Reset every window and every setting to the addon defaults? The active profile is the only one affected."
+L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."] =
+    "Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."
+L["Reset this profile to the addon defaults? Every setting goes back to its shipped value and your extra windows are DELETED \226\128\148 you come back with one fresh window, exactly as if you had made a new profile. Your other profiles are not affected."] =
+    "Reset this profile to the addon defaults? Every setting goes back to its shipped value and your extra windows are DELETED \226\128\148 you come back with one fresh window, exactly as if you had made a new profile. Your other profiles are not affected."
 L["Defaults"] = "Defaults"
 
 -- Export defaults. These four are what the export modal opens showing; every

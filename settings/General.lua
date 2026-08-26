@@ -39,14 +39,23 @@ local H = NS.Helpers or {}
 -- Reset everything
 -- ---------------------------------------------------------------------------
 --
--- Irreversible and wide: every page, for every window, in the active profile.
+-- Irreversible and wide: this is a PROFILE RESET, so it is the equivalent of
+-- starting a brand-new profile. Every setting on every page goes back to the
+-- shipped value, and the extra windows are DELETED rather than restyled — you
+-- come back with one fresh window. Other profiles are untouched.
+--
+-- The popup says the destructive part out loud, because it is the part that
+-- surprises: "reset settings" does not sound like "delete my three windows", and
+-- an OnAccept that does something the text did not warn about is how a player
+-- loses a layout they spent an evening on.
+--
 -- The body is Helpers.RestoreAllDefaults so this popup, the header Defaults
 -- button and `/mm resetall` are ONE implementation — the popup and the slash
 -- command cannot drift into resetting different things — and so the Profiles
 -- veto (settings/OptionsSetup.lua's skipRestoreAll) applies to all three
 -- rather than to whichever path someone remembered.
 StaticPopupDialogs["MULTIMETERS_RESET_ALL"] = {
-    text         = L["Reset every window and every setting to the addon defaults? The active profile is the only one affected."],
+    text         = L["Reset this profile to the addon defaults? Every setting goes back to its shipped value and your extra windows are DELETED \226\128\148 you come back with one fresh window, exactly as if you had made a new profile. Your other profiles are not affected."],
     button1      = L["Yes"],
     button2      = L["No"],
     timeout      = 0,
@@ -81,7 +90,7 @@ local function Build(mainCategory)
 
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
-            tooltip = L["Reset every setting on every page, for every window, back to the addon defaults. Profiles are left alone."],
+            tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."],
             onClick = function() StaticPopup_Show("MULTIMETERS_RESET_ALL") end,
         }, nil)
 

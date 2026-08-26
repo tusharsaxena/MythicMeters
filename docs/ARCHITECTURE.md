@@ -189,7 +189,7 @@ that a load-time cycle between two majors.
 | `get <path>` | Read one setting |
 | `set <path> <value>` | Write one setting |
 | `reset <path>` | Reset one setting to its default |
-| `resetall` | Reset every setting to its default (Profiles rows are vetoed) |
+| `resetall` | Reset the active profile to the shipped defaults — a **profile reset**, so it is the equivalent of a new profile: extra windows are deleted and one fresh window is left. The same act as Profiles → Reset Profile; other profiles are never touched. See [settings-panel.md](settings-panel.md#reset-all-settings-vs-reset-profile) |
 | `debug` | Toggle the console window; `on` / `off` set session logging; **`diag`** prints the diagnostic report; **`recap`** prints the death-recap probe alone |
 | `perf` | Performance capture — `/mm perf help` for the run's own verbs |
 | `version` | Print the addon version, read from the TOC manifest |

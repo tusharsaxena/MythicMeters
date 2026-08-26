@@ -422,11 +422,25 @@ test("Options: skipRestoreAll vetoes the profiles page from a global reset", fun
 
     assertEqual(seen["state.pretendProfileRow"], nil,
         "a profiles row was reset — the veto is not wired to the descriptor")
-    assertTrue(seen["window.frame.width"] ~= nil, "the reset did not sweep the ordinary rows")
-    assertTrue(seen["enabled"] ~= nil)
+
+    -- AND NOTHING THAT LIVES IN THE PROFILE. "Reset all settings" is a profile
+    -- reset now, so writing each row's default first would announce
+    -- CONFIG_CHANGED once per row for values about to be discarded whole. What
+    -- the row walk is left with is the sessionOnly rows, which are the only
+    -- settings a profile reset cannot reach — their storage is their own set().
+    -- red under: a predicate that vetoes only the profiles page.
+    assertEqual(seen["window.frame.width"], nil,
+        "a profile-backed row was written just before the profile was discarded")
+    assertEqual(seen["enabled"], nil)
+    assertTrue(seen["state.testMode"] ~= nil,
+        "the session-only rows still have to be swept row by row")
+    assertTrue(seen["state.debugConsole"] ~= nil)
 end)
 
 test("Options: a global reset restores window POSITIONS, which no schema row owns", function()
+    -- They come back with the rest of the profile now rather than from a
+    -- ResetPositions call in afterRestoreAll, which is why this case still holds
+    -- with that call gone.
     local inst = T.load()
     local NSi = inst.NS
     for _, w in ipairs(NSi.Database.GetWindows()) do

@@ -66,7 +66,7 @@ Four are not:
 - **Profiles** — restoring here would delete the player's profiles, which is not what anyone means
   by restoring a default (`options-ui-§3`). This is enforced **twice**: the button is suppressed on
   the page, and `settings/OptionsSetup.lua`'s `skipRestoreAll` predicate
-  (`row.page == "profiles"`) vetoes those rows from `/mm resetall`, the General page's
+  (`row.page == "profiles"` **or** `row.path == "window.name"`) vetoes those rows from `/mm resetall`, the General page's
   "Reset all settings" popup and the header Defaults sweep alike. Two enforcements of one rule,
   because the destructive controls this page hosts are the library's rather than ours — and because
   the degradation stub in `settings/OptionsSetup.lua` runs its own reset loop with **the same
@@ -305,7 +305,7 @@ or restore, so none of them can be a schema row.
 |---|---|---|
 | **Reset position** | Frame | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
 | **Reset meter data** | Data | Confirms, then `NS.Provider.Reset()`. Irreversible and reaches **outside** this addon: `C_DamageMeter.ResetAllCombatSessions` wipes the data Blizzard's own meter is showing too. Routed through the provider and never straight at the Compat shim — the provider is the only permitted caller of the meter shims, and it also forgets the memoized availability answer and announces `METER_RESET`. |
-| **Reset all settings** | General | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift and the Profiles veto applies to all three. Runs `afterRestoreAll`, which resets every window position. |
+| **Reset all settings** | General | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
 | **Preview mode** | General | `Helpers.SessionCheckbox` over `NS.State.preview`. Fills every window with placeholder rows so columns can be laid out without being in combat. Session-only: persisting it would mean logging in to a screen full of fake numbers. Also reachable as `/mm preview`, and implied by unlocking a window. |
 | **Debug console** | General | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The spec comes from `LibKa0s-DebugLog-1.0` itself (`D:ConsoleCheckbox()`) rather than being hand-written, so its label, tooltip and show/hide are the library's. |
 
@@ -431,3 +431,47 @@ rather than off `helpers()`, at call time:
 - `validate` → `NS.ValidateSchema`. Read off `helpers()` it was nil, so the path-resolution and
   default-agreement checks never ran in game and the one bug they exist to catch could only ever
   surface in the headless suite.
+
+## Reset all settings vs Reset Profile
+
+They are now the **same act**, deliberately: **General → Reset all settings** hands the profile to
+AceDB and is the equivalent of starting a brand-new profile.
+
+```lua
+afterRestoreAll = function()
+    local db = NS.db
+    if db and db.ResetProfile then db:ResetProfile() end
+end,
+```
+
+`db:ResetProfile()` empties the **active** profile — and only that one; the profile *list* is
+untouched, which is the line the Profiles veto has always been about — the defaults merge back, and
+`OnProfileReset` lands on `core/Database.lua`'s `OnProfileChanged`, which runs the migrations,
+re-seeds a single default window through `SeedWindows` and publishes `PROFILE_CHANGED`. Every window,
+the open panel and the aggregator's caches rebuild off that one message, exactly as they do for a
+profile switch (`architecture-§4`).
+
+So it is **destructive in a way the old sweep was not**: your extra windows are **deleted**, not
+restyled, and window names go back to the shipped one. The popup says so out loud, because "reset
+settings" does not sound like "delete my three windows" and an OnAccept that does something the text
+did not warn about is how a player loses a layout they spent an evening on.
+
+**The row walk is vetoed down to the session rows.** `skipRestoreAll` refuses the Profiles page as it
+always did, and now also refuses everything else that lives in the profile: writing each row's
+default first would announce `CONFIG_CHANGED` once per row for values about to be discarded whole,
+and would still leave the extra windows behind. What is left for the walk is exactly what a profile
+reset **cannot** reach — the `sessionOnly` rows (`state.testMode`, `state.debugConsole`), whose
+storage is their own `set()` rather than the db.
+
+Window positions come back with the rest of the profile, so `afterRestoreAll` no longer calls
+`ResetPositions`. The **Reset position** button on the Frame page is unaffected and still moves the
+active window alone.
+
+**What was wrong before.** Every `window.` path resolves against ONE window — whichever
+`NS.State.activeWindowId` names — which is exactly right for a panel click and for `/mm set`. The
+library's reset sweep walks the schema **once**, so "Reset all settings" reset the window you happened
+to have selected and left every other one untouched, while `afterRestoreAll`'s `ResetPositions`
+re-centred **all** of them: one action with two different scopes, and nothing on the button to say
+which you would get. Column arrays were missed entirely, because `window.columns` is a
+`NS.SetByPath` carve-out rather than a schema row and no `ApplyDefault` can address it.
+

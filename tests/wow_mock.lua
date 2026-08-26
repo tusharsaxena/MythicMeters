@@ -1970,6 +1970,73 @@ local function build()
 
     libs["AceEvent-3.0"] = { Embed = function(_, obj) return embedAceEvent(obj) end }
 
+    --- AceDB-3.0 with CallbackHandler's STRING-METHOD registration form.
+    ---
+    --- A DIVERGENCE FROM THE BASE, and the reason for it is that this addon uses
+    --- the form the base does not implement. CallbackHandler accepts both
+    ---
+    ---     db.RegisterCallback(obj, "OnProfileChanged", function(...) end)
+    ---     db.RegisterCallback(obj, "OnProfileChanged", "OnProfileChanged")
+    ---
+    --- and dispatches the second as `obj:method(event, ...)`. The base stores
+    --- whatever it is handed and CALLS it, so core/Database.lua's registrations --
+    --- all three of which are the string form (core/Database.lua's InitDB) --
+    --- raised "attempt to call a string value" the moment a profile was switched,
+    --- reset or copied. Nothing noticed, because nothing in the suite had reached
+    --- a profile callback: the whole PROFILE_CHANGED path was untestable.
+    ---
+    --- Wrapped rather than reimplemented: the base's AceDB is faithful about the
+    --- things that are hard to get right -- the defaults merge, the profile
+    --- table's identity surviving a reset, `db.sv` -- and this replaces exactly
+    --- the two functions that carry the dispatch.
+    local baseNewDB = libs["AceDB-3.0"].New
+    libs["AceDB-3.0"] = {
+        New = function(self, ...)
+            local db = baseNewDB(self, ...)
+
+            local registered = {}
+            local baseRegister = db.RegisterCallback
+            db.RegisterCallback = function(target, event, handler)
+                registered[event] = registered[event] or {}
+                registered[event][#registered[event] + 1] = { target = target, handler = handler }
+                -- The base still gets the FUNCTION form so its own `fire` keeps
+                -- working for anything registered that way; a string is withheld
+                -- from it, because calling one is the bug being fixed.
+                if type(handler) == "function" then baseRegister(target, event, handler) end
+            end
+
+            --- Dispatch one event to the string-form registrations.
+            ---
+            --- The base fires the function-form ones itself from inside whichever
+            --- profile call is running, so this only has to cover what was
+            --- withheld above -- and it runs AFTER that call, which is the same
+            --- order CallbackHandler gives.
+            local function fireStrings(event)
+                for _, entry in ipairs(registered[event] or {}) do
+                    local target, handler = entry.target, entry.handler
+                    if type(handler) == "string" and type(target) == "table"
+                        and type(target[handler]) == "function"
+                    then
+                        target[handler](target, event, db, db.GetCurrentProfile())
+                    end
+                end
+            end
+
+            for name, event in pairs({ SetProfile   = "OnProfileChanged",
+                                       ResetProfile = "OnProfileReset",
+                                       CopyProfile  = "OnProfileCopied" }) do
+                local base = db[name]
+                db[name] = function(...)
+                    local result = base(...)
+                    fireStrings(event)
+                    return result
+                end
+            end
+
+            return db
+        end,
+    }
+
     --- AceAddon-3.0 with the MODULE LIFECYCLE the base has no need for.
     ---
     --- Seven of this addon's files are `NS:NewModule(name, "AceEvent-3.0")`

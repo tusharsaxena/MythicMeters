@@ -205,6 +205,16 @@ second edge to catch.
   strips are about the window rather than any row. Also set **Text opacity** to 50% with Use class
   color on: the text must stay half-transparent — a class colour that resets it is one setting
   cancelling another.
+- **Reset all settings starts the profile over.** With **two or more** windows open, change something
+  visible on each (font size, width, a column added or removed), rename them, select **one** in the
+  window picker, then General → **Reset all settings**. You must come back with exactly **one** window
+  called *Meter* at the screen centre wearing the shipped defaults — the extras **deleted**, not
+  restyled. That is the point: it is a profile reset, the same act as Profiles → **Reset Profile**,
+  and the popup warns about the deletion before it happens. Confirm the two paths give the identical
+  result, and that **`/mm resetall` does too**.
+- **A reset leaves your other profiles alone.** Make a second profile on the Profiles page, switch
+  back, then reset. The profile list must be unchanged and you must still be on the profile you were
+  on — a reset empties one profile, it never deletes any.
 - **The Frame page's shape.** Three groups, in order: *Size and position*, *Border style*, *Frame
   behavior* (**not** "Row behavior" — that heading belongs to the Rows page), then *Header controls*.
   Each heading appears **once**; a heading printed twice means a row is filed under a group the page

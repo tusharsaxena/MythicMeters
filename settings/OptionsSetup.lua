@@ -24,12 +24,28 @@ local addonName, NS = ...
 -- ---------------------------------------------------------------------
 --
 -- Profiles rows are AceDBOptions-supplied and resetting them deletes user data,
--- which is not what "restore defaults" means to anyone (options-ui-§3). Named
--- ONCE because it is enforced TWICE — by the library through
+-- which is not what "restore defaults" means to anyone (options-ui-§3).
+--
+-- EVERYTHING ELSE IN THE PROFILE IS VETOED TOO, and that is not the loophole it
+-- looks like. "Reset all settings" IS a profile reset now -- `afterRestoreAll`
+-- below hands the whole thing to AceDB -- so walking the schema first and writing
+-- each row's default into the profile would announce CONFIG_CHANGED once per row
+-- for values that are about to be discarded whole, and would still leave the
+-- extra windows the player wanted gone.
+--
+-- What the row walk is left with is exactly what a profile reset CANNOT reach:
+-- `sessionOnly` rows, whose storage is their own `set()` rather than the db
+-- (`state.preview`, `state.debugConsole`). Those have to be restored row by row
+-- or they survive a reset that took everything around them.
+--
+-- Named ONCE because it is enforced TWICE -- by the library through
 -- descriptor.skipRestoreAll, and by the degradation stub's own reset loop, which
 -- has to keep working with no library at all. Two spellings of one predicate is
 -- how a reset ends up deleting profiles on exactly the install nobody tests.
-local function vetoedFromResetAll(row) return row.page == "profiles" end
+local function vetoedFromResetAll(row)
+    if row.page == "profiles" then return true end
+    return not row.sessionOnly
+end
 
 local lib = LibStub and LibStub("LibKa0s-Options-1.0", true)
 
@@ -88,14 +104,31 @@ local descriptor = {
 
     skipRestoreAll = vetoedFromResetAll,
 
-    -- Window POSITIONS are not schema rows — they are per-window instance state
-    -- the registry owns — so applyDefault never reaches them. `/mm resetall` and
-    -- the Defaults button both funnel through the library's RestoreAllDefaults,
-    -- and this hook is how they get there. It runs BEFORE the refresh, which is
-    -- load-bearing: a refresh first would paint the pre-hook values.
+    -- RESET ALL SETTINGS IS A PROFILE RESET. The player asked for the equivalent
+    -- of a brand-new profile, and that is one call: AceDB empties this profile
+    -- (and only this one -- the profile LIST is untouched, which is the rule the
+    -- Profiles veto above exists for), the defaults merge back, and
+    -- `OnProfileReset` lands on core/Database.lua's OnProfileChanged, which runs
+    -- the migrations, re-seeds a single default window through SeedWindows and
+    -- publishes PROFILE_CHANGED. Every window, the open panel and the
+    -- aggregator's caches rebuild off that one message, exactly as they do for a
+    -- profile switch.
+    --
+    -- It is deliberately DESTRUCTIVE in the one way the old sweep was not: extra
+    -- windows are deleted rather than restyled, and window names go back to the
+    -- shipped one. That is what "a new profile" means, and the popup asks first.
+    --
+    -- The row walk above is not a second implementation of this: it is vetoed
+    -- down to the sessionOnly rows, which are the only settings NOT in the
+    -- profile and therefore the only ones a profile reset cannot reach.
+    --
+    -- Positions come back for free -- they live in the profile -- so there is no
+    -- ResetPositions call here any more. A degraded install with no db has
+    -- nothing to reset and says so by doing nothing, which is honest: there is no
+    -- storage to restore.
     afterRestoreAll = function()
-        local M = NS.WindowManager
-        if M and M.ResetPositions then M:ResetPositions() end
+        local db = NS.db
+        if db and db.ResetProfile then db:ResetProfile() end
     end,
 
     -- Backs the color picker's 50 ms drag throttle. A descriptor field rather

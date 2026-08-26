@@ -598,3 +598,102 @@ test("Schema: every text surface offers face, outline, shadow and colour", funct
 
     assertEqual(#missing, 0, table.concat(missing, "; "))
 end)
+
+-- ---------------------------------------------------------------------------
+-- "Reset all settings" IS a profile reset
+-- ---------------------------------------------------------------------------
+
+test("RestoreAllDefaults resets EVERY window, not just the selected one", function()
+    -- Every `window.` path resolves against ONE window -- whichever
+    -- NS.State.activeWindowId names -- which is right for a panel click and for
+    -- `/mm set`, and was wrong for the global sweep: the library walks the schema
+    -- once, so "Reset all settings" reset the window you had selected and left
+    -- the others exactly as they were.
+    -- red under: afterRestoreAll going back to a per-row sweep.
+    local inst, first = twoWindows()
+    local NS = inst.NS
+
+    for _, w in ipairs(NS.Database.GetWindows()) do
+        w.frame.width = 999
+        w.text.size   = 30
+    end
+
+    NS.State.SetActiveWindow(first)
+    NS.Helpers.RestoreAllDefaults()
+
+    for _, w in ipairs(NS.Database.GetWindows()) do
+        assertEqual(w.frame.width, 694, "window " .. w.id .. " kept its width")
+        assertEqual(w.text.size, 11, "window " .. w.id .. " kept its font size")
+    end
+end)
+
+test("RestoreAllDefaults is the equivalent of a NEW PROFILE", function()
+    -- The requirement, stated plainly: it deletes the extra windows rather than
+    -- restyling them, and what comes back is one shipped window -- the same thing
+    -- Profiles -> Reset Profile gives, because it IS that call.
+    -- red under: afterRestoreAll restyling windows in place instead of handing
+    -- the profile to AceDB.
+    local inst = twoWindows()
+    local NS = inst.NS
+    assertEqual(#NS.Database.GetWindows(), 2)
+
+    for _, w in ipairs(NS.Database.GetWindows()) do
+        w.name        = "Renamed " .. w.id
+        w.frame.width = 999
+        w.columns     = { { stat = "Deaths", width = 44, showBar = true } }
+    end
+
+    NS.Helpers.RestoreAllDefaults()
+
+    local after = NS.Database.GetWindows()
+    assertEqual(#after, 1, "the extra window survived a reset that means 'start over'")
+    assertEqual(after[1].name, "Meter", "the shipped name is what a new profile has")
+    assertEqual(after[1].frame.width, 694)
+    assertEqual(#after[1].columns, #NS.DefaultWindow(1).columns,
+        "the column array is not a schema row, and only a profile reset reaches it")
+end)
+
+test("RestoreAllDefaults leaves the profile LIST alone", function()
+    -- The rule the Profiles veto has always been about: resetting a profile is
+    -- not deleting the player's profiles. `db:ResetProfile` empties the ACTIVE
+    -- profile and touches no other, which is exactly the line to hold.
+    -- red under: reaching for DeleteProfile, or resetting every profile.
+    local inst = T.load()
+    local NS = inst.NS
+    NS.db:SetProfile("Spare")
+    NS.db:SetProfile("Default")
+    local before = #NS.db:GetProfiles()
+    assertTrue(before >= 2, "the fixture needs a second profile to prove anything")
+
+    NS.Helpers.RestoreAllDefaults()
+
+    assertEqual(#NS.db:GetProfiles(), before, "a reset deleted a profile")
+    assertEqual(NS.db:GetCurrentProfile(), "Default", "a reset switched profile")
+end)
+
+test("A profile reset rebuilds through the ONE message, not by direct calls", function()
+    -- OnProfileReset lands on core/Database.lua's OnProfileChanged, which runs the
+    -- migrations, re-seeds through SeedWindows and publishes PROFILE_CHANGED --
+    -- and every window, the open panel and the aggregator's caches rebuild off
+    -- that one message, exactly as they do for a profile switch
+    -- (architecture-§4). A reset that emptied the profile without it would leave
+    -- every live window drawing the settings that are no longer there.
+    -- red under: afterRestoreAll emptying the profile itself rather than handing
+    -- it to db:ResetProfile.
+    --
+    -- NOT red under `db:ResetProfile(nil, true)`, the real library's
+    -- suppress-callbacks form: the harness's AceDB fires regardless of its
+    -- arguments, so that mutation passes here and would break in the client.
+    -- Recorded rather than worked around -- the fake is the vendored kit's.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local seen = 0
+    local target = NS.NewBusTarget and NS.NewBusTarget()
+    if target and target.RegisterMessage then
+        target:RegisterMessage(NS.Const.MSG.PROFILE_CHANGED, function() seen = seen + 1 end)
+    end
+
+    NS.Helpers.RestoreAllDefaults()
+    assertTrue(seen > 0, "PROFILE_CHANGED was not published, so nothing rebuilt")
+end)

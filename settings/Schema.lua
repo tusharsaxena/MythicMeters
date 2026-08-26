@@ -645,8 +645,10 @@ NS.Schema = {
 
     -- `frame.position` is deliberately NOT a row. It is written by a drag, it is
     -- four values with one meaning, and — rule R3 — it is never read back off the
-    -- live frame. NS.ResetPositions() is how a reset reaches it, wired into the
-    -- options descriptor's afterRestoreAll.
+    -- live frame. A global reset reaches it the way it reaches everything else:
+    -- "Reset all settings" is a PROFILE reset, and a position lives in the
+    -- profile. `/mm reset-positions` is the targeted verb, and it goes to
+    -- modules/WindowManager.lua, which owns re-anchoring a live frame.
 
     -- ── Header ───────────────────────────────────────────────────────────────
     {
@@ -1848,40 +1850,12 @@ end
 -- ---------------------------------------------------------------------------
 -- Positions
 -- ---------------------------------------------------------------------------
+--
+-- `NS.ResetPositions` USED TO LIVE HERE and no longer does. It existed because
+-- positions are not schema rows, so NS.ApplyDefault could not reach them, and the
+-- options descriptor's `afterRestoreAll` called it to finish a global reset. That
+-- reset is a PROFILE reset now (settings/OptionsSetup.lua): positions live in the
+-- profile, so they come back with everything else and the seam had no caller
+-- left. `/mm reset-positions` has always gone straight to
+-- modules/WindowManager.lua, which owns re-anchoring a live frame.
 
---- Move every window back to the shipped position.
----
---- Positions are not schema rows — they are written by a drag and read only from
---- config (rule R3: a cell handed a secret value makes its own geometry secret and
---- propagates that upward, so GetPoint on a live window is not something this addon
---- may do) — so `applyDefault` never reaches them and a "reset everything" would
---- leave every window exactly where it was. This is the hook that fixes that; it is
---- wired into the options descriptor's `afterRestoreAll`, which runs BEFORE the
---- panels refresh.
----
---- Delegates to modules/WindowManager.lua when it is up, because the registry owns
---- re-anchoring a live frame. The fallback writes the config and lets the next
---- render place the window, which is correct if slower, and is what a headless
---- suite with no frames exercises.
----
---- @return number  windows moved
-function NS.ResetPositions()
-    local M = NS.WindowManager
-    if M and M.ResetPositions then
-        return tonumber(M:ResetPositions()) or 0
-    end
-
-    local template = NS.WINDOW_TEMPLATE
-    local shipped  = template and template.frame and template.frame.position
-    local Database = NS.Database
-    if not (shipped and Database) then return 0 end
-
-    local moved = 0
-    for _, w in ipairs(Database.GetWindows()) do
-        if type(w.frame) == "table" then
-            w.frame.position = copy(shipped)
-            moved = moved + 1
-        end
-    end
-    return moved
-end

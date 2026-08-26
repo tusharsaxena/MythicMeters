@@ -244,9 +244,10 @@ which the flat path model has no vocabulary for, and it is written by a drag rat
 is also the one piece of window state that must never be *read back* off the live frame (rule R3).
 `modules/Window.lua` keeps an empty, invisible `anchor` frame that never receives a value and reads
 `GetPoint` off **that**; the visible window is anchored to it. Because positions have no row,
-`NS.ApplyDefault` never reaches them, so `NS.ResetPositions()` exists and is wired into the options
-descriptor's `afterRestoreAll` — without it a "reset everything" would leave every window exactly
-where it was.
+`NS.ApplyDefault` never reaches them. A global reset reaches them anyway, because "Reset all
+settings" is a **profile reset** and a position lives in the profile. (`NS.ResetPositions` used to
+exist for exactly this and was removed with its last caller; `/mm reset-positions` is the targeted
+verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a live frame.)
 
 ### `header` — the strip above the rows
 
