@@ -647,7 +647,7 @@ test("RestoreAllDefaults is the equivalent of a NEW PROFILE", function()
 
     local after = NS.Database.GetWindows()
     assertEqual(#after, 1, "the extra window survived a reset that means 'start over'")
-    assertEqual(after[1].name, "Meter", "the shipped name is what a new profile has")
+    assertEqual(after[1].name, "Multi Meters #1", "the shipped name is what a new profile has")
     assertEqual(after[1].frame.width, 694)
     assertEqual(#after[1].columns, #NS.DefaultWindow(1).columns,
         "the column array is not a schema row, and only a profile reset reaches it")

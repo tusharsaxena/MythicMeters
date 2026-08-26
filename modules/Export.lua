@@ -90,11 +90,18 @@ local EM_DASH = " \226\128\148 "
 -- so a change to MAX_ROWS moves both.
 local LINE_CHOICES = { 3, 5, 10, 20, Const.MAX_ROWS }
 
--- Seconds between two lines of a chat dump. Roughly three a second, which is
--- under every flood threshold the server enforces and still fast enough that a
--- five-line ranking is on screen before anybody has read the first line. A
--- forty-line dump takes about twelve seconds, and arriving whole is the point.
-local CHAT_STAGGER = 0.3
+-- The shape of a staggered chat dump. See "Getting a dump past the server" for
+-- the rules these three numbers answer to.
+--
+-- CHAT_STAGGER is roughly three lines a second: inside the byte budget, and fast
+-- enough that a five-line ranking is on screen before anybody has read the first
+-- line. CHAT_BATCH_GAP is the extra second taken every CHAT_BATCH lines, which is
+-- what keeps a long dump under the "too many messages" counter public channels
+-- keep as well as under the byte rate. A forty-line dump takes about twenty
+-- seconds, and arriving whole is the point.
+local CHAT_STAGGER   = 0.3
+local CHAT_BATCH     = 5
+local CHAT_BATCH_GAP = 1.0
 
 --- Resolve a collaborator by either shape it can have: a plain table hung on NS,
 --- or an AceAddon module in the registry. Same helper modules/Window.lua uses,
@@ -617,74 +624,18 @@ local function channelRow(key)
     return nil
 end
 
--- ---------------------------------------------------------------------------
--- What each rung of the AUTO ladder is asking about
--- ---------------------------------------------------------------------------
---
--- One predicate per catalog key, so the ORDER lives in core/Constants.lua
--- (EXPORT_AUTO_ORDER) and only the QUESTION lives here. Reordering the ladder is
--- then an edit to the catalog and nothing else.
---
--- SAY is deliberately absent and is the floor: a solo player who picked AUTO
--- asked for the lines to go somewhere, and there is nowhere more specific.
-local AUTO_TEST = {
-    -- Instance chat is the one channel everybody in a dungeon, a raid finder
-    -- group or a battleground can read, so it outranks both group channels —
-    -- but only while actually grouped, or it is a channel of one.
-    -- MEMBERSHIP OF THE INSTANCE GROUP, NOT PRESENCE IN AN INSTANCE. Those are
-    -- different facts and the difference is the whole rung: a guild raid that
-    -- walks into a raid instance is in an instance and is NOT an instance group,
-    -- and SendChatMessage on INSTANCE_CHAT for such a group is a silent no-op —
-    -- no error, no message, nothing in the log. Asking IsInInstance() would
-    -- therefore make RAID and PARTY unreachable for exactly the premade groups
-    -- this addon is for, and the failure would look like "export does nothing".
-    --
-    -- IsInGroup takes a party category; the Enum is read defensively because the
-    -- headless harness defines neither it nor the older global.
-    INSTANCE_CHAT = function()
-        local Enum = _G.Enum
-        local category = (Enum and Enum.PartyCategory and Enum.PartyCategory.Instance)
-            or _G.LE_PARTY_CATEGORY_INSTANCE
-        if category and _G.IsInGroup and _G.IsInGroup(category) then return true end
-        -- The queued-content fallback for a client whose category enum moved.
-        return (_G.IsPartyLFG and _G.IsPartyLFG()) or false
-    end,
-    RAID  = function() return _G.IsInRaid and _G.IsInRaid() end,
-    PARTY = function() return _G.IsInGroup and _G.IsInGroup() end,
-}
-
--- The ladder to walk when core/Constants.lua's copy is missing. Same rungs in
--- the same order — this is a degraded-load fallback, not a second opinion.
-local AUTO_ORDER_FALLBACK = { "INSTANCE_CHAT", "RAID", "PARTY", "SAY" }
-
---- Which channel AUTO actually resolves to, right now.
----
---- @return string  a channel key, never nil (SAY is the floor)
-local function resolveAuto()
-    local order = Const.EXPORT_AUTO_ORDER
-    if type(order) ~= "table" or #order == 0 then order = AUTO_ORDER_FALLBACK end
-
-    for _, key in ipairs(order) do
-        local test = AUTO_TEST[key]
-        -- A rung with no predicate is unconditional, which is what makes SAY the
-        -- floor without naming SAY here.
-        if not test then return key end
-        if test() then return key end
-    end
-
-    return "SAY"
-end
-
 --- Turn a stored channel choice into the pair SendChatMessage wants.
 ---
 --- SELF answers nil, and that is why it is the default: a misclick on a modal
 --- that defaulted to RAID is a wipe-night apology, while a misclick on SELF is
 --- three lines in your own chat frame.
 ---
---- AUTO walks the ladder "the group I am actually in, most specific first" —
---- instance chat inside a dungeon or raid finder group, then the raid, then the
---- party, then say. Say is the floor rather than a nil, because a solo player
---- who deliberately picked AUTO asked for it to go somewhere.
+--- AUTO IS RETIRED and is named here anyway. It used to resolve itself at send
+--- time and was removed as ambiguous (core/Constants.lua's catalog comment says
+--- why); core/Database.lua's v3 -> v4 step folds the stored key to SELF. This
+--- line is for the profile that arrives afterwards from a copy or a hand edit:
+--- without it the fallback below would hand SendChatMessage a chat type of
+--- "AUTO", which is not one.
 ---
 --- Anything else uses the catalog row's chatType when there is one and the key
 --- itself otherwise; the keys ARE the chat types ("SAY", "PARTY", "GUILD"), so
@@ -708,17 +659,165 @@ function Export.ResolveChannel(channel, target)
         return "WHISPER", target
     end
 
-    if channel == "AUTO" then
-        local key = resolveAuto()
-        local row = channelRow(key)
-        return (row and row.chatType) or key, nil
-    end
+    if channel == "AUTO" then return nil, nil end
 
     -- Everything past here is a plain channel, and every plain key in the
-    -- catalog IS its own chat type ("SAY", "RAID", "GUILD"). AUTO, SELF and
-    -- WHISPER are the only three that are not, and all three answered above.
+    -- catalog IS its own chat type ("SAY", "RAID", "GUILD"). SELF and WHISPER
+    -- are the only two that are not, and both answered above.
     local row = channelRow(channel)
     return (row and row.chatType) or channel, nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Getting a dump past the server
+-- ---------------------------------------------------------------------------
+--
+-- Two independent rules stand between a ranked list and the people meant to read
+-- it, and they pull in opposite directions.
+--
+-- RULE ONE — THE FLOOD. The server rate-limits outbound chat. ChatThrottleLib,
+-- which is the collection's reference for this, holds addon traffic to 800
+-- characters a second after a 4000-byte burst, on the reading that ~2000 CPS is
+-- safe and a sustained 3000 CPS disconnects you. Public channels are stricter
+-- again and count MESSAGES rather than bytes: more than about three in quick
+-- succession answers with "the number of messages that can be sent to this
+-- channel is limited". A forty-line dump fired in one frame therefore arrives
+-- truncated, at the one moment a truncated ranking is worst. Hence the stagger
+-- below, and the extra second every CHAT_BATCH lines on top of it.
+--
+-- RULE TWO — THE HARDWARE EVENT. Since patch 8.2.5 SendChatMessage on SAY, YELL
+-- and CHANNEL is only permitted from inside a hardware event — a real click or
+-- keypress — with SAY and YELL exempted inside instances and CHANNEL never
+-- exempted. A C_Timer callback is not a hardware event, so a staggered SAY dump
+-- delivered the first line (sent inside the click) and SILENTLY dropped every
+-- line after it. That was the bug: "print to Say only prints the header".
+--
+-- The two rules cannot both be honored, so the channel decides which one binds.
+-- Where a hardware event is required the whole dump goes out inside the click,
+-- flood risk and all, because a message that is rate-limited MIGHT arrive and a
+-- message sent off a timer certainly will not. Everywhere else the stagger wins.
+-- onPrintToChat warns before taking the burst path with more than one batch.
+
+--- Chat types Blizzard restricts to hardware events.
+local HARDWARE_EVENT_TYPES = { SAY = true, YELL = true, CHANNEL = true }
+
+--- Must this chat type be sent from inside the click that asked for it?
+---
+--- CHANNEL always. SAY and YELL only OUTSIDE an instance: Blizzard's exemption
+--- is exactly "SAY/YELL within instances", which covers the dungeon and raid
+--- content this addon is read in, so the staggered path is the one a raid
+--- actually takes and the burst is the open-world edge.
+---
+--- A client with no IsInInstance (the headless harness) is treated as outdoors,
+--- which is the restrictive answer and the one that cannot invent a send.
+---
+--- @param chatType string|nil  a SendChatMessage chat type
+--- @return boolean
+function Export.NeedsHardwareEvent(chatType)
+    if not HARDWARE_EVENT_TYPES[chatType] then return false end
+    if chatType == "CHANNEL" then return true end
+    local inInstance = _G.IsInInstance and _G.IsInInstance()
+    return not inInstance
+end
+
+--- How many lines go out between two batch gaps.
+--- @return number
+function Export.ChatBatch()
+    return CHAT_BATCH
+end
+
+--- How long after the click line `index` should go out.
+---
+--- CHAT_STAGGER between neighbours, plus one CHAT_BATCH_GAP for every whole
+--- batch already sent. The batch gap is the answer to the public-channel rule
+--- above: three-a-second is comfortably inside the byte budget and still trips
+--- the "too many messages" counter on a long run, and a pause every fifth line
+--- lets that counter drain. Line 1 is always 0 — a button that appears to do
+--- nothing for a third of a second is a button people press twice.
+---
+--- Published so the arithmetic is checkable out of game; the timers themselves
+--- are not.
+---
+--- @param index number  1-based line number
+--- @return number  seconds
+function Export.SendDelay(index)
+    if type(index) ~= "number" or index < 2 then return 0 end
+    local sent = index - 1
+    return sent * CHAT_STAGGER + math.floor(sent / CHAT_BATCH) * CHAT_BATCH_GAP
+end
+
+-- Bumped by every send and by every cancellation, and captured by each queued
+-- line. A line whose generation is stale simply does not send, which is how the
+-- tail of a whisper dump is dropped the moment the server says there is nobody
+-- by that name — without a timer handle per line to hold and cancel.
+local sendGeneration = 0
+
+-- The whisper dump currently in flight, or nil: { target, generation }. Read by
+-- NoteSystemMessage below, which is the only thing that looks at it.
+local pendingWhisper
+
+--- The game's own "no such player" error, as a Lua pattern with the name captured.
+---
+--- Built from the client's ERR_CHAT_PLAYER_NOT_FOUND_S rather than from an
+--- English literal, so it holds on a non-English client. Escaped first and
+--- un-escaped at the `%s` second, in that order: doing it the other way round
+--- would escape the capture group back into a literal.
+---
+--- @return string
+local function playerNotFoundPattern()
+    local template = _G.ERR_CHAT_PLAYER_NOT_FOUND_S
+    if type(template) ~= "string" or template == "" then
+        template = "No player named \"%s\" is currently playing."
+    end
+    local escaped = template:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    return "^" .. escaped:gsub("%%%%s", "(.+)") .. "$"
+end
+
+--- Drop everything still queued.
+local function cancelQueue()
+    sendGeneration = sendGeneration + 1
+    pendingWhisper = nil
+end
+
+--- One CHAT_MSG_SYSTEM line, offered by core/MultiMeters.lua's fan-out.
+---
+--- WHY THIS IS A CALL AND NOT A SUBSCRIPTION. architecture-§4 gives
+--- core/MultiMeters.lua every game event, and the choice left is whether the
+--- system message reaches the bus. It does not, for the reason the feign filter
+--- gives on the same page: republishing every system line in a raid to save one
+--- string match here would cost more than the match, and the only reader is this
+--- one. So the fan-out hands it over the way it hands a feign cast to
+--- modules/Feign.lua, and the FILTER lives with the thing that cares.
+---
+--- Cheap in the common case on purpose: no whisper in flight is a nil test, and
+--- that is what this is for every system message the player will ever see except
+--- the handful that follow a mistyped name.
+---
+--- THE POINT IS THE TAIL, not the error itself. A twenty-line whisper to a name
+--- nobody is playing is twenty identical system errors and no way to stop them;
+--- catching the first drops the other nineteen and says once, in the addon's own
+--- voice, what went wrong. The name is not checked BEFORE sending because there
+--- is no client-side way to ask — only the server knows who is playing.
+---
+--- @param message string|nil  the system line
+--- @return boolean  whether it was the error this watches for
+function Export.NoteSystemMessage(message)
+    local pending = pendingWhisper
+    if not pending then return false end
+    if pending.generation ~= sendGeneration then
+        pendingWhisper = nil
+        return false
+    end
+    if type(message) ~= "string" then return false end
+    if not message:match(playerNotFoundPattern()) then return false end
+
+    local target = pending.target
+    cancelQueue()
+    if NS.Print then
+        NS.Print(L["There is nobody called '%s' to whisper to. The rest of the export was not sent."]
+            :format(tostring(target)))
+    end
+    return true
 end
 
 --- Put a set of chat lines where the player asked for them.
@@ -731,7 +830,8 @@ end
 ---
 --- Falls back to printing when the client has no SendChatMessage at all (the
 --- headless harness does not define one), so a test of the caller does not need
---- a stub to avoid an error.
+--- a stub to avoid an error. A client with no C_Timer sends everything at once,
+--- which is the old behavior and still better than not sending.
 ---
 --- @param lines table|nil     array of strings
 --- @param channel string|nil  a key from Const.EXPORT_CHANNELS
@@ -753,25 +853,37 @@ function Export.Send(lines, channel, target)
         return true
     end
 
-    -- ONE MESSAGE A FRAME IS A FLOOD. `Lines: 40` plus the header is 41 calls to
-    -- SendChatMessage in a single frame, and the server answers that by dropping
-    -- the tail and telling the player they are sending too quickly — so the dump
-    -- arrives truncated, at the one moment a truncated ranking is worst.
-    --
-    -- The first line goes immediately, because a button that appears to do
-    -- nothing for a third of a second is a button people press twice. The rest
-    -- are staggered. On a client with no C_Timer they all go at once, which is
-    -- the old behavior and still better than not sending.
-    send(lines[1], chatType, nil, to)
+    -- A new send supersedes whatever the last one still had queued.
+    cancelQueue()
+    local generation = sendGeneration
 
     local after = _G.C_Timer and _G.C_Timer.After
-    for i = 2, #lines do
+    -- Inside the click or not at all: see "Getting a dump past the server".
+    if Export.NeedsHardwareEvent(chatType) or not after then
+        for _, line in ipairs(lines) do send(line, chatType, nil, to) end
+        return true
+    end
+
+    send(lines[1], chatType, nil, to)
+    local last = #lines
+    for i = 2, last do
         local line = lines[i]
-        if after then
-            after(CHAT_STAGGER * (i - 1), function() send(line, chatType, nil, to) end)
-        else
+        after(Export.SendDelay(i), function()
+            if generation ~= sendGeneration then return end
             send(line, chatType, nil, to)
-        end
+            -- The dump is over, so nothing is waiting on a system message any
+            -- more. Disarming here rather than on a second timer keeps the two
+            -- facts — "lines are still queued" and "a failure can still cancel
+            -- them" — as one.
+            if i == last then pendingWhisper = nil end
+        end)
+    end
+
+    -- Armed only for a whisper, and only while its own lines are still queued:
+    -- the error this watches for is the server's answer to a name nobody is
+    -- playing, and it is worth catching exactly once per dump.
+    if chatType == "WHISPER" then
+        pendingWhisper = { target = to, generation = generation }
     end
 
     return true
@@ -1288,6 +1400,19 @@ local function onPrintToChat()
 
     local lines = Export.ChatLines(result, statKey, readExport("lines", 5),
         Export.SessionLabel(invoker))
+
+    -- SAID BEFORE THE SEND, not after, and only where it is actually true. Say
+    -- and Yell out in the world have to leave inside this click (Export.Send's
+    -- "Getting a dump past the server"), so the stagger that keeps a long dump
+    -- whole is not available and the server may drop the tail. A player who sees
+    -- four of their ten lines arrive deserves to know it was the flood rule and
+    -- not the addon.
+    local chatType = Export.ResolveChannel(channel, whisperTo)
+    if Export.NeedsHardwareEvent(chatType) and #lines > Export.ChatBatch() and NS.Print then
+        NS.Print(L["Say and Yell go out all at once outside instances, so the server may drop some of %d lines. Fewer lines, or a group channel, will arrive whole."]
+            :format(#lines))
+    end
+
     Export.Send(lines, channel, whisperTo)
 
     -- Confirmed only for a send that LEFT this client. On SELF the lines are

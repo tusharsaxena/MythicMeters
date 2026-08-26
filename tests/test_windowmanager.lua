@@ -137,6 +137,41 @@ test("A duplicate name is disambiguated rather than refused", function()
     assertTrue(M.Resolve("Raid 3") ~= nil)
 end)
 
+test("A window created with no name is numbered off how many windows exist", function()
+    -- The seeded window is "Multi Meters #1", so the next one is #2 — the
+    -- number the picker shows, not the id.
+    -- red under: naming off NextWindowId, or off the template's bare name.
+    local inst, M = loaded()
+    assertEqual(inst.NS.Database.GetWindows()[1].name, "Multi Meters #1")
+
+    assertEqual(M:Create(), true)
+    assertEqual(M:Create(""), true, "a bare `/mm window new` arrives as an empty tail")
+    local windows = inst.NS.Database.GetWindows()
+    assertEqual(windows[2].name, "Multi Meters #2")
+    assertEqual(windows[3].name, "Multi Meters #3")
+end)
+
+test("The default number counts windows rather than climbing with deleted ids", function()
+    -- Ids are minted monotonically and never reused. Counting instead is what
+    -- keeps a player who makes and deletes a few windows off "Multi Meters #7"
+    -- for their second window.
+    local inst, M = loaded()
+    M:Create()
+    M:Delete("Multi Meters #2")
+    M:Create()
+    local windows = inst.NS.Database.GetWindows()
+    assertEqual(#windows, 2)
+    assertEqual(windows[2].name, "Multi Meters #2")
+    assertTrue(windows[2].id > 2, "and the id did move on, which is the point")
+end)
+
+test("The default name steps past a name the player has already taken", function()
+    local inst, M = loaded()
+    inst.NS.Database.GetWindows()[1].name = "Multi Meters #2"
+    M:Create()
+    assertEqual(inst.NS.Database.GetWindows()[2].name, "Multi Meters #3")
+end)
+
 test("Rename stores the new name and refuses an empty one", function()
     local inst, M = loaded()
     local cfg = inst.NS.Database.GetWindows()[1]

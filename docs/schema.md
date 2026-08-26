@@ -145,7 +145,15 @@ catalog cannot linger as an option that resolves to nothing. Localization happen
 its shipped default and a legal value, because it is what every channel but Whisper means. Its
 validator refuses a table typed in from a hand-edited SavedVariables and nothing more — whether a
 name resolves to a character is the server's answer to give, not this seam's — and a whisper with
-nobody named falls back to printing to yourself rather than erroring at the send site.
+nobody named falls back to printing to yourself rather than erroring at the send site. The modal
+catches the empty box before that fallback can swallow it silently ("Enter a name to whisper to."),
+and `Export.NoteSystemMessage` catches the server's *"no player named …"* answer to a name that is
+filled in but wrong, cancelling the rest of the dump so one mistyped name is one message rather than
+one per line.
+
+`schemaVersion` 4 retires the channel `AUTO`, which used to resolve its own destination at send time
+and was removed as ambiguous: choosing to print is choosing an audience, and a row that picks the
+audience leaves the one fact the player needs unstated. A stored `AUTO` folds to `SELF`.
 
 `lines` is clamped to `Constants.MAX_ROWS` rather than to a literal, because the aggregator truncates
 an export there anyway and a slider offering 60 would be offering a number the send could not honor.
@@ -173,7 +181,7 @@ schema validator.
 ```lua
 {
     id   = <number>,     -- stamped by NS.DefaultWindow / Database.SeedWindows
-    name = "Meter",      -- shown in the picker and, optionally, in the header
+    name = "Multi Meters #1",  -- Database.WindowName(n); shown in the picker and, optionally, in the header
     frame = {...}, header = {...}, rows = {...}, bars = {...}, text = {...},
     icons = {...}, tooltip = {...}, visibility = {...}, columns = {...}, data = {...},
 }

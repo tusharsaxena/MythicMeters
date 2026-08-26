@@ -823,51 +823,25 @@ test("Export.ResolveChannel answers nothing for SELF, which is the default", fun
     assertNil((ResolveChannel("")))
 end)
 
-test("Export.ResolveChannel walks AUTO's instance -> raid -> party -> say ladder", function()
-    local inst = T.load()
-    local ResolveChannel = inst.NS.Export.ResolveChannel
-    local mocks = inst.mocks
+test("Export.ResolveChannel folds the RETIRED \"AUTO\" key to self only", function()
+    -- AUTO used to resolve itself at send time and was removed as ambiguous: a
+    -- player pressing Print to Chat is choosing an audience, and a row that
+    -- picks the audience is the one fact the dialog then does not state.
+    -- core/Database.lua's v3 -> v4 step rewrites the stored key; this is the
+    -- guard for a profile that arrives from a copy or a hand edit afterwards.
+    -- red under: letting the unknown-key fallback have it, which would hand
+    -- SendChatMessage a chat type of "AUTO".
+    local ResolveChannel = T.NS.Export.ResolveChannel
+    assertNil((ResolveChannel("AUTO")))
+    assertNil((ResolveChannel("auto")))
+end)
 
-    -- Alone in the world: say, rather than nothing. A solo player who
-    -- deliberately picked AUTO asked for it to go somewhere.
-    mocks.setSolo()
-    mocks.setInstance(nil)
-    assertEqual((ResolveChannel("AUTO")), "SAY")
-
-    -- A party in the open world.
-    mocks.setGroup({ { name = "A" }, { name = "B" }, { name = "C" } })
-    assertEqual((ResolveChannel("AUTO")), "PARTY")
-
-    -- A raid in the open world.
-    mocks.setGroup({ { name = "A" }, { name = "B" }, { name = "C" } }, { raid = true })
-    assertEqual((ResolveChannel("AUTO")), "RAID")
-
-    -- A QUEUED group — dungeon finder, raid finder, a battleground — is the one
-    -- case instance chat wins, because it is the one channel everybody in there
-    -- can read.
-    mocks.setGroup({ { name = "A" }, { name = "B" }, { name = "C" } })
-    mocks.setInstance("party")
-    mocks.setInstanceGroup(true)
-    assertEqual((ResolveChannel("AUTO")), "INSTANCE_CHAT")
-
-    -- THE CASE THIS ADDON EXISTS FOR, and the one an earlier ladder got wrong by
-    -- asking IsInInstance() instead of asking about membership: a premade party
-    -- that walks into a dungeon is INSIDE an instance and is still a HOME group.
-    -- SendChatMessage on INSTANCE_CHAT for one of those is a silent no-op, so
-    -- resolving to it would make Print to Chat do nothing at all in a key.
-    mocks.setGroup({ { name = "A" }, { name = "B" }, { name = "C" } })
-    mocks.setInstance("party")
-    assertEqual((ResolveChannel("AUTO")), "PARTY")
-
-    -- The same for a guild raid inside a raid instance.
-    mocks.setGroup({ { name = "A" }, { name = "B" }, { name = "C" } }, { raid = true })
-    mocks.setInstance("raid")
-    assertEqual((ResolveChannel("AUTO")), "RAID")
-
-    -- An instance entered alone is not a group, so the ladder falls past it.
-    mocks.setSolo()
-    mocks.setInstance("party")
-    assertEqual((ResolveChannel("AUTO")), "SAY")
+test("The channel catalog no longer offers AUTO", function()
+    -- red under: putting the row back without deciding what it means.
+    for _, channel in ipairs(Const.EXPORT_CHANNELS) do
+        assertTrue(channel.key ~= "AUTO", "the AUTO channel is retired")
+    end
+    assertNil(Const.EXPORT_AUTO_ORDER, "and its resolution ladder went with it")
 end)
 
 test("Export.ResolveChannel trims a whisper target and refuses an empty one", function()
@@ -958,6 +932,151 @@ test("Export.Send prints locally for SELF and sends nothing to any channel", fun
     assertTrue(inst.NS.Export.Send({ "one", "two" }, "SELF"))
     inst.mocks.__fireTimers()
     assertEqual(sent, 0, "SELF must never reach the server")
+end)
+
+test("Export.SendDelay takes an extra second every batch, to duck the message counter", function()
+    -- Public channels count MESSAGES as well as bytes: more than about three in
+    -- quick succession answers with "the number of messages that can be sent to
+    -- this channel is limited". Three a second is inside the byte budget and
+    -- still trips that counter over a long dump, so every fifth line pauses to
+    -- let it drain.
+    -- red under: a flat stagger, which is what a 20-line dump used to be.
+    local SendDelay = T.NS.Export.SendDelay
+    local batch = T.NS.Export.ChatBatch()
+    assertEqual(batch, 5)
+
+    assertEqual(SendDelay(1), 0, "the first line leaves inside the click")
+    assertEqual(SendDelay(2), 0.3)
+    assertEqual(SendDelay(5), 1.2, "the first batch is the plain stagger")
+    -- Line 6 opens the second batch, so it carries one gap.
+    assertEqual(SendDelay(6), 0.3 * 5 + 1.0)
+    assertEqual(SendDelay(11), 0.3 * 10 + 2.0, "and the third batch carries two")
+
+    -- Monotonic, because a ranking that arrives out of order is not a ranking.
+    local last = -1
+    for i = 1, 41 do
+        local d = SendDelay(i)
+        assertTrue(d > last, "line " .. i .. " must not arrive before line " .. (i - 1))
+        last = d
+    end
+end)
+
+test("Export.NeedsHardwareEvent is true for Say outdoors and false inside an instance", function()
+    -- Since patch 8.2.5 SendChatMessage on SAY, YELL and CHANNEL is only allowed
+    -- from inside a hardware event, with SAY and YELL exempted inside instances.
+    -- A C_Timer callback is not a hardware event.
+    local inst = T.load()
+    local NeedsHardwareEvent = inst.NS.Export.NeedsHardwareEvent
+
+    inst.mocks.setInstance(nil)
+    assertTrue(NeedsHardwareEvent("SAY"))
+    assertTrue(NeedsHardwareEvent("YELL"))
+
+    inst.mocks.setInstance("raid")
+    assertFalse(NeedsHardwareEvent("SAY"), "Blizzard exempts SAY within instances")
+    assertFalse(NeedsHardwareEvent("YELL"))
+
+    -- CHANNEL is never exempted, in or out.
+    assertTrue(NeedsHardwareEvent("CHANNEL"))
+
+    -- And the channels a raid actually uses are not restricted at all.
+    inst.mocks.setInstance(nil)
+    for _, chatType in ipairs({ "PARTY", "RAID", "INSTANCE_CHAT", "GUILD", "WHISPER" }) do
+        assertFalse(NeedsHardwareEvent(chatType), chatType .. " needs no hardware event")
+    end
+    assertFalse(NeedsHardwareEvent(nil))
+end)
+
+test("Say outdoors sends the WHOLE dump inside the click, not off timers", function()
+    -- THE BUG THIS FIXES: "print to Say only prints the header". The first line
+    -- went out inside the click and every staggered line after it was dropped by
+    -- the server with no error, because a timer is not a hardware event.
+    -- red under: restoring the stagger for SAY.
+    local inst = T.load()
+    local sent = {}
+    inst.mocks.SendChatMessage = function(text) sent[#sent + 1] = text end
+    inst.mocks.setInstance(nil)
+
+    assertTrue(inst.NS.Export.Send({ "head", "one", "two", "three" }, "SAY"))
+    assertEqual(#sent, 4, "every line must leave while the click is still on the stack")
+
+    -- And no timer is left holding a line that would be dropped anyway.
+    inst.mocks.__fireTimers()
+    assertEqual(#sent, 4)
+end)
+
+test("Say INSIDE an instance keeps the stagger, because the restriction lifts there", function()
+    -- The case this addon is actually read in. Staggering is strictly better
+    -- where it is allowed: a raid-sized dump in one frame is a flood.
+    local inst = T.load()
+    local sent = 0
+    inst.mocks.SendChatMessage = function() sent = sent + 1 end
+    inst.mocks.setInstance("raid")
+
+    assertTrue(inst.NS.Export.Send({ "head", "one", "two" }, "SAY"))
+    assertEqual(sent, 1, "only the first line leaves in the calling frame")
+    inst.mocks.__fireTimers()
+    assertEqual(sent, 3)
+end)
+
+test("A whisper to nobody drops the rest of the dump and says so once", function()
+    -- The server answers a whisper to a name nobody is playing with one system
+    -- error PER LINE. Catching the first cancels the other nineteen.
+    -- red under: sending the queue regardless of what the server said.
+    local inst = T.load()
+    local sent = 0
+    inst.mocks.SendChatMessage = function() sent = sent + 1 end
+
+    assertTrue(inst.NS.Export.Send({ "head", "one", "two", "three" }, "WHISPER", "Nosuchname"))
+    assertEqual(sent, 1)
+
+    local before = #inst.mocks.__chat
+    local matched = inst.NS.Export.NoteSystemMessage(
+        inst.mocks.ERR_CHAT_PLAYER_NOT_FOUND_S:format("Nosuchname"))
+    assertTrue(matched, "the client's own error string must be recognized")
+
+    inst.mocks.__fireTimers()
+    assertEqual(sent, 1, "the queued lines must NOT go out after the refusal")
+    assertTrue(#inst.mocks.__chat > before, "and the player is told why, once")
+end)
+
+test("An unrelated system message leaves a whisper dump alone", function()
+    -- red under: matching loosely, which would cancel an export because somebody
+    -- looted an item.
+    local inst = T.load()
+    local sent = 0
+    inst.mocks.SendChatMessage = function() sent = sent + 1 end
+
+    inst.NS.Export.Send({ "head", "one", "two" }, "WHISPER", "Kaosz")
+    assertFalse(inst.NS.Export.NoteSystemMessage("Kaosz has come online."))
+    inst.mocks.__fireTimers()
+    assertEqual(sent, 3, "the dump must finish")
+end)
+
+test("A system message with no dump in flight is a cheap no", function()
+    -- This runs for every system line the player ever sees, so the common case
+    -- has to be a nil test and nothing else.
+    local inst = T.load()
+    assertFalse(inst.NS.Export.NoteSystemMessage("Anything at all"))
+    assertFalse(inst.NS.Export.NoteSystemMessage(nil))
+end)
+
+test("A second send supersedes whatever the first still had queued", function()
+    -- red under: leaving the first dump's timers live, which interleaves two
+    -- rankings in the same channel.
+    local inst = T.load()
+    local sent = {}
+    inst.mocks.SendChatMessage = function(text) sent[#sent + 1] = text end
+
+    inst.NS.Export.Send({ "a1", "a2", "a3" }, "PARTY")
+    inst.NS.Export.Send({ "b1", "b2", "b3" }, "PARTY")
+    inst.mocks.__fireTimers()
+
+    for _, text in ipairs(sent) do
+        assertTrue(text:sub(1, 1) ~= "a" or text == "a1",
+            "the superseded dump must not keep sending (" .. text .. ")")
+    end
+    assertEqual(sent[#sent], "b3")
 end)
 
 test("Export.Send does nothing with nothing to send", function()

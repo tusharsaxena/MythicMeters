@@ -151,10 +151,27 @@ function M.All()
     return out
 end
 
+--- The shipped name for a brand-new window: "Multi Meters #4".
+---
+--- The number is a ONE-UP COUNT of the windows that exist, not the window id.
+--- Ids are minted monotonically and never reused, so naming off one would have
+--- a player who makes and deletes a window five times land on "#6" for their
+--- second window. Counting instead means the number always matches what the
+--- picker shows — and the loop only ever moves it when the player has already
+--- renamed something onto that exact name.
+local function defaultName()
+    local n = #windows() + 1
+    while M.Resolve(NS.Database.WindowName(n)) do n = n + 1 end
+    return NS.Database.WindowName(n)
+end
+
 --- A name no existing window is using, derived from `base`.
+--- An empty base is not an error: it is the caller asking for the default,
+--- which is what settings/Windows.lua's "New window" button and `/mm window
+--- new` with no name both do.
 local function uniqueName(base)
     base = tostring(base or ""):match("^%s*(.-)%s*$")
-    if base == "" then base = L["Meter"] end
+    if base == "" then return defaultName() end
     if not M.Resolve(base) then return base end
     local n = 2
     while M.Resolve(base .. " " .. n) do n = n + 1 end

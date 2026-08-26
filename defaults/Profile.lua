@@ -55,7 +55,9 @@ local Const = NS.Constants
 
 local WINDOW_TEMPLATE = {
     -- Display name, shown in the window picker and (optionally) in the header.
-    -- NS.DefaultWindow overwrites this for windows after the first.
+    -- Every real window overwrites this: core/Database.lua's WindowName mints
+    -- "Multi Meters #<n>" and both seeding and modules/WindowManager.lua hand
+    -- the result to NS.DefaultWindow.
     name = "Multi Meters",
 
     -- -----------------------------------------------------------------------

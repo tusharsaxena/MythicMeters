@@ -220,7 +220,9 @@ end
 local function doCreate()
     local M = manager("Create")
     if not M then return end
-    local ok, err = M:Create(L["Meter"])
+    -- No name: the registry mints "Multi Meters #<n>" off how many windows
+    -- there are (modules/WindowManager.lua's defaultName).
+    local ok, err = M:Create()
     if not ok then return print_(err or L["No window is selected."]) end
     selectLast()
     afterRegistryChange()

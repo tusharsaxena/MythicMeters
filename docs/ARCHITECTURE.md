@@ -216,8 +216,8 @@ asked once, of `NS.Export.Available()`, and is never re-decided here — see [Ta
 
 **`core/MultiMeters.lua` registers every game event this addon listens to, and no other file
 registers any.** Each handler does the minimum translation and republishes onto the bus; none reads a
-value and — with one stated exception, the feign filter below — none decides anything, which is what
-lets that section be read as a wiring diagram.
+value and — with two stated exceptions, the feign filter and the system-message filter below — none
+decides anything, which is what lets that section be read as a wiring diagram.
 
 | Event | Handler | Becomes |
 |---|---|---|
@@ -231,6 +231,7 @@ lets that section be read as a wiring diagram.
 | `PLAYER_REGEN_DISABLED` / `PLAYER_REGEN_ENABLED` | `OnCombatChanged` | `COMBAT_CHANGED` |
 | `PLAYER_MOUNT_DISPLAY_CHANGED`, `UNIT_ENTERED_VEHICLE`, `UNIT_EXITED_VEHICLE`, `UPDATE_SHAPESHIFT_FORM`, `PLAYER_CAN_GLIDE_CHANGED`, `PLAYER_IS_GLIDING_CHANGED`, `PET_BATTLE_OPENING_START`, `PET_BATTLE_CLOSE`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `OnPlayerStateChanged` | `PLAYER_STATE_CHANGED` |
 | `UNIT_SPELLCAST_SUCCEEDED` | `OnSpellSucceeded` | **the one handler that decides something** — Feign Death (5384) only, straight into `modules/Feign.lua`. Nothing reaches the bus: republishing every cast in a raid to save one comparison would be worse, and no other file may see a game event |
+| `CHAT_MSG_SYSTEM` | `OnSystemMessage` | **the second handler that decides something** — offered straight to `modules/Export.lua`'s `NoteSystemMessage`, which answers `false` unless a whisper dump is in flight. Nothing reaches the bus, for the reason above it: the line is chatty, one file cares, and the filter belongs with the queue it cancels |
 
 The three `DAMAGE_METER_*` handlers carry the `meterEvent` perf bracket. It measures the **fan-out**,
 not the redraw: `SendMessage` walks every subscribed window's callback synchronously, which is the

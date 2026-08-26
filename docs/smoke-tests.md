@@ -129,8 +129,8 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
 
 **Pass.**
 - Login completes with no Lua errors.
-- Exactly **one** window exists, named "Meter", centered on screen (`Database.SeedWindows` seeds
-  one).
+- Exactly **one** window exists, named "Multi Meters #1", centered on screen
+  (`Database.SeedWindows` seeds one).
 - It shows the six default columns left to right after the name column: **Damage · Healing ·
   Interrupts · Dispels · Avoidable Damage · Deaths**.
 - Standing solo in the open world the window is **shown**: every context ships on and every hide
@@ -274,7 +274,8 @@ is precisely what must not happen.
 ### 6. Multi-window
 
 **Steps.**
-1. Windows page → **New window**. Confirm the picker follows the new window.
+1. Windows page → **New window**. Confirm the picker follows the new window, and that it is named
+   "Multi Meters #2" — the count of windows, not the window id.
 2. Give the two windows visibly different settings — different width, bar color, column set, sort
    column.
 3. Change a setting on window 2 and confirm window 1 does **not** move.
@@ -291,7 +292,7 @@ is precisely what must not happen.
 - Copying **Everything** copies all ten groups but **not** the target's `id`, `name` or **position** —
   the copy must not land exactly on top of its source.
 - Duplicate offsets the new window by 24px down-right, so it is visibly a second window.
-- The window picker is keyed by id: two windows both named "Meter" are still individually selectable.
+- The window picker is keyed by id: two windows both named "Raid" are still individually selectable.
 - **Delete** confirms first, and the **last** window cannot be deleted ("The last window cannot be
   deleted.").
 - After deleting the window the picker was pointed at, every settings page re-renders against the
@@ -1202,7 +1203,7 @@ misclick.
 **Steps.**
 1. Channel = **Print to myself**. Metric = **Damage**. Lines = **5**. Click **Print to Chat**.
 2. Read your own chat frame. Ask someone in the group whether they saw anything.
-3. Only once that is clean, work outward: Say · Party · Raid · Instance · Guild · Whisper · Automatic.
+3. Only once that is clean, work outward: Say · Party · Raid · Instance · Guild · Whisper.
 
 **Pass.**
 - **Self prints to your own frame and reaches nobody.** Every line carries the cyan `[MM]` banner,
@@ -1226,10 +1227,25 @@ misclick.
 - **Say** reaches only people nearby; **Party** and **Raid** reach the group; **Instance** works
   inside a dungeon or LFR group; **Guild** reaches the guild. Each sends the same lines, **without**
   the `[MM]` banner (that belongs to `NS.Print`).
-- **Automatic** resolves to the widest channel you are actually in, most specific first: instance
-  chat inside a dungeon or raid-finder group → Raid → Party → **Say** standing alone. Check at least
-  the solo case and the dungeon case — a solo Automatic must go to Say rather than silently nowhere.
+- **There is no Automatic channel.** It was removed as ambiguous: the dropdown offers Say, Party,
+  Raid, Instance, Guild, Whisper and Self only, and nothing else. A profile that still held `AUTO`
+  is folded to **Self only** by the v3 → v4 migration, so an upgraded install opens on Self rather
+  than on a destination it picked for you.
+- **Say outside an instance arrives whole, or the server says why.** Stand in a city, set Lines = 20
+  and send: every line leaves inside the click, because Blizzard only permits `SAY` / `YELL` /
+  `CHANNEL` from a hardware event out in the world, and the addon prints a one-line warning first
+  saying the server may drop some of them. **Only the header arriving is the bug this replaced** —
+  that was the staggered send, every line of which the server dropped silently.
+- **Say INSIDE a dungeon or raid is staggered like every other channel**, because the hardware-event
+  rule is lifted there. Twenty lines take about seven seconds and all twenty arrive.
+- **A long dump pauses every fifth line.** Lines = 20 to Party: watch the timing — five quick lines,
+  a beat, five more. That extra second per batch is what keeps the server's message counter from
+  swallowing the tail.
 - **Whisper** with a name in the box reaches that character and nobody else.
+- **Whisper to a name nobody is playing stops after the first line.** Type a nonsense name and send
+  20 lines: the game answers with its own "No player named ... is currently playing", the addon says
+  **"There is nobody called '...' to whisper to. The rest of the export was not sent."** once, and
+  the remaining nineteen lines are dropped. Nineteen repeats of the game's error is the failure.
 - **No line is truncated.** `SendChatMessage` cuts at 255 bytes; these are far under, but a very long
   NPC ally name on a percent-bearing line is the closest this ever gets.
 - Send with a segment that has **no rows at all** (a fresh login, before any pull): nothing is sent

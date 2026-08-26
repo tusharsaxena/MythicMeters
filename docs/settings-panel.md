@@ -220,7 +220,7 @@ into disagreeing about what "new window" means.
 
 Details that are the page's rather than the module's:
 
-- **The picker is keyed by id, labelled by name.** Nothing stops two windows being called "Meter";
+- **The picker is keyed by id, labelled by name.** Nothing stops two windows being called "Raid";
   ids are minted monotonically and never reused, so they are the only thing here that is actually a
   key.
 - **Rename fires on `OnEnterPressed` only**, never `OnTextChanged` — renaming fires

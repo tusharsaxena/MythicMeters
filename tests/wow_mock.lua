@@ -1790,6 +1790,12 @@ local function build()
     end
     M.UISpecialFrames = {}
 
+    -- The client's own "no such player" error string, verbatim. modules/Export.lua
+    -- builds its match pattern out of this global rather than out of an English
+    -- literal, so a mock that omitted it would exercise the fallback and never the
+    -- path a real client takes.
+    M.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named \"%s\" is currently playing."
+
     -- GameTooltip with a RECORDED line list. modules/Tooltip.lua's whole output is
     -- AddLine / AddDoubleLine calls, so a no-op tooltip would make every tooltip
     -- case pass without asserting anything.

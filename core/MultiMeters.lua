@@ -186,6 +186,13 @@ function NS:OnEnable()
     -- no other edge that tells us it was one. See modules/Feign.lua.
     self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "OnSpellSucceeded")
 
+    -- System chat, for one line of it: the server's answer to a whisper aimed at
+    -- a name nobody is playing. modules/Export.lua sends a chat dump one line at
+    -- a time, so a mistyped whisper target is that error repeated once per line
+    -- with no way to stop it — and the client is the last to know the name is
+    -- bad, because only the server can say. See OnSystemMessage.
+    self:RegisterEvent("CHAT_MSG_SYSTEM", "OnSystemMessage")
+
     -- The meter itself.
     self:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED", "OnMeterUpdated")
     self:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED",  "OnMeterSession")
@@ -314,6 +321,21 @@ end
 --- honest answer when the comparison is refused is to record nothing: that
 --- counts the feign as a death, which is exactly the behaviour that shipped
 --- before the filter existed and the safe direction to fail in.
+--- CHAT_MSG_SYSTEM -> modules/Export.lua, and NOTHING onto the bus.
+---
+--- The second handler in this file that does not republish, and it is here for
+--- the same reason OnSpellSucceeded is: the event is chatty, exactly one file
+--- cares, and the filter is a string match that belongs with the thing holding
+--- the queue it cancels. Export answers a bare `false` when no chat dump is in
+--- flight, which is every system message but a handful.
+---
+--- @param message string|nil
+function NS:OnSystemMessage(_, message)
+    local E = NS.Export
+    if not (E and E.NoteSystemMessage) then return end
+    E.NoteSystemMessage(message)
+end
+
 function NS:OnSpellSucceeded(_, unit, _castGUID, spellID)
     if unit == nil or spellID == nil then return end
     if not (NS.Secrets and NS.Secrets.CanCompare(spellID)) then return end

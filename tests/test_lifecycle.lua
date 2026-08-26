@@ -39,6 +39,9 @@ local EVENTS = {
     DAMAGE_METER_CURRENT_SESSION_UPDATED = "OnMeterUpdated",
     DAMAGE_METER_COMBAT_SESSION_UPDATED  = "OnMeterSession",
     UNIT_SPELLCAST_SUCCEEDED       = "OnSpellSucceeded",
+    -- System chat, filtered to one line: the whisper-target error that cancels
+    -- an export dump. Like the feign cast above it, nothing reaches the bus.
+    CHAT_MSG_SYSTEM                      = "OnSystemMessage",
     DAMAGE_METER_RESET                   = "OnMeterReset",
     -- Player state, for modules/Visibility.lua's rules. PLAYER_IS_GLIDING_CHANGED
     -- is the probed one — see the case below that takes it away.

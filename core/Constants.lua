@@ -404,9 +404,7 @@ Constants.NAME_COLUMN_WIDTH = 118
 --                LOCALIZE AT THE USE SITE — `NS.L[channel.label]` — never here,
 --                for exactly the reason the stat catalog above gives.
 --   chatType     the string handed to SendChatMessage, or nil where there is
---                nothing to hand it: AUTO has not decided yet and SELF never
---                sends at all.
---   auto         resolve this row at send time, walking EXPORT_AUTO_ORDER.
+--                nothing to hand it: SELF never sends at all.
 --   selfOnly     print through NS.Print and send nothing.
 --   needsTarget  the whisper-name field is meaningful for this row.
 --
@@ -416,8 +414,16 @@ Constants.NAME_COLUMN_WIDTH = 118
 --
 -- ADDING A CHANNEL: add a row. The settings dropdown and the export module both
 -- derive from this array and neither restates it.
+--
+-- THERE IS NO "AUTO" ROW, and its absence is a decision rather than an omission.
+-- A row that resolved itself at send time — instance, then raid, then party,
+-- then say — reads as a convenience and behaves as a guess: the one thing a
+-- player wants to be certain of, before pressing a button that puts their
+-- numbers in front of other people, is WHICH other people. It was removed as
+-- ambiguous; core/Database.lua's v3 -> v4 step folds a stored "AUTO" back to
+-- SELF, and modules/Export.lua names the retired key one last time so a profile
+-- that escaped the migration cannot reach SendChatMessage with it.
 Constants.EXPORT_CHANNELS = {
-    { key = "AUTO",          label = "Auto",            chatType = nil,             auto = true },
     { key = "SAY",           label = "Say",             chatType = "SAY" },
     { key = "PARTY",         label = "Party",           chatType = "PARTY" },
     { key = "RAID",          label = "Raid",            chatType = "RAID" },
@@ -436,14 +442,6 @@ Constants.EXPORT_CHANNEL_BY_KEY = {}
 for _, channel in ipairs(Constants.EXPORT_CHANNELS) do
     Constants.EXPORT_CHANNEL_BY_KEY[channel.key] = channel
 end
-
---- The ladder `AUTO` walks, in resolution order: the instance group first (it is
---- the one channel everybody in a dungeon or a battleground can read), then raid,
---- then party, then say for a player standing alone.
----
---- Stated as KEYS into the catalog above rather than as chatType literals, so a
---- row renamed there cannot leave a stale string here that resolves to nothing.
-Constants.EXPORT_AUTO_ORDER = { "INSTANCE_CHAT", "RAID", "PARTY", "SAY" }
 
 -- ---------------------------------------------------------------------------
 -- The message bus

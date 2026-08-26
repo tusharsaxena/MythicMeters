@@ -39,7 +39,8 @@ L["Ka0s Multi Meters"] = "Ka0s Multi Meters"
 L["A multi-column group meter: one row per player, one column per statistic."] =
     "A multi-column group meter: one row per player, one column per statistic."
 L["Multi Meters"] = "Multi Meters"
-L["Meter"] = "Meter"
+-- The shipped name of a window, numbered off how many exist.
+L["Multi Meters #%d"] = "Multi Meters #%d"
 
 -- ---------------------------------------------------------------------------
 -- Statistics — the column catalog (core/Constants.lua's STATS[].label)

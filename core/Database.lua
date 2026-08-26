@@ -35,7 +35,9 @@ NS.Database = Database
 -- per-profile (savedvariables-§1), so a migration runs once per ACCOUNT.
 -- v1 is the shipped shape.
 -- v2 makes every column one uniform width (see migrations[1] below).
-local CURRENT_DB_VERSION = 3
+-- v3 collapses the three row-icon toggles into one.
+-- v4 retires the export channel "AUTO".
+local CURRENT_DB_VERSION = 4
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -159,6 +161,21 @@ function Database.NextWindowId()
     return id
 end
 
+--- The shipped display name for the nth window: "Multi Meters #3".
+---
+--- Lives here, beside the id counter, because two callers mint a default name
+--- and neither may disagree with the other: SeedWindows below names the first
+--- window of a fresh profile, and modules/WindowManager.lua names every window
+--- created after it. The number is a plain one-up count of the windows that
+--- exist, NOT the id — ids are never reused, so a player who deletes and
+--- recreates would otherwise watch the name climb forever.
+---
+--- @param n number
+--- @return string
+function Database.WindowName(n)
+    return NS.L["Multi Meters #%d"]:format(n)
+end
+
 --- Seed a brand-new profile with exactly one window, and normalize every window
 --- already there.
 ---
@@ -172,7 +189,7 @@ function Database.SeedWindows()
 
     if #windows == 0 then
         local id = Database.NextWindowId()
-        windows[1] = NS.DefaultWindow(id, "Meter")
+        windows[1] = NS.DefaultWindow(id, Database.WindowName(1))
         if NS.State and NS.State.debug then
             NS.Debug("Init", "seeded default window id=%d", id)
         end
@@ -298,6 +315,30 @@ migrations[2] = function(db)
     end
 
     db.global.schemaVersion = 3
+end
+
+--- v3 -> v4: THE "AUTO" EXPORT CHANNEL IS RETIRED.
+---
+--- It resolved itself at send time — instance chat, then raid, then party, then
+--- say — and the objection to it is not that the ladder was wrong. It is that a
+--- player pressing "Print to Chat" is choosing an AUDIENCE, and a row that picks
+--- the audience for them makes the one fact they need to be sure of the one fact
+--- the dialog does not state. core/Constants.lua no longer offers the row.
+---
+--- A profile still holding the key would otherwise reach SendChatMessage with a
+--- chat type of "AUTO", which is not one, so it folds to SELF — the shipped
+--- default, and the only landing that cannot put a ranking somewhere the player
+--- did not ask for. modules/Export.lua's ResolveChannel names the retired key as
+--- well, for a profile that arrives from a copy or a hand edit after this ran.
+migrations[3] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        local export = profile.export
+        if type(export) == "table" and export.channel == "AUTO" then
+            export.channel = "SELF"
+        end
+    end
+
+    db.global.schemaVersion = 4
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

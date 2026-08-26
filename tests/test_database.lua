@@ -261,7 +261,7 @@ test("Database: a fresh profile is seeded with exactly one window", function()
     local inst = T.load{}
     local windows = inst.NS.Database.GetWindows()
     assertEqual(#windows, 1)
-    assertEqual(windows[1].name, "Meter")
+    assertEqual(windows[1].name, "Multi Meters #1")
     assertEqual(windows[1].id, 1)
     assertTrue(#windows[1].columns > 0, "the seeded window must ship with its default columns")
 end)
@@ -400,7 +400,7 @@ test("Database v2: every stored column is lifted to the one uniform width", func
         assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
             col.stat .. " kept its old per-stat width")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 3,
+    assertEqual(inst.NS.db.global.schemaVersion, 4,
         "the walk must run all the way to the current version, not stop at v2")
 end)
 
@@ -478,7 +478,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 3)
+    assertEqual(inst.NS.db.global.schemaVersion, 4)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -620,5 +620,55 @@ test("Database v3: the three dead keys are REMOVED, not left to rot", function()
     assertNil(icons.showClass, "showClass survived the migration")
     assertNil(icons.showSpec,  "showSpec survived the migration")
     assertNil(icons.showRole,  "showRole survived the migration")
-    assertEqual(inst.NS.db.global.schemaVersion, 3)
+    assertEqual(inst.NS.db.global.schemaVersion, 4)
+end)
+
+-- ---------------------------------------------------------------------------
+-- v3 -> v4: the export channel "AUTO" is retired
+-- ---------------------------------------------------------------------------
+
+--- A v3 account whose profiles carry the given export channels.
+local function v3Channels(channels)
+    local profiles = {}
+    for name, channel in pairs(channels) do
+        profiles[name] = {
+            nextWindowId = 2,
+            windows = { { id = 1 } },
+            export = { channel = channel, whisperTo = "" },
+        }
+    end
+    return preSeeded({ profiles = profiles, global = { schemaVersion = 3 } })
+end
+
+test("Database v4: a stored AUTO channel folds to SELF, in EVERY profile", function()
+    -- AUTO resolved its own destination at send time and was removed as
+    -- ambiguous. Left in a profile it would reach SendChatMessage as a chat type
+    -- of "AUTO", which is not one — and SELF is the only landing that cannot put
+    -- a ranking in front of people the player did not choose.
+    -- red under: lifting only the active profile, or leaving the key alone.
+    local inst = v3Channels{ Default = "AUTO", Alt = "AUTO" }
+    local sv = inst.NS.db.sv or _G.MultiMetersDB
+
+    assertEqual(sv.profiles.Default.export.channel, "SELF")
+    assertEqual(sv.profiles.Alt.export.channel, "SELF")
+    assertEqual(inst.NS.db.global.schemaVersion, 4)
+end)
+
+test("Database v4: every other channel is left exactly as the player set it", function()
+    -- red under: a step that rewrites the key unconditionally, which would take
+    -- a deliberate raid default away on login.
+    local inst = v3Channels{ Default = "RAID", Alt = "WHISPER" }
+    local sv = inst.NS.db.sv or _G.MultiMetersDB
+
+    assertEqual(sv.profiles.Default.export.channel, "RAID")
+    assertEqual(sv.profiles.Alt.export.channel, "WHISPER")
+end)
+
+test("Database v4: a profile with no export block at all survives the step", function()
+    -- Every profile written before the export feature existed is this one.
+    local inst = preSeeded({
+        profiles = { Default = { nextWindowId = 2, windows = { { id = 1 } } } },
+        global   = { schemaVersion = 3 },
+    })
+    assertEqual(inst.NS.db.global.schemaVersion, 4)
 end)
