@@ -1,7 +1,7 @@
 -- settings/Columns.lua
 --
--- The Columns page: the ordered stat list a window draws, left to right — add,
--- remove, reorder, and per-column width and show-bar.
+-- The Columns page: one block per statistic, ticked or not, in the order the
+-- window draws them left to right.
 --
 -- ---------------------------------------------------------------------------
 -- WHY COLUMN EDITING LIVES HERE AND ONLY HERE
@@ -17,6 +17,12 @@
 -- own position and size data are secret too, and that propagates to everything
 -- anchored to it (design §4). So the read that a drag editor is built out of is
 -- exactly the read this addon may never perform on a live cell.
+--
+-- THE WIDTH SETTING IS GONE ENTIRELY NOW, which retires the argument rather than
+-- answering it: modules/Window.lua divides the frame width evenly across the
+-- visible columns, so there is no per-column width for anyone to drag OR to type
+-- into a slider. The page still lives here, and the paragraph above is still why
+-- a column editor could never have lived anywhere else.
 --
 -- Confining column management to a settings panel removes the hazard rather
 -- than guarding against it: layout is computed from config on the way OUT and
@@ -81,7 +87,7 @@ end
 local function snapshot(w)
     local out = {}
     for i, c in ipairs(columnsOf(w)) do
-        out[i] = { stat = c.stat, width = c.width, showBar = c.showBar }
+        out[i] = { stat = c.stat, enabled = c.enabled and true or false }
     end
     return out
 end
@@ -118,248 +124,113 @@ end
 -- Mutations
 -- ---------------------------------------------------------------------------
 
--- Each mutation ANSWERS with the seam's verdict rather than swallowing it, so a
--- caller (and a test) can tell an applied edit from a refused one.
+-- Each answers with the seam's verdict rather than swallowing it, so a caller
+-- (and a test) can tell an applied edit from a refused one.
 
-local function setField(index, field, value)
+--- Tick or untick one block.
+---
+--- A TOGGLE IS ALSO A MOVE, and that is the whole interaction. Ticking sends the
+--- block to the END of the enabled group -- it becomes the rightmost column,
+--- which is where a column you just added belongs. Unticking sends it to the TOP
+--- of the disabled group, which is the shortest travel available: the player
+--- watches it drop just below the rule rather than hunting for where it went.
+---
+--- The seam re-sorts anyway -- normalizeColumns partitions enabled ahead of
+--- disabled -- so the position built here is only ever a position WITHIN a group.
+--- Building it explicitly is what makes the two ends predictable rather than
+--- whatever a stable partition happened to leave.
+---
+--- @param index number
+--- @return boolean applied
+local function toggle(index)
     local w = activeWindow()
     if not w then return false end
-    local cols = snapshot(w)
-    if not cols[index] then return false end
-    cols[index][field] = value
-    return commit(cols)
-end
 
-local function moveColumn(index, delta)
-    local w = activeWindow()
-    if not w then return false end
-    local cols   = snapshot(w)
-    local target = index + delta
-    if not (cols[index] and cols[target]) then return false end
-    cols[index], cols[target] = cols[target], cols[index]
-    return commit(cols)
-end
+    local cols  = snapshot(w)
+    local entry = cols[index]
+    if not entry then return false end
 
-local function removeColumn(index)
-    local w = activeWindow()
-    if not w then return false end
-    local cols = snapshot(w)
-    -- A window with no columns is a window with nothing but names in it, which
-    -- reads as a broken addon rather than as a configuration.
-    if #cols <= 1 then
-        print_(L["A window must keep at least one column."])
-        return false
+    -- The seam refuses this too. Refusing HERE is what puts the reason in front
+    -- of the player attached to the click that caused it, rather than as a line
+    -- printed after a control appeared to do nothing.
+    if entry.enabled then
+        local shown = 0
+        for _, c in ipairs(cols) do
+            if c.enabled then shown = shown + 1 end
+        end
+        if shown <= 1 then
+            print_(L["A window must keep at least one column."])
+            return false
+        end
     end
-    if not cols[index] then return false end
+
     tremove(cols, index)
+    entry.enabled = not entry.enabled
+
+    local boundary = 0
+    for _, c in ipairs(cols) do
+        if c.enabled then boundary = boundary + 1 end
+    end
+
+    -- Both ends land at the same insertion point: the first slot after the last
+    -- enabled entry. Newly ticked, that is the end of the enabled group; newly
+    -- unticked, it is the top of the disabled one.
+    tinsert(cols, boundary + 1, entry)
     return commit(cols)
 end
 
-local function addColumn(statKey)
-    local stat = statKey and Const.STAT_BY_KEY[statKey]
-    if not stat then return false end
+--- Move one block to another index.
+---
+--- Both are already in the same group -- settings/ColumnBlocks.lua clamped the
+--- drop before it ever got here, because crossing the rule is a state change and
+--- a drag is not how the player asks for one.
+---
+--- @param from number
+--- @param to number
+--- @return boolean applied
+local function reorder(from, to)
     local w = activeWindow()
     if not w then return false end
+
     local cols = snapshot(w)
-    -- Width and show-bar come from the catalog rather than from a fixed number,
-    -- so a stat added to core/Constants.lua arrives sized for the text the
-    -- formatter produces at its magnitude with no edit here.
-    cols[#cols + 1] = { stat = stat.key, width = stat.defaultWidth or 80, showBar = true }
+    if not (cols[from] and cols[to]) or from == to then return false end
+
+    tinsert(cols, to, tremove(cols, from))
     return commit(cols)
-end
-
--- ---------------------------------------------------------------------------
--- Option lists
--- ---------------------------------------------------------------------------
-
---- The stats not already shown, plus `keep` if it is given. Labels are localized
---- AT THE USE SITE — core/Constants.lua stores the English label and deliberately
---- does not call L itself, because locales/ may load either side of it.
----
---- A stat can appear once: two Damage columns would show identical numbers twice
---- and double the provider reads for it. That is an invariant NS.SetByPath now
---- enforces, so the pickers must not offer a choice it would refuse — which is
---- what `keep` is for. A column's own stat dropdown has to list the stat that
---- column already shows, or the control would open with nothing selected.
----
---- @param w table|nil
---- @param keep string|nil
---- @return table list, table order, number count
-local function unusedStatList(w, keep)
-    local used = {}
-    for _, c in ipairs(columnsOf(w)) do used[c.stat] = true end
-
-    local list, order = {}, {}
-    for _, stat in ipairs(Const.STATS) do
-        if not used[stat.key] or stat.key == keep then
-            list[stat.key]    = L[stat.label]
-            order[#order + 1] = stat.key
-        end
-    end
-    return list, order, #order
-end
-
--- Which stat the Add picker is pointed at. Page state: it means nothing outside
--- an open panel, so it is neither a schema row nor a stored value.
-local pendingStat = nil
-
--- ---------------------------------------------------------------------------
--- Per-column widgets
--- ---------------------------------------------------------------------------
-
-local function makeStatDropdown(index, current)
-    return function(_, parent, relativeWidth)
-        if not H.ActionDropdown then return nil end
-        -- Built at RENDER time, not at declaration: which stats are free depends
-        -- on the array as it stands now, and this closure outlives the edit that
-        -- changed it.
-        local list, order = unusedStatList(activeWindow(), current)
-        return H.ActionDropdown(parent, relativeWidth, {
-            label    = L["Statistic"],
-            tooltip  = L["Which statistic this column shows."],
-            list     = list,
-            order    = order,
-            value    = current,
-            onSelect = function(key) setField(index, "stat", key) end,
-        })
-    end
-end
-
-local function makeWidthSlider(index, current)
-    return function(_, parent, relativeWidth)
-        local AceGUI = NS.AceGUI
-        if not (AceGUI and parent) then return nil end
-
-        local sl = AceGUI:Create("Slider")
-        sl:SetLabel(L["Column width"])
-        sl:SetRelativeWidth(relativeWidth or 1)
-        sl:SetSliderValues(24, 240, 1)
-        sl:SetValue(current or 80)
-        -- Release-only, never OnValueChanged: a width write rebuilds the window
-        -- and re-renders this page, and doing that per drag frame would tear the
-        -- slider out from under the cursor.
-        sl:SetCallback("OnMouseUp", function(_, _, value)
-            setField(index, "width", value)
-        end)
-        if H.AttachTooltip then
-            H.AttachTooltip(sl, L["Column width"], L["Width of this column in pixels."])
-        end
-        parent:AddChild(sl)
-        return sl
-    end
-end
-
-local function makeShowBarCheckbox(index, current)
-    return function(_, parent, relativeWidth)
-        local AceGUI = NS.AceGUI
-        if not (AceGUI and parent) then return nil end
-
-        local cb = AceGUI:Create("CheckBox")
-        cb:SetLabel(L["Show bar"])
-        cb:SetRelativeWidth(relativeWidth or 1)
-        cb:SetValue(current and true or false)
-        cb:SetCallback("OnValueChanged", function(_, _, value)
-            setField(index, "showBar", value and true or false)
-        end)
-        if H.AttachTooltip then
-            H.AttachTooltip(cb, L["Show bar"],
-                L["Draw a bar behind this column's number. Turn it off for a numbers-only column."])
-        end
-        parent:AddChild(cb)
-        return cb
-    end
-end
-
---- Move left / move right / remove, three across one full-width row.
----
---- Not InlineButtonPair, which is a PAIR by construction. Three buttons in a
---- Flow group is the smallest thing that says "this column's actions" without
---- splitting one column's controls over two visually unrelated rows.
-local function makeColumnActions(index, count)
-    return function(_, parent)
-        local AceGUI = NS.AceGUI
-        if not (AceGUI and parent) then return nil end
-
-        local row = AceGUI:Create("SimpleGroup")
-        row:SetLayout("Flow")
-        row:SetFullWidth(true)
-        row:SetHeight(28)
-
-        local function button(text, tooltip, enabled, onClick)
-            local btn = AceGUI:Create("Button")
-            btn:SetText(text)
-            btn:SetRelativeWidth(0.32)
-            btn:SetDisabled(not enabled)
-            btn:SetCallback("OnClick", function() pcall(onClick) end)
-            if H.AttachTooltip then H.AttachTooltip(btn, text, tooltip) end
-            row:AddChild(btn)
-        end
-
-        button(L["Move left"], L["Move left"], index > 1,
-            function() moveColumn(index, -1) end)
-        button(L["Move right"], L["Move right"], index < count,
-            function() moveColumn(index, 1) end)
-        button(L["Remove column"], L["Remove this column from the window."], count > 1,
-            function() removeColumn(index) end)
-
-        parent:AddChild(row)
-        return row
-    end
 end
 
 -- ---------------------------------------------------------------------------
 -- The body
 -- ---------------------------------------------------------------------------
 
-local function renderColumn(ctx, index, column, count)
-    local stat = Const.STAT_BY_KEY[column.stat]
-    -- A column whose stat is not in this build's catalog is still listed, so a
-    -- player who moved a profile back from a newer build can see it and remove
-    -- it. The renderer drops it; the editor must not hide it.
-    local label = stat and L[stat.label] or tostring(column.stat)
-
-    H.Section(ctx, index .. ". " .. label)
-    H.RenderGrid(ctx, {
-        { make = makeStatDropdown(index, column.stat) },
-        { make = makeWidthSlider(index, column.width) },
-        { make = makeShowBarCheckbox(index, column.showBar) },
-        { make = makeColumnActions(index, count), wide = true },
-    })
-end
-
-local function renderAddColumn(ctx, w)
-    local list, order, remaining = unusedStatList(w)
-
-    H.Section(ctx, L["Add column"])
-    if remaining == 0 then
-        H.TextRow(ctx, L["Every available statistic is already shown."])
-        return
+--- The stored array in the shape the widget wants it.
+---
+--- Labels are localized HERE because core/Constants.lua stores the English label
+--- and deliberately does not call L itself -- locales/ may load either side of
+--- it.
+---
+--- A statistic this build does not have cannot appear: normalizeColumns drops it
+--- on the way in. So there is no unknown-stat row to render and no fallback label
+--- to invent, which the old page needed because its array was a subset the player
+--- had assembled by hand.
+local function items(w)
+    local out = {}
+    for i, c in ipairs(columnsOf(w)) do
+        local stat = Const.STAT_BY_KEY[c.stat]
+        out[i] = {
+            key     = c.stat,
+            label   = stat and L[stat.label] or tostring(c.stat),
+            enabled = c.enabled and true or false,
+        }
     end
-
-    if pendingStat ~= nil and list[pendingStat] == nil then pendingStat = nil end
-
-    H.RenderGrid(ctx, {
-        {
-            make = function(_, parent, relativeWidth)
-                if not H.ActionDropdown then return nil end
-                return H.ActionDropdown(parent, relativeWidth, {
-                    label    = L["Statistic"],
-                    tooltip  = L["Add a statistic as a new column on the right."],
-                    list     = list,
-                    order    = order,
-                    value    = pendingStat,
-                    onSelect = function(key) pendingStat = key end,
-                })
-            end,
-        },
-    })
-    H.InlineButtonPair(ctx, {
-        text    = L["Add column"],
-        tooltip = L["Add a statistic as a new column on the right."],
-        onClick = function() addColumn(pendingStat) end,
-    }, nil)
+    return out
 end
 
+--- NO SECTION HEADINGS, and no Add section. Each column used to get its own
+--- `1. Damage` heading over four controls, so eight columns was eight headings
+--- and forty widgets to scroll past. The array is the catalog now: there is
+--- nothing to add and nothing to remove, only an order and which of them you
+--- want to see.
 local function render(ctx)
     H.ClearScroll(ctx)
 
@@ -370,16 +241,14 @@ local function render(ctx)
         return
     end
 
-    H.Section(ctx, L["Column list"])
-    H.TextRow(ctx, L["The columns this window shows, left to right. Columns can only be changed out of combat."])
+    H.TextRow(ctx, L["Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."])
 
-    local cols  = columnsOf(w)
-    local count = #cols
-    for i = 1, count do
-        renderColumn(ctx, i, cols[i], count)
-    end
+    NS.ReorderableBlocks(ctx, {
+        items    = items(w),
+        onToggle = toggle,
+        onMove   = reorder,
+    })
 
-    renderAddColumn(ctx, w)
     H.Relayout(ctx)
 end
 
