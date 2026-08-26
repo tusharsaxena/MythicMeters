@@ -222,9 +222,11 @@ second edge to catch.
   own column's colour, the title bar takes the **sort column's** (change the sort and watch it follow), the tooltip
   takes **the column you hovered** — a Healing tooltip is Healing-coloured whatever the grid is
   sorted by, and each **column label takes its own column's** — that last one is the check
-  that catches the strip being resolved once and painted uniformly. The two header strips also carry
-  a **Background color mode** over the same three; on Column headers, Per-statistic paints one
-  rectangle behind each label rather than one across the strip. **The configured opacity survives
+  that catches the strip being resolved once and painted uniformly. The **Column headers** strip also carries a
+  **Background color mode** over the same three, where Per-statistic paints one rectangle behind each
+  label rather than one across the strip. The **Frame header's** background is a plain colour picker
+  with no mode: it is one strip over the whole window, so per-statistic could only ever paint it the
+  sort column's colour. **The configured opacity survives
   every mode** — a class or statistic background must arrive as a tint, not a slab. Walk all four on each page and watch the
   right thing change: the cells, the title bar and session line, the "Player | Damage | Healing"
   strip, and a hovered tooltip. A control that moves the wrong surface means two groups are sharing a
@@ -252,9 +254,9 @@ second edge to catch.
   cells, both header strips and the tooltip. The check below is written for the colour mode and is
   the same for all four.
 - **The meta colour mode.** Frame → Frame behavior → **Color mode (all surfaces)**. Set it to
-  Per-statistic and check all ten of the individual dropdowns followed — Bars (bar and background),
-  Bars → Cell text, Header → Frame header (text and background), Header → Column headers (text and
-  background), Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
+  Per-statistic and check all nine of the individual dropdowns followed — Bars (bar and background),
+  Bars → Cell text, Header → Frame header (text), Header → Column headers (text and background),
+  Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
   only that one changes, and the meta is not fought. Finally press the Frame page's **Defaults**
   button and confirm the ten are **untouched** — a page's reset must not reach other pages.
 - **The Frame page's shape.** Three groups, in order: *Size and position* — which now ends with

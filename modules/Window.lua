@@ -1008,8 +1008,11 @@ function WindowProto:ApplyHeaderStrip()
     -- one drawn over the other with no way to see the lower one, and a colour
     -- picked for the title bar silently restyled the grid's column labels too.
     -- Two strips, two settings, two rectangles.
-    local ar, ag, ab, aa = surfaceColor(header.bgColorMode, header.bgColor,
-        windowStat(self), 0, 0, 0, 0.5)
+    -- A PLAIN COLOUR, with no mode of its own. The column strip below has one
+    -- because "per statistic" tints each label with its own column's colour; this
+    -- is one strip over the whole window, so the same mode could only paint it the
+    -- sort column's colour -- a fact already on screen twice over.
+    local ar, ag, ab, aa = RGBA(header.bgColor, 0, 0, 0, 0.5)
     self.headerBG:ClearAllPoints()
     self.headerBG:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, -pad)
     self.headerBG:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, -pad)

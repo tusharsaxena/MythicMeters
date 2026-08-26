@@ -230,16 +230,16 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 
 `window.colorMode`, `window.barTexture`, `window.font` and `window.fontOutline` are rows on the
 **Frame** page that set the others rather than being read by anything. Each fans out to every surface
-that has a setting of its kind: the colour mode to ten, the bar texture to two (the grid and the
+that has a setting of its kind: the colour mode to nine, the bar texture to two (the grid and the
 tooltip), and the font and its outline to four each (the cells, both header strips and the tooltip).
 The tooltip's keys carry a `font` prefix of their own — `fontOutline`, not `outline` — which is why
 each fan-out is a list of **paths** rather than a group list and a suffix assumed to be shared.
 
 `window.colorMode` sets the other ten rather than being read by
 anything. Ten surfaces each carry a mode of their own — `bars.colorMode`, `bars.bgColorMode`,
-`text.colorMode`, `header.colorMode`, `header.bgColorMode`, `columnHeader.colorMode`,
-`columnHeader.bgColorMode`, `tooltip.colorMode`, `tooltip.barColorMode`, `tooltip.barBgColorMode` —
-which is right when a player wants one of them different and tedious when they want all ten the same.
+`text.colorMode`, `header.colorMode`, `columnHeader.colorMode`, `columnHeader.bgColorMode`,
+`tooltip.colorMode`, `tooltip.barColorMode`, `tooltip.barBgColorMode` —
+which is right when a player wants one of them different and tedious when they want all nine the same.
 
 All four behave the same way, so what follows about the colour mode is true of every one of them.
 
@@ -251,7 +251,7 @@ stale.
 
 The fan-out writes **through `NS.SetByPath`, one at a time**, so each target gets its own validation,
 its own debug line and its own `CONFIG_CHANGED`: a broadcast is indistinguishable from the player
-having set all ten by hand. Writing the config tree directly would be a second write seam, and the
+having set all nine by hand. Writing the config tree directly would be a second write seam, and the
 windows would not repaint.
 
 **It does not fire during a reset.** `NS.ApplyDefault` raises `NS.__restoring` around its write,
@@ -338,7 +338,7 @@ verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a
 
 `font = "Friz Quadrata TT"` · `size = 12` ·
 `outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `colorMode = "custom"` ·
-`align = "LEFT"` · `height = 18` · `bgColor = { r=0, g=0, b=0, a=0.5 }` · `bgColorMode = "custom"`.
+`align = "LEFT"` · `height = 18` · `bgColor = { r=0, g=0, b=0, a=0.5 }`.
 
 **Four keys lived here and are gone**, and each of them said something already on screen: `title`
 (a second name for a window that has one), `showSessionName` ("Overall" beside a window the player
@@ -366,8 +366,9 @@ text — under a heading that said background.
 ### The four text surfaces and their colour modes
 
 `text`, `header`, `columnHeader` and `tooltip` each carry the same five controls — face, outline,
-shadow, colour, and a **`colorMode`** of `class` / `stat` / `custom`. The two header strips carry a
-`bgColorMode` over the same three. `schemaVersion` 7 migrates the `classColor` boolean each of them
+shadow, colour, and a **`colorMode`** of `class` / `stat` / `custom`. The COLUMN strip carries a `bgColorMode` over the same three; the
+title bar's background deliberately does not, because it is one strip over the whole window and "per
+statistic" could only paint it the sort column's colour — a fact on screen twice already. `schemaVersion` 7 migrates the `classColor` boolean each of them
 used to have: `true` → `"class"`, `false` → `"custom"`, which is exactly what it meant, and the dead
 key is pruned.
 

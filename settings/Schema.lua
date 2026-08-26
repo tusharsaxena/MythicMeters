@@ -287,7 +287,6 @@ local COLOR_MODE_PATHS = {
     "window.bars.bgColorMode",
     "window.text.colorMode",
     "window.header.colorMode",
-    "window.header.bgColorMode",
     "window.columnHeader.colorMode",
     "window.columnHeader.bgColorMode",
     "window.tooltip.colorMode",
@@ -773,18 +772,18 @@ NS.Schema = {
         page = "header", group = L["Frame header"],
         label = L["Header height"], desc = L["Height of the header strip in pixels."],
     },
-    {
-        path = "window.header.bgColorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "header", group = L["Frame header"],
-        label = L["Background color mode"],
-        desc = L["What colors the strip behind the title bar. The configured opacity is kept whichever mode is picked, so a class or statistic color arrives as a tint rather than as a slab."],
-    },
+    -- NO `bgColorMode` HERE, and the column strip below keeps one. The two look
+    -- like a matched pair and are not: the column strip labels the COLUMNS, so
+    -- "per statistic" tints each label with its own column's colour and means
+    -- something. The title bar is one strip over the whole window, so the same
+    -- mode could only paint it one colour -- the sort column's -- which is a
+    -- fact already on screen twice over. What is left is the colour picker,
+    -- which is what the setting was.
     {
         path = "window.header.bgColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 0.5 },
         page = "header", group = L["Frame header"],
-        label = L["Header background"], desc = L["Color drawn behind the title bar, when the mode above is Custom. The column-header strip has its own, under Column headers."],
+        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."],
     },
 
     -- ── The header's controls (issue #6) ─────────────────────────────────────

@@ -213,8 +213,6 @@ L["Text color mode"] = "Text color mode"
 L["Background color mode"] = "Background color mode"
 L["What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."] =
     "What colors the title bar's text. Class is your OWN, because the header is about the window rather than about any one row; Per-statistic is the color of the column the grid is sorted by."
-L["What colors the strip behind the title bar. The configured opacity is kept whichever mode is picked, so a class or statistic color arrives as a tint rather than as a slab."] =
-    "What colors the strip behind the title bar. The configured opacity is kept whichever mode is picked, so a class or statistic color arrives as a tint rather than as a slab."
 L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."] =
     "What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."
 L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."] =
@@ -223,8 +221,6 @@ L["What colors the numbers and names. Class is the class of the row being drawn;
     "What colors the numbers and names. Class is the class of the row being drawn; Per-statistic is the color of the column each cell sits in."
 L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."] =
     "What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."
-L["Color drawn behind the title bar, when the mode above is Custom. The column-header strip has its own, under Column headers."] =
-    "Color drawn behind the title bar, when the mode above is Custom. The column-header strip has its own, under Column headers."
 
 -- ONE group for the whole title bar: its text, its alignment, its height and its
 -- background. It was two ("Header text" and "Header background") and the split

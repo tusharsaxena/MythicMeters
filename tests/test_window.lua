@@ -2153,16 +2153,21 @@ test("Per-statistic BACKGROUND on the column strip paints each label, not the st
     end
 end)
 
-test("The header background keeps its opacity in every colour mode", function()
-    -- The alpha is what makes a colour a tint rather than a slab, and neither the
-    -- class palette nor the stat palette carries one.
-    local _, window, cfg = scene()
-    cfg.header.bgColor = { r = 0, g = 0, b = 0, a = 0.4 }
-    for _, mode in ipairs({ "custom", "class", "stat" }) do
-        cfg.header.bgColorMode = mode
-        window:ApplyConfig()
-        assertEqual(window.headerBG.__colorTexture[4], 0.4, "mode " .. mode .. " dropped the alpha")
-    end
+test("The title bar's background is a plain colour, with no mode of its own", function()
+    -- It is ONE strip over the whole window, so a per-statistic mode could only
+    -- paint it the sort column's colour -- a fact on screen twice already. The
+    -- column strip below it keeps its mode, because there "per statistic" tints
+    -- each label with its own column's colour and means something.
+    -- red under: giving the title bar a bgColorMode back.
+    local inst, window, cfg = scene()
+    cfg.header.bgColor = { r = 0.2, g = 0.4, b = 0.6, a = 0.4 }
+    window:ApplyConfig()
+
+    local c = window.headerBG.__colorTexture
+    assertEqual(c[1], 0.2)
+    assertEqual(c[4], 0.4, "the configured opacity was dropped")
+    assertNil(inst.NS.FindSchemaRow("window.header.bgColorMode"),
+        "the title bar grew a background mode back")
 end)
 
 test("The Player column is the shipped width for the shipped config, exactly", function()

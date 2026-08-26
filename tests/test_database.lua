@@ -400,7 +400,7 @@ test("Database v2: every stored column is lifted to the one uniform width", func
         assertEqual(col.width, inst.NS.Constants.COLUMN_WIDTH,
             col.stat .. " kept its old per-stat width")
     end
-    assertEqual(inst.NS.db.global.schemaVersion, 8,
+    assertEqual(inst.NS.db.global.schemaVersion, 9,
         "the walk must run all the way to the current version, not stop at v2")
 end)
 
@@ -478,7 +478,7 @@ test("Database v2: the step is idempotent and survives a malformed window", func
         global = { schemaVersion = 1 },
     })
     inst.NS:RunMigrations()
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database: RunMigrations with no database is a no-op, not an error", function()
@@ -620,7 +620,7 @@ test("Database v3: the three dead keys are REMOVED, not left to rot", function()
     assertNil(icons.showClass, "showClass survived the migration")
     assertNil(icons.showSpec,  "showSpec survived the migration")
     assertNil(icons.showRole,  "showRole survived the migration")
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -651,7 +651,7 @@ test("Database v4: a stored AUTO channel folds to SELF, in EVERY profile", funct
 
     assertEqual(sv.profiles.Default.export.channel, "SELF")
     assertEqual(sv.profiles.Alt.export.channel, "SELF")
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database v4: every other channel is left exactly as the player set it", function()
@@ -670,7 +670,7 @@ test("Database v4: a profile with no export block at all survives the step", fun
         profiles = { Default = { nextWindowId = 2, windows = { { id = 1 } } } },
         global   = { schemaVersion = 3 },
     })
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -703,7 +703,7 @@ test("Database v5: the FIRST window's values are the ones lifted", function()
 
     assertEqual(profile.data.mergePets, true)
     assertEqual(profile.data.throttle, 0.5)
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database v5: the per-window keys are REMOVED from EVERY window", function()
@@ -743,7 +743,7 @@ test("Database v5: a profile whose windows never carried the keys survives", fun
     -- Every profile written before either setting existed is this one, and the
     -- shipped defaults are what it should land on.
     local inst = v4Data({ { id = 1, data = { sortColumn = "Healing" } } })
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
     assertEqual(inst.NS.DataSetting("throttle"), 0.25)
     assertEqual(inst.NS.DataSetting("mergePets"), false)
 end)
@@ -775,7 +775,7 @@ test("Database v6: the two dead row-background keys are pruned from every window
     end
     -- And nothing else in the group was touched.
     assertEqual(inst.NS.Database.FindWindow(1).rows.highlightSelf, false)
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database v7: a class-colour boolean becomes a colour mode, on every surface", function()
@@ -811,7 +811,7 @@ test("Database v7: a class-colour boolean becomes a colour mode, on every surfac
     end
     -- Nothing else in a migrated group was touched.
     assertEqual(w.tooltip.fontSize, 14)
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database v7: a window that never set one is left to the shipped default", function()
@@ -846,7 +846,7 @@ test("Database v8: the four redundant header keys are pruned from every window",
         assertNil(header[key], "the header kept " .. key)
     end
     assertEqual(header.size, 14, "the rest of the group was touched")
-    assertEqual(inst.NS.db.global.schemaVersion, 8)
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)
 
 test("Database v8: a typed header title becomes the window's NAME, not nothing", function()
@@ -879,4 +879,29 @@ test("Database v8: a window that was named itself keeps its own name", function(
         global = { schemaVersion = 7 },
     })
     assertEqual(inst.NS.Database.FindWindow(1).name, "Raid")
+end)
+
+test("Database v9: the title bar's background mode is pruned, the column strip's is kept", function()
+    -- The two looked like a matched pair and are not: "per statistic" means
+    -- something per COLUMN and nothing over one strip.
+    -- red under: pruning both, or neither.
+    local inst = preSeeded({
+        profiles = {
+            Default = {
+                nextWindowId = 2,
+                windows = {
+                    { id = 1,
+                      header       = { bgColorMode = "stat", bgColor = { r = 1 } },
+                      columnHeader = { bgColorMode = "stat" } },
+                },
+            },
+        },
+        global = { schemaVersion = 8 },
+    })
+
+    local w = inst.NS.Database.FindWindow(1)
+    assertNil(w.header.bgColorMode, "the title bar kept a mode it no longer has")
+    assertEqual(w.columnHeader.bgColorMode, "stat", "the column strip lost the mode it keeps")
+    assertEqual(w.header.bgColor.r, 1, "the colour picker went with the dropdown")
+    assertEqual(inst.NS.db.global.schemaVersion, 9)
 end)

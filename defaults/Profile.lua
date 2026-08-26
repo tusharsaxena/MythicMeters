@@ -188,7 +188,6 @@ local WINDOW_TEMPLATE = {
         colorMode       = "custom",
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
-        bgColorMode     = "custom",
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },
     },
 

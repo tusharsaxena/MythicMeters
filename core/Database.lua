@@ -41,7 +41,8 @@ NS.Database = Database
 -- v6 prunes the two row-background keys nothing ever read.
 -- v7 turns four class-colour booleans into three-way colour modes.
 -- v8 prunes the four header keys that said what was already on screen.
-local CURRENT_DB_VERSION = 8
+-- v9 takes the colour mode off the title bar's background.
+local CURRENT_DB_VERSION = 9
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -494,6 +495,29 @@ migrations[7] = function(db)
     end
 
     db.global.schemaVersion = 8
+end
+
+--- v8 -> v9: THE TITLE BAR'S BACKGROUND LOSES ITS COLOUR MODE.
+---
+--- `header.bgColorMode` and `columnHeader.bgColorMode` looked like a matched pair
+--- and are not. The column strip labels the COLUMNS, so "per statistic" tints
+--- each label with its own column's colour and means something. The title bar is
+--- ONE strip over the whole window, so the same mode could only ever paint it one
+--- colour -- the sort column's -- which is a fact already on screen twice over.
+--- It keeps its colour picker, which is what the setting was before the mode was
+--- added to it.
+---
+--- Pruned rather than left, for the reason every step here gives: AceDB merges
+--- defaults in and never removes what they stopped naming.
+migrations[8] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local header = type(w) == "table" and w.header
+            if type(header) == "table" then header.bgColorMode = nil end
+        end
+    end
+
+    db.global.schemaVersion = 9
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

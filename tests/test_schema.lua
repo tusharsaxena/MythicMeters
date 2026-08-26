@@ -475,10 +475,15 @@ test("Schema: the export choices are hidden from the panel but NOT from the seam
 end)
 
 test("The meta colour mode sets every surface in the window at once", function()
-    -- Ten surfaces each carry a colour mode of their own -- the cells, the bar and
-    -- its background, both header strips and both of their backgrounds, the
+    -- Nine surfaces each carry a colour mode of their own -- the cells, the bar
+    -- and its background, both header strips, the column strip's background, the
     -- tooltip's text and both of its bars -- which is right when a player wants
-    -- one of them different and tedious when they want all ten the same.
+    -- one of them different and tedious when they want all nine the same.
+    --
+    -- The title bar's BACKGROUND is deliberately not among them: it is one strip
+    -- over the whole window, so a per-statistic mode could only paint it the sort
+    -- column's colour, which is on screen twice already. It kept its colour
+    -- picker and lost the dropdown.
     -- red under: a path dropped from COLOR_MODE_PATHS.
     local inst = T.load()
     local NS = inst.NS
@@ -488,7 +493,7 @@ test("The meta colour mode sets every surface in the window at once", function()
     for _, path in ipairs({
         "window.bars.colorMode", "window.bars.bgColorMode",
         "window.text.colorMode",
-        "window.header.colorMode", "window.header.bgColorMode",
+        "window.header.colorMode",
         "window.columnHeader.colorMode", "window.columnHeader.bgColorMode",
         "window.tooltip.colorMode", "window.tooltip.barColorMode",
         "window.tooltip.barBgColorMode",
