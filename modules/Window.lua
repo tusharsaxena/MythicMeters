@@ -2224,11 +2224,31 @@ end
 --- It is deliberately not permanent: the visibility rules exist to follow you
 --- between a dungeon and a city, and a flag that outlived that would quietly
 --- disable the whole page.
+---
+--- AND IT OVERRIDES A CONTEXT RULE ONLY. It used to override the whole ladder,
+--- which made the master enable do nothing: any window the player had ever shown
+--- carried `forcedShow`, so unticking "Enable Multi Meters" re-ran the ladder, got
+--- "disabled", and was overruled by a flag that means "I asked for this window in
+--- this zone" — a far narrower statement than the one the master switch makes.
+--- The same bug let a window come back from under a perf suspend, which step 0 of
+--- the ladder exists specifically to forbid ("a suspended capture must be inert:
+--- nothing may re-show a window behind suspend's back", performance-§6).
+---
+--- The reasons below are steps 0 and 1, which are the addon-wide answers. Matched
+--- on the REASON rather than re-asking each source, because the ladder already
+--- names the step that decided and a second reading of NS.Perf.suspended here is
+--- a second place for the two to disagree.
+local UNFORCEABLE = {
+    ["suspended"] = true,   -- step 0: a suspended capture must be inert
+    ["disabled"]  = true,   -- step 1: the master switch is not a context rule
+    ["no window"] = true,   -- not a decision at all -- there is nothing to show
+}
+
 function WindowProto:RefreshVisibility()
     local show, reason = true, "shown"
     if NS.ShouldShow then show, reason = NS.ShouldShow(self.config) end
 
-    if not show and self.forcedShow then
+    if not show and self.forcedShow and not UNFORCEABLE[reason] then
         show, reason = true, "requested"
     end
 

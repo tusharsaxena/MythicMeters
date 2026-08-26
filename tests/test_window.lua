@@ -1645,6 +1645,58 @@ test("Changing a setting does not close a window the player asked for", function
     assertTrue(window:IsShown(), "and an unrelated settings edit must not take it away")
 end)
 
+test("The master switch closes a window the player asked for", function()
+    -- forcedShow used to override the WHOLE ladder, which made "Enable Multi
+    -- Meters" do nothing: any window that had ever been shown carried the flag, so
+    -- unticking the master switch re-ran the ladder, got "disabled", and was
+    -- overruled by a flag that means "I asked for this window in this zone" -- a
+    -- far narrower statement than the one the master switch makes.
+    -- red under: `if not show and self.forcedShow then` with no UNFORCEABLE check.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+
+    local window = NS.WindowManager.All()[1]
+    window:Show()
+    assertTrue(window:IsShown(), "an explicit request shows it")
+
+    assertTrue(NS.SetByPath("enabled", false))
+    assertFalse(window:IsShown(), "the master switch is not a context rule")
+end)
+
+test("A perf suspend closes a window the player asked for", function()
+    -- Step 0 of the ladder exists to say a suspended capture is INERT: nothing --
+    -- a combat transition, a zone-in, a settings change -- may re-show a window
+    -- behind suspend's back. forcedShow was doing exactly that.
+    -- red under: forcedShow overriding a "suspended" answer.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+
+    local window = NS.WindowManager.All()[1]
+    window:Show()
+    assertTrue(window:IsShown())
+
+    NS.Perf.suspended = true
+    window:RefreshVisibility()
+    assertFalse(window:IsShown(), "a suspended capture must be inert")
+end)
+
+test("A CONTEXT rule still cannot close a window the player asked for", function()
+    -- The other half of the same fix, and the reason forcedShow exists at all: it
+    -- must still outrank the context rules, or narrowing the override would have
+    -- brought back the bug it was written for.
+    local inst = T.load{ enable = true }
+    local NS = inst.NS
+    local cfg = NS.Database.GetWindows()[1]
+    cfg.visibility = { dungeon = false, raid = false, arena = false,
+                       battleground = false, world = false,
+                       hideWhenSolo = false, hideInVehicle = false }
+
+    local window = NS.WindowManager.All()[1]
+    window:Show()
+    window:RefreshVisibility()
+    assertTrue(window:IsShown(), "every context says no, and the request still wins")
+end)
+
 test("A zone change is what makes an explicit show stale", function()
     -- Deliberately not permanent: the visibility rules exist to follow you between
     -- a dungeon and a city, and a flag that outlived that would quietly disable
