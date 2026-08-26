@@ -138,16 +138,24 @@ test("CellTooltip opens on the hovered cell and heads with the player and the st
     assertEqual(tt.__lines[1].right, "Damage", "localized at the use site, from the catalog")
 end)
 
-test("CellTooltip honors the anchor setting and falls back to the cursor", function()
+test("CellTooltip honors the anchor setting and falls back to the default", function()
     local inst, cfg, anchor = bench()
     cfg.tooltip.anchor = "BOTTOMRIGHT"
     inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
     assertEqual(inst.mocks.GameTooltip.__anchor, "ANCHOR_BOTTOMRIGHT")
 
+    -- TOP, because it is the shipped default: an anchor this build does not
+    -- offer -- a typo, or a profile that escaped the v9 -> v10 step still
+    -- carrying "CURSOR" -- lands where a new window does rather than somewhere
+    -- nothing else uses.
     cfg.tooltip.anchor = "SOMETHINGWRONG"
     inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
-    assertEqual(inst.mocks.GameTooltip.__anchor, "ANCHOR_CURSOR",
+    assertEqual(inst.mocks.GameTooltip.__anchor, "ANCHOR_TOP",
         "a typo'd token must not silently become a broken anchor")
+
+    local tip, _, rel = inst.mocks.GameTooltip:GetPoint(1)
+    assertEqual(tip, "BOTTOM", "the fallback must be PLACED as well as owned")
+    assertEqual(rel, "TOP")
 end)
 
 test("CellTooltip sorts biggest-first when comparison is legal", function()
@@ -1049,7 +1057,6 @@ test("Every anchor the schema offers resolves to a real GameTooltip token", func
     -- fall back to if our own SetPoint raises.
     -- red under: dropping any entry from ANCHOR_TOKENS.
     local expected = {
-        CURSOR      = "ANCHOR_CURSOR",
         TOP         = "ANCHOR_TOP",
         BOTTOM      = "ANCHOR_BOTTOM",
         LEFT        = "ANCHOR_LEFT",
@@ -1098,13 +1105,18 @@ test("Each anchor puts the tooltip in the box of a 3x3 around the cell", functio
     end
 end)
 
-test("At the cursor, nothing is placed by us at all", function()
-    -- The cursor is not a corner of anything, and ANCHOR_CURSOR is the one token
-    -- that already does exactly what its name says.
-    local inst, cfg, anchor = bench{ configure = function(c) c.tooltip.anchor = "CURSOR" end }
-    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
-    assertEqual(inst.mocks.GameTooltip.__anchor, "ANCHOR_CURSOR")
-    assertNil(inst.mocks.GameTooltip:GetPoint(1), "the cursor anchor was overridden")
+test("There is no \"At cursor\" anchor, and TOP is what shipped instead", function()
+    -- It was the default and it is what every other tooltip in the game does,
+    -- which is exactly the trouble: over a grid it lands wherever the pointer
+    -- happens to be inside a cell, so the same hover puts the tooltip somewhere
+    -- different every time and reads as jitter rather than as a choice. TOP is
+    -- the deliberate version of the same thing.
+    -- red under: putting the entry back without deciding what it means.
+    local inst = T.load()
+    local row = inst.NS.FindSchemaRow("window.tooltip.anchor")
+    assertTrue(row ~= nil)
+    assertEqual(row.default, "TOP")
+    assertNil(row.values.CURSOR, "the dropdown still offers the cursor")
 end)
 
 test("The anchor dropdown offers nothing the token table cannot resolve", function()

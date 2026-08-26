@@ -42,7 +42,8 @@ NS.Database = Database
 -- v7 turns four class-colour booleans into three-way colour modes.
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
-local CURRENT_DB_VERSION = 9
+-- v10 retires the "At cursor" tooltip anchor.
+local CURRENT_DB_VERSION = 10
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -518,6 +519,30 @@ migrations[8] = function(db)
     end
 
     db.global.schemaVersion = 9
+end
+
+--- v9 -> v10: THE "At cursor" TOOLTIP ANCHOR IS RETIRED.
+---
+--- It was the shipped default and it is what every other tooltip in the game
+--- does, which is exactly what was wrong with it here: over a GRID it lands
+--- wherever the pointer happens to be inside a cell, so the same hover puts the
+--- tooltip somewhere different every time and reads as jitter rather than as a
+--- choice. TOP is the deliberate version of the same thing -- above the cell, in
+--- one place -- and is the default now.
+---
+--- A stored "CURSOR" becomes "TOP" rather than being left to the reader's
+--- fallback, so the value in the profile is the value the dropdown shows.
+migrations[9] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local tooltip = type(w) == "table" and w.tooltip
+            if type(tooltip) == "table" and tooltip.anchor == "CURSOR" then
+                tooltip.anchor = "TOP"
+            end
+        end
+    end
+
+    db.global.schemaVersion = 10
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

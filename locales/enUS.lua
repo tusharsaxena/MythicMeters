@@ -394,7 +394,8 @@ L["Tooltip behavior"] = "Tooltip behavior"
 L["Tooltip anchor"] = "Tooltip anchor"
 L["Where the tooltip appears relative to the cursor or the window."] =
     "Where the tooltip appears relative to the cursor or the window."
-L["At cursor"] = "At cursor"
+-- No "At cursor": over a grid it lands wherever the pointer happens to be inside
+-- a cell, so the same hover puts the tooltip somewhere different every time.
 L["Show spell breakdown"] = "Show spell breakdown"
 L["List the individual spells behind a cell's number when you hover it."] =
     "List the individual spells behind a cell's number when you hover it."

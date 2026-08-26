@@ -449,8 +449,13 @@ local DEATHTIME_SORT = { "clock", "ago" }
 -- the one thing this addon may not do: a cell handed a secret value has secret
 -- geometry, so there is no legal way to compute a point from it (rule R3).
 -- Ordered cursor first, then the four edges, then the four corners.
+-- NO "At cursor". It was the shipped default and it is what every other tooltip
+-- in the game does, which is exactly the trouble: over a grid it lands wherever
+-- the pointer happens to be inside a cell, so the same hover puts the tooltip in
+-- a different place every time and reads as jitter rather than as a choice. TOP
+-- is the deliberate version of the same thing -- above the cell, in one place --
+-- and is the default now.
 local ANCHOR_VALUES  = {
-    CURSOR      = L["At cursor"],
     TOP         = L["Top"],
     BOTTOM      = L["Bottom"],
     LEFT        = L["Left"],
@@ -461,7 +466,6 @@ local ANCHOR_VALUES  = {
     BOTTOMRIGHT = L["Bottom right"],
 }
 local ANCHOR_SORT    = {
-    "CURSOR",
     "TOP", "BOTTOM", "LEFT", "RIGHT",
     "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT",
 }
@@ -1236,7 +1240,7 @@ NS.Schema = {
 
     -- ── Tooltip ──────────────────────────────────────────────────────────────
     {
-        path = "window.tooltip.anchor", type = "string", default = "CURSOR",
+        path = "window.tooltip.anchor", type = "string", default = "TOP",
         values = ANCHOR_VALUES, sorting = ANCHOR_SORT,
         page = "tooltip", group = L["Tooltip behavior"],
         label = L["Tooltip anchor"], desc = L["Where the tooltip appears relative to the cursor or the window."],

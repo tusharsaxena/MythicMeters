@@ -203,8 +203,10 @@ second edge to catch.
 - Every change applies **immediately** to the window, without a `/reload`.
 - **The tooltip.** *Tooltip behavior* now holds the **scale** slider and the **Targets** pair (they
   had a group of their own for two rows). **Each anchor is a box of a 3×3 around the cell**: "Top left" is above and to
-  the LEFT, "Left" is beside it and grows left, and so on around the eight. Walk all nine (the ninth
-  is At cursor) and check each opens AWAY from the cell rather than across it. **This is the one
+  the LEFT, "Left" is beside it and grows left, and so on around the eight. Walk all eight and check each opens AWAY from the cell rather than
+  across it. **There is no "At cursor"** — it was the default, and over a grid it landed wherever the
+  pointer happened to be inside a cell, so the same hover moved every time; **Top** is the deliberate
+  version and is the default now. **This is the one
   place the addon positions the tooltip itself**, so it is also the check for a taint error: if
   hovering a cell mid-pull ever produces a Lua error naming this addon, the placement is the
   suspect — it is `pcall`'d and the tooltip should fall back to roughly the right place rather than

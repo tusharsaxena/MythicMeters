@@ -576,7 +576,7 @@ every number to its right is opaque.
 
 ### `tooltip`
 
-`anchor = "CURSOR"` · `offsetX = 0` · `offsetY = 0` · `showSpells = true` · `maxSpells = 10` ·
+`anchor = "TOP"` · `offsetX = 0` · `offsetY = 0` · `showSpells = true` · `maxSpells = 10` ·
 `showAllStatsOnName = true` · `hideInCombat = false`.
 
 Its own appearance, kept separate from `bars` and `text` on purpose — a 14px spell line and a 90px
@@ -591,10 +591,17 @@ one line's two figures.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
 
-`anchor` takes nine values — `CURSOR`, the four edges and the four corners — and the eight that are
-not the cursor name **a box of a 3×3 drawn around the hovered cell**. "Top left" is the box above and
+`anchor` takes eight values — the four edges and the four corners — and each names **a box of a 3×3
+drawn around the hovered cell**. "Top left" is the box above and
 to the LEFT; "Left" is the box beside it, growing left. Each therefore names a direction the tooltip
 grows in as well as a corner it touches, which is what a player means by picking one.
+
+**There is no "at cursor".** It was the shipped default and it is what every other tooltip in the
+game does, which is exactly what was wrong with it here: over a *grid* it lands wherever the pointer
+happens to be inside a cell, so the same hover puts the tooltip somewhere different every time and
+reads as jitter rather than as a choice. `TOP` is the deliberate version of the same thing, and is
+the default. `schemaVersion` 10 rewrites a stored `CURSOR`, and an unrecognised anchor falls back to
+`TOP` for the same reason — it is where a new window puts it.
 
 **Blizzard's tokens cannot say that**: `ANCHOR_TOPLEFT` and `ANCHOR_TOPRIGHT` are both directly above
 the owner, aligned to one edge or the other, so both grow *across* the thing being hovered — and

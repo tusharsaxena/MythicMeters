@@ -367,7 +367,10 @@ local WINDOW_TEMPLATE = {
     tooltip = {
         -- CURSOR | TOP | BOTTOM | LEFT | RIGHT
         --        | TOPLEFT | TOPRIGHT | BOTTOMLEFT | BOTTOMRIGHT
-        anchor             = "CURSOR",
+        -- Above the cell, in ONE place. "At cursor" was the default and is gone:
+        -- over a grid it lands wherever the pointer happens to be inside a cell,
+        -- so the same hover puts the tooltip somewhere different every time.
+        anchor             = "TOP",
         -- The TOOLTIP's scale, not the window's: a player who wants a bigger grid
         -- and a small tooltip is asking two questions. Put back to 1 when the
         -- tooltip closes, because GameTooltip is Blizzard's and shared.

@@ -445,7 +445,6 @@ local ANCHOR_POINTS = {
 -- before: both mean "the owner places this", which with no placement of our own
 -- would be no placement at all.
 local ANCHOR_TOKENS = {
-    CURSOR      = "ANCHOR_CURSOR",
     TOP         = "ANCHOR_TOP",
     BOTTOM      = "ANCHOR_BOTTOM",
     LEFT        = "ANCHOR_LEFT",
@@ -516,7 +515,7 @@ end
 --- @param anchorFrame table
 --- @param config table
 local function placeTooltip(anchorFrame, config)
-    local at = ANCHOR_POINTS[config.anchor]
+    local at = ANCHOR_POINTS[config.anchor] or ANCHOR_POINTS.TOP
     if not (at and anchorFrame) then
         pendingPlacement = nil
         return
@@ -561,7 +560,11 @@ local function openTooltip(anchorFrame, config)
         GameTooltip:SetScale(tooltipScale(config.scale))
     end
 
-    GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_CURSOR",
+    -- TOP is the fallback for a stored anchor this build does not offer -- a
+    -- profile that escaped the v9 -> v10 step still carrying "CURSOR", say. It is
+    -- the shipped default, so an unrecognised value lands on the same place a new
+    -- window does rather than somewhere nothing else uses.
+    GameTooltip:SetOwner(anchorFrame, ANCHOR_TOKENS[config.anchor] or "ANCHOR_TOP",
         offset(config.offsetX), offset(config.offsetY))
     placeTooltip(anchorFrame, config)
     GameTooltip:ClearLines()
