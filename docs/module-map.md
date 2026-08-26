@@ -136,7 +136,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
         Visibility · Columns · Profiles
                           — the 10 panel pages, in panel order. General is FIRST;
                           the nine between Windows and Profiles are drawn with a
-                          "    - " indent, because the Windows picker retargets them
+                          "  - " indent, because the Windows picker retargets them
 ```
 
 ## What each file publishes and consumes

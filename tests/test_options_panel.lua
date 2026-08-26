@@ -124,7 +124,7 @@ test("Options: every window page is marked as nested, and the two that are not a
     -- a bulleted list rather than as nesting). Leading whitespace is also the
     -- one part of this a toolkit could silently TRIM, so this is the case that
     -- would notice a mark that stopped arriving whole.
-    local MARK = "    - "
+    local MARK = "  - "
     local NESTED = {
         frame = true, header = true, rows = true, bars = true,
         tooltip = true, visibility = true, columns = true,

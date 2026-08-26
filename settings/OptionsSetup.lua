@@ -53,11 +53,10 @@ local addonName, NS = ...
 -- that silently retarget when a picker two pages up moves, presented as peers of
 -- the two that never do, is the tree lying about what a click will change.
 --
--- There is no API for a third level, so the mark is TYPOGRAPHY: four spaces, a
+-- There is no API for a third level, so the mark is TYPOGRAPHY: two spaces, a
 -- hyphen and a space, prefixed to the tree label ONLY. It is deliberately not
 -- part of the page's own title -- the canvas heading and the breadcrumb keep the
--- plain name, because a page heading that starts four spaces in reads as a
--- layout bug.
+-- plain name, because a page heading that starts indented reads as a layout bug.
 --
 -- THE INDENT DOES THE NESTING; THE HYPHEN MARKS THE ITEM. Two earlier spellings
 -- got one of those and not the other, and both are recorded because each failed
@@ -71,17 +70,21 @@ local addonName, NS = ...
 --           nesting: with nothing indenting it, the mark sat where the page name
 --           should start and competed with it for the eye.
 --
--- Four spaces alone were confirmed in the client to survive -- leading
--- whitespace is the kind of thing a UI toolkit trims, and this one does not --
--- which is what makes the hyphen safe to add: it is decoration on an indent that
--- is already doing the work, rather than the only thing standing in for it. If a
--- future client does start trimming, the nine pages keep a visible "- " and
--- degrade to a flat bulleted list rather than to nothing at all.
+-- Whitespace was confirmed in the client to survive -- leading whitespace is the
+-- kind of thing a UI toolkit trims, and this one does not -- which is what makes
+-- the hyphen safe to add: it is decoration on an indent that is already doing the
+-- work, rather than the only thing standing in for it. If a future client does
+-- start trimming, the pages keep a visible "- " and degrade to a flat bulleted
+-- list rather than to nothing at all.
+--
+-- TWO spaces rather than four: at four the hyphen sat far enough right that the
+-- eye read the indent and the mark as two separate things rather than as one
+-- label starting late.
 --
 -- Not a locale string. It is furniture rather than text, and a translator handed
--- four spaces and a hyphen has nothing to translate and one more chance to drop
--- a space.
-local SUBPAGE_MARK = "    - "
+-- two spaces and a hyphen has nothing to translate and one more chance to drop a
+-- space.
+local SUBPAGE_MARK = "  - "
 
 --- The tree label for a page nested under Windows.
 ---
