@@ -479,26 +479,53 @@ local function offset(v)
     return v
 end
 
+-- WHAT THIS HOVER ASKED FOR, kept between openTooltip and the Show that ends the
+-- build. Cleared by releaseLines with everything else.
+local pendingPlacement
+
 --- Put the tooltip in the box the setting names, or leave the token's placement
 --- alone.
+---
+--- CALLED AGAIN AFTER GameTooltip:Show(), AND THAT IS THE WHOLE TRICK. The show
+--- path RE-ANCHORS the tooltip to its owner -- the same way it re-fonts the
+--- tooltip's lines, which is why `reapplyFonts` exists three lines below every
+--- Show in this file. Placing only before the lines were added meant every point
+--- set here was silently thrown away and the token's placement was what the
+--- player actually got: "Top left" sat directly above the cell growing right,
+--- because that is what ANCHOR_TOPLEFT does, and no anchor produced the box
+--- beside the cell at all.
 ---
 --- THE OFFSETS ARE APPLIED HERE rather than through SetOwner, so they mean the
 --- same thing whichever path placed the tooltip: positive x moves it right and
 --- positive y moves it up, from wherever the anchor put it.
----
---- @param anchorFrame table
---- @param config table
-local function placeTooltip(anchorFrame, config)
-    local at = ANCHOR_POINTS[config.anchor]
-    if not (at and GameTooltip.SetPoint and GameTooltip.ClearAllPoints) then return end
+local function applyPlacement()
+    local at = pendingPlacement
+    if not at then return end
+    if not (GameTooltip.SetPoint and GameTooltip.ClearAllPoints) then return end
 
     -- pcall'd: see the note on ANCHOR_TOKENS above. A raise here means the
     -- tooltip keeps the placement SetOwner already gave it.
     pcall(function()
         GameTooltip:ClearAllPoints()
-        GameTooltip:SetPoint(at.tip, anchorFrame, at.owner,
-            offset(config.offsetX), offset(config.offsetY))
+        GameTooltip:SetPoint(at.tip, at.frame, at.owner, at.x, at.y)
     end)
+end
+
+--- Remember where this hover wants the tooltip, and make the first attempt.
+---
+--- @param anchorFrame table
+--- @param config table
+local function placeTooltip(anchorFrame, config)
+    local at = ANCHOR_POINTS[config.anchor]
+    if not (at and anchorFrame) then
+        pendingPlacement = nil
+        return
+    end
+    pendingPlacement = {
+        frame = anchorFrame, tip = at.tip, owner = at.owner,
+        x = offset(config.offsetX), y = offset(config.offsetY),
+    }
+    applyPlacement()
 end
 
 --- Claim GameTooltip for this hover, or answer false if it must not open.
@@ -962,6 +989,11 @@ end
 --- leaving ours on it makes the next addon's item tooltip inexplicably wide —
 --- the same class of bug as a bar left Shown.
 local function releaseLines()
+    -- The placement belongs to ONE hover. Left set, the next Show of a tooltip
+    -- this addon did not build -- an item, a unit, a quest -- would re-anchor it
+    -- to a cell of ours, which is the same class of leak as a bar left Shown.
+    pendingPlacement = nil
+
     for _, frame in pairs(linePool) do
         frame.bar:Hide()
         frame:Hide()
@@ -2231,9 +2263,11 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     applyMinimumWidth(style)
 
     GameTooltip:Show()
-    -- AFTER Show, not before: the show path re-fonts the tooltip's lines. See
-    -- `reapplyFonts`.
+    -- AFTER Show, not before, and for the same reason twice over: the show path
+    -- re-fonts the tooltip's lines AND re-anchors it to its owner. See
+    -- `reapplyFonts` and `applyPlacement`.
     reapplyFonts()
+    applyPlacement()
 
     if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
     if State.debug and Debug then
@@ -2363,6 +2397,9 @@ function Tooltip:NameTooltip(row, anchorFrame, window)
 
     if not config.showAllStatsOnName then
         GameTooltip:Show()
+        -- AFTER Show: the show path re-anchors the tooltip to its owner, so a
+        -- point set before the lines were added is silently thrown away.
+        applyPlacement()
         if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
         return
     end
@@ -2377,6 +2414,9 @@ function Tooltip:NameTooltip(row, anchorFrame, window)
     end
 
     GameTooltip:Show()
+    -- AFTER Show: the show path re-anchors the tooltip to its owner, so a
+    -- point set before the lines were added is silently thrown away.
+    applyPlacement()
 
     if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
     if State.debug and Debug then
@@ -2435,6 +2475,9 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
         local color = classes and row.classFilename and classes[row.classFilename] or nil
         addDeathBreakdown(row, lineStyle(config, color), numberStyleOf(window))
         GameTooltip:Show()
+        -- AFTER Show: the show path re-anchors the tooltip to its owner, so a
+        -- point set before the lines were added is silently thrown away.
+        applyPlacement()
         reapplyFonts()
         if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
         return
@@ -2447,6 +2490,9 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
         local ok = pcall(GameTooltip.SetSpellByID, GameTooltip, spellID)
         if ok then
             GameTooltip:Show()
+            -- AFTER Show: the show path re-anchors the tooltip to its owner, so a
+            -- point set before the lines were added is silently thrown away.
+            applyPlacement()
             if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end
             return
         end
@@ -2456,6 +2502,9 @@ function Tooltip:SpellTooltip(row, anchorFrame, window)
     -- the row is still telling the player which spell it is.
     GameTooltip:AddLine(displayName(row), 1, 1, 1)
     GameTooltip:Show()
+    -- AFTER Show: the show path re-anchors the tooltip to its owner, so a
+    -- point set before the lines were added is silently thrown away.
+    applyPlacement()
     reapplyFonts()
 
     if t0 then Perf.Note("tooltip", debugprofilestop() - t0) end

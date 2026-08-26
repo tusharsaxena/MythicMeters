@@ -601,6 +601,12 @@ there is no token at all for the four diagonals. So `SetOwner` is called with th
 which gives the tooltip a valid position and keeps it on screen, and `placeTooltip` then lays the
 exact box over it with a `SetPoint`.
 
+**The placement is applied AFTER `GameTooltip:Show()`**, and that is not a detail. The show path
+**re-anchors** the tooltip to its owner — the same pass that re-fonts its lines, which is why
+`reapplyFonts` already runs from exactly there. A point set before the lines were added is silently
+thrown away, so the player got the token's placement instead: "Top left" sat directly above the cell
+growing right, and no anchor produced the box beside it at all.
+
 **That `SetPoint` is the one place this addon positions anything against a frame that has held a
 meter value.** A cell handed a secret has secret anchoring data (rule R3), so this is the one call in
 the file that could raise inside Blizzard's own code while tainted by us. It is `pcall`'d, and a

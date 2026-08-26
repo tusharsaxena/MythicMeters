@@ -1848,6 +1848,30 @@ local function build()
         return self
     end
     function tooltip:GetOwner() return self.__owner end
+
+    -- SHOW RE-ANCHORS THE TOOLTIP TO ITS OWNER, and modelling that is the whole
+    -- reason this override exists. The client does it -- it is the same pass that
+    -- re-fonts the tooltip's lines, which modules/Tooltip.lua already works around
+    -- with `reapplyFonts` -- so a point set BEFORE the lines were added is
+    -- silently thrown away.
+    --
+    -- A mock whose Show kept our points made the anchor setting look implemented
+    -- while the player got Blizzard's token placement instead: "Top left" sat
+    -- directly above the cell growing right, and no anchor produced the box beside
+    -- it at all. The suite was green throughout. Modelling the awkward behaviour
+    -- rather than the convenient one is rule 5 of the mock's own header.
+    function tooltip:Show()
+        -- The base frame's Show, not a replacement for it: OnShow has to fire on
+        -- the hide->show TRANSITION, because a suite case models a tooltip skin
+        -- that re-fonts every line from that hook.
+        local was = self.__shown
+        self.__shown = true
+        -- The re-anchor, before the hook rather than after: the client has placed
+        -- the tooltip by the time anything watching OnShow sees it.
+        self.__points = {}
+        if not was then self:_run("OnShow") end
+        return self
+    end
     function tooltip:ClearLines() self.__lines = {}; return self end
     -- PER-LINE FONTSTRINGS, under the client's own global names.
     --
