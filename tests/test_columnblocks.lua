@@ -215,6 +215,57 @@ test("Blocks: a drag reports where it landed", function()
     assertEqual(log.moved[1][2], 3, "two rows down from index 1 is index 3")
 end)
 
+test("Blocks: a poll that never reports the button held cannot kill the drag", function()
+    -- THE BUG THIS EXISTS FOR. The drop used to be ended by IsMouseButtonDown
+    -- alone, so an API that is unavailable or simply answers false on the first
+    -- frame ended the drag immediately, zero rows travelled -- no Lua error, no
+    -- message, and indistinguishable from a drag that never started.
+    --
+    -- The poll must now see the button HELD before it may act on it being
+    -- released, so an answer that is always false can never end anything, and
+    -- OnMouseUp carries the drag instead.
+    -- red under: `if not IsMouseButtonDown(...) then finish() end`.
+    local inst = T.load()
+    local blocks, log = render(inst)
+    local block = blocks[1]
+
+    -- Never held, as far as the poll is concerned.
+    inst.mocks.setMouseDown("LeftButton", false)
+    inst.mocks.setCursor(0, 1000)
+    block.mmHandle:_run("OnMouseDown")
+
+    inst.mocks.setCursor(0, 1000 - 2 * inst.NS.BLOCK_STRIDE)
+    block:_run("OnUpdate", 0.1)
+    assertEqual(#log.moved, 0, "the poll ended a drag it never saw begin")
+
+    block.mmHandle:_run("OnMouseUp")
+    assertEqual(#log.moved, 1, "OnMouseUp did not complete the drag")
+    assertEqual(log.moved[1][2], 3, "the distance travelled was thrown away")
+end)
+
+test("Blocks: OnDragStop completes a drag too", function()
+    -- The third ender. Whichever of the three the client delivers, the drag
+    -- completes once -- finish() is idempotent, so two of them arriving is not a
+    -- second reorder.
+    local inst = T.load()
+    local blocks, log = render(inst)
+    local block = blocks[1]
+
+    inst.mocks.setMouseDown("LeftButton", true)
+    inst.mocks.setCursor(0, 1000)
+    block.mmHandle:_run("OnMouseDown")
+    inst.mocks.setCursor(0, 1000 - 2 * inst.NS.BLOCK_STRIDE)
+    block:_run("OnUpdate", 0.1)
+
+    block.mmHandle:_run("OnDragStop")
+    block.mmHandle:_run("OnMouseUp")     -- and again, from the other path
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)          -- and again, from the poll
+
+    assertEqual(#log.moved, 1, "one grab must produce exactly one reorder")
+    assertEqual(log.moved[1][2], 3)
+end)
+
 test("Blocks: a drag that lands where it started reports nothing", function()
     -- Reporting it would rewrite the array and repaint the page for no change.
     local inst = T.load()

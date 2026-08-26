@@ -337,8 +337,12 @@ below it. Nothing here can be driven offline, so every check below needs a clien
 
 **Pass.**
 - **1** — the window's columns reorder to match, immediately, and the page after the drop shows the
-  new order. Only the **handle** (the up/down arrows on the left) starts a drag: pressing anywhere
-  else on the block does not.
+  new order. The **handle** is the full-height strip down the left edge carrying the icon — the whole
+  strip is the target, not just the icon. Pressing anywhere else on the block does not start a drag.
+- **If the drag does nothing at all**, turn on `/mm debug` and try again. The handle logs
+  `[Blocks] grab N at y=…` when the press is received and `[Blocks] drop N -> M (R rows)` when it
+  completes. No `grab` line means the press never reached the handle; a `grab` with no `drop` means
+  no release path fired; a `drop` with `0 rows` means the cursor read did not move.
 - **After any of these, look at the blocks themselves.** Each must show exactly ONE label and ONE
   glyph. Two names overprinted ("DamageDeaths") or a tick with a cross through it means blocks are
   stacking on recycled slots again, and the next thing to check is that clicking a glyph toggles the

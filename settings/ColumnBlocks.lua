@@ -52,7 +52,7 @@ NS.BLOCK_STRIDE = NS.BLOCK_HEIGHT + 4
 -- runs both reads one glyph vocabulary rather than two.
 local ENABLED_TEX  = "Interface\\RaidFrame\\ReadyCheck-Ready"
 local DISABLED_TEX = "Interface\\RaidFrame\\ReadyCheck-NotReady"
-local HANDLE_ICON  = "elevator"
+local HANDLE_ICON  = "segment"
 
 --- Where a block dropped `rows` rows from `from` lands, clamped to its own group.
 ---
@@ -107,15 +107,20 @@ local function blockFor(parent)
     -- ONLY THE HANDLE TAKES THE MOUSE. Making the whole block draggable means a
     -- press aimed at the glyph starts a drag instead, and the two are a few
     -- pixels apart.
+    -- FULL BLOCK HEIGHT, not an 18px square. The icon inside it stays small, but
+    -- the thing you have to hit to start a drag is the whole left edge of the
+    -- row -- an 18px target in a 30px row is a miss most of the time, and a miss
+    -- here is indistinguishable from the drag not working.
     local handle = CreateFrame("Button", nil, block)
-    handle:SetSize(18, 18)
-    handle:SetPoint("LEFT", block, "LEFT", 8, 0)
+    handle:SetSize(30, NS.BLOCK_HEIGHT)
+    handle:SetPoint("LEFT", block, "LEFT", 2, 0)
     handle:EnableMouse(true)
     handle:RegisterForDrag("LeftButton")
     block.mmHandle = handle
 
     block.handleTex = handle:CreateTexture(nil, "ARTWORK")
-    block.handleTex:SetAllPoints(handle)
+    block.handleTex:SetSize(16, 16)
+    block.handleTex:SetPoint("CENTER", handle, "CENTER", 0, 0)
     if NS.Icon then block.handleTex:SetTexture(NS.Icon(HANDLE_ICON)) end
     block.handleTex:SetVertexColor(0.7, 0.7, 0.7)
 
@@ -141,22 +146,47 @@ local function blockFor(parent)
 
     -- ── the drag ───────────────────────────────────────────────────────────
     --
-    -- OnMouseDown plus an OnUpdate that watches the button, rather than
-    -- RegisterForDrag's OnDragStart/OnDragStop pair. Two reasons, and the first
-    -- is that the pair did not fire at all inside the Settings canvas.
+    -- EVERY DELIVERY PATH CAN START IT AND EVERY DELIVERY PATH CAN END IT, and
+    -- that redundancy is deliberate rather than lazy. The first two attempts each
+    -- picked one pair and each failed in the client while passing offline, so
+    -- what is depended on now is "at least one of these arrives" rather than any
+    -- particular one:
     --
-    -- The second is that it is simply less to depend on: OnDragStart needs the
-    -- client's own drag threshold to be crossed before the handler is entered,
-    -- and OnDragStop needs the release to be delivered to the same frame. Polling
-    -- IsMouseButtonDown asks the one question that actually decides it -- is the
-    -- button still held -- and answers it from the frame we already own.
+    --   start   OnMouseDown (immediate) · OnDragStart (after the drag threshold)
+    --   end     OnMouseUp · OnDragStop · the poll below
+    --
+    -- Both helpers are idempotent, so whichever order the client delivers them
+    -- in, the drag begins once and completes once.
+    --
+    -- THE POLL IS THE ONE THAT CANNOT BE TRUSTED ALONE, and that is why it now
+    -- has to see the button held BEFORE it may act on it being released. If
+    -- IsMouseButtonDown is unavailable or simply answers false on the first
+    -- frame, the old code called finish() immediately with zero rows travelled --
+    -- which is not an error, not a Lua fault, and indistinguishable from a drag
+    -- that never started. `mmSawDown` makes that failure mode impossible: an API
+    -- that never answers true can never end a drag, and the two script-driven
+    -- enders above carry it instead.
+    local function mouseHeld()
+        if type(IsMouseButtonDown) ~= "function" then return nil end
+        local ok, held = pcall(IsMouseButtonDown, "LeftButton")
+        if not ok then return nil end
+        return held and true or false
+    end
+
     local function finish()
         block:SetScript("OnUpdate", nil)
         if not block.mmStartY then return end
-        block.mmStartY = nil
+        block.mmStartY  = nil
+        block.mmSawDown = nil
 
         local to = dropIndex(block.mmIndex, block.mmRows or 0,
             block.mmCount or 1, block.mmBoundary or 0)
+
+        if NS.State and NS.State.debug and NS.Debug then
+            NS.Debug("Blocks", "drop %d -> %d (%d rows)",
+                block.mmIndex, to, block.mmRows or 0)
+        end
+
         -- A drag that lands where it started is not a reorder, and reporting one
         -- would rewrite the array and repaint the page for no change at all.
         local spec = block.mmSpec
@@ -167,6 +197,7 @@ local function blockFor(parent)
 
     local function track()
         if not block.mmStartY then return end
+
         local _, y = GetCursorPosition()
         local moved = block.mmStartY - (y / UIParent:GetEffectiveScale())
         -- +0.5 then floor is round-to-nearest: a block dragged 60% of the way to
@@ -174,29 +205,31 @@ local function blockFor(parent)
         -- back where it started.
         block.mmRows = math.floor(moved / NS.BLOCK_STRIDE + 0.5)
 
-        if not IsMouseButtonDown("LeftButton") then finish() end
+        local held = mouseHeld()
+        if held then
+            block.mmSawDown = true
+        elseif held == false and block.mmSawDown then
+            finish()
+        end
     end
 
     local function begin()
         if block.mmStartY then return end
         local _, y = GetCursorPosition()
-        block.mmStartY = y / UIParent:GetEffectiveScale()
-        block.mmRows   = 0
+        block.mmStartY  = y / UIParent:GetEffectiveScale()
+        block.mmRows    = 0
+        block.mmSawDown = nil
         block:SetScript("OnUpdate", track)
+
+        if NS.State and NS.State.debug and NS.Debug then
+            NS.Debug("Blocks", "grab %d at y=%.1f", block.mmIndex, block.mmStartY)
+        end
     end
 
-    -- TWO ENTRY POINTS INTO ONE START, and they converge deliberately. Whichever
-    -- of the two the client delivers first begins the drag, and `begin` is a
-    -- no-op once it has: OnMouseDown is immediate and always arrives, while
-    -- OnDragStart waits for the client's own drag threshold and is what a player
-    -- who has grabbed the handle and moved decisively will trigger. Depending on
-    -- either one alone is a drag that works everywhere except the one place it
-    -- was tried.
     handle:SetScript("OnMouseDown", begin)
     handle:SetScript("OnDragStart", begin)
-    -- OnDragStop is not wired: `track` ends the drag when the button comes up,
-    -- which is the same question asked without needing the release to be
-    -- delivered to this frame.
+    handle:SetScript("OnMouseUp",   finish)
+    handle:SetScript("OnDragStop",  finish)
 
     parent.mmBlock = block
     return block
