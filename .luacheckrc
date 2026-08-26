@@ -15,7 +15,7 @@ read_globals = {
   "UIParent", "GameTooltip", "GameTooltip_SetDefaultAnchor",
   -- Where the pointer is, in SCALED coordinates. settings/ColumnBlocks.lua's drag
   -- reads it per OnUpdate frame and divides by UIParent:GetEffectiveScale().
-  "GetCursorPosition",
+  "GetCursorPosition", "IsMouseButtonDown",
   "GameFontNormal", "GameFontHighlight", "GameFontDisable", "STANDARD_TEXT_FONT",
   "hooksecurefunc", "securecallfunction", "PlaySound",
   -- Perf bracket timer (performance-§2). The bracket CALL SITES are addon code and are

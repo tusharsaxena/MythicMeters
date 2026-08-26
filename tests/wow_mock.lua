@@ -135,7 +135,7 @@
 --
 -- Secrets      mocks.secret(v) · mocks.secretTable(t) · mocks.reveal(v)
 --              mocks.isSimulatedSecret(v) · mocks.SECRET_ERROR
---              mocks.setRestricted(b) · mocks.setSecretValues(b) · mocks.setCursor(x, y)
+--              mocks.setRestricted(b) · mocks.setSecretValues(b) · mocks.setCursor(x, y) · mocks.setMouseDown(btn, b)
 --              mocks.setSecretsAccessible(b) · mocks.setRestrictionState(n)
 -- Meter        mocks.setMeterAvailable(ok, reason) · mocks.setSession(...)
 --              mocks.setSourceDetail(...) · mocks.buildSession(opts)
@@ -994,6 +994,17 @@ local function build()
     M.__cursorX, M.__cursorY = 0, 0
     M.GetCursorPosition = function() return M.__cursorX, M.__cursorY end
     function M.setCursor(x, y) M.__cursorX, M.__cursorY = x or 0, y or 0 end
+
+    -- Whether a mouse button is held. settings/ColumnBlocks.lua's drag polls this
+    -- rather than waiting for OnDragStop, so a drag that is never released is a
+    -- drag the suite can hold open and inspect mid-flight.
+    M.__mouseDown = {}
+    M.IsMouseButtonDown = function(button)
+        return M.__mouseDown[button or "LeftButton"] and true or false
+    end
+    function M.setMouseDown(button, down)
+        M.__mouseDown[button or "LeftButton"] = down and true or false
+    end
 
     -- ── the four detection globals ─────────────────────────────────────────
     --

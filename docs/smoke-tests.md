@@ -337,7 +337,12 @@ below it. Nothing here can be driven offline, so every check below needs a clien
 
 **Pass.**
 - **1** — the window's columns reorder to match, immediately, and the page after the drop shows the
-  new order. Only the **handle** starts a drag: pressing anywhere else on the block does not.
+  new order. Only the **handle** (the up/down arrows on the left) starts a drag: pressing anywhere
+  else on the block does not.
+- **After any of these, look at the blocks themselves.** Each must show exactly ONE label and ONE
+  glyph. Two names overprinted ("DamageDeaths") or a tick with a cross through it means blocks are
+  stacking on recycled slots again, and the next thing to check is that clicking a glyph toggles the
+  statistic you clicked rather than a different one.
 - **2** — the block drops to the **top of the disabled group**, just below the rule, and the window
   loses that column. It lands where you can see it, not at the bottom of a long list.
 - **3** — it lands at the **end of the ticked group** and reappears as the **rightmost** column.

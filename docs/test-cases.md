@@ -1437,11 +1437,15 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
 
-### test_columnblocks.lua (9)
+### test_columnblocks.lua (13)
 
 - Blocks: one block per item, each carrying its index and its label
 - Blocks: the glyph says enabled or disabled, and clicking it toggles
-- Blocks: only the handle takes the mouse for dragging
+- Blocks: only the handle starts a drag
+- Blocks: a slot owns exactly ONE block, cached on the slot itself
+- Blocks: a reused block reports the index it now carries, not the one it was built with
+- Blocks: OnDragStart begins the same drag OnMouseDown does
+- Blocks: the second entry point does not restart a drag already running
 - Blocks: a drag reports where it landed
 - Blocks: a drag that lands where it started reports nothing
 - Blocks: an enabled block cannot be dragged past the last enabled one
@@ -1533,7 +1537,7 @@ badge and any count quoted in the docs must agree with it.
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
 | test_options_panel.lua | 25 |
-| test_columnblocks.lua | 9 |
+| test_columnblocks.lua | 13 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1370** |
+| **Total** | **1374** |

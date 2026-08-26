@@ -52,7 +52,7 @@ NS.BLOCK_STRIDE = NS.BLOCK_HEIGHT + 4
 -- runs both reads one glyph vocabulary rather than two.
 local ENABLED_TEX  = "Interface\\RaidFrame\\ReadyCheck-Ready"
 local DISABLED_TEX = "Interface\\RaidFrame\\ReadyCheck-NotReady"
-local HANDLE_ICON  = "list"
+local HANDLE_ICON  = "elevator"
 
 --- Where a block dropped `rows` rows from `from` lands, clamped to its own group.
 ---
@@ -81,96 +81,156 @@ local function dropIndex(from, rows, count, boundary)
     return to
 end
 
---- One block: the handle, the glyph and the label, on a plain frame.
+--- The one block on `parent`, built the first time and reused forever after.
 ---
---- A raw CreateFrame rather than an AceGUI widget because AceGUI has no block --
---- a SimpleGroup would give a container and every child would still be built by
---- hand inside it, for a layout that is three fixed positions.
-local function makeBlock(parent, index, item, spec)
+--- REUSED, NOT REBUILT, AND THAT IS THE WHOLE BUG THIS FIXES. H.ClearScroll calls
+--- AceGUI's ReleaseChildren, which pools the SimpleGroups -- so the NEXT render
+--- gets the same `slot.frame` back with the previous render's raw children still
+--- parented to it and still shown. Building a second block on it stacked one over
+--- the other: two labels ("DamageDeaths"), two glyphs (a tick with a cross
+--- through it), and every repaint added another layer.
+---
+--- AceGUI cannot clean these up because it does not know about them: they are
+--- CreateFrame children, not AceGUI widgets. So the slot owns exactly one block
+--- for its whole life, and re-rendering re-points that block instead.
+local function blockFor(parent)
+    if parent.mmBlock then return parent.mmBlock end
+
     local block = CreateFrame("Frame", nil, parent)
-    block:SetHeight(NS.BLOCK_HEIGHT)
     block:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     block:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-    block.mmIndex = index
+    block:SetHeight(NS.BLOCK_HEIGHT)
 
-    -- A disabled block is dimmer but still a block: it can be dragged, and it is
-    -- what you click to bring the column back.
-    local bg = block:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(block)
-    bg:SetColorTexture(1, 1, 1, item.enabled and 0.06 or 0.03)
+    block.bg = block:CreateTexture(nil, "BACKGROUND")
+    block.bg:SetAllPoints(block)
 
+    -- ONLY THE HANDLE TAKES THE MOUSE. Making the whole block draggable means a
+    -- press aimed at the glyph starts a drag instead, and the two are a few
+    -- pixels apart.
     local handle = CreateFrame("Button", nil, block)
-    handle:SetSize(16, 16)
+    handle:SetSize(18, 18)
     handle:SetPoint("LEFT", block, "LEFT", 8, 0)
+    handle:EnableMouse(true)
     handle:RegisterForDrag("LeftButton")
-    local handleTex = handle:CreateTexture(nil, "ARTWORK")
-    handleTex:SetAllPoints(handle)
-    if NS.Icon then handleTex:SetTexture(NS.Icon(HANDLE_ICON)) end
-    handleTex:SetVertexColor(0.7, 0.7, 0.7)
     block.mmHandle = handle
+
+    block.handleTex = handle:CreateTexture(nil, "ARTWORK")
+    block.handleTex:SetAllPoints(handle)
+    if NS.Icon then block.handleTex:SetTexture(NS.Icon(HANDLE_ICON)) end
+    block.handleTex:SetVertexColor(0.7, 0.7, 0.7)
 
     local glyph = CreateFrame("Button", nil, block)
     glyph:SetSize(18, 18)
-    glyph:SetPoint("LEFT", block, "LEFT", 40, 0)
-    -- Recorded as well as set: the mock's SetNormalTexture stores the path where
-    -- a test can compare two blocks' glyphs without reaching into the mock's
-    -- private fields, and the widget is the honest place to publish it.
-    block.mmGlyphTexture = item.enabled and ENABLED_TEX or DISABLED_TEX
-    glyph:SetNormalTexture(block.mmGlyphTexture)
-    glyph:SetScript("OnClick", function()
-        if spec.onToggle then spec.onToggle(index) end
-    end)
+    glyph:SetPoint("LEFT", block, "LEFT", 42, 0)
+    glyph:EnableMouse(true)
     block.mmGlyph = glyph
 
-    local label = block:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("RIGHT", block, "RIGHT", -10, 0)
-    label:SetJustifyH("RIGHT")
-    label:SetText(item.label or "")
-    -- Greyed rather than hidden: a label you cannot read is a block you cannot
-    -- aim at, and aiming at it is how you turn the column back on.
-    if not item.enabled then label:SetTextColor(0.5, 0.5, 0.5) end
-    block.mmLabel = label
+    block.mmLabel = block:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    block.mmLabel:SetPoint("RIGHT", block, "RIGHT", -12, 0)
+    block.mmLabel:SetJustifyH("RIGHT")
 
-    return block
-end
+    -- EVERY SCRIPT READS ITS STATE OFF THE BLOCK AT FIRE TIME, never off an
+    -- upvalue captured when it was wired. A closure over `index` was the second
+    -- half of the stacking bug: the visible glyph belonged to the newest block
+    -- and the click it delivered carried an older render's index, so ticking one
+    -- statistic toggled a different one.
+    glyph:SetScript("OnClick", function()
+        local spec = block.mmSpec
+        if spec and spec.onToggle then spec.onToggle(block.mmIndex) end
+    end)
 
---- Wire one block's handle to the drag.
-local function wireDrag(block, spec, count, boundary)
-    local handle = block.mmHandle
-    local startY, rows
+    -- ── the drag ───────────────────────────────────────────────────────────
+    --
+    -- OnMouseDown plus an OnUpdate that watches the button, rather than
+    -- RegisterForDrag's OnDragStart/OnDragStop pair. Two reasons, and the first
+    -- is that the pair did not fire at all inside the Settings canvas.
+    --
+    -- The second is that it is simply less to depend on: OnDragStart needs the
+    -- client's own drag threshold to be crossed before the handler is entered,
+    -- and OnDragStop needs the release to be delivered to the same frame. Polling
+    -- IsMouseButtonDown asks the one question that actually decides it -- is the
+    -- button still held -- and answers it from the frame we already own.
+    local function finish()
+        block:SetScript("OnUpdate", nil)
+        if not block.mmStartY then return end
+        block.mmStartY = nil
 
-    -- Stored on the handle rather than closed over by OnDragStart, so the tracker
-    -- can be installed and taken off again without either script holding the
-    -- other.
-    handle.mmTrack = function()
-        if not startY then return end
+        local to = dropIndex(block.mmIndex, block.mmRows or 0,
+            block.mmCount or 1, block.mmBoundary or 0)
+        -- A drag that lands where it started is not a reorder, and reporting one
+        -- would rewrite the array and repaint the page for no change at all.
+        local spec = block.mmSpec
+        if to ~= block.mmIndex and spec and spec.onMove then
+            spec.onMove(block.mmIndex, to)
+        end
+    end
+
+    local function track()
+        if not block.mmStartY then return end
         local _, y = GetCursorPosition()
-        local moved = startY - (y / UIParent:GetEffectiveScale())
+        local moved = block.mmStartY - (y / UIParent:GetEffectiveScale())
         -- +0.5 then floor is round-to-nearest: a block dragged 60% of the way to
         -- the next slot has visibly left its own, and rounding down would drop it
         -- back where it started.
-        rows = math.floor(moved / NS.BLOCK_STRIDE + 0.5)
+        block.mmRows = math.floor(moved / NS.BLOCK_STRIDE + 0.5)
+
+        if not IsMouseButtonDown("LeftButton") then finish() end
     end
 
-    handle:SetScript("OnDragStart", function()
+    local function begin()
+        if block.mmStartY then return end
         local _, y = GetCursorPosition()
-        startY = y / UIParent:GetEffectiveScale()
-        rows = 0
-        handle:SetScript("OnUpdate", handle.mmTrack)
-    end)
+        block.mmStartY = y / UIParent:GetEffectiveScale()
+        block.mmRows   = 0
+        block:SetScript("OnUpdate", track)
+    end
 
-    handle:SetScript("OnDragStop", function()
-        handle:SetScript("OnUpdate", nil)
-        if not startY then return end
-        startY = nil
+    -- TWO ENTRY POINTS INTO ONE START, and they converge deliberately. Whichever
+    -- of the two the client delivers first begins the drag, and `begin` is a
+    -- no-op once it has: OnMouseDown is immediate and always arrives, while
+    -- OnDragStart waits for the client's own drag threshold and is what a player
+    -- who has grabbed the handle and moved decisively will trigger. Depending on
+    -- either one alone is a drag that works everywhere except the one place it
+    -- was tried.
+    handle:SetScript("OnMouseDown", begin)
+    handle:SetScript("OnDragStart", begin)
+    -- OnDragStop is not wired: `track` ends the drag when the button comes up,
+    -- which is the same question asked without needing the release to be
+    -- delivered to this frame.
 
-        local to = dropIndex(block.mmIndex, rows or 0, count, boundary)
-        -- A drag that lands where it started is not a reorder, and reporting one
-        -- would rewrite the array and repaint the page for no change at all.
-        if to ~= block.mmIndex and spec.onMove then
-            spec.onMove(block.mmIndex, to)
-        end
-    end)
+    parent.mmBlock = block
+    return block
+end
+
+--- Re-point one block at the item now sitting at `index`.
+local function applyBlock(block, index, item, spec, count, boundary)
+    block.mmIndex    = index
+    block.mmSpec     = spec
+    block.mmCount    = count
+    block.mmBoundary = boundary
+
+    -- A disabled block is dimmer but still a block: it can be dragged, and it is
+    -- what you click to bring the column back.
+    block.bg:SetColorTexture(1, 1, 1, item.enabled and 0.06 or 0.03)
+
+    block.mmGlyphTexture = item.enabled and ENABLED_TEX or DISABLED_TEX
+    block.mmGlyph:SetNormalTexture(block.mmGlyphTexture)
+
+    block.mmLabel:SetText(item.label or "")
+    -- Greyed rather than hidden: a label you cannot read is a block you cannot
+    -- aim at, and aiming at it is how you turn the column back on.
+    if item.enabled then
+        block.mmLabel:SetTextColor(1, 0.82, 0)
+    else
+        block.mmLabel:SetTextColor(0.5, 0.5, 0.5)
+    end
+
+    -- A drag interrupted by a repaint must not survive it: the indices this block
+    -- was carrying describe the list as it was before the write.
+    block:SetScript("OnUpdate", nil)
+    block.mmStartY = nil
+
+    block:Show()
 end
 
 --- Render `spec.items` as blocks into `ctx`'s scroll.
@@ -204,8 +264,8 @@ function NS.ReorderableBlocks(ctx, spec)
         slot:SetHeight(NS.BLOCK_STRIDE)
         scroll:AddChild(slot)
 
-        local block = makeBlock(slot.frame or slot.content, i, item, spec)
-        wireDrag(block, spec, count, boundary)
+        local block = blockFor(slot.frame or slot.content)
+        applyBlock(block, i, item, spec, count, boundary)
         blocks[i] = block
 
         -- The rule, drawn under the LAST enabled block so it marks where the

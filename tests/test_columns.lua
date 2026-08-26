@@ -181,12 +181,14 @@ test("Columns: dragging a block reorders the stored array", function()
     local inst, _, blocks = openPage()
     local before = statKeys(inst)
 
-    local handle = blocks[1].mmHandle
+    local block = blocks[1]
+    inst.mocks.setMouseDown("LeftButton", true)
     inst.mocks.setCursor(0, 1000)
-    handle:_run("OnDragStart")
+    block.mmHandle:_run("OnMouseDown")
     inst.mocks.setCursor(0, 1000 - 2 * inst.NS.BLOCK_STRIDE)
-    handle:_run("OnUpdate", 0.1)
-    handle:_run("OnDragStop")
+    block:_run("OnUpdate", 0.1)
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)
 
     local after = statKeys(inst)
     assertEqual(after[3], before[1], "the dragged block did not land two rows down")
@@ -199,11 +201,13 @@ test("Columns: a drag that goes nowhere writes nothing", function()
     local before = table.concat(statKeys(inst), ",")
     local rendered = ctx._rendered
 
-    local handle = blocks[2].mmHandle
+    local block = blocks[2]
+    inst.mocks.setMouseDown("LeftButton", true)
     inst.mocks.setCursor(0, 1000)
-    handle:_run("OnDragStart")
-    handle:_run("OnUpdate", 0.1)
-    handle:_run("OnDragStop")
+    block.mmHandle:_run("OnMouseDown")
+    block:_run("OnUpdate", 0.1)
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)
 
     assertEqual(table.concat(statKeys(inst), ","), before)
     assertTrue(rendered)
