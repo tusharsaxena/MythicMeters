@@ -81,6 +81,70 @@ local function dropIndex(from, rows, count, boundary)
     return to
 end
 
+--- The one floating copy of a block, carried under the cursor while dragging.
+---
+--- A DRAG NEEDS SOMETHING TO FOLLOW THE POINTER OR IT IS NOT A DRAG. The line
+--- alone said where a block WOULD land while nothing said one was in your hand,
+--- and the log of a working drag looked identical to the log of a broken one from
+--- where the player was sitting.
+---
+--- ONE, ON UIParent, NOT ONE PER BLOCK. It has to escape the ScrollFrame's clip
+--- rectangle to follow the cursor past the edge of the list, which a child of the
+--- scroll cannot do -- and being a singleton on UIParent also puts it outside
+--- AceGUI's pool entirely, so it is the one frame here with no recycling story to
+--- get wrong.
+---
+--- MOUSE DISABLED, and that is load-bearing rather than tidy: a frame under the
+--- pointer that accepts the mouse eats the very button-release that ends the drag
+--- it is drawing.
+local ghost
+
+local function ghostFrame()
+    if ghost then return ghost end
+
+    ghost = CreateFrame("Frame", nil, UIParent)
+    ghost:SetFrameStrata("TOOLTIP")
+    ghost:SetHeight(NS.BLOCK_HEIGHT)
+    ghost:SetWidth(300)
+    ghost:EnableMouse(false)
+    ghost:SetAlpha(0.9)
+    ghost:Hide()
+
+    ghost.bg = ghost:CreateTexture(nil, "BACKGROUND")
+    ghost.bg:SetAllPoints(ghost)
+    ghost.bg:SetColorTexture(0.12, 0.12, 0.12, 0.95)
+
+    ghost.handleTex = ghost:CreateTexture(nil, "ARTWORK")
+    ghost.handleTex:SetSize(16, 16)
+    ghost.handleTex:SetPoint("LEFT", ghost, "LEFT", 8, 0)
+    if NS.Icon then ghost.handleTex:SetTexture(NS.Icon(HANDLE_ICON)) end
+    ghost.handleTex:SetVertexColor(1, 0.82, 0)
+
+    ghost.glyph = ghost:CreateTexture(nil, "ARTWORK")
+    ghost.glyph:SetSize(18, 18)
+    ghost.glyph:SetPoint("LEFT", ghost, "LEFT", 42, 0)
+
+    ghost.label = ghost:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ghost.label:SetPoint("RIGHT", ghost, "RIGHT", -12, 0)
+    ghost.label:SetJustifyH("RIGHT")
+
+    NS.__ColumnDragGhost = ghost
+    return ghost
+end
+
+--- Put the ghost under the cursor. Offset right and up by half a row so the
+--- pointer sits ON the thing it is carrying rather than at its corner.
+local function moveGhost()
+    if not (ghost and ghost:IsShown()) then return end
+    local x, y = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    if not (type(x) == "number" and type(y) == "number" and type(scale) == "number") then
+        return
+    end
+    ghost:ClearAllPoints()
+    ghost:SetPoint("LEFT", UIParent, "BOTTOMLEFT", (x / scale) + 14, y / scale)
+end
+
 --- The one insertion line for this scroll, built once and reused.
 ---
 --- Cached on the content frame for exactly the reason the blocks are: a fresh one
@@ -208,6 +272,7 @@ local function blockFor(parent)
     local function finish()
         block:SetScript("OnUpdate", nil)
         if block.mmLine then block.mmLine:Hide() end
+        if ghost then ghost:Hide() end
         block:SetAlpha(1)
         if not block.mmStartY then return end
         block.mmStartY  = nil
@@ -268,6 +333,7 @@ local function blockFor(parent)
         -- back where it started.
         block.mmRows = math.floor(moved / NS.BLOCK_STRIDE + 0.5)
 
+        moveGhost()
         showLine(dropIndex(block.mmIndex, block.mmRows,
             block.mmCount or 1, block.mmBoundary or 0))
 
@@ -286,9 +352,27 @@ local function blockFor(parent)
         block.mmRows    = 0
         block.mmSawDown = nil
         block:SetScript("OnUpdate", track)
-        -- The block you are carrying fades, so the row you are looking at is the
-        -- line rather than the thing you grabbed.
-        block:SetAlpha(0.45)
+        -- The block you are carrying fades in the LIST, because the copy under
+        -- the cursor is now the one you are looking at.
+        block:SetAlpha(0.35)
+
+        -- The copy itself: same glyph, same name, same width as the row it came
+        -- from, so what you are carrying reads as that row rather than as a new
+        -- widget that appeared. The width is read off the block, which is an
+        -- options frame and has never held a meter value -- rule R3 is about
+        -- cells that have.
+        local g = ghostFrame()
+        local w = block.GetWidth and block:GetWidth()
+        if type(w) == "number" and w > 0 then g:SetWidth(w) end
+        g.glyph:SetTexture(block.mmGlyphTexture)
+        g.label:SetText(block.mmLabel:GetText() or "")
+        if block.mmEnabled then
+            g.label:SetTextColor(1, 0.82, 0)
+        else
+            g.label:SetTextColor(0.5, 0.5, 0.5)
+        end
+        g:Show()
+        moveGhost()
 
         if NS.State and NS.State.debug and NS.Debug then
             NS.Debug("Blocks", "grab %d at y=%.1f", block.mmIndex, block.mmStartY)
@@ -310,6 +394,7 @@ local function applyBlock(block, index, item, spec, count, boundary)
     block.mmSpec     = spec
     block.mmCount    = count
     block.mmBoundary = boundary
+    block.mmEnabled  = item.enabled and true or false
     block:SetAlpha(1)
 
     -- A disabled block is dimmer but still a block: it can be dragged, and it is
@@ -329,9 +414,12 @@ local function applyBlock(block, index, item, spec, count, boundary)
     end
 
     -- A drag interrupted by a repaint must not survive it: the indices this block
-    -- was carrying describe the list as it was before the write.
+    -- was carrying describe the list as it was before the write. The ghost goes
+    -- with it -- a copy left floating over a list that has already changed is
+    -- worse than no feedback at all.
     block:SetScript("OnUpdate", nil)
     block.mmStartY = nil
+    if ghost then ghost:Hide() end
 
     block:Show()
 end

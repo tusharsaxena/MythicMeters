@@ -266,6 +266,59 @@ test("Blocks: OnDragStop completes a drag too", function()
     assertEqual(log.moved[1][2], 3)
 end)
 
+test("Blocks: a copy of the block is carried under the cursor", function()
+    -- THE FEEDBACK THE DRAG ACTUALLY NEEDED. The insertion line said where a
+    -- block WOULD land while nothing said one was in your hand, so a working drag
+    -- and a broken one looked the same from where the player was sitting.
+    -- red under: no ghost, or a ghost that never follows.
+    local inst = T.load()
+    local blocks = render(inst)
+    local block = blocks[2]
+
+    inst.mocks.setMouseDown("LeftButton", true)
+    inst.mocks.setCursor(0, 1000)
+    block.mmHandle:_run("OnMouseDown")
+
+    local g = inst.NS.__ColumnDragGhost
+    assertTrue(g ~= nil, "no ghost was built")
+    assertTrue(g:IsShown(), "the ghost must appear as soon as the block is grabbed")
+    assertEqual(g.label:GetText(), ITEMS[2].label,
+        "the ghost must read as the row it came from")
+    assertEqual(g.glyph.__texture, block.mmGlyphTexture,
+        "and wear that row's glyph")
+    assertEqual(g.__mouseEnabled, false,
+        "a ghost that takes the mouse eats the release that ends the drag")
+
+    -- It FOLLOWS: a second position, a second anchor.
+    local firstY = select(5, g:GetPoint(1))
+    inst.mocks.setCursor(0, 1000 - 2 * inst.NS.BLOCK_STRIDE)
+    block:_run("OnUpdate", 0.1)
+    assertFalse(select(5, g:GetPoint(1)) == firstY, "the ghost did not follow the cursor")
+
+    assertTrue(block:GetAlpha() < 1, "the row it came from must fade behind it")
+
+    inst.mocks.setMouseDown("LeftButton", false)
+    block:_run("OnUpdate", 0.1)
+    assertFalse(g:IsShown(), "the ghost must be put away when the drag ends")
+    assertEqual(block:GetAlpha(), 1)
+end)
+
+test("Blocks: a repaint mid-drag takes the ghost down with it", function()
+    -- A copy left floating over a list that has already changed is worse than no
+    -- feedback at all -- it names a row that may not be there any more.
+    local inst = T.load()
+    local blocks, _, ctx = render(inst)
+
+    inst.mocks.setMouseDown("LeftButton", true)
+    inst.mocks.setCursor(0, 1000)
+    blocks[1].mmHandle:_run("OnMouseDown")
+    assertTrue(inst.NS.__ColumnDragGhost:IsShown())
+
+    render(inst, nil, ctx)   -- something wrote, and the page redrew
+    assertFalse(inst.NS.__ColumnDragGhost:IsShown(),
+        "the ghost outlived the list it was describing")
+end)
+
 test("Blocks: the insertion line follows the drop target while dragging", function()
     -- WITHOUT THIS A WORKING DRAG LOOKED BROKEN. Nothing moves under the cursor
     -- while you drag, so until the line existed the only feedback was the list

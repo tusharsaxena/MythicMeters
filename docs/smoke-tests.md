@@ -355,9 +355,12 @@ below it. Nothing here can be driven offline, so every check below needs a clien
   A clamped drop writes nothing, so the line stopping is the only feedback there is — if you cannot
   see it, that is the bug, not the clamp.
 
-**Throughout a drag:** the block you grabbed **fades**, and a gold **insertion line** sits where it
-would land, following the cursor. Neither the list nor the block moves under the pointer — the line
-is the whole of the feedback, and without it a working drag is indistinguishable from a broken one.
+**Throughout a drag, three things must be true at once:** a **copy of the block** follows the
+cursor, the row it came from **fades** in the list, and a gold **insertion line** sits where it would
+land. The list itself never reflows under the pointer — the copy and the line are the whole of the
+feedback, and without them a working drag is indistinguishable from a broken one. The copy must
+follow the cursor **past the top and bottom of the list**; if it clips at the edge it is parented to
+the wrong frame.
 - **5** — refused, with "A window must keep at least one column." printed. A window of nothing but
   names reads as a broken addon rather than as a configuration.
 
