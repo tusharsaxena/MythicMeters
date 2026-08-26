@@ -111,8 +111,8 @@ it *and* the order it lands in a new window if it ships enabled.
 | Surface | How |
 |---|---|
 | `Constants.STAT_BY_KEY` | built from the array |
-| `Constants.DEFAULT_STAT_KEYS` | derived from `defaultEnabled`; drives `NS.DefaultWindow`'s columns |
-| The Columns page's Add picker | `unusedStatList` walks `Const.STATS` |
+| `Constants.DEFAULT_STAT_KEYS` | derived from `defaultEnabled`; chooses which of `NS.DefaultWindow`'s columns ship **ticked** — every catalog statistic gets an entry either way |
+| The Columns page | `settings/Columns.lua` draws one block per entry of the window's array, which normalizeColumns keeps equal to `Const.STATS` |
 | The name tooltip's all-statistics list | `modules/Tooltip.lua` walks `Const.STATS` |
 | The aggregator's per-stat read | `columnKeys(window)` filters the window's columns through `STAT_BY_KEY` |
 

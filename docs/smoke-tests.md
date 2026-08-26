@@ -323,28 +323,56 @@ second edge to catch.
 
 ### 5. Column editor
 
-**Steps.** Out of combat, on the Columns page: add **Absorbs**; move it left twice; widen it; turn
-its bar off; remove it. Then try to add a stat already shown.
+The page is **one block per statistic** — a drag handle, a green tick or a red cross, and a name.
+Ticked blocks are the columns, in block order, and they always sit above the rule; unticked ones sit
+below it. Nothing here can be driven offline, so every check below needs a client.
+
+**Steps.** Out of combat, on the Columns page:
+
+1. **Drag** a block from the bottom of the ticked group to the top, by its handle.
+2. **Untick** a middle column.
+3. **Re-tick** it.
+4. Try to **drag a ticked block below the rule**.
+5. Untick down to one column, then try to untick that one.
 
 **Pass.**
-- Each edit repaints the window immediately and repaints the page (the page's shape changed).
-- The width slider commits **on release**, not while dragging — the slider must not tear out from
-  under the cursor.
-- The Add picker offers only stats not already shown; when every stat is shown it says so instead of
-  offering an empty dropdown.
-- A column's own stat dropdown lists the stat that column already shows (or it would open with
-  nothing selected).
-- **Remove** is disabled when only one column remains, and attempting it anyway prints "A window must
-  keep at least one column."
-- Turning a bar off leaves the column's **text** — the column still reads, it just stops competing
-  for attention.
+- **1** — the window's columns reorder to match, immediately, and the page after the drop shows the
+  new order. The **handle** is the full-height strip down the left edge carrying the icon — the whole
+  strip is the target, not just the icon. Pressing anywhere else on the block does not start a drag.
+- **If the drag does nothing at all**, turn on `/mm debug` and try again. The handle logs
+  `[Blocks] grab N at y=…` when the press is received and `[Blocks] drop N -> M (R rows)` when it
+  completes. No `grab` line means the press never reached the handle; a `grab` with no `drop` means
+  no release path fired; a `drop` with `0 rows` means the cursor read did not move.
+- **After any of these, look at the blocks themselves.** Each must show exactly ONE label and ONE
+  glyph. Two names overprinted ("DamageDeaths") or a tick with a cross through it means blocks are
+  stacking on recycled slots again, and the next thing to check is that clicking a glyph toggles the
+  statistic you clicked rather than a different one.
+- **2** — the block drops to the **top of the disabled group**, just below the rule, and the window
+  loses that column. It lands where you can see it, not at the bottom of a long list.
+- **3** — it lands at the **end of the ticked group** and reappears as the **rightmost** column.
+- **4** — the **insertion line stops at the rule** and the block stays ticked, wherever you take the
+  cursor. The tick is what moves a block between groups; a drag must never silently turn a column off.
+  A clamped drop writes nothing, so the line stopping is the only feedback there is — if you cannot
+  see it, that is the bug, not the clamp.
 
-**Combat refusal.** Leave the Columns page **open**, then pull. Click Add / Remove / Move.
+**Throughout a drag, three things must be true at once:** a **copy of the block** follows the
+cursor, the row it came from **fades** in the list, and a gold **insertion line** sits where it would
+land. The list itself never reflows under the pointer — the copy and the line are the whole of the
+feedback, and without them a working drag is indistinguishable from a broken one. The copy must
+follow the cursor **past the top and bottom of the list**; if it clips at the edge it is parented to
+the wrong frame.
+- **5** — refused, with "A window must keep at least one column." printed. A window of nothing but
+  names reads as a broken addon rather than as a configuration.
 
-**Pass.** Every mutation is refused with "Columns cannot be changed during combat." — printed, not
-silent. **No Lua error.** This is the case the library's render-time refusal does not cover: a panel
-left open when a pull starts is still clickable, and rebuilding cells that are holding secret values
-is precisely what must not happen.
+Also check: every column draws its **bar** (there is no numbers-only column any more), and the
+columns share the frame width evenly (there is no per-column width to set).
+
+**Combat refusal.** Leave the Columns page **open**, then pull. Click a glyph and drag a handle.
+
+**Pass.** Both are refused with "Columns cannot be changed during combat." — printed, not silent.
+**No Lua error.** This is the case the library's render-time refusal does not cover: a panel left
+open when a pull starts is still clickable, and rebuilding cells that are holding secret values is
+precisely what must not happen.
 
 ### 6. Multi-window
 

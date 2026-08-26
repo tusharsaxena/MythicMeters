@@ -30,8 +30,8 @@ local function bench(configure)
     local cfg = NS.Database.GetWindows()[1]
     cfg.frame.locked = true
     cfg.columns = {
-        { stat = "DamageDone",  width = 90, showBar = true },
-        { stat = "Interrupts",  width = 40, showBar = true },
+        { stat = "DamageDone", enabled = true },
+        { stat = "Interrupts", enabled = true },
     }
     cfg.data.sortColumn = "DamageDone"
     if configure then configure(cfg) end
@@ -98,14 +98,14 @@ test("A column toggled off hides its cell rather than destroying it", function()
     local before = row.cells.Interrupts
     assertTrue(before ~= nil)
 
-    cfg.columns = { { stat = "DamageDone", width = 90 } }
+    cfg.columns = { { stat = "DamageDone", enabled = true } }
     window:RefreshUpvalues()
     row:ApplyLayout(window.layout)
 
     assertEqual(row.cells.Interrupts.frame:IsShown(), false)
     assertTrue(row.cells.Interrupts == before, "the widget is kept for when it comes back")
 
-    cfg.columns = { { stat = "DamageDone", width = 90 }, { stat = "Interrupts", width = 40 } }
+    cfg.columns = { { stat = "DamageDone", enabled = true }, { stat = "Interrupts", enabled = true } }
     window:RefreshUpvalues()
     row:ApplyLayout(window.layout)
     assertEqual(row.cells.Interrupts.frame:IsShown(), true)
@@ -400,18 +400,24 @@ test("A custom color comes from the setting, not from the last-resort literal", 
     assertEqual(color[3], 0.3)
 end)
 
-test("A cell with its bar switched off keeps its text", function()
+test("Every cell draws its bar, because the bar is not optional", function()
+    -- Show-bar was a per-column checkbox. The bar is what makes the grid readable
+    -- at a glance and a numbers-only column is a worse column, so there is no
+    -- longer a state in which a cell paints its fill transparent -- and a stored
+    -- flag left behind by a profile the migration missed must not create one.
+    -- red under: SetValue branching on a show-bar decision again.
     local _, window, row, cfg = bench(function(c) c.text.leftSlot = "total" end)
     cfg.columns[1].showBar = false
     window:RefreshUpvalues()
     row:ApplyLayout(window.layout)
     row:Update(entry{ DamageDone = { total = 4200000, maxAmount = 4200000 } }, 1)
 
-    assertEqual(row.cells.DamageDone.frame.__barColor[4], 0, "the bar goes transparent")
-    assertEqual(row.cells.DamageDone.left:GetText(), "4.2M", "the column still reads")
-    -- The BACKGROUND stays: a bar-less column still carries its class tint, it
-    -- just stops competing for attention with a filled bar.
-    assertEqual(row.cells.DamageDone.bg:IsShown(), true)
+    local cell = row.cells.DamageDone
+    assertEqual(cell.showBar, nil, "a cell must not carry a show-bar decision at all")
+    assertTrue(cell.frame.__barColor[4] ~= 0, "the bar must be painted, not made transparent")
+    assertEqual(cell.left:GetText(), "4.2M", "the column still reads")
+    -- The BACKGROUND is unrelated and stays: it carries the class tint.
+    assertEqual(cell.bg:IsShown(), true)
 end)
 
 test("Cell text takes the ROW's class color when asked", function()

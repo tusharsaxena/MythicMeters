@@ -110,7 +110,9 @@ test("Create appends a window with the shipped defaults and a live instance", fu
     local windows = inst.NS.Database.GetWindows()
     assertEqual(#windows, 2)
     assertEqual(windows[2].name, "Raid")
-    assertEqual(#windows[2].columns, #inst.NS.Constants.DEFAULT_STAT_KEYS)
+    -- The whole catalog, not the default SUBSET: the Columns page has no add
+    -- button, so every statistic has to be there already for the player to tick.
+    assertEqual(#windows[2].columns, #inst.NS.Constants.STATS)
     assertTrue(M.Get("Raid") ~= nil, "and an instance stands behind it")
     assertEqual(M.Get("Raid").id, windows[2].id)
 end)

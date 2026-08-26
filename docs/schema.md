@@ -680,26 +680,41 @@ is that the player switched the open world off.
 
 ### `columns` — the ordered stat list
 
-An **array**, filled by `NS.DefaultWindow` from `Constants.DEFAULT_STAT_KEYS` rather than written
-out in the template, so the stat catalog in `core/Constants.lua` stays the single source of truth
-for which stats exist and which ship enabled.
+An **array, and it is the whole catalog** — one entry per statistic in `Constants.STATS`, each
+carrying `enabled`. Filled by `NS.DefaultWindow` rather than written out in the template, so the
+catalog in `core/Constants.lua` stays the single source of truth for which statistics exist;
+`Constants.DEFAULT_STAT_KEYS` chooses which of them ship **ticked**.
 
 ```lua
 columns = {
-    { stat = "DamageDone",           width = 92, showBar = true },
-    { stat = "HealingDone",          width = 92, showBar = true },
-    { stat = "Interrupts",           width = 48, showBar = true },
-    { stat = "Dispels",              width = 48, showBar = true },
-    { stat = "AvoidableDamageTaken", width = 78, showBar = true },
-    { stat = "Deaths",               width = 44, showBar = true },
+    { stat = "DamageDone",           enabled = true  },
+    { stat = "HealingDone",          enabled = true  },
+    { stat = "Interrupts",           enabled = true  },
+    { stat = "Dispels",              enabled = true  },
+    { stat = "AvoidableDamageTaken", enabled = true  },
+    { stat = "Deaths",               enabled = true  },
+    { stat = "Absorbs",              enabled = false },
+    { stat = "DamageTaken",          enabled = false },
 }
 ```
 
-The catalog offers two more that ship disabled: `Absorbs` and `DamageTaken`. `EnemyDamageTaken` is
-no longer offered as a column at all — it is read, never catalogued (issue #2), and a profile that
-still holds such a column is not migrated: the renderer drops it and the Columns page lists it so it
-can be removed by hand. `Dps` and `Hps` are absent from the catalog entirely and never queried — `amountPerSecond` ships on
-the same source row as `totalAmount`, so one `DamageDone` read fills both halves of the column.
+**Enabled entries always come before disabled ones**, and that ordering is a stored invariant rather
+than something the page maintains — `/mm set window.columns ...` and a hand-edited SavedVariables
+reach the seam without ever drawing a block. The enabled prefix, in order, is what the window draws
+left to right.
+
+It was a SUBSET the player assembled until schemaVersion 12. It is the catalog now because the
+Columns page is a fixed list of blocks you tick and drag rather than a list you add to and remove
+from — and a page with no add button needs every statistic already present to tick.
+`width` and `showBar` went with that change: width had been dead since the window began auto-sizing
+(`BuildLayout` divides the frame width evenly across the visible columns and never read `col.width`),
+and the bar is unconditional.
+
+`EnemyDamageTaken` is not offered as a column at all — it is read, never catalogued (issue #2) — and
+a stored column naming it is now **dropped** by the normalizer rather than listed, because there is
+no longer a remove button to act on it with. `Dps` and `Hps` are absent from the catalog entirely and
+never queried: `amountPerSecond` ships on the same source row as `totalAmount`, so one `DamageDone`
+read fills both halves of the column.
 
 ### `data`
 
@@ -919,16 +934,32 @@ subtree is a documented carve-out rather than a row:
 | `NS.SetByPath("window.columns", array)` | **accepted whole-array** — the only granularity a path can honestly express |
 | `NS.SetByPath("window.columns.2.width", 90)` | **refused** — the ordinal moves on the next add, remove or reorder, so a stored reference to it is wrong by the next edit |
 
-Because the array has no row, it gets none of a row's `validate`, so the check lives at the seam and
-is at least as strict. `normalizeColumns` proves the array shape before reading anything out of it
-(a hole or a string key would make `#value` an arbitrary answer), then rebuilds it entry by entry:
+Because the array has no row, it gets none of a row's `validate`, so the check lives at the seam.
+`normalizeColumns` proves the array shape before reading anything out of it (a hole or a string key
+would make `#value` an arbitrary answer), then rebuilds it entry by entry.
 
-- at least one column (a window of nothing but names reads as a broken addon);
-- every `stat` is a string present in `Constants.STAT_BY_KEY`, **once** — two Damage columns show
-  identical numbers twice and double the provider reads for them;
-- `width` is a number in **24–240**, with an explicit `width ~= width` NaN test (NaN passes every
-  ordinary comparison and would reach `SetWidth` as a size no frame can be given);
-- `showBar` is a real boolean.
+**It REPAIRS rather than rejects**, which is the change schemaVersion 12 brought with it. An entry
+naming a statistic this build does not have used to be stored and listed so the player could remove
+it; with no remove button and a list that *is* the catalog, there is nothing they could do with the
+row. So the normalizer:
+
+- **drops** an entry whose `stat` is not in `Constants.STAT_BY_KEY`, and **drops** a repeat — the
+  first appearance wins, so a later duplicate cannot quietly overrule the position already given it.
+  Two Damage columns would show identical numbers twice and double the provider reads for them;
+- **appends** every catalog statistic the caller did not mention, `enabled = false`, in catalog
+  order — which is what makes a statistic added to `core/Constants.lua` appear on every existing
+  profile's page with no migration of its own;
+- **partitions** enabled ahead of disabled, stably, so relative order inside each group is the
+  caller's.
+
+Two things it still refuses outright, because neither has an answer it could invent: an array that
+is not gapless, and one with **nothing enabled** — a window of nothing but names reads as a broken
+addon, and there is no way to guess which column was meant to survive.
+
+It is published as `NS.NormalizeColumns` so `core/Database.lua`'s `migrations[11]` shares the one
+definition. That is a **deferred** read: `settings/Schema.lua` loads eighteen TOC entries later, but
+the ladder runs on Init, which is the same pattern `migrations[1]` already uses for
+`NS.WINDOW_TEMPLATE`.
 
 Rebuilding rather than accepting the caller's table does two jobs at once: the stored array can never
 share a sub-table with whoever handed it over, and any extra key someone smuggled in is dropped

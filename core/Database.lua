@@ -43,7 +43,7 @@ NS.Database = Database
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
 -- v10 retires the "At cursor" tooltip anchor.
-local CURRENT_DB_VERSION = 11
+local CURRENT_DB_VERSION = 12
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -567,6 +567,56 @@ migrations[10] = function(db)
     end
 
     db.global.schemaVersion = 11
+end
+
+--- v11 -> v12: THE COLUMN ARRAY BECOMES THE CATALOG.
+---
+--- `window.columns` was the columns the player had CHOSEN; it is now every
+--- statistic this build offers, in their order, each carrying `enabled`. The page
+--- that reads it is a fixed list of blocks you tick and drag rather than a list
+--- you add to and remove from, and a page that cannot add a column needs every
+--- column already present to tick.
+---
+--- `width` and `showBar` are pruned rather than left. Width has been dead since
+--- the window began auto-sizing -- BuildLayout divides the frame width evenly
+--- across the visible columns and has never read `col.width` -- and the bar is
+--- unconditional now. AceDB merges defaults in and never removes what they
+--- stopped naming, so a field nobody prunes is a field that outlives its reader.
+---
+--- IT GOES THROUGH NS.NormalizeColumns RATHER THAN RESTATING THE RULE. That
+--- function is settings/Schema.lua's, which loads eighteen TOC entries after this
+--- file -- but the ladder RUNS on Init, long after every file is in memory, which
+--- is the same deferred read `migrations[1]` already makes for NS.WINDOW_TEMPLATE.
+--- A private copy of "what shape is a column array" here is how the migration and
+--- the write seam end up disagreeing about it.
+migrations[11] = function(db)
+    local normalize = NS.NormalizeColumns
+
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            if type(w) == "table" and type(w.columns) == "table" then
+                -- Every stored column was a column the player was SHOWN, so every
+                -- one of them arrives enabled. The normalizer appends the rest
+                -- disabled and drops anything this build no longer has.
+                local carried = {}
+                for _, col in ipairs(w.columns) do
+                    if type(col) == "table" and type(col.stat) == "string" then
+                        carried[#carried + 1] = { stat = col.stat, enabled = true }
+                    end
+                end
+
+                -- The refusal case is a profile whose every column named a
+                -- statistic this build dropped, which leaves nothing enabled and
+                -- no way to guess what they meant. The shipped list is the only
+                -- honest answer, and it is what a new window would have had.
+                w.columns = (normalize and normalize(carried))
+                    or (NS.DefaultWindow and NS.DefaultWindow(w.id).columns)
+                    or w.columns
+            end
+        end
+    end
+
+    db.global.schemaVersion = 12
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

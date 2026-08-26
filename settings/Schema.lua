@@ -1912,16 +1912,27 @@ end
 -- (modules/Row.lua's cell builder, modules/Window.lua's header) indexes
 -- `stat`, `width` and `showBar` without re-checking any of them.
 
--- The bounds the Columns page's own width slider produces. Stated here as well
--- because the CLI and a hand-edited SavedVariables reach this seam without ever
--- touching that slider, and a column 4000px wide is a window with one column in it.
-local COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH = 24, 240
-
---- Validate a candidate column array and return a FRESH one built entry by entry.
+--- Repair a candidate column array into the catalog, in the caller's order.
 ---
---- Rebuilding rather than accepting the caller's table does two jobs at once: the
---- stored array can never share a sub-table with whoever handed it over (the
---- classic profile-aliasing bug), and any extra key someone smuggled in is dropped
+--- REPAIRING RATHER THAN REJECTING, and that is the change. The array used to be
+--- a SUBSET the player assembled, so an entry naming a statistic this build does
+--- not have was a real editing problem and was surfaced as one: stored, listed on
+--- the page, and removable. There is nothing to surface now. The array IS the
+--- catalog, there is no remove button, and a row for a statistic that does not
+--- exist is a row nobody can act on. So an unknown statistic is DROPPED and one
+--- this build gained is APPENDED disabled, and a profile carried back from a
+--- newer build heals itself instead of growing a dead row.
+---
+--- ENABLED-FIRST IS ENFORCED HERE, WHICH IS WHY THE PAGE DOES NOT HAVE TO. The
+--- Columns page sinks a disabled block below its rule, but `/mm set
+--- window.columns ...` and a hand-edited SavedVariables reach this seam without
+--- ever drawing a block. Partitioning here is what makes those three routes
+--- agree, and the two-list build below is a STABLE partition: relative order
+--- inside each group is exactly the caller's.
+---
+--- Rebuilding rather than accepting the caller's table also means the stored
+--- array can never share a sub-table with whoever handed it over (the classic
+--- profile-aliasing bug), and any extra key someone smuggled in is dropped
 --- rather than persisted into a profile the renderer will not read.
 ---
 --- @param value any
@@ -1932,9 +1943,6 @@ local function normalizeColumns(value)
     end
 
     local n = #value
-    if n == 0 then
-        return nil, L["A window must keep at least one column."]
-    end
 
     -- A hole or a string key would make `#value` an arbitrary answer, so the array
     -- shape is proved rather than assumed before anything is read out of it.
@@ -1944,43 +1952,55 @@ local function normalizeColumns(value)
         return nil, L["Columns must be a plain ordered list with no gaps."]
     end
 
-    local out, seen = {}, {}
+    local enabled, disabled, seen = {}, {}, {}
     for i = 1, n do
         local c = value[i]
         if type(c) ~= "table" then
             return nil, L["Column %d is not a column."]:format(i)
         end
 
+        -- An unknown statistic and a repeat are both dropped, silently and on
+        -- purpose. THE FIRST APPEARANCE WINS: a later duplicate carrying a
+        -- different `enabled` cannot quietly overrule the position the caller
+        -- already gave it.
         local stat = c.stat
-        if type(stat) ~= "string" or not Const.STAT_BY_KEY[stat] then
-            return nil, L["Column %d names a statistic this build does not have: %s"]
-                :format(i, tostring(stat))
+        if type(stat) == "string" and Const.STAT_BY_KEY[stat] and not seen[stat] then
+            seen[stat] = true
+            local entry = { stat = stat, enabled = c.enabled and true or false }
+            local into  = entry.enabled and enabled or disabled
+            into[#into + 1] = entry
         end
-        -- One column per stat: two Damage columns show identical numbers twice and
-        -- double the provider reads for them.
-        if seen[stat] then
-            return nil, L["Column %d repeats the statistic %s."]:format(i, stat)
-        end
-        seen[stat] = true
-
-        local width = c.width
-        -- `width ~= width` is the NaN test: NaN passes every comparison below and
-        -- would reach SetWidth as a size no frame can be given.
-        if type(width) ~= "number" or width ~= width
-            or width < COLUMN_MIN_WIDTH or width > COLUMN_MAX_WIDTH then
-            return nil, L["Column %d has a width outside %d-%d: %s"]
-                :format(i, COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH, tostring(width))
-        end
-
-        if type(c.showBar) ~= "boolean" then
-            return nil, L["Column %d's show-bar flag is not true or false."]:format(i)
-        end
-
-        out[i] = { stat = stat, width = width, showBar = c.showBar }
     end
 
+    -- Every catalog statistic the caller did not mention, appended disabled in
+    -- catalog order -- which is what makes a statistic added to core/Constants.lua
+    -- appear on every existing profile's page with no migration of its own.
+    for _, stat in ipairs(Const.STATS) do
+        if not seen[stat.key] then
+            disabled[#disabled + 1] = { stat = stat.key, enabled = false }
+        end
+    end
+
+    -- A window with nothing but names in it reads as a broken addon rather than as
+    -- a configuration. This is the one thing the repair cannot invent an answer
+    -- for: which column did they mean to keep?
+    if #enabled == 0 then
+        return nil, L["A window must keep at least one column."]
+    end
+
+    local out = {}
+    for _, entry in ipairs(enabled)  do out[#out + 1] = entry end
+    for _, entry in ipairs(disabled) do out[#out + 1] = entry end
     return out
 end
+
+--- Published because core/Database.lua's migration ladder needs this same rule and
+--- cannot reach a local in a file that loads eighteen TOC entries after it. Read
+--- at MIGRATION time rather than at load time, which is the pattern `migrations[1]`
+--- already uses for `NS.WINDOW_TEMPLATE`: the ladder runs on Init, long after
+--- every file is in memory. A second implementation of "what shape is a column
+--- array" is how the migration and the write seam end up disagreeing about it.
+NS.NormalizeColumns = normalizeColumns
 
 --- Write the whole column array of the active window.
 --- @param value any
@@ -1996,7 +2016,16 @@ local function setColumns(value)
     -- here, held by nobody else.
     w.columns = cols
 
-    announceWrite("columns", id, "%s = %d columns", COLUMNS_PREFIX, #cols)
+    -- HOW MANY ARE SHOWN, not how many there are. Every array is the catalog now,
+    -- so `#cols` is the same number on every write, and a log line that never
+    -- changes is a log line nobody can read a change out of. Two format arguments
+    -- because that is what announceWrite forwards -- a third would be dropped and
+    -- its `%d` would reach the console literally.
+    local shown = 0
+    for _, c in ipairs(cols) do
+        if c.enabled then shown = shown + 1 end
+    end
+    announceWrite("columns", id, "%s = %d shown", COLUMNS_PREFIX, shown)
     return true
 end
 

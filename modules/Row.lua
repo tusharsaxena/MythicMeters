@@ -679,8 +679,7 @@ end
 --- that sits behind the fill.
 ---
 --- @param bars table|nil   the window's `bars` config group
---- @param showBar boolean  whether this column draws its bar at all
-function Cell:ApplyBarSkin(bars, _showBar)
+function Cell:ApplyBarSkin(bars)
     local bar = self.frame
     bar:SetStatusBarTexture(barTexture(bars and bars.texture))
     bar:SetOrientation("HORIZONTAL")
@@ -871,18 +870,17 @@ function Cell:ApplyTextStyle(text)
 end
 
 --- @param layout table  the window's computed layout (see modules/Window.lua)
---- @param col table     this cell's column descriptor { x, width, showBar }
+--- @param col table     this cell's column descriptor { x, width }
 function Cell:ApplyLayout(layout, col)
     local cfg = self.window.config
     local bar = self.frame
-    local showBar = col.showBar ~= false
 
     bar:ClearAllPoints()
     bar:SetPoint("TOPLEFT", self.row.frame, "TOPLEFT", col.x, 0)
     bar:SetSize(col.width, layout.rowHeight)
 
     local bars = cfg.bars
-    self:ApplyBarSkin(bars, showBar)
+    self:ApplyBarSkin(bars)
     self:ApplyBorder(bars)
 
     -- `text.alpha` is applied INSIDE ApplyTextStyle, to the two FontStrings. The
@@ -891,8 +889,6 @@ function Cell:ApplyLayout(layout, col)
     -- the fill and the icons too.
     local text = cfg.text or {}
     self:ApplyTextStyle(text)
-
-    self.showBar = showBar
 end
 
 --- Draw one player's figure for this column.
@@ -921,12 +917,12 @@ function Cell:SetValue(entry)
     end
     bar:SetValue(total == nil and 0 or total)
 
-    if self.showBar then
-        local r, g, b = barColor(cfg.bars, entry, self.key)
-        bar:SetStatusBarColor(r, g, b)
-    else
-        bar:SetStatusBarColor(0, 0, 0, 0)
-    end
+    -- UNCONDITIONAL. Show-bar was a per-column checkbox and is not a choice any
+    -- more: the bar is what makes the grid readable at a glance, and a
+    -- numbers-only column is a worse column. So there is no longer a state in
+    -- which a cell paints its fill transparent.
+    local r, g, b = barColor(cfg.bars, entry, self.key)
+    bar:SetStatusBarColor(r, g, b)
 
     -- The class tint behind the bar, per row. See cellBackground.
     local br, bg, bb, ba = cellBackground(cfg.bars, entry, self.key)

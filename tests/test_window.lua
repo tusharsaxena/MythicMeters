@@ -244,8 +244,8 @@ test("BuildLayout computes every coordinate from config alone", function()
     cfg.rows.height   = 16
     cfg.rows.spacing  = 1
     cfg.columns = {
-        { stat = "DamageDone",  width = 90 },
-        { stat = "Interrupts",  width = 40 },
+        { stat = "DamageDone", enabled = true },
+        { stat = "Interrupts", enabled = true },
     }
     cfg.frame.width = 500
     local layout = window:BuildLayout()
@@ -304,12 +304,41 @@ end)
 test("BuildLayout drops a column whose stat this build does not offer", function()
     local _, window, cfg = scene()
     cfg.columns = {
-        { stat = "DamageDone", width = 90 },
-        { stat = "StatFromALaterBuild", width = 90 },
+        { stat = "DamageDone", enabled = true },
+        { stat = "StatFromALaterBuild", enabled = true },
     }
     local layout = window:BuildLayout()
     assertEqual(#layout.columns, 1, "a nameless empty column is worse than an absent one")
     assertEqual(layout.columns[1].key, "DamageDone")
+end)
+
+test("BuildLayout draws only the ENABLED columns, in stored order", function()
+    -- The array is the whole catalog now, so most of a typical window's entries
+    -- are disabled and this filter is what makes the window show six columns
+    -- rather than eight. Distinct from the unknown-stat drop above: that is a
+    -- profile from a newer build, this is the player's own decision.
+    -- red under: BuildLayout filtering on the catalog alone.
+    local _, window, cfg = scene()
+    cfg.columns = {
+        { stat = "Interrupts",  enabled = true  },
+        { stat = "DamageDone",  enabled = true  },
+        { stat = "HealingDone", enabled = false },
+        { stat = "Deaths",      enabled = false },
+    }
+    local layout = window:BuildLayout()
+    assertEqual(#layout.columns, 2, "a disabled statistic is not a column")
+    assertEqual(layout.columns[1].key, "Interrupts", "the stored order is the drawn order")
+    assertEqual(layout.columns[2].key, "DamageDone")
+end)
+
+test("A layout column carries no show-bar decision", function()
+    -- The bar is unconditional, so there is nothing for the layout to say about
+    -- it. Left on the entry it would be a field with no reader, which is how a
+    -- setting comes back to life by accident.
+    local _, window, cfg = scene()
+    cfg.columns = { { stat = "DamageDone", enabled = true, showBar = false } }
+    local layout = window:BuildLayout()
+    assertEqual(layout.columns[1].showBar, nil)
 end)
 
 test("BuildLayout derives how many rows FIT, capped by maxRows and MAX_ROWS", function()
@@ -1083,8 +1112,8 @@ test("Column headers are BUTTONS carrying the full stat label, left-aligned", fu
     -- read far less often than the numbers under it, so the space is worth it.
     local inst, window = scene{ configure = function(c)
         c.columns = {
-            { stat = "DamageDone", width = 92, showBar = true },
-            { stat = "AvoidableDamageTaken", width = 92, showBar = true },
+            { stat = "DamageDone", enabled = true },
+            { stat = "AvoidableDamageTaken", enabled = true },
         }
     end }
     local L = inst.NS.L
