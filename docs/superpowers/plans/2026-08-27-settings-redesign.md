@@ -539,7 +539,6 @@ end)
 
 test("widgets: clicking the ACTIVE tab does not re-fire onSelect", function()
   -- A re-render on every click of the tab you are already on is a page that flickers for
-  -- nothing, and on a host whose renderer refuses in combat it is a refusal message for
   -- nothing.
   -- red under: wiring OnClick before checking the active key.
   local O, _, ctx = bench()
@@ -1215,9 +1214,10 @@ Append to `LibKa0s/OptionsWidgets.lua`, after `O.RenderSchema`:
       onSelect = function(key)
         if key == ctx.activeTab then return end
         ctx.activeTab = key
-        -- The same structural path a change of subject takes, which is what earns the combat
-        -- refusal for free (options-ui-§13): the host's renderer owns the guard, and a second
-        -- one here would be a second policy to keep in step.
+        -- The same structural path a change of subject takes (options-ui-§13). NOT combat-
+        -- guarded, and deliberately so: §2's refusal covers opening or switching a settings
+        -- CATEGORY, which Blizzard protects. Redrawing widgets inside a panel that is already
+        -- open is not a protected action, so a guard here would refuse something that works.
         O.ClearScroll(ctx)
         O.RenderTabbedSchema(ctx, pageKey, afterGroup, pairWith)
       end,
@@ -2685,7 +2685,7 @@ These cannot be reached headlessly and are the acceptance list.
 
 - [ ] Every one of Frame, Header, Bars, Tooltip, Visibility, Columns and Windows shows the banner naming the active window; changing it on any one changes it on all the others.
 - [ ] Switching windows while on Bars' *Bar border* tab lands on *Bar border* for the new window.
-- [ ] Clicking a tab **in combat** is refused with the standard grey message and leaves the page as it was.
+- [ ] Clicking a tab **in combat** WORKS — the strip is deliberately not combat-guarded, because redrawing inside an already-open panel is not a protected action. What is refused is *reaching* the panel mid-combat (`options-ui-§2`): opening it from the AddOns sidebar closes the window and prints the grey refusal. Verify both halves; a tab click that refuses is the defect here, not one that works.
 - [ ] Clicking the tab you are already on does nothing at all — no flicker, no refusal message.
 - [ ] Frame's six tabs and Bars' six fit one row at default UI scale; Header's five fit; note any that wrap.
 - [ ] **Tab art:** the strip is a flat backing with the active tab darker. Decide in the client whether that reads as tabs or wants Blizzard's tab atlas — this is the one deliberately-open question in the plan, and changing it is a `LibKa0s/OptionsWidgets.lua` edit plus a minor bump.
