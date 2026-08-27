@@ -431,7 +431,10 @@ test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     ctx.panel:Hide()
     ctx.panel:Show()
 
-    local cb = findWidget(widgetsSince(inst, before), "CheckBox", inst.NS.L["Show title bar"])
+    -- "Lock window" rather than "Show title bar": the title-bar toggle moved to the Header page
+    -- with the settings redesign, and it is about to be renamed as well. This case is about the
+    -- WRITE SEAM, not about which checkbox carries it, so it uses one that stays put.
+    local cb = findWidget(widgetsSince(inst, before), "CheckBox", inst.NS.L["Lock window"])
     assertTrue(cb ~= nil)
 
     local seen = {}
@@ -440,12 +443,12 @@ test("Options: a checkbox's set() routes through NS.SetByPath too", function()
         seen[#seen + 1] = path
         return real(path, value)
     end
-    cb:__fire("OnValueChanged", false)
+    cb:__fire("OnValueChanged", true)
     inst.NS.SetByPath = real
 
     assertEqual(#seen, 1)
-    assertEqual(seen[1], "window.frame.titleBar")
-    assertEqual(inst.NS.GetSetting("window.frame.titleBar"), false)
+    assertEqual(seen[1], "window.frame.locked")
+    assertTrue(inst.NS.GetSetting("window.frame.locked"))
 end)
 
 test("Options: applyDefault routes through NS.SetByPath, not around it", function()

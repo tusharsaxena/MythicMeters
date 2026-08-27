@@ -11,8 +11,10 @@
 -- never change, which is what keeps a call site stable across every locale.
 --
 -- ORGANIZATION mirrors the settings panel, page by page, in the order the pages
--- appear: Windows · Frame · Header · Rows · Bars · Text · Icons · Tooltip ·
--- Visibility · Columns · Data · General · Profiles. Shared vocabulary (anchor
+-- appear: General · Windows · Frame · Header · Bars · Tooltip · Visibility ·
+-- Columns · Profiles. Within a page, `group` is now a TAB label — the flow
+-- engine emits one tab per group, partitioned in declaration order — rather
+-- than a section heading on a scrolling page. Shared vocabulary (anchor
 -- points, font flags, yes/no) is collected at the end so it is not duplicated
 -- into each page's block.
 --
@@ -104,6 +106,7 @@ L["Profiles"] = "Profiles"
 L["Active window"] = "Active window"
 L["Which window the settings on every other page apply to. Each window is configured independently."] =
     "Which window the settings on every other page apply to. Each window is configured independently."
+L["Window"] = "Window"
 L["Window name"] = "Window name"
 L["Name shown in this picker and, optionally, in the window's own header."] =
     "Name shown in this picker and, optionally, in the window's own header."
@@ -159,12 +162,14 @@ L["Border thickness"] = "Border thickness"
 L["Border edge size in pixels."] = "Border edge size in pixels."
 L["Border color"] = "Border color"
 L["Color of the window border."] = "Color of the window border."
+L["Background and border"] = "Background and border"
 L["Padding"] = "Padding"
 L["Gap in pixels between the window edge and the rows inside it."] =
     "Gap in pixels between the window edge and the rows inside it."
 L["Lock window"] = "Lock window"
 L["When unlocked you can drag the window to reposition it, and it fills with placeholder data so you can see the layout."] =
     "When unlocked you can drag the window to reposition it, and it fills with placeholder data so you can see the layout."
+L["Behavior"] = "Behavior"
 L["Keep on screen"] = "Keep on screen"
 L["Prevent the window from being dragged off the edge of the screen."] =
     "Prevent the window from being dragged off the edge of the screen."
@@ -173,7 +178,6 @@ L["Draw the title strip along the top of the window."] =
     "Draw the title strip along the top of the window."
 L["Show close button"] = "Show close button"
 L["Draw a close button in the title bar."] = "Draw a close button in the title bar."
-L["Header controls"] = "Header controls"
 L["Show close"] = "Show close"
 L["Show minimise"] = "Show minimise"
 L["Collapse the window to its title bar and back."] = "Collapse the window to its title bar and back."
@@ -212,6 +216,13 @@ L["Move the window selected on the Windows page back to the center of the screen
 -- Header page
 -- ---------------------------------------------------------------------------
 
+L["Title bar"] = "Title bar"
+L["Title text"] = "Title text"
+L["Window buttons"] = "Window buttons"
+L["Meter buttons"] = "Meter buttons"
+L["Button style"] = "Button style"
+L["All surfaces"] = "All surfaces"
+
 L["Text color mode"] = "Text color mode"
 L["Background color mode"] = "Background color mode"
 L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."] =
@@ -223,11 +234,11 @@ L["What colors the numbers and names. Class is the class of the row being drawn;
 L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."] =
     "What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."
 
--- ONE group for the whole title bar: its text, its alignment, its height and its
--- background. It was two ("Header text" and "Header background") and the split
--- put the height and the alignment of the text under a heading that said
--- background. The column strip below it keeps its own group, because it is a
--- different strip.
+-- TWO tabs for the title bar now: "Title bar" for whether it shows, its
+-- alignment, its height and its background, and "Title text" for the face
+-- drawn on it. The column-label strip below it moved to its own page (the
+-- Columns page it labels), and the meter's own controls (close, minimise,
+-- segment picker...) sort into two further tabs of their own.
 L["Color mode (all surfaces)"] = "Color mode (all surfaces)"
 L["Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."] =
     "Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."
@@ -242,7 +253,6 @@ L["Font outline (all surfaces)"] = "Font outline (all surfaces)"
 L["Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."] =
     "Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."
 
-L["Frame header"] = "Frame header"
 -- The header's own Title box and its three "show this too" checkboxes are gone
 -- with the strings that labelled them: each said something already on screen.
 -- The header draws the window's name now.
@@ -258,7 +268,6 @@ L["Where the header text sits horizontally."] = "Where the header text sits hori
 -- Rows page
 -- ---------------------------------------------------------------------------
 
-L["Row layout"] = "Row layout"
 L["Maximum rows"] = "Maximum rows"
 L["Largest number of rows to draw. Set to 0 to draw as many as the window has room for."] =
     "Largest number of rows to draw. Set to 0 to draw as many as the window has room for."
@@ -270,7 +279,6 @@ L["Growth direction"] = "Growth direction"
 L["Whether rows stack downward from the header or upward from the bottom."] =
     "Whether rows stack downward from the header or upward from the bottom."
 L["Row behavior"] = "Row behavior"
-L["Frame behavior"] = "Frame behavior"
 L["Always show yourself"] = "Always show yourself"
 L["Keep your own row visible even when it would fall outside the maximum row count."] =
     "Keep your own row visible even when it would fall outside the maximum row count."
@@ -287,7 +295,7 @@ L["Brighten the row under the cursor."] = "Brighten the row under the cursor."
 -- Bars page
 -- ---------------------------------------------------------------------------
 
-L["Bar appearance"] = "Bar appearance"
+L["Bar"] = "Bar"
 L["Bar texture"] = "Bar texture"
 L["LibSharedMedia statusbar texture used for every cell's bar."] =
     "LibSharedMedia statusbar texture used for every cell's bar."
@@ -300,7 +308,7 @@ L["Custom color"] = "Custom color"
 L["Bar color"] = "Bar color"
 L["Fill color used when the color mode is set to Custom color."] =
     "Fill color used when the color mode is set to Custom color."
-L["Bar background color"] = "Bar background color"
+L["Bar background"] = "Bar background"
 L["Color drawn behind the unfilled part of each bar."] =
     "Color drawn behind the unfilled part of each bar."
 L["Bar background opacity"] = "Bar background opacity"
@@ -325,7 +333,7 @@ L["Which edge of the cell each bar grows from."] =
 -- Text page
 -- ---------------------------------------------------------------------------
 
-L["Cell text"] = "Cell text"
+L["Text content"] = "Text content"
 L["Left text"] = "Left text"
 L["What to show on the left of each cell. Set it to Total for the `1.41M  83.2K` pair; leave it empty for the per-second figure alone."] =
     "What to show on the left of each cell. Set it to Total for the `1.41M  83.2K` pair; leave it empty for the per-second figure alone."
@@ -340,6 +348,7 @@ L["Full"] = "Full"
 L["Max name length"] = "Max name length"
 L["Truncate a name past this many characters. 0 shows the whole name. The realm is always stripped."] =
     "Truncate a name past this many characters. 0 shows the whole name. The realm is always stripped."
+L["Text style"] = "Text style"
 L["Font"] = "Font"
 L["Font used for every number in the grid. A monospace font keeps the columns from shifting as the numbers change."] =
     "Font used for every number in the grid. A monospace font keeps the columns from shifting as the numbers change."
@@ -361,7 +370,6 @@ L["Opacity of the numbers and names."] = "Opacity of the numbers and names."
 -- Icons page
 -- ---------------------------------------------------------------------------
 
-L["Row icons"] = "Row icons"
 L["Show icon"] = "Show icon"
 L["Show one icon beside each player's name: their specialization where it is known, and their class where it is not."] =
     "Show one icon beside each player's name: their specialization where it is known, and their class where it is not."
@@ -391,12 +399,12 @@ L["Color of the unfilled part, when the mode above is Custom."] =
 L["Opacity of the unfilled part of each tooltip bar."] =
     "Opacity of the unfilled part of each tooltip bar."
 
-L["Tooltip behavior"] = "Tooltip behavior"
 L["Tooltip anchor"] = "Tooltip anchor"
 L["Where the tooltip appears relative to the cursor or the window."] =
     "Where the tooltip appears relative to the cursor or the window."
 -- No "At cursor": over a grid it lands wherever the pointer happens to be inside
 -- a cell, so the same hover puts the tooltip somewhere different every time.
+L["Contents"] = "Contents"
 L["Show spell breakdown"] = "Show spell breakdown"
 L["List the individual spells behind a cell's number when you hover it."] =
     "List the individual spells behind a cell's number when you hover it."
@@ -416,7 +424,6 @@ L["Hide tooltips in combat"] = "Hide tooltips in combat"
 L["Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."] =
     "Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."
 
-L["Tooltip bars"] = "Tooltip bars"
 L["LibSharedMedia statusbar texture drawn behind each spell line."] =
     "LibSharedMedia statusbar texture drawn behind each spell line."
 L["Bar spacing"] = "Bar spacing"
@@ -430,7 +437,6 @@ L["Bar border color"] = "Bar border color"
 L["Color of the border around each spell bar."] =
     "Color of the border around each spell bar."
 
-L["Tooltip text"] = "Tooltip text"
 L["Font used for the tooltip's spell names and numbers."] =
     "Font used for the tooltip's spell names and numbers."
 L["Tooltip text size in pixels."] = "Tooltip text size in pixels."
@@ -445,7 +451,16 @@ L["Maximum targets"] = "Maximum targets"
 L["How many enemies to list before stopping."] =
     "How many enemies to list before stopping."
 
-L["Column headers"] = "Column headers"
+-- ---------------------------------------------------------------------------
+-- Columns page
+-- ---------------------------------------------------------------------------
+-- No rows of its own (the column array is a documented carve-out, not a row —
+-- see settings/Schema.lua). The column-header strip's styling lives here too,
+-- under window.columnHeader.* — it LABELS the columns, so it belongs on the
+-- page where the columns are chosen. Its paths stay under window.columnHeader,
+-- unchanged: a row's page is where it is edited, its path where it is stored.
+
+L["Header text"] = "Header text"
 L["Font used for the column header strip above the rows."] =
     "Font used for the column header strip above the rows."
 L["Column header text size in pixels."] = "Column header text size in pixels."
@@ -595,7 +610,6 @@ L["Clear every recorded combat session?"] = "Clear every recorded combat session
 -- General page
 -- ---------------------------------------------------------------------------
 
-L["Master controls"] = "Master controls"
 L["Enable Multi Meters"] = "Enable Multi Meters"
 L["Master switch for the addon. When off, no window is drawn and no data is read."] =
     "Master switch for the addon. When off, no window is drawn and no data is read."
@@ -605,7 +619,7 @@ L["Show the minimap button for opening these settings."] =
 L["Test mode"] = "Test mode"
 L["Fill every window with placeholder data so you can lay out columns without being in combat."] =
     "Fill every window with placeholder data so you can lay out columns without being in combat."
-L["Debug"] = "Debug"
+L["Maintenance"] = "Maintenance"
 L["Debug console"] = "Debug console"
 L["Show or hide the on-screen debug console. Session only; it does not turn debug logging on."] =
     "Show or hide the on-screen debug console. Session only; it does not turn debug logging on."
