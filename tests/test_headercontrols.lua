@@ -296,7 +296,7 @@ test("HeaderControls: the width reserved equals the width occupied", function()
 end)
 
 test("HeaderControls: no title bar means no strip and no reservation", function()
-    local inst, window = scene(function(cfg) cfg.frame.titleBar = false end)
+    local inst, window = scene(function(cfg) cfg.header.show = false end)
     assertEqual(inst.NS.HeaderControls.WidthUsed(window), 0)
     assertEqual(window.controls.settings:IsShown(), false)
 end)

@@ -184,8 +184,9 @@ end
 --- @param window table
 --- @return number
 function HeaderControls.WidthUsed(window)
-    local frameCfg = (window.config or {}).frame or {}
-    if frameCfg.titleBar == false then return 0 end
+    local cfg = window.config or {}
+    local frameCfg = cfg.frame or {}
+    if (cfg.header or {}).show == false then return 0 end
 
     -- COUNTED, NOT ASSUMED BUILT. Every control in the strip is now ours and
     -- every one is `controlSize` wide, so the reservation is one multiplication
@@ -405,7 +406,7 @@ function HeaderControls:Apply(window)
     local frameCfg = cfg.frame or {}
     local layout   = window.layout
     local size     = controlSize(frameCfg)
-    local visible  = (frameCfg.titleBar ~= false)
+    local visible  = ((cfg.header or {}).show ~= false)
 
     local style = HeaderControls.Style(window)
 

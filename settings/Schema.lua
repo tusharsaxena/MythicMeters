@@ -820,12 +820,13 @@ NS.Schema = {
     -- moved to the Columns page it labels -- see the note there.
 
     -- ── Title bar ────────────────────────────────────────────────
-    -- Whether it draws, and its shape: alignment, height and background. FROM THE
-    -- FRAME PAGE -- it is what the header strip draws, not the frame's own
-    -- geometry, and the path stays `window.frame.titleBar`; a row's page is where
-    -- it is edited, its path is where it is stored.
+    -- Whether it draws, and its shape: alignment, height and background. This
+    -- toggle is the header page's master switch, so its path moved with it:
+    -- `window.header.show`, not `window.frame.titleBar` -- a path naming `frame`
+    -- for a row on the Header page misleads the next reader and reads wrong in
+    -- `/mm set`.
     {
-        path = "window.frame.titleBar", type = "bool", default = true,
+        path = "window.header.show", type = "bool", default = true,
         page = "header", group = L["Title bar"],
         label = L["Show title bar"], desc = L["Draw the title strip along the top of the window."],
     },

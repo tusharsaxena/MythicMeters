@@ -43,7 +43,7 @@ NS.Database = Database
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
 -- v10 retires the "At cursor" tooltip anchor.
-local CURRENT_DB_VERSION = 12
+local CURRENT_DB_VERSION = 13
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -617,6 +617,36 @@ migrations[11] = function(db)
     end
 
     db.global.schemaVersion = 12
+end
+
+--- v12 -> v13: THE TITLE-BAR TOGGLE MOVES ONTO THE HEADER.
+---
+--- `Show title bar` was on the Frame page, under "Frame behavior", switching a surface the
+--- Header page owns -- so it sat three clicks from every control that styles the thing it turns
+--- off. The control moved with the settings redesign; the PATH moved with it, because a row on
+--- the Header page whose path says `frame` misleads the next reader of the schema and reads
+--- wrong in `/mm set window.frame.titleBar`.
+---
+--- Carried across rather than defaulted: a player who turned their title bar off must not log
+--- in to it back on. An ABSENT key is left absent, because absent means "never changed from the
+--- default" -- writing one here would freeze today's default into every stored profile and the
+--- default could never move again.
+---
+--- Pruned rather than left, for the reason every step here gives: AceDB merges defaults in and
+--- never removes what they stopped naming, so a field nobody prunes outlives its reader.
+migrations[12] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local frame = type(w) == "table" and w.frame
+            if type(frame) == "table" and frame.titleBar ~= nil then
+                if type(w.header) ~= "table" then w.header = {} end
+                w.header.show = frame.titleBar
+                frame.titleBar = nil
+            end
+        end
+    end
+
+    db.global.schemaVersion = 13
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every

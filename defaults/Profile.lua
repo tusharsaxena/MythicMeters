@@ -101,14 +101,13 @@ local WINDOW_TEMPLATE = {
         -- player positioning a window at a target dummy still sees a full grid.
         locked         = false,
         clampToScreen  = true,
-        titleBar       = true,
         -- ── The header's controls (issue #6) ──
         --
         -- Seven keys, one per control that this addon builds. `closeButton` is
         -- the odd one out and deliberately keeps its old name: renaming it to
         -- `showClose` for symmetry would migrate every stored profile in exchange
         -- for a consistency nobody can see. It sits here rather than up beside
-        -- `titleBar` because what it draws is a header control.
+        -- `header.show` because what it draws is a header control.
         closeButton     = true,
         showMinimise    = true,
         showLock        = true,
@@ -174,6 +173,7 @@ local WINDOW_TEMPLATE = {
     -- holding the same figure per player. The header draws `window.name` now, so
     -- renaming a window renames its header.
     header = {
+        show            = true,
         font            = "Friz Quadrata TT",
         size            = 12,
         outline         = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME

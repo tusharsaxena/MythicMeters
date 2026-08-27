@@ -292,7 +292,7 @@ function WindowProto:BuildLayout()
         padding     = pad,
         rowHeight   = rowHeight,
         rowSpacing  = spacing,
-        titleHeight = (frame.titleBar ~= false) and (header.height or 18) or 0,
+        titleHeight = (header.show ~= false) and (header.height or 18) or 0,
         headerHeight = rowHeight * HEADER_ROW_FACTOR,
         growUp      = (rows.growthDirection == "UP"),
         columns     = {},
@@ -992,7 +992,7 @@ function WindowProto:ApplyTitle()
         title = title .. "   |cffff2020" .. L["TEST MODE"] .. "|r"
     end
     frame.title:SetText(title)
-    frame.title:SetShown((cfg.frame or {}).titleBar ~= false)
+    frame.title:SetShown((cfg.header or {}).show ~= false)
 
     -- THE TITLE IS HEADER TEXT, and it now takes the header's colour like the
     -- session line beside it. It used to be left to ApplySkin -- frame.title is
