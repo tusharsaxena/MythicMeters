@@ -426,20 +426,18 @@ end)
 
 test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     local inst = T.load()
-    local ctx = panelFor(inst, "frame")
+    -- The HEADER page, whose first tab opens on a checkbox -- so this needs no tab click and is
+    -- not coupled to tab order. (Frame's checkboxes live on its "Behavior" tab, and reaching them
+    -- by index would break silently the day the tabs are reordered.) This is the same control the
+    -- case used before the settings redesign moved it off Frame, now at its new path -- matching
+    -- the file's own idiom above (panelFor, capture `before`, THEN render) rather than showPage,
+    -- which renders before `before` is captured and would leave nothing in widgetsSince.
+    local ctx = panelFor(inst, "header")
+    local before = #aceGUI(inst).__created
     ctx.panel:Hide()
     ctx.panel:Show()
 
-    local before = #aceGUI(inst).__created
-
-    -- "Lock window" lives on the page's "Behavior" tab, not the one it opens on, since the
-    -- settings redesign grouped it there. Switch to it before looking for the checkbox.
-    ctx.__tabKids[5]:__fire("OnClick")
-
-    -- "Lock window" rather than "Show title bar": the title-bar toggle moved to the Header page
-    -- with the settings redesign, and it is about to be renamed as well. This case is about the
-    -- WRITE SEAM, not about which checkbox carries it, so it uses one that stays put.
-    local cb = findWidget(widgetsSince(inst, before), "CheckBox", inst.NS.L["Lock window"])
+    local cb = findWidget(widgetsSince(inst, before), "CheckBox", inst.NS.L["Show title bar"])
     assertTrue(cb ~= nil)
 
     local seen = {}
@@ -448,12 +446,12 @@ test("Options: a checkbox's set() routes through NS.SetByPath too", function()
         seen[#seen + 1] = path
         return real(path, value)
     end
-    cb:__fire("OnValueChanged", true)
+    cb:__fire("OnValueChanged", false)
     inst.NS.SetByPath = real
 
     assertEqual(#seen, 1)
-    assertEqual(seen[1], "window.frame.locked")
-    assertTrue(inst.NS.GetSetting("window.frame.locked"))
+    assertEqual(seen[1], "window.header.show")
+    assertFalse(inst.NS.GetSetting("window.header.show"))
 end)
 
 test("Options: applyDefault routes through NS.SetByPath, not around it", function()
