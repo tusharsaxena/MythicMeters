@@ -15,6 +15,11 @@
 - **Repo order is absolute.** Standards → LibKa0s (tagged) → MultiMeters. The addon does not start until the library carries a git tag.
 - **Branches, already created:** `options-tabbed-pages` in `../WowAddonStandards` and `../LibKa0s`; `settings-redesign` in `MultiMeters`.
 - **Green gate before every commit, in whichever repo you are in:** `lua tests/run.lua` and `luacheck .` at **0 warnings / 0 errors**.
+- **Complexity gate: zero functions above CCN 15** (`automated-tests-§3`). The release task runs the full battery and refuses to tag on a breach, so **every task that adds or grows a function verifies it at the time**, not at the end:
+  ```sh
+  python3 -m lizard -l lua -C 15 <the file you changed> | tail -20
+  ```
+  A clean run prints no warning block. Paste the output into your report — the number, not an expectation. For calibration in `OptionsWidgets.lua`: `RenderRows` is CCN 9 and `RenderField` is CCN 7, so anything near 15 is an outlier worth splitting into a file-local before it is committed.
 - **Never auto-stage, auto-commit or auto-push outside the commit steps written here**, and never bump a version except where a step says to.
 - **Non-ASCII is a byte escape, never a literal.** The collection writes `\226\128\148` for an em dash; this plan introduces `\226\128\186` for `›`. A literal depends on the file's encoding surviving every editor between here and a client.
 - **Line endings are CRLF** in both repos (`.gitattributes` enforces it; `tests/test_eol.lua` in LibKa0s and the addon's lint check it).
