@@ -477,8 +477,8 @@ test("widgets: tab packing fills a row and wraps to the next", function()
   -- rule nothing checks.
   -- red under: counting the gap before the first tab of a row, or comparing with >=.
   local O = Fixture.new()
-  local rows = O.__layoutTabs({ 60, 60, 60 }, 200, 4)
-  assertEqual(#rows, 2, "60+4+60 fits in 200, a third does not")
+  local rows = O.__layoutTabs({ 60, 60, 60 }, 150, 4)
+  assertEqual(#rows, 2, "60+4+60 = 124 fits in 150; a third would need 188, so it wraps")
   assertEqual(#rows[1], 2)
   assertEqual(rows[1][1], 1)
   assertEqual(rows[1][2], 2)
@@ -707,6 +707,12 @@ In `LibKa0s/OptionsWidgets.lua`, after `O.Section`:
 
       b:SetEnabled(tab.key ~= spec.value)
       b:SetScript("OnClick", function()
+        -- Belt AND braces. A disabled Button does not fire OnClick in the client, so this guard
+        -- is redundant there -- but the invariant is worth stating where it can be read, and it
+        -- keeps the handler correct if anything ever re-enables the button without redrawing
+        -- the strip. It is also the only thing a harness can assert against, since a mock's
+        -- SetEnabled cannot suppress a directly-fired script.
+        if tab.key == spec.value then return end
         if spec.onSelect then pcall(spec.onSelect, tab.key) end
       end)
       if tab.tooltip then O.AttachTooltip(b, tab.label, tab.tooltip) end
