@@ -463,3 +463,14 @@ test("Slash: Register is a no-op rather than a raise when there is no AceConsole
     target.RegisterChatCommand = real
     assertTrue(ok, "a half-installed Ace stack must not take the load down")
 end)
+
+test("Slash: /mm list heads each block with the page AND the tab", function()
+    -- `page` was the whole heading while a page was one scroll. It is now a page and a tab, and
+    -- a CLI that named only the first half would send someone to a page with no way to say
+    -- which of its six tabs the setting is on.
+    -- red under: reverting groupKey to row.page, or joining with a plain "/" the panel never shows.
+    local inst = T.load()
+    local text = joined(say(inst, "list"))
+    assertTrue(text:find("frame \226\128\186 ", 1, true) ~= nil,
+        "no page \226\128\186 tab heading in the listing")
+end)
