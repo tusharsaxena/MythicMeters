@@ -857,6 +857,31 @@ local function trackDrag(row)
   end
 end
 
+--- Dress the carried copy as the row it came from and put it under the cursor.
+---
+--- Its own function because `beginDrag` was doing two jobs -- starting a drag, and drawing one --
+--- and the pair came to CCN 17 against a release gate of 15. Splitting on that seam rather than
+--- anywhere cheaper: the state machine and the picture it paints are genuinely separable, and this
+--- half is the one that grows when the ghost gains a field.
+local function raiseGhost(row, list)
+  local g = ensureGhost()
+
+  local w = row.frame.GetWidth and row.frame:GetWidth()
+  if type(w) == "number" and w > 0 then g:SetWidth(w) end
+  g:SetHeight(row.height or list.stride)
+
+  g.icon:SetTexture(row.ghostIcon or list.handleIcon or HANDLE_FALLBACK)
+  local ic = row.ghostIconColor or { 1, 1, 1 }
+  g.icon:SetVertexColor(ic[1], ic[2], ic[3])
+
+  g.text:SetText(row.ghostText or "")
+  local tc = row.ghostTextColor or { 1, 0.82, 0 }
+  g.text:SetTextColor(tc[1], tc[2], tc[3])
+
+  g:Show()
+  moveGhost()
+end
+
 local function beginDrag(row)
   if not row then return end
   local list = row.list
@@ -875,22 +900,7 @@ local function beginDrag(row)
   -- looking at now.
   if row.frame.SetAlpha then row.frame:SetAlpha(0.35) end
 
-  local g = ensureGhost()
-  local w = row.frame.GetWidth and row.frame:GetWidth()
-  if type(w) == "number" and w > 0 then g:SetWidth(w) end
-  g:SetHeight(row.height or list.stride)
-  g.icon:SetTexture(row.ghostIcon or list.handleIcon or HANDLE_FALLBACK)
-  if row.ghostIconColor then
-    g.icon:SetVertexColor(row.ghostIconColor[1], row.ghostIconColor[2], row.ghostIconColor[3])
-  else
-    g.icon:SetVertexColor(1, 1, 1)
-  end
-  g.text:SetText(row.ghostText or "")
-  local c = row.ghostTextColor or { 1, 0.82, 0 }
-  g.text:SetTextColor(c[1], c[2], c[3])
-  g:Show()
-  moveGhost()
-
+  raiseGhost(row, list)
   list.say("grab %d at y=%.1f", row.index, row.startY)
 end
 
