@@ -472,11 +472,11 @@ end
 
 --- One control's colour, at rest or under the pointer.
 ---
---- TWO COLOURS AND TWO CLASS-COLOUR FLAGS, because they are two independent
---- answers: a player who wants their class colour under the pointer does not
---- necessarily want the whole strip in it at rest, and one shared flag would make
---- hover and rest the same colour for anyone who ticked it -- which is the one
---- thing a hover colour must never be.
+--- TWO COLOURS AND TWO COLOUR MODES, because they are two independent answers: a
+--- player who wants their class colour under the pointer does not necessarily
+--- want the whole strip in it at rest, and one shared mode would make hover and
+--- rest the same colour for anyone who chose class -- which is the one thing a
+--- hover colour must never be.
 ---
 --- The LOCAL player's class, like every other header surface: the strip is about
 --- the window rather than about any row in it, so yours is the only class it can
@@ -495,18 +495,17 @@ local function controlColor(frameCfg, hovered)
         r, g, b = color(frameCfg.controlColor, 1, 1, 1)
     end
 
-    -- Spelled out rather than `hovered and A or B`: that idiom answers B whenever
-    -- A is false, so a window with the RESTING flag on and the hover flag off
-    -- would take the resting flag's answer while hovered — the two flags
-    -- collapsing back into the one this exists not to be.
-    local classed
+    -- Spelled out rather than `hovered and A or B`, and the reason survived the type change: a
+    -- mode string is never falsy, so the idiom would now answer the HOVER mode always instead of
+    -- the resting one always. Same trap, opposite direction, still worth the four lines.
+    local mode
     if hovered then
-        classed = frameCfg.controlHoverClassColor
+        mode = frameCfg.controlHoverColorMode
     else
-        classed = frameCfg.controlClassColor
+        mode = frameCfg.controlColorMode
     end
 
-    if classed and NS.PlayerClassRGB then
+    if mode == "class" and NS.PlayerClassRGB then
         local cr, cg, cb = NS.PlayerClassRGB()
         if cr then r, g, b = cr, cg, cb end
     end

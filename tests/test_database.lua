@@ -978,3 +978,24 @@ test("Database: v12 -> v13 leaves a window that never stored the toggle alone", 
     assertNil(w.frame.titleBar, "nothing to carry, nothing left behind")
     assertEqual(w.header.show, true, "the shipped default arrived through the merge, not the step")
 end)
+
+test("Database: v12 -> v13 turns the control class-colour flags into modes", function()
+    -- The two booleans sat beside colour pickers while every other surface in this addon
+    -- expresses the same choice as a mode dropdown. A stored `true` becomes "class"; a stored
+    -- `false` becomes "custom", which is what it already meant.
+    -- red under: mapping false to nil, which leaves the row reading the schema default.
+    local inst = T.load()
+    local db = inst.NS.db
+
+    db.global.schemaVersion = 12
+    local w = db.profile.windows[1]
+    w.frame.controlClassColor      = true
+    w.frame.controlHoverClassColor = false
+
+    inst.NS:RunMigrations()
+
+    assertEqual(w.frame.controlColorMode, "class")
+    assertEqual(w.frame.controlHoverColorMode, "custom")
+    assertNil(w.frame.controlClassColor)
+    assertNil(w.frame.controlHoverClassColor)
+end)

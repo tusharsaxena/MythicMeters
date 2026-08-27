@@ -198,8 +198,13 @@ L["Reveal controls on hover"] = "Reveal controls on hover"
 L["Fade every control except the one under the pointer. Off keeps them all visible."] = "Fade every control except the one under the pointer. Off keeps them all visible."
 L["Minimised"] = "Minimised"
 L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."] = "Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."
+L["Control color mode"] = "Control color mode"
+L["What colors the header controls at rest."] = "What colors the header controls at rest."
 L["Control color"] = "Control color"
 L["Color the header controls are drawn in."] = "Color the header controls are drawn in."
+L["Control hover color mode"] = "Control hover color mode"
+L["What colors a header control while the pointer is over it."] =
+    "What colors a header control while the pointer is over it."
 L["Control hover color"] = "Control hover color"
 L["Color the control under the pointer is drawn in."] =
     "Color the control under the pointer is drawn in."

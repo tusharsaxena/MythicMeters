@@ -424,6 +424,16 @@ local BARBG_VALUES = {
 }
 local BARBG_SORT = { "class", "stat", "custom", "none" }
 
+-- TWO modes, not the three every text surface offers. "Per-statistic" cannot say anything true
+-- about a header BUTTON: a close box does not belong to a statistic, so the option could only
+-- ever paint it the sort column's colour -- which is a fact already on screen in that column's
+-- own header and in its arrow.
+local CONTROLCOLOR_VALUES = {
+    class  = L["Class color"],
+    custom = L["Custom color"],
+}
+local CONTROLCOLOR_SORT = { "class", "custom" }
+
 -- ONE set for both slots, and EVERY VALUE IS LITERAL — modules/Row.lua renders
 -- exactly what is asked for and never falls back to another figure. `none` in
 -- particular means nothing at all, which it did not always: both slots set to
@@ -978,22 +988,29 @@ NS.Schema = {
         page = "header", group = L["Button style"],
         label = L["Reveal controls on hover"], desc = L["Fade every control except the one under the pointer. Off keeps them all visible."],
     },
+    -- Two modes rather than one, because rest and hover are two independent answers: a player who
+    -- wants their class colour under the pointer has not asked for the whole strip in it at rest,
+    -- and a shared mode would make hover and rest the same colour for anyone who chose class --
+    -- the one thing a hover colour must never be.
+    {
+        path = "window.frame.controlColorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
+        page = "header", group = L["Button style"],
+        label = L["Control color mode"],
+        desc = L["What colors the header controls at rest."],
+    },
     {
         path = "window.frame.controlColor", type = "color",
         default = { r = 1, g = 1, b = 1, a = 1 },
         page = "header", group = L["Button style"],
         label = L["Control color"], desc = L["Color the header controls are drawn in."],
     },
-    -- Two class-colour flags rather than one, because they are two independent
-    -- answers: a player who wants their class colour under the pointer has not
-    -- asked for the whole strip in it at rest, and a shared flag would make hover
-    -- and rest the same colour for anyone who ticked it -- the one thing a hover
-    -- colour must never be.
     {
-        path = "window.frame.controlClassColor", type = "bool", default = false,
+        path = "window.frame.controlHoverColorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
         page = "header", group = L["Button style"],
-        label = L["Use class color"],
-        desc = L["Draw the header controls in your own class color. Your configured color is kept where the class cannot be read."],
+        label = L["Control hover color mode"],
+        desc = L["What colors a header control while the pointer is over it."],
     },
     {
         path = "window.frame.controlHoverColor", type = "color",
@@ -1001,12 +1018,6 @@ NS.Schema = {
         page = "header", group = L["Button style"],
         label = L["Control hover color"],
         desc = L["Color the control under the pointer is drawn in."],
-    },
-    {
-        path = "window.frame.controlHoverClassColor", type = "bool", default = false,
-        page = "header", group = L["Button style"],
-        label = L["Use class color"],
-        desc = L["Draw the control under the pointer in your own class color. Your configured color is kept where the class cannot be read."],
     },
     {
         path = "window.frame.controlSize", type = "number", default = 16,

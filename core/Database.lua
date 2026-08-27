@@ -619,7 +619,8 @@ migrations[11] = function(db)
     db.global.schemaVersion = 12
 end
 
---- v12 -> v13: THE TITLE-BAR TOGGLE MOVES ONTO THE HEADER.
+--- v12 -> v13: THE TITLE-BAR TOGGLE MOVES ONTO THE HEADER, AND THE HEADER CONTROLS' TWO
+--- CLASS-COLOUR FLAGS BECOME MODES.
 ---
 --- `Show title bar` was on the Frame page, under "Frame behavior", switching a surface the
 --- Header page owns -- so it sat three clicks from every control that styles the thing it turns
@@ -632,6 +633,12 @@ end
 --- default" -- writing one here would freeze today's default into every stored profile and the
 --- default could never move again.
 ---
+--- The two `controlClassColor` / `controlHoverClassColor` booleans get the same redesign every
+--- other colourable surface already has: a mode dropdown. A stored `true` becomes "class"; a
+--- stored `false` becomes "custom", which is what it already meant -- mapping it to nil instead
+--- would leave the row reading the schema default, which happens to be the same value today but
+--- need not be tomorrow.
+---
 --- Pruned rather than left, for the reason every step here gives: AceDB merges defaults in and
 --- never removes what they stopped naming, so a field nobody prunes outlives its reader.
 migrations[12] = function(db)
@@ -642,6 +649,18 @@ migrations[12] = function(db)
                 if type(w.header) ~= "table" then w.header = {} end
                 w.header.show = frame.titleBar
                 frame.titleBar = nil
+            end
+
+            if type(frame) == "table" then
+                if frame.controlClassColor ~= nil then
+                    frame.controlColorMode = frame.controlClassColor and "class" or "custom"
+                    frame.controlClassColor = nil
+                end
+                if frame.controlHoverClassColor ~= nil then
+                    frame.controlHoverColorMode =
+                        frame.controlHoverClassColor and "class" or "custom"
+                    frame.controlHoverClassColor = nil
+                end
             end
         end
     end

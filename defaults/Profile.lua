@@ -135,17 +135,17 @@ local WINDOW_TEMPLATE = {
         -- uses. Both are pickers rather than a "match the header" switch: the
         -- strip is the only part of the window whose two states a player sees
         -- constantly, and one of them being unconfigurable was the complaint.
-        controlColor      = { r = 1, g = 1, b = 1, a = 1 },
-        controlHoverColor = { r = 1, g = 0.82, b = 0, a = 1 },
-        -- One class-colour flag EACH, and both ship off so no window changes
+        -- One colour MODE each, and both ship "custom" so no window changes
         -- appearance. Two rather than one because hover and rest are two
-        -- independent answers: sharing a flag would make the pointer's colour
-        -- identical to the resting one for anybody who ticked it, which is the
+        -- independent answers: sharing a mode would make the pointer's colour
+        -- identical to the resting one for anybody who chose class, which is the
         -- one thing a hover colour must never be. The LOCAL player's class, like
         -- every other header surface — the strip is about the window, not about
         -- any row in it.
-        controlClassColor      = false,
-        controlHoverClassColor = false,
+        controlColorMode       = "custom",
+        controlColor           = { r = 1, g = 1, b = 1, a = 1 },
+        controlHoverColorMode  = "custom",
+        controlHoverColor      = { r = 1, g = 0.82, b = 0, a = 1 },
         -- The SLOT a control occupies -- its click target and the strip's layout
         -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
         -- 11px icon on the same line as a 12px title and the strip stops

@@ -212,20 +212,19 @@ test("HeaderControls: both colours come from config", function()
     assertEqual(r .. "," .. g .. "," .. b, "0,1,0")
 end)
 
-test("HeaderControls: each colour has its OWN class-colour flag", function()
-    -- Two flags rather than one, because hover and rest are two independent
-    -- answers. A shared flag would make the pointer's colour identical to the
-    -- resting one for anybody who ticked it, which is the one thing a hover
-    -- colour must never be.
-    -- red under: a single `classColor` key driving both.
+test("HeaderControls: each colour has its OWN colour mode", function()
+    -- Two modes rather than one, because hover and rest are two independent answers. A shared
+    -- mode would make the pointer's colour identical to the resting one for anybody who chose
+    -- class, which is the one thing a hover colour must never be.
+    -- red under: a single `controlColorMode` key driving both, or reading the retired boolean.
     local inst, window = scene(function(cfg)
-        cfg.frame.controlColor      = { r = 0, g = 0, b = 1, a = 1 }
-        cfg.frame.controlHoverColor = { r = 0, g = 1, b = 0, a = 1 }
-        cfg.frame.controlClassColor = true
+        cfg.frame.controlColor          = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor     = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlColorMode      = "class"
+        cfg.frame.controlHoverColorMode = "custom"
     end)
-    -- Compared against the reader itself rather than against a literal: whose
-    -- class it is, is the subject of the case above this one, and hard-coding a
-    -- hue here would only re-test the mock.
+    -- Compared against the reader itself rather than against a literal: whose class it is, is
+    -- the subject of another case, and hard-coding a hue here would only re-test the mock.
     local cr, cg, cb = inst.NS.PlayerClassRGB()
     assertTrue(cr ~= nil, "the scene has no readable class to colour with")
 
@@ -233,28 +232,34 @@ test("HeaderControls: each colour has its OWN class-colour flag", function()
     assertEqual(r .. "," .. g .. "," .. b, cr .. "," .. cg .. "," .. cb,
         "the resting colour is not classed")
 
-    -- The hover colour is untouched by the resting flag.
     window.controls.settings:_run("OnEnter")
     local hr, hg, hb = tintOf(window.controls.settings)
     assertEqual(hr .. "," .. hg .. "," .. hb, "0,1,0",
-        "the resting flag classed the hover colour too")
+        "the resting mode classed the hover colour too")
 end)
 
-test("HeaderControls: the hover flag classes the hover colour and nothing else", function()
+test("HeaderControls: the hover mode classes the hover colour and nothing else", function()
+    -- The other direction, and the one the type change put at risk: `hovered and A or B` used
+    -- to answer B whenever A was false, and a mode STRING is never falsy -- so the same idiom
+    -- would now answer the hover mode always instead of the resting one always. Same trap,
+    -- opposite direction.
+    -- red under: collapsing the resting/hover branch back to that idiom.
     local inst, window = scene(function(cfg)
-        cfg.frame.controlColor           = { r = 0, g = 0, b = 1, a = 1 }
-        cfg.frame.controlHoverColor      = { r = 0, g = 1, b = 0, a = 1 }
-        cfg.frame.controlHoverClassColor = true
+        cfg.frame.controlColor          = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor     = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlColorMode      = "custom"
+        cfg.frame.controlHoverColorMode = "class"
     end)
     local cr, cg, cb = inst.NS.PlayerClassRGB()
     assertTrue(cr ~= nil, "the scene has no readable class to colour with")
 
     local r, g, b = tintOf(window.controls.settings)
-    assertEqual(r .. "," .. g .. "," .. b, "0,0,1", "the hover flag classed the resting colour")
+    assertEqual(r .. "," .. g .. "," .. b, "0,0,1", "the hover mode classed the resting colour")
 
     window.controls.settings:_run("OnEnter")
     local hr, hg, hb = tintOf(window.controls.settings)
-    assertEqual(hr .. "," .. hg .. "," .. hb, cr .. "," .. cg .. "," .. cb)
+    assertEqual(hr .. "," .. hg .. "," .. hb, cr .. "," .. cg .. "," .. cb,
+        "the hover mode did not class the hover colour")
 end)
 
 test("HeaderControls: both flags off is the shipped look, unchanged", function()
