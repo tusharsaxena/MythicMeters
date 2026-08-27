@@ -12,7 +12,7 @@
 local lib = LibStub and LibStub("LibKa0s-Options-1.0", true)
 if not lib then return end
 
-local WIDGETS_MINOR = 8
+local WIDGETS_MINOR = 9
 -- Paired on the SHELL's minor as well as this file's own — see OptionsScroll.lua for why the
 -- file's own counter is not enough.
 if lib.__widgetsMinor and lib.__widgetsMinor >= WIDGETS_MINOR
@@ -162,10 +162,15 @@ end
 --- Emit a section heading when `row` opens a group the page has not drawn yet, and advance the
 --- tracker. The previous group's tail row is flushed FIRST, or the heading lands above a widget
 --- that belongs above IT.
-local function startGroup(O, ctx, row, flushRow)
+---
+--- `noHeadings` skips the O.Section call for a page whose sections are drawn as tabs instead
+--- (options-ui-§13) -- but the flush and the tracker advance happen either way, or a later
+--- group would be treated as a continuation of this one and the boundary flush between them
+--- would never happen.
+local function startGroup(O, ctx, row, flushRow, noHeadings)
   if not (row.group and row.group ~= ctx.lastGroup) then return end
   flushRow()
-  O.Section(ctx, row.group)
+  if not noHeadings then O.Section(ctx, row.group) end
   ctx.lastGroup = row.group
 end
 
@@ -412,6 +417,217 @@ function lib.__AttachWidgets(O, d)
 
     O.AddSpacer(scroll, L.SECTION_BOTTOM_SPACER)
     return h
+  end
+
+  --- Pack tab widths into rows that fit `available`. Pure arithmetic and no widgets, so the
+  --- wrap rule -- the thing that decides whether a page's strip is one row or two -- is
+  --- checkable without a measured font.
+  ---
+  --- A tab wider than the whole strip is placed alone rather than dropped: the split only fires
+  --- when the row already holds something, so every index in `widths` comes back in exactly one
+  --- row. Losing one would lose a whole section of a page with nothing said about it.
+  ---
+  --- @param widths number[]    each tab's pixel width, in tab order
+  --- @param available number   usable width of the strip
+  --- @param gap number         horizontal gap between two tabs sharing a row
+  --- @return number[][]        rows of 1-based indices into `widths`, in order
+  function O.__layoutTabs(widths, available, gap)
+    local rows, row, used = {}, {}, 0
+    for i = 1, #widths do
+      local need = (#row > 0) and (gap + widths[i]) or widths[i]
+      if #row > 0 and used + need > available then
+        rows[#rows + 1] = row
+        row, used, need = {}, 0, widths[i]
+      end
+      row[#row + 1] = i
+      used = used + need
+    end
+    if #row > 0 then rows[#rows + 1] = row end
+    return rows
+  end
+
+  --- Hide, unparent and forget every widget in one of a page's chrome ledgers.
+  local function releaseLedger(ctx, key)
+    for _, f in ipairs(ctx[key] or {}) do
+      f:Hide()
+      f:SetParent(nil)
+    end
+    ctx[key] = {}
+  end
+
+  --- Release everything a page parked in its chrome band -- the banner AND the strip.
+  ---
+  --- Two ledgers, one release, because the two have different LIFETIMES: a tab click redraws the
+  --- strip alone and drains __tabKids itself, while only a full page render redraws the banner.
+  --- Draining both here is what keeps the page-wide teardown total without making the strip's
+  --- ledger a second copy of it -- when TabStrip appended to both, __chromeKids grew by one entry
+  --- per tab click, forever, holding buttons already hidden and unparented.
+  local function releaseChrome(ctx)
+    releaseLedger(ctx, "__chromeKids")
+    releaseLedger(ctx, "__tabKids")
+  end
+  O.__releaseChrome = releaseChrome
+
+  --- Measure a label, in pixels, or fall back to the floor width.
+  ---
+  --- Guarded twice over. A FontString may not be there at all (an inert widget in a headless
+  --- harness), and a mock's catch-all metatable answers a capitalized call with the frame
+  --- itself -- so a `GetStringWidth` that "worked" could still hand back a table, and the
+  --- arithmetic below would raise inside a layout pass. Type-check the answer, not the method.
+  local function labelWidth(fs)
+    if not (fs and fs.GetStringWidth) then return L.TAB_MIN_W end
+    local w = fs:GetStringWidth()
+    if type(w) ~= "number" or w <= 0 then return L.TAB_MIN_W end
+    return math.max(L.TAB_MIN_W, w + (L.TAB_PAD_X * 2))
+  end
+
+  --- One tab button: art, state, handler, and its measured width.
+  ---
+  --- Lifted out of TabStrip's loop because the loop is the only interesting thing left in that
+  --- function -- packing widths into rows -- and a button's construction is six unrelated
+  --- decisions that were making one function read as two.
+  ---
+  --- The ACTIVE tab is the DISABLED one, which is how Blizzard's own tab groups mark selection
+  --- and is why it needs no second piece of art to say so: a disabled button does not highlight
+  --- on hover and does not fire, so clicking the tab you are already on cannot re-render the
+  --- page you are already looking at.
+  ---
+  --- @return table  the button frame
+  --- @return number its measured width, in pixels
+  local function makeTab(ctx, tab, active, onSelect)
+    local b = CreateFrame("Button", nil, ctx.chrome)
+    b:SetHeight(L.TAB_H)
+    b:SetNormalFontObject(_G.GameFontNormalSmall)
+    b:SetHighlightFontObject(_G.GameFontHighlightSmall)
+    b:SetDisabledFontObject(_G.GameFontHighlightSmall)
+    b:SetText(tab.label or "")
+
+    -- A flat backing rather than a Blizzard tab atlas. The art is deliberately minimal here;
+    -- what the strip owes the page is a readable active/inactive distinction, and the atlas
+    -- question is one for a live client rather than for this file.
+    local bg = b.CreateTexture and b:CreateTexture(nil, "BACKGROUND")
+    if bg and bg.SetColorTexture then
+      bg:SetAllPoints(b)
+      bg:SetColorTexture(0, 0, 0, active and 0.55 or 0.25)
+    end
+
+    b:SetEnabled(not active)
+    b:SetScript("OnClick", function()
+      -- Belt AND braces. A disabled Button does not fire OnClick in the client, so this guard
+      -- is redundant there -- but the invariant is worth stating where it can be read, and it
+      -- keeps the handler correct if anything ever re-enables the button without redrawing
+      -- the strip. It is also the only thing a harness can assert against, since a mock's
+      -- SetEnabled cannot suppress a directly-fired script.
+      if active then return end
+      if onSelect then pcall(onSelect, tab.key) end
+    end)
+    if tab.tooltip then O.AttachTooltip(b, tab.label, tab.tooltip) end
+
+    return b, labelWidth(b.GetFontString and b:GetFontString())
+  end
+
+  --- Pack `buttons` into their wrapped rows and reserve the band those rows need.
+  ---
+  --- The band is reserved AFTER the wrap is known, never before: a strip that reserved one row
+  --- and then laid out two would put its second row on top of the page's first widget.
+  local function placeTabs(ctx, buttons, widths)
+    -- The strip's own width, not the panel's: a body inset by PADDING_X on both edges.
+    local available = ctx.chrome.GetWidth and ctx.chrome:GetWidth()
+    if type(available) ~= "number" or available <= 0 then available = L.TAB_MIN_W end
+
+    local rows = O.__layoutTabs(widths, available, L.TAB_GAP)
+    for r, indices in ipairs(rows) do
+      local x = 0
+      local y = -((r - 1) * (L.TAB_H + L.TAB_ROW_GAP))
+      for _, i in ipairs(indices) do
+        buttons[i]:SetWidth(widths[i])
+        buttons[i]:ClearAllPoints()
+        buttons[i]:SetPoint("TOPLEFT", ctx.chrome, "TOPLEFT", x, y)
+        buttons[i]:Show()
+        x = x + widths[i] + L.TAB_GAP
+      end
+    end
+
+    local rowCount = math.max(#rows, 1)
+    O.SetChromeHeight(ctx,
+      (ctx.__bannerHeight or 0) + (rowCount * L.TAB_H) + ((rowCount - 1) * L.TAB_ROW_GAP))
+  end
+
+  --- A pinned tab strip in the page's chrome band (options-ui-§13). One tab per section.
+  ---
+  --- `spec` = { tabs = { { key, label, tooltip } }, value, onSelect }. Returns the buttons in
+  --- tab order, or nil having drawn nothing.
+  function O.TabStrip(ctx, spec)
+    if not (ctx and ctx.chrome and spec and type(spec.tabs) == "table" and #spec.tabs > 0) then
+      return nil
+    end
+    if not O.AceGUI then return nil end
+
+    -- Only the strip's own buttons, never the banner: the banner is drawn first and a blanket
+    -- release here would take it with them.
+    releaseLedger(ctx, "__tabKids")
+
+    local buttons, widths = {}, {}
+    for i, tab in ipairs(spec.tabs) do
+      local b, w = makeTab(ctx, tab, tab.key == spec.value, spec.onSelect)
+      buttons[i] = b
+      widths[i]  = w
+      ctx.__tabKids[#ctx.__tabKids + 1] = b
+    end
+
+    placeTabs(ctx, buttons, widths)
+    return buttons
+  end
+
+  --- The page banner (options-ui-§14): which instance this page is editing, and the picker for
+  --- it, pinned above the strip and the scroll.
+  ---
+  --- It carries the PICKER rather than a label, and it is the ONLY picker: a page that already
+  --- had one deletes it. Two controls over one piece of session state is a synchronisation
+  --- problem the design invented and would then own forever -- here there is one value, read at
+  --- render time, and the structural refresh the write already triggers repaints every panel.
+  ---
+  --- Draw it BEFORE the strip. It records its own share of the band in `ctx.__bannerHeight`,
+  --- which TabStrip adds to the rows it reserves for itself; called the other way round, the
+  --- strip's reservation would not know about it.
+  ---
+  --- `spec` = { label, list, order, value, onSelect, tooltip }. Returns the dropdown, or nil
+  --- having drawn nothing.
+  function O.PageBanner(ctx, spec)
+    if not (ctx and ctx.chrome and spec) then return nil end
+    local AceGUI = O.AceGUI
+    if not AceGUI then return nil end
+
+    releaseChrome(ctx)
+
+    local dd = AceGUI:Create("Dropdown")
+    dd:SetLabel(spec.label or "")
+    dd:SetList(spec.list or {}, spec.order)
+    dd:SetValue(spec.value)
+    dd:SetCallback("OnValueChanged", function(_, _, key)
+      -- pcall'd for the reason every host callback in this file is: a selection handler reaches
+      -- into live addon state, and a raise inside AceGUI's own dispatch takes the click handling
+      -- of every widget on the frame with it.
+      if spec.onSelect then pcall(spec.onSelect, key) end
+    end)
+    if dd.frame then
+      dd.frame:SetParent(ctx.chrome)
+      dd.frame:ClearAllPoints()
+      dd.frame:SetPoint("TOPLEFT",  ctx.chrome, "TOPLEFT",  0, 0)
+      dd.frame:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, 0)
+      dd.frame:SetHeight(L.BANNER_H)
+      dd.frame:Show()
+      ctx.__chromeKids[#ctx.__chromeKids + 1] = dd.frame
+
+      -- Reserved only here, with the frame that justifies it: a widget with no backing frame
+      -- parented nothing and occupies no band, so it must not claim one either. This repo's own
+      -- harness is exactly the case that produces a frameless AceGUI widget.
+      ctx.__bannerHeight = L.BANNER_H
+      O.SetChromeHeight(ctx, L.BANNER_H)
+    end
+    O.AttachTooltip(dd, spec.label, spec.tooltip)
+
+    return dd
   end
 
   --- A full-width line of text: one AceGUI Label added to the page's scroll, left-justified.
@@ -785,6 +1001,11 @@ function lib.__AttachWidgets(O, d)
   --               and only when that path is currently the lone
   --               widget on its row — attaching to a row that already has two would make it
   --               three-wide and break the 50/50 split for the rest of the page.
+  --   opts        { noHeadings = true } suppresses the automatic Section heading, for a page
+  --               whose sections are drawn as tabs instead (options-ui-§13). Omitted by every
+  --               untabbed caller, which is why it is a fifth argument rather than a field on
+  --               the ctx: a page's tabbedness is a property of THIS render, and a ctx flag
+  --               would leak it into the next one.
 
   --- Render an EXPLICIT list of rows. Taking a list rather than a page key is what lets a host
   --- render a filtered subset (a mirrored unit's partition) through the same engine.
@@ -842,7 +1063,7 @@ function lib.__AttachWidgets(O, d)
     flushRow()
   end
 
-  function O.RenderRows(ctx, rows, afterGroup, pairWith)
+  function O.RenderRows(ctx, rows, afterGroup, pairWith, opts)
     local scroll = O.EnsureScroll(ctx)
     if not scroll then return end
     local pendingRow, pendingCount = nil, 0
@@ -862,7 +1083,7 @@ function lib.__AttachWidgets(O, d)
     end
 
     for i, row in ipairs(rows) do
-      startGroup(O, ctx, row, flushRow)
+      startGroup(O, ctx, row, flushRow, opts and opts.noHeadings)
 
       if not row.skipRender then
         if row.solo and pendingCount > 0 then
@@ -885,5 +1106,71 @@ function lib.__AttachWidgets(O, d)
   --- how a per-unit page renders only the selected unit's rows.
   function O.RenderSchema(ctx, pageKey, afterGroup, pairWith)
     O.RenderRows(ctx, d.rowsForPage(pageKey, ctx.unit) or {}, afterGroup, pairWith)
+  end
+
+  --- Render one page as a tab strip over its sections (options-ui-§13).
+  ---
+  --- The partition is by `group`, IN DECLARATION ORDER, and one tab is exactly one group. There
+  --- is no second field naming a tab, for the reason options-ui-§1 gives against a second
+  --- widget selector: a tab list declared apart from the rows is a list that goes stale the
+  --- first time a section is renamed, and nothing would say so.
+  ---
+  --- Returns the group names, in tab order. A page with fewer than two groups draws no strip --
+  --- a single tab is chrome for its own sake, and its band would push the page down for nothing.
+  ---
+  --- With no AceGUI there is nothing to draw AT ALL: EnsureScroll answers nil and every maker in
+  --- this file refuses, so this reports an empty tab list and draws nothing -- which is what
+  --- RenderSchema would also have done, reached or not. The fallback that matters is the
+  --- single-group one above it, not this.
+  function O.RenderTabbedSchema(ctx, pageKey, afterGroup, pairWith)
+    local rows = d.rowsForPage(pageKey, ctx.unit) or {}
+
+    local groups, seen = {}, {}
+    for _, row in ipairs(rows) do
+      if row.group and not seen[row.group] then
+        seen[row.group] = true
+        groups[#groups + 1] = row.group
+      end
+    end
+
+    if not O.AceGUI then return {} end
+    if #groups < 2 then
+      O.RenderSchema(ctx, pageKey, afterGroup, pairWith)
+      return groups
+    end
+
+    -- A tab pointing at a group this page no longer has renders an empty page under a strip,
+    -- so a stale pointer heals to the first rather than being trusted. Cheap enough to check on
+    -- every render, and the alternative is a page that is blank until the user clicks something.
+    if not (ctx.activeTab and seen[ctx.activeTab]) then
+      ctx.activeTab = groups[1]
+    end
+
+    local tabs = {}
+    for i, name in ipairs(groups) do tabs[i] = { key = name, label = name } end
+
+    O.TabStrip(ctx, {
+      tabs  = tabs,
+      value = ctx.activeTab,
+      onSelect = function(key)
+        if key == ctx.activeTab then return end
+        ctx.activeTab = key
+        -- The same re-render path a change of subject takes (ClearScroll then a fresh
+        -- render), but that path carries no combat refusal to inherit -- options-ui-§2's
+        -- guard lives in the panel's OnShow and covers the category switch Blizzard protects.
+        -- Redrawing widgets inside an already-open panel was never a protected action, so a
+        -- tab click needs no guard here and none is added (options-ui-§13).
+        O.ClearScroll(ctx)
+        O.RenderTabbedSchema(ctx, pageKey, afterGroup, pairWith)
+      end,
+    })
+
+    local active = {}
+    for _, row in ipairs(rows) do
+      if row.group == ctx.activeTab then active[#active + 1] = row end
+    end
+    O.RenderRows(ctx, active, afterGroup, pairWith, { noHeadings = true })
+
+    return groups
   end
 end
