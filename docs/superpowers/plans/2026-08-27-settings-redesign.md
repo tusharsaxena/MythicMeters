@@ -2036,7 +2036,9 @@ test("Database: v12 -> v13 turns the control class-colour flags into modes", fun
     w.frame.controlClassColor      = true
     w.frame.controlHoverClassColor = false
 
-    inst.NS.Database.Migrate(db)
+    -- NS:RunMigrations() is the walker; there is no NS.Database.Migrate. Setting the version
+    -- back on the live db and re-running it is the cheapest way to drive one step.
+    inst.NS:RunMigrations()
 
     assertEqual(w.frame.controlColorMode, "class")
     assertEqual(w.frame.controlHoverColorMode, "custom")
