@@ -1258,6 +1258,10 @@ In `LibKa0s/OptionsWidgets.lua`: `WIDGETS_MINOR` 8 → 9.
 
 `OptionsScroll.lua` is untouched, so `SCROLL_MINOR` stays 3 — the new version key is therefore `10.9.3`.
 
+**`Kit.VERSION` moved to 14** during the tab-strip task (the frame mock gained real enabled-state
+tracking), so this release's version block says **kit revision 14**, and `tests/_kit/` must already
+match `testkit/` — `tests/test_kitsync.lua` enforces it. Confirm with `grep -n 'Kit.VERSION' testkit/framework.lua tests/_kit/framework.lua` before writing the CHANGELOG block.
+
 - [ ] **Step 2: Run the suite to see the versioning gate fail**
 
 ```sh
@@ -1289,7 +1293,7 @@ At the top of `../LibKa0s/CHANGELOG.md`, under `# Changelog`'s preamble:
 Versions in this release: **Core minor 6**, **Env minor 1**, **Pool minor 3**, **Item minor 1**,
 **Media minor 3**, **Widgets minor 8**, **DebugLog minor 12**, **Slash minor 7**, **Options minor 10**,
 **OptionsWidgets minor 9**, **OptionsScroll minor 3**, **Perf minor 7**, **PerfPanel minor 4**,
-**kit revision 13**.
+**kit revision 14**.
 
 **`LibKa0s-Options-1.0` minors 10/9 — tabbed pages and a page banner, on a chrome slot that
 costs an unadopting consumer nothing.**
@@ -1398,13 +1402,24 @@ cd /mnt/d/Profile/Users/Tushar/Documents/GIT/MultiMeters
 cp -r ../LibKa0s/LibKa0s/. libs/LibKa0s/
 ```
 
-The kit revision did not move in v1.20.0, so `tests/_kit/` is not re-copied. Confirm:
+**The kit revision DID move in v1.20.0 — 13 to 14** (the frame mock gained real enabled-state
+tracking, without which a tab strip's active-tab assertion silently tests nothing). So both
+payloads are re-copied, in this same commit:
+
+```sh
+cp -r ../LibKa0s/testkit/. tests/_kit/
+```
+
+Confirm the pairing before and after:
 
 ```sh
 grep -n 'kit revision' ../LibKa0s/CHANGELOG.md | head -2
+grep -n 'Kit.VERSION' ../LibKa0s/testkit/framework.lua tests/_kit/framework.lua
 ```
 
-Expected: v1.20.0 and v1.19.0 both say **kit revision 13**. If they differ, also run `cp -r ../LibKa0s/testkit/. tests/_kit/` in this same commit.
+Expected: v1.20.0 says **kit revision 14**, v1.19.0 says 13, and both `framework.lua` copies read
+`Kit.VERSION = 14`. `tests/test_vendor_sync.lua` compares the copies byte-for-byte and will stay
+red until both payloads land.
 
 - [ ] **Step 2: Roll the provenance line**
 
