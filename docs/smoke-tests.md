@@ -104,14 +104,16 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
   already moved. **Sweep along the strip**: the bright one must follow the pointer control by
   control, without a flicker in the gaps and without the whole set coming up as you cross the title
   bar. **Check this on a LOCKED window too**: locking used to disable the title bar's mouse.
-- **The colours are both settings.** Header → Header controls → **Control color** (white by default)
+- **The colours are both settings.** Header → Button style → **Control color** (white by default)
   and **Control hover color** (gold). Change either and the strip must follow immediately, at rest
   and under the pointer.
-- **Each colour has its OWN class-colour flag.** Tick **Use class color** under Control color: the
-  strip goes to your class colour at rest and the **hover colour is unchanged**. Tick the one under
-  Control hover color instead: the resting colour is unchanged and the control under the pointer
-  takes your class. Both ticked is legal and makes hover indistinguishable from rest — that is the
-  player's choice to make, but one flag driving both would force it, which is why there are two.
+- **Each colour has its OWN color-mode dropdown.** Set **Control color mode** to **Class color**: the
+  strip goes to your class colour at rest and the **hover colour is unchanged**. Set **Control hover
+  color mode** to Class color instead: the resting colour is unchanged and the control under the
+  pointer takes your class. Both set to Class color is legal and makes hover indistinguishable from
+  rest — that is the player's choice to make, but one dropdown driving both would force it, which is
+  why there are two. (These were booleans, `controlClassColor` / `controlHoverClassColor`, migrated
+  to `controlColorMode` / `controlHoverColorMode` at schemaVersion 12 → 13.)
 - **`Reveal controls on hover` OFF keeps every control at full alpha** — and the hover **colour**
   must still say which one the pointer is on, because it is the only channel left.
 - **Minimise collapses to the title bar** and the plus/minus flips. The column headers, the rows,
@@ -141,13 +143,14 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
 - Standing solo in the open world the window is **shown**: every context ships on and every hide
   rule ships off.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
-- Settings → AddOns shows a **Ka0s Multi Meters** parent with **twelve** subcategories in this
+- Settings → AddOns shows a **Ka0s Multi Meters** parent with **nine** subcategories in this
   order: General · Windows · Frame · Header · Bars · Tooltip · Visibility · Columns · Profiles. **General is first**, and the six between Windows and Profiles read as
-  `    - Frame` — four spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
+  `  - Frame` — two spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
   Two failure modes to watch for: a **hollow box** in front of a page name means a non-ASCII glyph
   has crept back in and the player's font does not have it, and a **flat list of hyphens** with no
-  indent means the client has started trimming leading whitespace — they are the pages the Windows picker retargets. General and Profiles
-  do not carry it, and no page's own heading does.
+  indent means the client has started trimming leading whitespace — they are the pages the banner
+  retargets. General and Profiles do not carry it, and no page's own canvas heading does — the
+  indent is tree-label-only.
 - **No `schema error:` line and no "schema path does not resolve" line appears at any point.**
   `NS.ValidateSchema` runs from the options descriptor at panel creation; a line here means a schema
   row's path does not resolve against `defaults/Profile.lua`, or its default disagrees with the tree.
@@ -217,29 +220,29 @@ second edge to catch.
   a bar, not two thirds of it. The **fill and the backdrop** each have their own colour, mode and
   opacity. And **Bar border draws something**: it is on the bar rather than under it now, so a style
   and a thickness are visible at last.
-- **The five text controls, on all four surfaces.** Bars → Cell text, Header → Frame header, Header →
-  Column headers, and Tooltip each carry a **font** picker, a **font outline** dropdown, a **text
+- **The five text controls, on all four surfaces.** Bars → Text style, Header → Title text, Columns →
+  Header text, and Tooltip → Text each carry a **font** picker, a **font outline** dropdown, a **text
   shadow** checkbox, a **text colour** picker and a **Text color mode** dropdown of Class /
   Per-statistic / Custom. **Per-statistic means a different statistic on each**: the cell takes its
   own column's colour, the title bar takes the **sort column's** (change the sort and watch it follow), the tooltip
   takes **the column you hovered** — a Healing tooltip is Healing-coloured whatever the grid is
   sorted by, and each **column label takes its own column's** — that last one is the check
-  that catches the strip being resolved once and painted uniformly. The **Column headers** strip also carries a
-  **Background color mode** over the same three, where Per-statistic paints one rectangle behind each
-  label rather than one across the strip. The **Frame header's** background is a plain colour picker
-  with no mode: it is one strip over the whole window, so per-statistic could only ever paint it the
-  sort column's colour. **The configured opacity survives
+  that catches the strip being resolved once and painted uniformly. Columns → **Header background**
+  also carries a **Background color mode** over the same three, where Per-statistic paints one
+  rectangle behind each label rather than one across the strip. The **Title bar's** own background
+  (Header → Title bar) is a plain colour picker with no mode: it is one strip over the whole window,
+  so per-statistic could only ever paint it the sort column's colour. **The configured opacity survives
   every mode** — a class or statistic background must arrive as a tint, not a slab. Walk all four on each page and watch the
   right thing change: the cells, the title bar and session line, the "Player | Damage | Healing"
   strip, and a hovered tooltip. A control that moves the wrong surface means two groups are sharing a
   key that is supposed to be their own.
-- **"Use class color" means the right class on each surface.** On **Text** the cells take **each
-  row's** class, so a grid of mixed classes goes multi-coloured — not all one colour. On **Tooltip**
-  the text takes the class of the player you are **hovering**; hover two different players and the
-  colour follows. On **Header** and **Column headers** it takes **your own** class, because those
-  strips are about the window rather than any row. Also set **Text opacity** to 50% with Use class
-  color on: the text must stay half-transparent — a class colour that resets it is one setting
-  cancelling another.
+- **"Text color mode" set to Class means the right class on each surface.** On Bars → **Text style** the cells take
+  **each row's** class, so a grid of mixed classes goes multi-coloured — not all one colour. On
+  Tooltip → **Text** the text takes the class of the player you are **hovering**; hover two different
+  players and the colour follows. On Header → **Title text** and Columns → **Header text** it takes
+  **your own** class, because those strips are about the window rather than any row. Also set **Text
+  opacity** to 50% with the colour mode set to Class: the text must stay half-transparent — a class
+  colour that resets it is one setting cancelling another.
 - **Reset all settings starts the profile over.** With **two or more** windows open, change something
   visible on each (font size, width, a column added or removed), rename them, select **one** in the
   window picker, then General → **Reset all settings**. You must come back with exactly **one** window
@@ -250,40 +253,47 @@ second edge to catch.
 - **A reset leaves your other profiles alone.** Make a second profile on the Profiles page, switch
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
-- **The four meta rows.** Frame → Frame behavior carries **Color mode**, **Bar texture**, **Font**
+- **The four meta rows.** Frame → **All surfaces** carries **Color mode**, **Bar texture**, **Font**
   and **Font outline**, each marked *(all surfaces)*. Each sets every surface that has a setting of
   its kind — the bar texture reaches the grid and the tooltip, the font and its outline reach the
   cells, both header strips and the tooltip. The check below is written for the colour mode and is
   the same for all four.
-- **The meta colour mode.** Frame → Frame behavior → **Color mode (all surfaces)**. Set it to
-  Per-statistic and check all nine of the individual dropdowns followed — Bars (bar and background),
-  Bars → Cell text, Header → Frame header (text), Header → Column headers (text and background),
+- **The meta colour mode.** Frame → **All surfaces** → **Color mode (all surfaces)**. Set it to
+  Per-statistic and check all ten of the individual dropdowns followed — Bars → Bar (bar and
+  background), Bars → Text style, Header → Title text, Columns → Header text and Header background,
   Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
   only that one changes, and the meta is not fought. Finally press the Frame page's **Defaults**
-  button and confirm the ten are **untouched** — a page's reset must not reach other pages.
-- **The Frame page's shape.** Three groups, in order: *Size and position* — which now ends with
-  **Background color**, the fill inside the window; it sat under *Border style*, which is the edge
-  around it — then *Border style*, then *Frame behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears
-  **once**; a heading printed twice means a row is filed under a group the page has already left.
-  There is **no** *Header controls* group here any more — the whole group is on **Header** — and
-  **no** "Reset position" button, which is on **General**. There is also **no** "Show resize grip"
-  checkbox and **no** "Minimised" checkbox: the lock governs the grip, and the header's own minimise
-  button governs the collapse.
-- **The Bars page's shape.** Seven groups, outside in: *Row layout*, *Row behavior*, *Bar
-  appearance*, *Bar background color*, *Bar border*, *Cell text*, *Row icons*. The Rows, Text and
-  Icons pages all folded in here, and their paths did not move with them — `/mm get
-  window.rows.height` and `/mm get window.text.size` both still answer.
-- **The Header page's shape.** Three groups, top to bottom in the order the strips are drawn:
-  *Frame header* — everything about the title bar, its text, alignment, height and background, in one
-  group because they are one strip — then *Header controls*, the group that moved off Frame, then
-  *Column headers* for the strip below. **Show close** sits in the controls group. Those rows are
-  still **stored** at `window.frame.*` (`/mm get window.frame.showClose` answers), which is
-  deliberate: a row's page is where it is edited, its path is where it is stored.
-- **The header background stops at the title bar.** Header → Frame header → **Header background** to
-  something loud, and Column headers → **Background color** to something else: two distinct bands,
-  the second starting exactly where the first ends. One colour covering both rows is the old
-  behaviour, in which the column strip's own setting was invisible underneath and a colour picked for
-  the title bar restyled the grid's labels too.
+  button and confirm the rest are **untouched** — a page's reset must not reach other pages, and this
+  page's own Defaults resets the **whole page**, every tab, not just the visible one.
+- **The Frame page's shape.** Six tabs, in order: *Size and position* (width, height, scale, opacity,
+  strata, padding), *Rows* (max rows, row height, spacing, growth direction — per-window layout, not
+  the row's own colour or highlight behaviour), *Row behavior* (always-show-self, highlight-self,
+  alternating background, mouseover highlight), *Background and border* (the window's own fill colour
+  and its LSM edge, thickness and colour), *Behavior* (lock, keep on screen), and *All surfaces* for
+  the four meta rows above. Each tab label appears **once**; a heading printed twice means a row is
+  filed under a tab the page has already left. There is **no** *Header controls* tab here — those
+  rows are on **Header** — and **no** "Reset position" button, which is on **General**'s Maintenance
+  tab. There is also **no** "Show resize grip" checkbox and **no** "Minimised" checkbox: the lock
+  governs the grip, and the header's own minimise button governs the collapse. Whether the title bar
+  draws at all (`window.header.show`) is a **Header** page setting now, on its **Title bar** tab, not
+  a Frame row.
+- **The Bars page's shape.** Six tabs, outside in: *Bar*, *Bar background*, *Bar border*, *Text
+  content*, *Text style*, *Icons*. The Text and Icons pages folded in here, and their paths did not
+  move with them — `/mm get window.text.size` still answers; `window.rows.*` is on the **Frame**
+  page's *Rows* / *Row behavior* tabs now, not on Bars.
+- **The Header page's shape.** Five tabs, top to bottom in the order the strips are drawn: *Title
+  bar* — the strip's own shape: whether it draws, alignment, height and background — then *Title
+  text* — the face drawn on it, and the window's own name — then *Window buttons* (close, minimise,
+  lock, settings), *Meter buttons* (segment picker, reset, export) and *Button style* (size, hover
+  reveal, and the two colour-mode dropdowns). `showClose` and the rest are still **stored** at
+  `window.frame.*` (`/mm get window.frame.showClose` answers), which is deliberate: a row's page is
+  where it is edited, its path is where it is stored. There is **no** *Column headers* tab here any
+  more — that strip's rows moved to the **Columns** page, which is the page that labels it.
+- **The header background stops at the title bar.** Header → Title bar → **Header background** to
+  something loud, and Columns → Header background → **Background color** to something else: two
+  distinct bands, the second starting exactly where the first ends. One colour covering both rows is
+  the old behaviour, in which the column strip's own setting was invisible underneath and a colour
+  picked for the title bar restyled the grid's labels too.
 - **Scale scales the whole window.** Frame → Scale to 0.5, then 2.0. The window's **outline** grows
   and shrinks with its contents. A box that stays exactly the size it was while the grid inside it
   shrinks into one corner means the scale reached the visible frame but not its anchor.
@@ -293,20 +303,22 @@ second edge to catch.
   non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
   addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
   border style, checked in §23.
-- Six pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
-- **The General page's shape and its three buttons.** It is the **first** page in the tree, above
-  Windows. It carries **Merge pets into their owner** and **Refresh interval**, both addon-wide:
-  change either and **every** window follows, not just the selected one. Its three buttons are
-  **Reset all settings** and **Reset position** — there is deliberately **no** Reset meter data
-  button here, or on any page; the header's own reset control is the one way to it. Reset position
-  is the one
-  control on the page that is **not** addon-wide — it moves the window selected on the Windows page
-  and nothing else, which its tooltip says.
-- **The window name takes the header's colour.** Header → Frame header → **Text color**: the title in
+- Six pages carry a **Defaults** button in the header (Frame, Header, Bars, Tooltip, Visibility,
+  Columns); **Windows and Profiles do not.** Columns' button resets its block editor to the shipped
+  catalog, ticked and ordered — it is **not** absent the way it used to be.
+- **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows.
+  Its **General** tab carries Test mode alongside the master enable and minimap toggle; its **Data**
+  tab carries **Merge pets into their owner** and **Refresh interval**, both addon-wide: change either
+  and **every** window follows, not just the selected one. Its **Maintenance** tab carries the debug
+  console toggle and its two buttons, **Reset all settings** and **Reset position** — there is
+  deliberately **no** Reset meter data button here, or on any page; the header's own reset control is
+  the one way to it. Reset position is the one control on the page that is **not** addon-wide — it
+  moves the window the banner is pointed at and nothing else, which its tooltip says.
+- **The window name takes the header's colour.** Header → Title text → **Text color**: the title in
   the window's title bar follows it, along with the font, size, outline and shadow it already
-  followed. Tick **Use class color** and the title takes your class colour, exactly as the session
-  line beside it does — the two are one header and must never differ.
-  The Settings window's own footer Defaults control works on the same ten.
+  followed. Set **Text color mode** to Class color and the title takes your class colour, exactly as
+  the session line beside it does — the two are one header and must never differ.
+  The Settings window's own footer Defaults control works on the same tab.
 - **Panel ↔ CLI parity.** With a page open, run `/mm set window.frame.width 640`. The Frame page's
   Width slider moves to 640 **without being reopened** (`RefreshScalars`). Conversely, move a slider
   and `/mm get window.frame.width` reports the new value.

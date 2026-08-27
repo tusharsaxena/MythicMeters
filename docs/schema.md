@@ -313,9 +313,8 @@ either alone. `text.shadow` keeps its long-standing `true`.
 | `borderSize` | `2` | `0` drops `edgeFile` with it — a zero edge size with a texture still present is drawn as a hard 1px line. With no edge, the skin's 1px `frame.innerBorder` child is hidden too: it is not part of the backdrop `ApplyBorder` rewrites, so it used to be the whole visible border on a window whose border was switched off |
 | `borderColor` | `{ r=0, g=0, b=0, a=1 }` | |
 | `padding` | `6` | frame edge to rows |
-| `locked` | `false` | unlocking implies preview mode |
+| `locked` | `false` | **not** coupled to Test mode — `WindowManager:SetLocked` used to also switch it on, which made unlocking a window fill it with placeholder rows and made unchecking Test mode a no-op while any window was unlocked. Locking is now about movement and nothing else; ask for a grid to aim at with `/mm test` |
 | `clampToScreen` | `true` | |
-| `titleBar` | `true` | |
 | `closeButton` | `true` | a **header control**, grouped with the `show*` keys on the panel |
 | `minimised` | `false` | a **hidden** schema row: writable through `NS.SetByPath` and listed by `/mm list`, but drawn as no control. It is per-window state the header's own minimise button writes, not a preference |
 | `position` | `{ point="CENTER", relativePoint="CENTER", x=0, y=0 }` | **not a schema row** — see below |
@@ -336,9 +335,15 @@ verb and goes straight to `modules/WindowManager.lua`, which owns re-anchoring a
 
 ### `header` — the strip above the rows
 
-`font = "Friz Quadrata TT"` · `size = 12` ·
+`show = true` · `font = "Friz Quadrata TT"` · `size = 12` ·
 `outline = "OUTLINE"` · `color = { r=1, g=0.82, b=0, a=1 }` · `colorMode = "custom"` ·
 `align = "LEFT"` · `height = 18` · `bgColor = { r=0, g=0, b=0, a=0.5 }`.
+
+**`show` moved here from `window.frame.titleBar` at `schemaVersion` 12 → 13** (`window.header.show`,
+not `window.frame.titleBar` — a path naming `frame` for the Header page's own master switch misled
+the next reader and read wrong in `/mm set`). `migrations[12]` in `core/Database.lua` copies a stored
+`frame.titleBar` into `header.show` and deletes the old key; a profile saved before this branch opens
+with its title bar exactly as it was.
 
 **Four keys lived here and are gone**, and each of them said something already on screen: `title`
 (a second name for a window that has one), `showSessionName` ("Overall" beside a window the player
@@ -359,9 +364,11 @@ that "the header" is the whole block a player points at — which meant `columnH
 drawn underneath it and could not be seen, and a colour picked for the title bar restyled the grid's
 column labels too. Two strips, two settings, two rectangles.
 
-All of these are edited under one **Frame header** group on the Header page. It was two groups
-("Header text" and "Header background"), which put `align` and `height` — both properties of the
-text — under a heading that said background.
+`show`, `align`, `height` and `bgColor` are edited on the Header page's **Title bar** tab — the strip's
+own shape; `font`, `size`, `outline`, `shadow` and `color` are the **Title text** tab — the face drawn
+on it. The two used to be one group ("Header text" and "Header background" before that, which put
+`align` and `height` — both properties of the text — under a heading that said background); splitting
+shape from face is what makes each tab's rows a single answerable question rather than a mix of two.
 
 ### The four text surfaces and their colour modes
 
@@ -409,6 +416,13 @@ pixel-identical after the upgrade — what changed is that the settings exist an
 
 `bgColor` is new capability rather than a moved one: the strip has never had a backdrop, which is why
 it defaults fully transparent.
+
+**Edited on the Columns page, not the Header page.** These eight rows carry `page = "columns"` —
+**Header text** (`font`, `size`, `outline`, `shadow`, `color`, `colorMode`) and **Header background**
+(`bgColorMode`, `bgColor`) are two of that page's three tabs, alongside the bespoke block editor. They
+moved off Header because Columns is the page that labels the strip they style; the storage paths are
+untouched (`window.columnHeader.*`), so a row's page is where it is edited and its path is where it
+is stored, same as `frame`/`header` above.
 
 ### `rows` — one per group member
 
@@ -468,8 +482,9 @@ bar is anchored to a hand-picked offset any more.
 `showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
 `true`. Six of the seven controls; `closeButton` is the seventh and deliberately keeps its older
 name, because renaming it to `showClose` for symmetry would migrate every stored profile in exchange
-for a consistency nobody can see. All seven sit in the panel's **Header controls** group, because
-what each of them governs is a control in the header strip.
+for a consistency nobody can see. All seven sit on the Header page, split across two tabs by what they
+act on: **Window buttons** (close, minimise, lock, settings) and **Meter buttons** (segment picker,
+reset, export). Their size, hover reveal and colours sit in a third tab, **Button style**, below.
 
 **There is no `resizeGrip` key.** There was, and it was read once while the frame was being built —
 so unticking it did nothing until a reload. The grip follows the **lock**: drawn while the window is
@@ -481,7 +496,14 @@ control, not per strip, so it *is* the "which one am I about to click" feedback 
 separate highlight drawn behind it. `minimised = false`
 collapses the window to that bar — the stored `frame.height` is untouched, so expanding restores it
 exactly. `controlColor = { r=1, g=1, b=1, a=1 }` and `controlHoverColor = { r=1, g=0.82, b=0, a=1 }` — two
-colours, because hover is the only feedback a control gives. The art ships white and is tinted by a
+colours, because hover is the only feedback a control gives, each now paired with its own
+**`controlColorMode`** / **`controlHoverColorMode`** dropdown (`class` / `custom`, both default
+`"custom"`) rather than the `controlClassColor` / `controlHoverClassColor` booleans they replaced at
+`schemaVersion` 12 → 13. Two modes rather than one, because rest and hover are two independent
+answers: a player who wants their class colour under the pointer has not asked for the whole strip in
+it, and a shared mode would make hover and rest the same colour for anyone who chose class — the one
+thing a hover colour must never be. `migrations[12]` reads each stored boolean and writes `"class"` or
+`"custom"` in its place. The art ships white and is tinted by a
 **multiply**, so the shipped `controlColor` is the identity rather than a recolour: the icons read as
 chrome, and the pointer turns exactly one of them the gold the rest of the header uses. Both are
 pickers rather than a "match the header text" switch — one of the two states being unconfigurable was
@@ -852,7 +874,13 @@ default      the shipped value; MUST equal defaults/Profile.lua's.
 page         the page key. Groups `/mm list`, feeds the panel's rowsForPage, names
              the CONFIG_CHANGED section, and `page == "profiles"` is the reset-all
              veto. One key, four jobs.
-group        section heading inside the page.
+group        section heading inside the page, AND the tab label on a tabbed page --
+             `RenderTabbedSchema` partitions a page's rows by `group`, in
+             declaration order, and draws one tab per distinct value. One tab is
+             exactly one group; there is deliberately no second field naming a
+             tab. A group whose every row is `hidden` is still real for `/mm
+             list` and the schema-vs-defaults check, and never becomes a tab —
+             `rowsForPage` drops hidden rows before grouping runs.
 label, desc  displayed strings, localized at declaration through NS.L.
 min/max/step/fmt/isPercent    slider shape.
 values/sorting/dialogControl  dropdown shape. A `number` row carrying `values` is
@@ -874,7 +902,7 @@ always the **stored** value, so the validator still compares like with like.
 
 ### `sessionOnly` — exempt from validation, still rows
 
-`state.preview` and `state.debugConsole` are never persisted, so they have no home in the defaults
+`state.testMode` and `state.debugConsole` are never persisted, so they have no home in the defaults
 tree and `NS.ValidateSchema` skips them. They are rows anyway because they belong on the page and in
 `/mm list` beside the settings they sit next to — a toggle that exists only in the panel is a toggle
 the CLI cannot reach. Their own `get` / `set` **are** the whole storage; `NS.GetSetting` returns

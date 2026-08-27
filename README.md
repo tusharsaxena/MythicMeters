@@ -88,21 +88,26 @@ are currently looking at, not all of them.
 
 ### Settings panel
 
-`/mm config`, or the Options → AddOns list. Thirteen pages:
+`/mm config`, or the Options → AddOns list. Nine pages, and within a page the settings are grouped
+into **tabs** — click one to switch, and it never asks you to leave combat to do it; only opening or
+switching between pages in the list on the left does that (see [I cannot open the settings while
+fighting](#troubleshooting) above). Every page below Windows opens with a **banner** naming which
+window it is editing, and that one dropdown is the only window picker in the whole panel.
 
-The six pages between Windows and Profiles are **indented under it**, because they all configure
-*the window Windows has selected* — the two that are not indented configure the addon.
+The seven pages between Windows and Profiles are **indented under it**, because they all configure
+*whichever window the banner is pointed at* — the two that are not indented, General and Profiles,
+configure the addon and draw no banner.
 
 | Page | What you set there |
 |---|---|
-| General | The addon master switch, the minimap button, Test mode, the debug console, whether pets are merged into their owner, and how often the display refreshes. Also two resets: all settings, and the selected window's position |
+| General | The addon master switch, the minimap button and Test mode; whether pets are merged into their owner and how often the display refreshes; the debug console, and two resets — all settings, and the selected window's position |
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
-| `  - `Frame | Size, scale, opacity, background, border, lock, title bar |
-| `  - `Header | Title, session name, duration, totals, font, alignment, background — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
+| `  - `Frame | Size, scale, opacity, background, border, lock, and whether the title bar draws |
+| `  - `Header | The title bar's own text (font, alignment, background) and the header controls — which of the seven buttons the title strip draws, in what color and at what size |
 | `  - `Bars | The grid and everything drawn in it — row height, count, spacing and growth direction, and then, per cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
 | `  - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
 | `  - `Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
-| `  - `Columns | One block per statistic — tick the ones you want, drag them by the handle into the order they appear. All eight are catalogued and listed; six are on by default, with Absorbs and Damage Taken there to be switched on |
+| `  - `Columns | One block per statistic — tick the ones you want, drag them by the handle into the order they appear — plus the column-header strip's own font and background, which label the columns this page builds |
 | Profiles | Share a setup between characters |
 
 ## How it works

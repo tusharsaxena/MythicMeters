@@ -283,14 +283,16 @@ One row, one default, one locale entry. A schema row automatically gains `/mm ge
 `/mm list`, `/mm reset`, its page widget, the per-page **Defaults** button and the `/mm resetall`
 sweep — so **do not** write a parallel mutator for a field that already has a row.
 
-**1. `settings/Schema.lua`** — add the row in the block for its page, positioned where you want it
-to render (the flow engine pairs consecutive rows two to a line, so neighbors here are neighbors on
-screen).
+**1. `settings/Schema.lua`** — add the row in the block for its page **and tab**: `group` is now the
+tab label, not just a section heading, so the row lands wherever an existing row already carries that
+`group` on that `page` (positioned where you want it to render within the tab — the flow engine pairs
+consecutive rows two to a line, so neighbors here are neighbors on screen). Use an existing group to
+add to an existing tab; see [Split an over-full tab](#split-an-over-full-tab) below for a new one.
 
 ```lua
 {
     path = "window.rows.compactMode", type = "bool", default = false,
-    page = "bars", group = L["Row layout"],
+    page = "frame", group = L["Rows"],
     label = L["Compact mode"], desc = L["Draw rows without spacing."],
 },
 ```
@@ -325,15 +327,47 @@ the write succeeds, and nothing anywhere says so) and a default that disagrees w
   do not hand `row.default` to anything directly.
 - Adding a leaf is **additive** and needs no `schemaVersion` bump. Renaming or restructuring one
   does — and needs a migrator beside it.
+- A brand-new `group` value is a brand-new **tab**, and nothing else — `RenderTabbedSchema` draws one
+  tab per distinct `group` on a page automatically, in the order each group's first row appears. There
+  is no second place that lists a page's tabs.
+- A `group` whose every row is `hidden` never becomes a tab at all — `rowsForPage` drops hidden rows
+  before grouping runs, so the group is real for `/mm list` and the schema-vs-defaults check and
+  invisible in the panel (General's `Export` group is the shipped example).
+
+---
+
+## Split an over-full tab
+
+Worth doing once a tab is long enough to scroll past comfortably — Frame and Bars already sit at six
+tabs each, so a seventh on either is the point to ask whether it should be its own tab instead of
+added to one of the six.
+
+**1. `settings/Schema.lua`** — pick the rows moving to the new tab and give them a `group` no other
+row on that `page` uses. `RenderTabbedSchema` draws the new tab in the position its first row's
+declaration order puts it — there is no separate ordering list to update.
+
+**2. `locales/enUS.lua`** — the new group's string is the tab's label; nothing else needs a name.
+
+**3. `lua tests/run.lua`.** `NS.ValidateSchema()` does not care about tab shape, but a row that moved
+`page` as well as `group` needs its default checked against `defaults/Profile.lua` again like any
+other row.
+
+**Gotchas.**
+- `/mm list` headings are `page › group` (`settings/Slash.lua`'s `groupKey`), so splitting a group
+  also splits the CLI heading — `frame › Rows` becomes two headings if `Rows` splits into two groups,
+  same as the panel gaining a tab.
+- If every row moving to the new group is `hidden`, the split produces a tab nobody sees — check the
+  `Export` case above before assuming a new group is a new tab.
 
 ---
 
 ## Add a settings page
 
 Only worth doing for a genuinely new group of settings; five of the nine existing pages are one
-`RenderSchema` call.
+`H.WindowBanner(c)` plus one `H.RenderTabbedSchema(c, PAGE)` call.
 
-**1. `settings/<Name>.lua`.** Copy `settings/Visibility.lua` — it is the minimal shape.
+**1. `settings/<Name>.lua`.** Copy `settings/Frame.lua` — it is the minimal shape for a page that
+edits the active window.
 
 ```lua
 local addonName, NS = ...
@@ -346,17 +380,19 @@ local function Build(mainCategory)
     if not (H and H.CreatePanel) then return nil end
 
     local ctx = H.CreatePanel("MultiMeters<Name>Panel", L["<Name>"], {
-        panelKey = PAGE, defaultsButton = true,
+        pageKey        = PAGE,
+        defaultsButton = true,
     })
     ctx.panel.defaultsOnClick = function() H.RestoreDefaults(PAGE, ctx) end
 
     H.SetRenderer(ctx, function(c)
         c.unit = NS.State and NS.State.activeWindowId or nil
         H.ClearScroll(c)
-        H.RenderSchema(c, PAGE)
+        H.WindowBanner(c)          -- omit this line for an addon-wide page (General has none)
+        H.RenderTabbedSchema(c, PAGE)
     end)
 
-    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["<Name>"])
+    return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["<Name>"]))
 end
 
 if NS.RegisterOptionsPage then
@@ -365,29 +401,44 @@ end
 ```
 
 **2. `MultiMeters.toc`** — add the file in the `# Settings` block, **after** `settings/Schema.lua`
-and `settings/OptionsSetup.lua`, in the position you want the page to appear. Registration order is
-page order.
+and `settings/OptionsSetup.lua`, in the position you want the page to appear in the **tree** — the
+tree's order is registration order, and it is not the same order as `settings/Schema.lua`'s own row
+order (General registers first and is declared last in the schema file; see
+[settings-panel.md](settings-panel.md#the-pages)).
 
-**3. `settings/Schema.lua`** — the rows, with `page = "<pagekey>"`.
+**3. `settings/Schema.lua`** — the rows, with `page = "<pagekey>"` and a `group` for each: one
+distinct `group` value on the page is one tab, drawn by `RenderTabbedSchema` in the order each
+group's first row appears. A page with only one visible group falls back to a strip-less
+`RenderSchema` automatically — nothing to opt into or out of.
 
 **4. `defaults/Profile.lua`** — a new config group if the page owns one. If it is per-window, add it
 to `WINDOW_TEMPLATE` **and** to `COPY_GROUPS` in `modules/WindowManager.lua` and `COPY_GROUPS` in
 `settings/Windows.lua`. A group in the template but not in those lists simply never copies, silently.
 
-**5. `locales/enUS.lua`** — the page name, group headings, labels and descriptions.
+**5. `locales/enUS.lua`** — the page name, group (tab) headings, labels and descriptions.
 
 **Gotchas.**
 - **Build lazily.** `SetRenderer` is not optional: a builder that runs at registration lays its
   children out against a zero-width body and loses the AceGUI skinning race (`options-ui-§5`).
-- **`H.ClearScroll(c)` first.** `RenderSchema` appends; it does not clear. Without it, a re-render
-  after the picker moved stacks a second copy of the page under the first.
+- **`H.ClearScroll(c)` first.** `RenderTabbedSchema`/`RenderSchema` append; they do not clear.
+  Without it, a re-render after the picker moved — or after a tab click — stacks a second copy of
+  the page under the first.
 - **`c.unit`** carries the active window id as the library's row filter. Set it on any page with
   `window.` rows.
-- If you draw anything past the end of a `RenderSchema` call — a button, a bespoke control — end
-  with `H.Relayout(c)`. `RenderRows` runs its own layout pass and `InlineButtonPair` appends after
-  it, so the appended child has no measured height until you ask.
+- **`H.WindowBanner(c)`** is the window picker now — call it before the tab strip on any page with
+  `window.`-prefixed rows, and leave it out on an addon-wide page (General, Profiles). It is decorated
+  onto `H` by `settings/Windows.lua`, so that file has to have loaded first, same as every other
+  `settings/` file after `OptionsSetup.lua`.
+- If you draw anything past the end of a `RenderTabbedSchema` call — a button, a bespoke control —
+  end with `H.Relayout(c)`. `RenderRows` runs its own layout pass and `InlineButtonPair` appends
+  after it, so the appended child has no measured height until you ask.
 - A page with **no** schema rows must pass `defaultsButton = false`. There is nothing for the button
-  to restore, and a button that appears to do nothing is worse than no button.
+  to restore, and a button that appears to do nothing is worse than no button — unless, like Columns,
+  the page gives the button bespoke work to do (`ctx.panel.defaultsOnClick` can be any function, not
+  only `H.RestoreDefaults`).
+- A tab click needs no combat guard and none should be added — `options-ui-§13` covers this, and the
+  library's own combat refusal already lives in the panel's `OnShow`, which guards *opening or
+  switching* a category, not redrawing inside one that is already open.
 - If the page has destructive controls, add its key to `vetoedFromResetAll` in
   `settings/OptionsSetup.lua` — and remember that predicate is enforced twice, in the descriptor and
   in the degradation stub's own reset loop.

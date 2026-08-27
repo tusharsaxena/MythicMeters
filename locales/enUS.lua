@@ -10,13 +10,22 @@
 -- right-hand sides, and rename it (deDE.lua, frFR.lua); the left-hand sides
 -- never change, which is what keeps a call site stable across every locale.
 --
--- ORGANIZATION mirrors the settings panel, page by page, in the order the pages
--- appear: General · Windows · Frame · Header · Bars · Tooltip · Visibility ·
--- Columns · Profiles. Within a page, `group` is now a TAB label — the flow
--- engine emits one tab per group, partitioned in declaration order — rather
--- than a section heading on a scrolling page. Shared vocabulary (anchor
--- points, font flags, yes/no) is collected at the end so it is not duplicated
--- into each page's block.
+-- ORGANIZATION mirrors the settings panel, page by page — but "the order the
+-- pages appear" is not one order, and this file does not pretend it is.
+-- `MultiMeters.toc` registers General before Windows, so the TREE reads
+-- General · Windows · Frame · Header · Bars · Tooltip · Visibility · Columns ·
+-- Profiles; `settings/Schema.lua` declares its rows Windows · Frame · Header ·
+-- Bars · Tooltip · Visibility · Columns · General, General second-to-last. This
+-- file's own page-name block and section comments follow the SCHEMA order,
+-- because that is the file whose neighboring rows this file's neighboring
+-- strings exist to translate — a reader adding a Bars string wants Bars
+-- strings around it, not General's. Do not take either order as the one true
+-- order; they answer different questions and have differed since before this
+-- file's settings-panel-redesign pass. Within a page, `group` is now a TAB
+-- label — the flow engine emits one tab per group, partitioned in declaration
+-- order — rather than a section heading on a scrolling page. Shared
+-- vocabulary (anchor points, font flags, yes/no) is collected at the end so
+-- it is not duplicated into each page's block.
 --
 -- NOTE FOR LIBKA0S ADOPTERS: never pass this table as a library descriptor's
 -- `L`. The fallback makes it answer a string for EVERY key, which shadows the
