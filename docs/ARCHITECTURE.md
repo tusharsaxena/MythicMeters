@@ -52,10 +52,11 @@ meter window, the debug console and the perf step panel wear the same Ka0s edge 
 addon. Nine LibKa0s majors are consumed — Core, Media, Perf, DebugLog, Env, Pool, Slash, Options and
 Widgets. Eight are reached through a seam file of their own (`core/CoreSetup.lua`,
 `core/MediaSetup.lua`, `core/PerfSetup.lua`, `core/DebugLogSetup.lua`, `core/EnvSetup.lua`,
-`core/PoolSetup.lua`, `settings/Slash.lua`, `settings/OptionsSetup.lua`); Widgets is resolved at its
-one call site, `modules/Export.lua`, because the export modal is the only thing in the addon that
-builds a dropdown. Every one of the nine degrades rather than erroring when `libs/LibKa0s` is
-absent. Two of them pass the addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
+`core/PoolSetup.lua`, `settings/Slash.lua`, `settings/OptionsSetup.lua`); Widgets has no seam file and
+is resolved at each of its two call sites — `modules/Export.lua`, whose modal builds the addon's only
+dropdowns, and `settings/ColumnBlocks.lua`, whose block list is the library's `ReorderList` — because
+both widgets are built lazily on first use rather than wired at load. Every one of the nine degrades
+rather than erroring when `libs/LibKa0s` is absent. Two of them pass the addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
 `core/DebugLogSetup.lua`'s descriptor), and a third gets there by accident of its own descriptor —
 `core/PerfSetup.lua` passes the folder name as `name`, which is what the perf panel's own close
 control is built from (`PerfPanel.lua` minor 4). This is why that file passes **no** `decorate` hook:
@@ -91,7 +92,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `HeaderControls`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
-| `settings/` | `Schema`, `Slash`, `OptionsSetup` + 9 pages | One schema drives the panel, the CLI and the defaults reset. |
+| `settings/` | `Schema`, `Slash`, `OptionsSetup`, `ColumnBlocks` + 9 pages | One schema drives the panel, the CLI and the defaults reset; `ColumnBlocks` is the Columns page's row, drawn into `LibKa0s-Widgets-1.0`'s `ReorderList`. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
 identity build, the formatter and the widget setters — is **[data-flow.md](data-flow.md)**. Read it before
