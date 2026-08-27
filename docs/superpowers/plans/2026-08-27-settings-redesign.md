@@ -1454,17 +1454,18 @@ Replace the two existing header-page cases in `tests/test_schema.lua` — `the h
 --- Every page's tabs, in the order the strip draws them, and how many controls each holds.
 --- Stated here rather than derived from the schema the assertion reads, so a row that drifts
 --- into another tab is a NAMED failure rather than a shorter list that still agrees with
---- itself. Hidden rows count: they are on a page for the write seam's sake and a reader
---- comparing this table with the file has to be able to find them.
+--- itself.
+---
+--- VISIBLE rows only, because NS.SchemaForPage filters `hidden` and this table describes what
+--- the panel DRAWS. So General has no Export tab -- its three export rows are hidden -- and
+--- Window buttons counts four, not the five rows filed under it. The case below this one is
+--- what keeps those hidden rows honest.
 local PARTITION = {
-    general    = { { "General", 3 }, { "Data", 2 }, { "Maintenance", 1 }, { "Export", 3 } },
+    general    = { { "General", 3 }, { "Data", 2 }, { "Maintenance", 1 } },
     windows    = { { "Window", 1 } },
     frame      = { { "Size and position", 6 }, { "Rows", 4 }, { "Row behavior", 4 },
                    { "Background and border", 4 }, { "Behavior", 2 }, { "All surfaces", 4 } },
-    -- Window buttons is FIVE because window.frame.minimised is filed there: it is hidden, so it
-    -- draws nothing, but its group has to be one that exists or the contiguity walk sees a tab
-    -- with no controls in it.
-    header     = { { "Title bar", 4 }, { "Title text", 5 }, { "Window buttons", 5 },
+    header     = { { "Title bar", 4 }, { "Title text", 5 }, { "Window buttons", 4 },
                    { "Meter buttons", 4 }, { "Button style", 6 } },
     bars       = { { "Bar", 5 }, { "Bar background", 3 }, { "Bar border", 4 },
                    { "Text content", 5 }, { "Text style", 7 }, { "Icons", 3 } },
@@ -1525,6 +1526,38 @@ test("Schema: no tab holds fewer than two controls", function()
         if not EXEMPT[group] then
             assertTrue(n >= 2, pageOf[group] .. " / " .. group .. " holds only " .. n)
         end
+    end
+end)
+
+test("Schema: a hidden row is filed under a tab that exists, and draws nothing", function()
+    -- A hidden row still carries a page and a group -- that is what keeps it writable through
+    -- NS.SetByPath, listable in `/mm list` and comparable by the schema-vs-defaults validator
+    -- while missing the panel. It cannot produce a phantom tab, because SchemaForPage filters
+    -- it before the strip is built; what it CAN do is lose its page and quietly drop out of
+    -- `/mm list`, which is the half worth pinning.
+    -- red under: dropping page or group from a hidden row "since it never draws".
+    local inst = T.load()
+    local NS = inst.NS
+
+    local hidden, drawn = 0, {}
+    for _, row in ipairs(NS.Schema) do
+        if row.hidden then
+            hidden = hidden + 1
+            assertTrue(row.page ~= nil and row.group ~= nil,
+                row.path .. " is hidden but carries no page or group")
+        end
+    end
+    assertEqual(hidden, 4, "four rows are hidden: frame.minimised and the three export choices")
+
+    -- And the other half: no tab the strip actually draws is empty.
+    for _, page in ipairs({ "general", "windows", "frame", "header", "bars", "tooltip",
+                            "visibility", "columns" }) do
+        for _, row in ipairs(NS.SchemaForPage(page)) do
+            drawn[row.group or "?"] = (drawn[row.group or "?"] or 0) + 1
+        end
+    end
+    for group, n in pairs(drawn) do
+        assertTrue(n >= 1, group .. " is a drawn tab with nothing in it")
     end
 end)
 
@@ -1611,7 +1644,8 @@ Walk the file in declaration order and set every row's `page` and `group` to the
 - `window.rows.maxRows`, `.height`, `.spacing`, `.growthDirection` → `page = "frame"`, `group = L["Rows"]`
 - `window.rows.alwaysShowSelf`, `.highlightSelf`, `.mouseoverHighlight`, `window.rows.alternatingBackground` → `page = "frame"`, `group = L["Row behavior"]`
 - all eight `window.columnHeader.*` → `page = "columns"`, split `L["Header text"]` (font, size, outline, shadow, color, colorMode) and `L["Header background"]` (bgColorMode, bgColor)
-- `window.frame.minimised` stays `page = "header"`, and joins `group = L["Window buttons"]` — it is hidden, so it draws nothing, but its group must be one that exists or the contiguity walk sees a phantom tab.
+- `window.frame.minimised` stays `page = "header"`, and joins `group = L["Window buttons"]`. It is hidden and draws nothing; it keeps a page and a group so it stays writable through `NS.SetByPath` and listable in `/mm list`.
+- **`window.frame.titleBar` moves here too** — `page = "header"`, `group = L["Title bar"]`, **first** in that group. Its **path does not change in this task**; Task 9 owns the rename, the defaults move and the migration. This task owns the partition, and leaving the row on Frame would make this task's own PARTITION test fail on a row it was never told to touch.
 
 Within `header`, the eight button toggles split: close / minimise / lock / settings → `L["Window buttons"]`; segment / segment picker / reset / export → `L["Meter buttons"]`.
 
@@ -1740,7 +1774,7 @@ Expected: FAIL — `schemaVersion` stops at 12.
 
 - [ ] **Step 4: Rename the row and its readers**
 
-In `settings/Schema.lua`, change the row's `path` to `"window.header.show"`, its `page` to `"header"` and its `group` to `L["Title bar"]`, and move it to the top of that group.
+In `settings/Schema.lua`, change the row's `path` to `"window.header.show"`. **Its `page` and `group` are already `header` / `L["Title bar"]` and it already sits at the top of that group** — Task 8 moved it, because Task 8 owns the partition. This task changes the path and nothing else about the row.
 
 In `defaults/Profile.lua`, delete `titleBar` from the `frame` table and add `show = true` to the `header` table, positioned to match the schema's order.
 
@@ -2381,18 +2415,15 @@ test("Slash: /mm list heads each block with the page AND the tab", function()
     -- which of its six tabs the setting is on.
     -- red under: reverting groupKey to row.page, or joining with a plain "/" the panel never shows.
     local inst = T.load()
-    local lines = T.capture(function() inst.NS.Slash.Run("list") end)
-    local joined = table.concat(lines, "\n")
-    assertTrue(joined:find("frame \226\128\186 ", 1, true) ~= nil,
+    local text = joined(say(inst, "list"))
+    assertTrue(text:find("frame \226\128\186 ", 1, true) ~= nil,
         "no page \226\128\186 tab heading in the listing")
 end)
 ```
 
-Confirm the capture helper's real name first:
-
-```sh
-grep -n 'T.capture\|local function capture' tests/test_slash.lua tests/run.lua | head
-```
+`say(inst, msg)` and `joined(lines)` are the file's own helpers, at `tests/test_slash.lua:26`
+and `:34`. The existing case at line 194 (`list groups by the row's PAGE`) asserts only that
+`"frame"` appears somewhere in the listing, so it survives this change unedited — leave it.
 
 - [ ] **Step 2: Run and confirm failure**
 
