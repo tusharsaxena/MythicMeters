@@ -113,8 +113,12 @@ lib.LAYOUT = {
   -- Height of one row of tabs. PUBLISHED as O.TAB_H: a host that measures its own strip -- to
   -- reserve the band before drawing into it -- has no other way to read the number.
   TAB_H         = 24,
-  -- Height of the page banner. PUBLISHED as O.BANNER_H, same reason as TAB_H.
-  BANNER_H      = 30,
+  -- Floor and fallback for the page banner's height. PUBLISHED as O.BANNER_H, same reason as
+  -- TAB_H. PageBanner measures the dropdown's own frame and uses that when it is a taller
+  -- number than this; this is what a headless harness (GetHeight answers 0) and any real
+  -- measurement below the floor fall back to. Roughly an AceGUI Dropdown WITH a label, whose
+  -- label renders above the control and pushes the whole widget past a bare control's height.
+  BANNER_H      = 44,
   -- INTERNAL: TAB_PAD_X — horizontal padding inside one tab, consumed by O.TabStrip when it
   -- sizes a button around its measured label; no host draws a tab itself.
   TAB_PAD_X     = 12,

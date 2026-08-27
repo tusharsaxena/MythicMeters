@@ -12,7 +12,7 @@
 local lib = LibStub and LibStub("LibKa0s-Options-1.0", true)
 if not lib then return end
 
-local WIDGETS_MINOR = 9
+local WIDGETS_MINOR = 10
 -- Paired on the SHELL's minor as well as this file's own — see OptionsScroll.lua for why the
 -- file's own counter is not enough.
 if lib.__widgetsMinor and lib.__widgetsMinor >= WIDGETS_MINOR
@@ -446,6 +446,30 @@ function lib.__AttachWidgets(O, d)
     return rows
   end
 
+  --- Where every tab lands, as pure arithmetic over numbers.
+  ---
+  --- Pure for the same reason __layoutTabs is: the harness no-ops SetPoint and answers 0 from
+  --- GetWidth, so a rows-to-pixels mapping computed inline is a mapping nothing can check --
+  --- which is exactly how a strip once shipped drawn on top of its own banner, with every test
+  --- passing.
+  ---
+  --- `top` is the band already spoken for above the strip (the banner's height, or 0).
+  --- @return table  { { index, x, y, width } … }, in tab order
+  --- @return number the number of rows the strip wrapped into
+  function O.__tabPlacement(widths, available, gap, top, tabH, rowGap)
+    local rows = O.__layoutTabs(widths, available, gap)
+    local out = {}
+    for r, indices in ipairs(rows) do
+      local x = 0
+      local y = -(top + (r - 1) * (tabH + rowGap))
+      for _, i in ipairs(indices) do
+        out[#out + 1] = { index = i, x = x, y = y, width = widths[i] }
+        x = x + widths[i] + gap
+      end
+    end
+    return out, #rows
+  end
+
   --- Hide, unparent and forget every widget in one of a page's chrome ledgers.
   local function releaseLedger(ctx, key)
     for _, f in ipairs(ctx[key] or {}) do
@@ -535,22 +559,19 @@ function lib.__AttachWidgets(O, d)
     local available = ctx.chrome.GetWidth and ctx.chrome:GetWidth()
     if type(available) ~= "number" or available <= 0 then available = L.TAB_MIN_W end
 
-    local rows = O.__layoutTabs(widths, available, L.TAB_GAP)
-    for r, indices in ipairs(rows) do
-      local x = 0
-      local y = -((r - 1) * (L.TAB_H + L.TAB_ROW_GAP))
-      for _, i in ipairs(indices) do
-        buttons[i]:SetWidth(widths[i])
-        buttons[i]:ClearAllPoints()
-        buttons[i]:SetPoint("TOPLEFT", ctx.chrome, "TOPLEFT", x, y)
-        buttons[i]:Show()
-        x = x + widths[i] + L.TAB_GAP
-      end
+    local top = ctx.__bannerHeight or 0
+    local placement, rowCount =
+      O.__tabPlacement(widths, available, L.TAB_GAP, top, L.TAB_H, L.TAB_ROW_GAP)
+    for _, p in ipairs(placement) do
+      local b = buttons[p.index]
+      b:SetWidth(p.width)
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", ctx.chrome, "TOPLEFT", p.x, p.y)
+      b:Show()
     end
 
-    local rowCount = math.max(#rows, 1)
-    O.SetChromeHeight(ctx,
-      (ctx.__bannerHeight or 0) + (rowCount * L.TAB_H) + ((rowCount - 1) * L.TAB_ROW_GAP))
+    rowCount = math.max(rowCount, 1)
+    O.SetChromeHeight(ctx, top + (rowCount * L.TAB_H) + ((rowCount - 1) * L.TAB_ROW_GAP))
   end
 
   --- A pinned tab strip in the page's chrome band (options-ui-§13). One tab per section.
@@ -615,15 +636,21 @@ function lib.__AttachWidgets(O, d)
       dd.frame:ClearAllPoints()
       dd.frame:SetPoint("TOPLEFT",  ctx.chrome, "TOPLEFT",  0, 0)
       dd.frame:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, 0)
-      dd.frame:SetHeight(L.BANNER_H)
       dd.frame:Show()
       ctx.__chromeKids[#ctx.__chromeKids + 1] = dd.frame
 
+      -- Measured, not forced: a Dropdown WITH a label is taller than the floor because AceGUI
+      -- renders the label above the control, and forcing L.BANNER_H used to clip it. Type-check
+      -- the answer rather than the method -- a mock's catch-all metatable can answer a
+      -- capitalized call with the frame itself, the same trap labelWidth guards against above.
+      --
       -- Reserved only here, with the frame that justifies it: a widget with no backing frame
       -- parented nothing and occupies no band, so it must not claim one either. This repo's own
       -- harness is exactly the case that produces a frameless AceGUI widget.
-      ctx.__bannerHeight = L.BANNER_H
-      O.SetChromeHeight(ctx, L.BANNER_H)
+      local h = dd.frame.GetHeight and dd.frame:GetHeight()
+      if type(h) ~= "number" or h < L.BANNER_H then h = L.BANNER_H end
+      ctx.__bannerHeight = h
+      O.SetChromeHeight(ctx, h)
     end
     O.AttachTooltip(dd, spec.label, spec.tooltip)
 
