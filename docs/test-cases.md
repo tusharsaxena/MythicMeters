@@ -153,7 +153,7 @@ badge and any count quoted in the docs must agree with it.
 - Locale: the locale file registers no second table over NS.L
 - Locale: enUS is the only locale shipped, and it is unconditional
 
-### test_database.lua (53)
+### test_database.lua (56)
 
 - Database: InitDB publishes the live instance under both names
 - Database: the profile is the SHARED Default, not a per-character one
@@ -208,6 +208,9 @@ badge and any count quoted in the docs must agree with it.
 - Database v8: a window that was named itself keeps its own name
 - Database v9: the title bar's background mode is pruned, the column strip's is kept
 - Database v10: a stored cursor anchor becomes TOP, and other anchors are left alone
+- Database: v12 -> v13 moves the title-bar toggle onto the header
+- Database: v12 -> v13 leaves a window that never stored the toggle alone
+- Database: v12 -> v13 turns the control class-colour flags into modes
 
 ### test_diagnostics.lua (43)
 
@@ -800,8 +803,8 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: a control at rest takes the control colour
 - HeaderControls: the control under the pointer takes the HOVER colour
 - HeaderControls: both colours come from config
-- HeaderControls: each colour has its OWN class-colour flag
-- HeaderControls: the hover flag classes the hover colour and nothing else
+- HeaderControls: each colour has its OWN colour mode
+- HeaderControls: the hover mode classes the hover colour and nothing else
 - HeaderControls: both flags off is the shipped look, unchanged
 - HeaderControls: control size comes from config
 - HeaderControls: the width reserved equals the width occupied
@@ -1311,7 +1314,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (46)
+### test_schema.lua (51)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1350,7 +1353,12 @@ badge and any count quoted in the docs must agree with it.
 - The other three meta rows broadcast their own kind of setting
 - A surface changed after the broadcast keeps its own answer
 - The Frame page's Defaults button does NOT broadcast
-- Schema: the Header page's three groups are named and ordered for the strip they describe
+- Schema: every page's tabs are the designed ones, in order, at the designed size
+- Schema: no tab holds fewer than two controls
+- Schema: a hidden row is filed under a tab that exists, and draws nothing
+- Schema: every tab name and row label is a localized string, not a bare literal
+- Schema: the active tab is session state and has no home in the schema
+- Schema: the column header strip is styled on the page where columns are chosen
 - Schema: the header controls are EDITED on Header and STORED under frame
 - Schema: every group on every page is CONTIGUOUS, or a heading prints twice
 - Schema: every LSM border setting is one this suite knows honours "None"
@@ -1373,7 +1381,7 @@ badge and any count quoted in the docs must agree with it.
 - ValidateSchema: counts a row whose path does not resolve
 - ValidateSchema: compares a color CHANNEL, not just the presence of a table
 
-### test_slash.lua (33)
+### test_slash.lua (34)
 
 - Slash: NS.COMMANDS entries are positional triples, not named fields
 - Slash: no verb is declared twice
@@ -1408,8 +1416,9 @@ badge and any count quoted in the docs must agree with it.
 - Slash: both registered tokens reach the SAME dispatcher
 - Slash: no raw SLASH_* global is claimed anywhere
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
+- Slash: /mm list heads each block with the page AND the tab
 
-### test_options_panel.lua (26)
+### test_options_panel.lua (31)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1437,6 +1446,11 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel is idempotent
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
+- Panel: every tabbed page opens on its first tab and draws a strip
+- Panel: Profiles draws no strip
+- Panel: switching tabs re-renders without leaving the previous tab's widgets behind
+- Panel: every window sub-page banners the active window, and Windows has no second picker
+- Panel: choosing a window in the banner retargets every page and keeps the tab
 
 ### test_columnblocks.lua (14)
 
@@ -1509,7 +1523,7 @@ badge and any count quoted in the docs must agree with it.
 | test_compat.lua | 33 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
-| test_database.lua | 53 |
+| test_database.lua | 56 |
 | test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 23 |
@@ -1535,11 +1549,11 @@ badge and any count quoted in the docs must agree with it.
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 46 |
+| test_schema.lua | 51 |
 | test_schema_defaults.lua | 10 |
-| test_slash.lua | 33 |
-| test_options_panel.lua | 26 |
+| test_slash.lua | 34 |
+| test_options_panel.lua | 31 |
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1376** |
+| **Total** | **1390** |
