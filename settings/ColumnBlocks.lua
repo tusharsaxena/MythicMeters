@@ -113,6 +113,21 @@ local function applyBlock(block, index, item, spec)
     block:Show()
 end
 
+--- Stop the previous render's drag and give its handles back.
+---
+--- SEPARATE FROM ReorderableBlocks, AND CALLED BEFORE H.ClearScroll, which is the
+--- whole point of it being its own function. Releasing a handle is what takes it
+--- off the AceGUI frame it was parented to -- and ClearScroll hands every one of
+--- those frames back to AceGUI's process-wide pool, where the next thing to ask
+--- for a SimpleGroup gets one with a live handle still sitting on it. That is how
+--- drag handles turned up on rows that were not lists.
+function NS.CancelReorder(ctx)
+    if ctx and ctx.mmReorder then
+        ctx.mmReorder:Cancel()
+        ctx.mmReorder = nil
+    end
+end
+
 --- Render `spec.items` as blocks into `ctx`'s scroll.
 ---
 --- @param ctx table   an options page context (H.CreatePanel's return)
@@ -122,12 +137,6 @@ function NS.ReorderableBlocks(ctx, spec)
     local scroll = H.EnsureScroll and H.EnsureScroll(ctx)
     local AceGUI = NS.AceGUI
     if not (scroll and AceGUI and type(spec) == "table") then return {} end
-
-    -- A DRAG MUST NOT OUTLIVE THE LIST IT WAS DESCRIBING. Every render replaces
-    -- the controller, so the one from the pass before is told to stop -- a ghost
-    -- left floating over a list that has already changed names a row that may
-    -- not be there any more.
-    if ctx.mmReorder then ctx.mmReorder:Cancel() end
 
     local items = spec.items or {}
     local count = #items
@@ -172,7 +181,14 @@ function NS.ReorderableBlocks(ctx, spec)
         blocks[i] = block
 
         if list then
+            -- A HIDDEN COLUMN IS NOT DRAGGABLE. The order of the hidden group is real -- it is
+            -- where a column lands when you tick it back on -- but nothing reads it, so dragging
+            -- one was a gesture that appeared to do something and did nothing. It is still
+            -- REGISTERED, because the row still counts for indices and still anchors the line: a
+            -- shown column dragged down must stop at the rule, and the rule is the first hidden
+            -- row's top edge.
             block.mmHandle = list:AddRow(block, {
+                draggable      = item.enabled and true or false,
                 ghostText      = item.label,
                 ghostIcon      = block.mmGlyphTexture,
                 ghostTextColor = item.enabled and { 1, 0.82, 0 } or { 0.5, 0.5, 0.5 },

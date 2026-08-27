@@ -1445,11 +1445,11 @@ badge and any count quoted in the docs must agree with it.
 - Blocks: a slot owns exactly ONE block, cached on the slot itself
 - Blocks: a reused block reports the index it now carries, not the one it was built with
 - Blocks: a drag reports where it landed
-- Blocks: the page hands LibKa0s the boundary, so groups stay separate
+- Blocks: the page hands LibKa0s the boundary, so a shown column stops at the rule
+- Blocks: a hidden column has no handle, because its order means nothing
 - Blocks: a repaint cancels the controller the render before it built
 - Blocks: a drag that lands where it started reports nothing
 - Blocks: an enabled block cannot be dragged past the last enabled one
-- Blocks: a disabled block cannot be dragged above the rule
 - Blocks: a list with nothing disabled drags end to end
 - Blocks: the rule is drawn once, under the last enabled block
 

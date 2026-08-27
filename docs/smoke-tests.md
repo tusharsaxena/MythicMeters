@@ -350,8 +350,9 @@ below it. Nothing here can be driven offline, so every check below needs a clien
 - **2** — the block drops to the **top of the disabled group**, just below the rule, and the window
   loses that column. It lands where you can see it, not at the bottom of a long list.
 - **3** — it lands at the **end of the ticked group** and reappears as the **rightmost** column.
-- **4** — the **insertion line stops at the rule** and the block stays ticked, wherever you take the
-  cursor. The tick is what moves a block between groups; a drag must never silently turn a column off.
+- **4** — **a hidden column has no handle at all**, so there is nothing to grab below the rule. On a
+  shown one the **insertion line stops at the rule** and the block stays ticked, wherever you take
+  the cursor. The tick is what moves a block between groups; a drag must never silently turn a column off.
   A clamped drop writes nothing, so the line stopping is the only feedback there is — if you cannot
   see it, that is the bug, not the clamp.
 
@@ -371,6 +372,12 @@ once and then does nothing means a stale one from the previous render is taking 
 carried copy is usually left floating over the list as the other half of that symptom.
 
 **The Defaults button** (top right) puts the shipped statistics back, ticked and in shipped order.
+
+**After every drag and after Defaults, look for leftovers.** No row may show two names stacked, and
+no drag handle may appear anywhere that is not a block — not beside the page's intro text, not on
+the scrollbar, nowhere. Either symptom means a handle or a block outlived the render that made it.
+`/mm debug` prints `[Columns] paint window=N` per repaint and `[Blocks] painted N rows, M draggable`
+from the library, so the count of handles going back should match the count going out.
 
 Also check: every column draws its **bar** (there is no numbers-only column any more), and the
 columns share the frame width evenly (there is no per-column width to set).

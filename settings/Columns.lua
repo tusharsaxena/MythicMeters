@@ -256,7 +256,17 @@ end
 --- nothing to add and nothing to remove, only an order and which of them you
 --- want to see.
 local function render(ctx)
+    -- BEFORE ClearScroll, not after. ClearScroll hands every AceGUI container on this page back to
+    -- a process-wide pool, and a drag handle is parented to one of them until the controller is
+    -- cancelled -- so cancelling afterwards means some unrelated widget has already been handed a
+    -- frame with a live handle on it.
+    if NS.CancelReorder then NS.CancelReorder(ctx) end
     H.ClearScroll(ctx)
+
+    if NS.State and NS.State.debug and NS.Debug then
+        local w0 = activeWindow()
+        NS.Debug("Columns", "paint window=%s", tostring(w0 and w0.id))
+    end
 
     local w = activeWindow()
     if not w then

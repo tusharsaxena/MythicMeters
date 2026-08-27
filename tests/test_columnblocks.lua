@@ -42,6 +42,9 @@ local function render(inst, items, ctx)
     local log = { toggled = {}, moved = {} }
 
     ctx = ctx or NS.Helpers.CreatePanel("MultiMetersBlockTestPanel", "Blocks", {})
+    -- Exactly what settings/Columns.lua's render does, and in that order: cancel, THEN clear. A
+    -- helper that skipped the cancel would be testing a page nobody ships.
+    if NS.CancelReorder then NS.CancelReorder(ctx) end
     NS.Helpers.ClearScroll(ctx)
 
     local blocks = NS.ReorderableBlocks(ctx, {
@@ -158,7 +161,7 @@ test("Blocks: a drag reports where it landed", function()
     assertEqual(log.moved[1][2], 3, "two rows down from index 1 is index 3")
 end)
 
-test("Blocks: the page hands LibKa0s the boundary, so groups stay separate", function()
+test("Blocks: the page hands LibKa0s the boundary, so a shown column stops at the rule", function()
     -- THE CLAMP IS THE LIBRARY'S; passing it the right divide is this file's. A shown column may
     -- not be dragged among the hidden ones -- the tick is what moves a block between them, and a
     -- drag that crossed would have to silently turn a column off.
@@ -168,10 +171,23 @@ test("Blocks: the page hands LibKa0s the boundary, so groups stay separate", fun
 
     drag(inst, blocks, 1, 4)
     assertEqual(log.moved[1][2], 3, "an enabled block stopped somewhere other than the divide")
+end)
 
-    local blocks2, log2 = render(inst)
-    drag(inst, blocks2, 5, -4)
-    assertEqual(log2.moved[1][2], 4, "a disabled block stopped somewhere other than the divide")
+test("Blocks: a hidden column has no handle, because its order means nothing", function()
+    -- The hidden group HAS an order -- it is where a column lands when you tick it back on -- but
+    -- nothing reads it, so dragging one was a gesture that appeared to do something and did not.
+    --
+    -- The row is still REGISTERED with the library, which is why the case checks both halves: drop
+    -- the registration and the indices shift, and the rule a shown column clamps against is the
+    -- first hidden row's own top edge.
+    -- red under: draggable not passed, or the hidden rows not registered at all.
+    local inst = T.load()
+    local blocks = render(inst)
+
+    assertTrue(blocks[1].mmHandle ~= nil, "a shown column must be draggable")
+    assertTrue(blocks[3].mmHandle ~= nil, "the last shown column too")
+    assertEqual(blocks[4].mmHandle, nil, "a hidden column must not offer a handle")
+    assertEqual(blocks[5].mmHandle, nil)
 end)
 
 test("Blocks: a repaint cancels the controller the render before it built", function()
@@ -213,15 +229,6 @@ test("Blocks: an enabled block cannot be dragged past the last enabled one", fun
     drag(inst, blocks, 1, 4)
     assertEqual(#log.moved, 1)
     assertEqual(log.moved[1][2], 3, "clamped to the last enabled index, not index 5")
-end)
-
-test("Blocks: a disabled block cannot be dragged above the rule", function()
-    local inst = T.load()
-    local blocks, log = render(inst)
-
-    drag(inst, blocks, 5, -4)
-    assertEqual(#log.moved, 1)
-    assertEqual(log.moved[1][2], 4, "clamped to the first disabled index, not index 1")
 end)
 
 test("Blocks: a list with nothing disabled drags end to end", function()

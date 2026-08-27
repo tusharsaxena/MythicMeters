@@ -752,6 +752,32 @@ local function mouseHeld()
   return held and true or false
 end
 
+-- ── the handle pool ──────────────────────────────────────────────────────────────────────────
+--
+-- THE LIBRARY OWNS ITS HANDLES. It does not cache them on the frames a host hands over, and the
+-- reason is the whole of a bug that shipped:
+--
+-- Both consumers hand over frames their UI framework POOLS. Caching a handle on one looked right,
+-- because the same host gets the same frame back at its next render -- but AceGUI's pool is
+-- process-wide and typeless within a widget type. A released container is handed to whatever asks
+-- next, and what asked next was a completely unrelated part of the page: a drag handle appeared on
+-- "Drag to action bar", on an ID entry row, on a dropdown. The frame's identity is simply not the
+-- host's to lend, and a cache keyed on it is a cache keyed on nothing.
+--
+-- So handles are acquired from a free list here and RELEASED on Cancel -- hidden, unanchored and
+-- reparented off the host's frame in one step. A handle can then only ever be visible on a frame
+-- this library put it on, during a render it is live for.
+
+local handlePool, handleAttic = {}, nil
+
+local function atticFrame()
+  if not handleAttic then
+    handleAttic = CreateFrame("Frame", nil, UIParent)
+    handleAttic:Hide()
+  end
+  return handleAttic
+end
+
 -- ── the drag, hoisted out of the controller ───────────────────────────────────────────────────
 --
 -- These take a ROW and reach the controller through `row.list`, rather than closing over one.
@@ -903,6 +929,7 @@ function lib.ReorderList(opts)
     handleIcon = opts.handleIcon,
     color      = opts.lineColor or { 1, 0.82, 0, 0.9 },
     rows       = {},
+    handles    = {},
     dead       = false,
   }
 
@@ -915,11 +942,18 @@ function lib.ReorderList(opts)
   -- is the one moment where "nothing is being dragged" is known for certain.
   if ghost then ghost:Hide() end
 
-  --- Stop any drag in flight and put the chrome away. Idempotent.
+  --- Stop any drag in flight, put the chrome away, and give every handle back. Idempotent.
+  ---
+  --- A HOST MUST CALL THIS BEFORE IT RENDERS ANYTHING, not merely before it rebuilds the list.
+  --- Releasing a handle is what takes it off the host frame it was parented to, and that frame goes
+  --- back into the host framework's pool the moment the host clears its page -- so a Cancel that
+  --- runs after the page has started rebuilding is a Cancel that runs after some unrelated widget
+  --- has already been handed the frame with a live handle still sitting on it.
   function list:Cancel()
     self.dead = true
     if ghost then ghost:Hide() end
     if self.line then self.line:Hide() end
+
     local row = self.dragging
     if row then
       row.frame:SetScript("OnUpdate", nil)
@@ -927,8 +961,66 @@ function lib.ReorderList(opts)
       row.startY = nil
     end
     self.dragging = nil
+
+    local n = #self.handles
+    for i = n, 1, -1 do
+      local handle = self.handles[i]
+      self.handles[i] = nil
+      handle.__row = nil
+      handle:Hide()
+      handle:ClearAllPoints()
+      handle:SetParent(atticFrame())
+      handlePool[#handlePool + 1] = handle
+    end
+    if n > 0 then self.say("released %d handles", n) end
   end
 
+  --- Build one handle. Called only when the free list is empty.
+  local function newHandle()
+    local handle = CreateFrame("Button", nil, atticFrame())
+    handle:EnableMouse(true)
+    handle:RegisterForDrag("LeftButton")
+
+    handle.art = handle:CreateTexture(nil, "ARTWORK")
+    handle.art:SetPoint("CENTER", handle, "CENTER", 0, 0)
+
+    -- READ AT FIRE TIME, never captured. A pooled handle outlives the controller that last used
+    -- it, so a handler closing over either the row or the controller would drive a dead one --
+    -- which is a drag that works once and then freezes.
+    handle:SetScript("OnMouseDown", function(self) beginDrag(self.__row) end)
+    handle:SetScript("OnDragStart", function(self) beginDrag(self.__row) end)
+    handle:SetScript("OnMouseUp",   function(self) finishDrag(self.__row) end)
+    handle:SetScript("OnDragStop",  function(self) finishDrag(self.__row) end)
+
+    -- GOLD ON HOVER, so the handle says it is a control before you press it. The tint is the
+    -- host's to choose and the default is the collection's gold; a host that wants its list's
+    -- affordance to match its own palette says so, and one that says nothing matches everyone
+    -- else's.
+    handle:SetScript("OnEnter", function(self)
+      local h = self.__hoverColor
+      self.art:SetVertexColor(h[1], h[2], h[3])
+      local tip = self.__tooltip
+      if tip and GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(tip, 1, 1, 1)
+        GameTooltip:Show()
+      end
+    end)
+    handle:SetScript("OnLeave", function(self)
+      local c = self.__restColor
+      self.art:SetVertexColor(c[1], c[2], c[3])
+      if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    return handle
+  end
+
+  --- Register one row, in display order, and get back the handle that drags it.
+  ---
+  --- `spec.draggable = false` registers the row WITHOUT a handle. The row still counts for indices
+  --- and still anchors the insertion line -- it is a place a drag can land, just not one a drag can
+  --- start from. MultiMeters' hidden columns are that case: they have an order among themselves
+  --- that nobody can act on, and offering a handle for it was offering a gesture with no meaning.
   function list:AddRow(frame, spec)
     spec = spec or {}
 
@@ -944,65 +1036,18 @@ function lib.ReorderList(opts)
     }
     self.rows[row.index] = row
 
-    -- ONE HANDLE PER PARENT, FOR THE LIFE OF THAT PARENT, and this is not an optimization.
-    --
-    -- Both shipped consumers hand over a frame that their UI framework POOLS: AceGUI's
-    -- ReleaseChildren puts a container back and hands the same one out at the next render. A
-    -- handle built fresh each time therefore piled up on that recycled frame -- and every copy but
-    -- the newest was still wired, still mouse-enabled, and still pointing at the controller from
-    -- the render that made it. That controller is Cancel()led on the next render, so the press was
-    -- refused, and the drag simply stopped working after the first successful one.
-    --
-    -- It is the same failure the ROW content hit one layer up, and it has the same two halves:
-    -- cache the frame, and read the state at FIRE time rather than closing over it. `handle.__row`
-    -- is that half here -- and it is only half, which is why beginDrag and finishDrag are hoisted
-    -- out of this function and reach the controller through `row.list`. A handler closing over the
-    -- controller would still be calling a dead one however correct the row was.
+    if spec.draggable == false then return nil end
+
     local parent = spec.parent or frame
-    local handle = parent.__ka0sDragHandle
+    local handle = table.remove(handlePool) or newHandle()
+    self.handles[#self.handles + 1] = handle
 
-    if not handle then
-      handle = CreateFrame("Button", nil, parent)
-      handle:EnableMouse(true)
-      handle:RegisterForDrag("LeftButton")
-
-      handle.art = handle:CreateTexture(nil, "ARTWORK")
-      handle.art:SetPoint("CENTER", handle, "CENTER", 0, 0)
-
-      handle:SetScript("OnMouseDown", function(self) beginDrag(self.__row) end)
-      handle:SetScript("OnDragStart", function(self) beginDrag(self.__row) end)
-      handle:SetScript("OnMouseUp",   function(self) finishDrag(self.__row) end)
-      handle:SetScript("OnDragStop",  function(self) finishDrag(self.__row) end)
-
-      -- GOLD ON HOVER, so the handle says it is a control before you press it. The tint is the
-      -- host's to choose and the default is the collection's gold; a host that wants its list's
-      -- affordance to match its own palette says so, and one that says nothing matches everyone
-      -- else's.
-      handle:SetScript("OnEnter", function(self)
-        local h = self.__hoverColor
-        self.art:SetVertexColor(h[1], h[2], h[3])
-        local tip = self.__tooltip
-        if tip and GameTooltip then
-          GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-          GameTooltip:AddLine(tip, 1, 1, 1)
-          GameTooltip:Show()
-        end
-      end)
-      handle:SetScript("OnLeave", function(self)
-        local c = self.__restColor
-        self.art:SetVertexColor(c[1], c[2], c[3])
-        if GameTooltip then GameTooltip:Hide() end
-      end)
-
-      parent.__ka0sDragHandle = handle
-    end
-
-    -- Re-pointed on every render, because the row a given parent carries changes.
     handle.__row        = row
     handle.__restColor  = opts.handleColor or { 0.7, 0.7, 0.7 }
     handle.__hoverColor = opts.handleHoverColor or { 1, 0.82, 0 }
     handle.__tooltip    = opts.handleTooltip
 
+    handle:SetParent(parent)
     handle:SetSize(opts.handleSize or 24, spec.height or self.stride)
     handle:ClearAllPoints()
     handle:SetPoint("LEFT", parent, "LEFT", opts.handleInset or 0, 0)
@@ -1022,6 +1067,8 @@ function lib.ReorderList(opts)
   function list:Finish(container)
     self.line = ensureLine(container, self.color)
     if self.line then self.line:Hide() end
+    self.say("painted %d rows, %d draggable, boundary=%s",
+      #self.rows, #self.handles, tostring(self.boundary or 0))
     return self.line
   end
 
