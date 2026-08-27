@@ -100,35 +100,68 @@ test("Blocks: the glyph says enabled or disabled, and clicking it toggles", func
     assertEqual(log.toggled[1], 4, "the glyph must report ITS OWN index")
 end)
 
-test("Blocks: a slot owns exactly ONE block, cached on the slot itself", function()
-    -- THE CACHE IS THE FIX FOR THE STACKING BUG, and this asserts the mechanism
-    -- because the bug itself is not reachable offline.
-    --
-    -- In game, H.ClearScroll calls AceGUI's ReleaseChildren, the SimpleGroups go
-    -- back to AceGUI's pool, and the NEXT render is handed the same `slot.frame`
-    -- with the previous render's raw children still parented to it and still
-    -- shown. Building a second block there stacked two labels and two glyphs on
-    -- top of each other -- "DamageDeaths", a tick with a cross through it -- and
-    -- every repaint added another layer. AceGUI cannot clean them up, because
-    -- they are CreateFrame children rather than AceGUI widgets.
-    --
-    -- THE HARNESS DOES NOT RECYCLE: a probe confirms AceGUI hands back a fresh
-    -- widget AND a fresh frame after ReleaseChildren here, so a test that
-    -- re-rendered and compared blocks would pass whether the cache existed or
-    -- not. What is checkable is that the block is stored ON its slot, which is
-    -- what makes the second render find it instead of building another. The
-    -- stacking itself is smoke test 5's job.
-    -- red under: blockFor building a fresh frame instead of caching on the slot.
+test("Blocks: the glyph's tooltip says what the CLICK will do", function()
+    -- A tick that said "shown" would describe the thing you are already looking at. The question a
+    -- player has over a control is what happens if they press it.
+    -- red under: keying the tooltip on the glyph's meaning instead of its effect, or reading the
+    -- enabled flag at wire time rather than at hover time.
     local inst = T.load()
+    local L = inst.NS.L
     local blocks = render(inst)
 
-    for i, block in ipairs(blocks) do
-        local slot = block:GetParent()
-        assertTrue(slot ~= nil, "block " .. i .. " has no parent slot")
-        assertEqual(slot.mmBlock, block,
-            "block " .. i .. " is not cached on its slot, so a recycled slot "
-            .. "would grow a second block over this one")
+    blocks[1].mmGlyph:_run("OnEnter")
+    assertEqual(inst.mocks.GameTooltip.__lines[1].text, L["Click to hide this column"],
+        "a shown column's glyph must offer to hide it")
+
+    inst.mocks.GameTooltip.__lines = {}
+    blocks[4].mmGlyph:_run("OnEnter")
+    assertEqual(inst.mocks.GameTooltip.__lines[1].text, L["Click to show this column"],
+        "a hidden column's glyph must offer to show it")
+end)
+
+test("Blocks: a repaint gives every block back before it takes any out", function()
+    -- THE GHOST LABEL OVER ROW ONE. The blocks are CreateFrame children, not AceGUI widgets, so
+    -- ClearScroll's ReleaseChildren neither hides them nor knows they exist -- they ride a released
+    -- SimpleGroup into whatever asks for one next. On an options page that is almost everything,
+    -- and what it was in practice was the SPACER between the page's intro line and the first block:
+    -- a container handed out with a live block still parented to it, drawn exactly over row one.
+    --
+    -- So the blocks are pooled here and released on the next render. The count out must equal the
+    -- count in, or something is still parented to a frame the page has already given away.
+    -- red under: caching a block on slot.frame instead of pooling it.
+    local inst = T.load()
+    local first, _, ctx = render(inst)
+    assertEqual(#first, #ITEMS)
+
+    local before = {}
+    for i, b in ipairs(first) do before[i] = b end
+
+    local second = render(inst, nil, ctx)
+    assertEqual(#second, #ITEMS, "the repaint must still draw one block per item")
+
+    -- Every block from the first render came back and went out again: the pool is the only source.
+    local seen = {}
+    for _, b in ipairs(second) do seen[b] = true end
+    for i, b in ipairs(before) do
+        assertTrue(seen[b], "block " .. i .. " was abandoned rather than released")
     end
+end)
+
+test("Blocks: a released block is off its AceGUI frame, not merely hidden", function()
+    -- Hiding is not enough. The frame goes back to a process-wide pool and the next widget to take
+    -- it inherits whatever is still parented to it -- shown or not, a stray child is a stray child
+    -- the moment something calls Show on the container.
+    local inst = T.load()
+    local blocks, _, ctx = render(inst)
+    local block = blocks[1]
+    local slot  = block:GetParent()
+    assertTrue(slot ~= nil)
+
+    inst.NS.CancelReorder(ctx)
+
+    assertFalse(block:IsShown(), "a released block must not be visible")
+    assertFalse(block:GetParent() == slot,
+        "a released block is still on the AceGUI frame the page is about to give away")
 end)
 
 test("Blocks: a reused block reports the index it now carries, not the one it was built with", function()

@@ -376,8 +376,13 @@ carried copy is usually left floating over the list as the other half of that sy
 **After every drag and after Defaults, look for leftovers.** No row may show two names stacked, and
 no drag handle may appear anywhere that is not a block — not beside the page's intro text, not on
 the scrollbar, nowhere. Either symptom means a handle or a block outlived the render that made it.
-`/mm debug` prints `[Columns] paint window=N` per repaint and `[Blocks] painted N rows, M draggable`
-from the library, so the count of handles going back should match the count going out.
+`/mm debug` prints `[Columns] paint window=N` per repaint, `[Blocks] released N blocks` and
+`[Blocks] released N handles` on the way in, and `[Blocks] painted N rows, M draggable` on the way
+out. **Blocks and handles released must equal blocks and handles painted**, every time — a
+shortfall is something still parented to a container the page has already given back to AceGUI's
+pool, which is where every leftover in this page's history has come from.
+
+**Hover a tick and a cross.** Each says what the CLICK will do — *Click to hide this column* / *Click to show this column* — not what the glyph already means.
 
 Also check: every column draws its **bar** (there is no numbers-only column any more), and the
 columns share the frame width evenly (there is no per-column width to set).

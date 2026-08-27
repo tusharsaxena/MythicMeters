@@ -1438,11 +1438,13 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
 
-### test_columnblocks.lua (12)
+### test_columnblocks.lua (14)
 
 - Blocks: one block per item, each carrying its index and its label
 - Blocks: the glyph says enabled or disabled, and clicking it toggles
-- Blocks: a slot owns exactly ONE block, cached on the slot itself
+- Blocks: the glyph's tooltip says what the CLICK will do
+- Blocks: a repaint gives every block back before it takes any out
+- Blocks: a released block is off its AceGUI frame, not merely hidden
 - Blocks: a reused block reports the index it now carries, not the one it was built with
 - Blocks: a drag reports where it landed
 - Blocks: the page hands LibKa0s the boundary, so a shown column stops at the rule
@@ -1537,7 +1539,7 @@ badge and any count quoted in the docs must agree with it.
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
 | test_options_panel.lua | 26 |
-| test_columnblocks.lua | 12 |
+| test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1374** |
+| **Total** | **1376** |
