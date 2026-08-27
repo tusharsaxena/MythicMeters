@@ -459,7 +459,9 @@ local function render(ctx)
         onSelect = function(key)
             if key == ctx.activeTab then return end
             ctx.activeTab = key
-            H.ClearScroll(ctx)
+            -- No H.ClearScroll here: RefreshPanel(ctx, true) re-enters render(), which already
+            -- clears the scroll itself. Matches Columns.lua's tab onSelect, the one page where the
+            -- ordering is load-bearing (a live reorder controller); this page reads the same way.
             H.RefreshPanel(ctx, true)
         end,
     })

@@ -43,6 +43,10 @@ NS.Database = Database
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
 -- v10 retires the "At cursor" tooltip anchor.
+-- v11 takes the colour mode off the title bar's text.
+-- v12 turns the column array from a chosen subset into the full catalog, ticked.
+-- v13 moves the title-bar toggle onto the header and turns the two control
+--     class-colour flags into modes.
 local CURRENT_DB_VERSION = 13
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender

@@ -326,7 +326,10 @@ local function render(ctx)
         onSelect = function(key)
             if key == ctx.activeTab then return end
             ctx.activeTab = key
-            H.ClearScroll(ctx)
+            -- No H.ClearScroll here: RefreshPanel(ctx, true) re-enters render(), which clears the
+            -- scroll AFTER cancelling the reorder controller (see the comment at the top of render
+            -- above). Clearing here too would run BEFORE the cancel on a tab click -- the one path
+            -- that matters, since this is the page with a live reorder controller.
             H.RefreshPanel(ctx, true)
         end,
     })
@@ -359,10 +362,18 @@ local function Build(mainCategory)
     local ctx = H.CreatePanel("MultiMetersColumnsPanel", L["Columns"], {
         pageKey          = PAGE,
         defaultsButton   = true,
-        defaultsTooltip  = L["Restore the statistics this window ships with, ticked and in their shipped order."],
+        defaultsTooltip  = L["Restore the statistics this window ships with, ticked and in their shipped order, and the header text and background settings on this page to their shipped values."],
     })
 
-    ctx.panel.defaultsOnClick = restoreShippedColumns
+    -- TWO RESETS BEHIND ONE BUTTON, because this page carries both a bespoke array (the column
+    -- list, addressable only as a whole -- see restoreShippedColumns above) and eight
+    -- window.columnHeader.* schema rows on its other two tabs. options-ui-§13 makes the Defaults
+    -- button page-wide, not tab-wide, so both halves have to come back regardless of which tab is
+    -- showing when it is clicked.
+    ctx.panel.defaultsOnClick = function()
+        restoreShippedColumns()
+        H.RestoreDefaults(PAGE, ctx)
+    end
 
     H.SetRenderer(ctx, function(c)
         c.unit = NS.State and NS.State.activeWindowId or nil

@@ -324,6 +324,30 @@ test("Options: the Columns page's Defaults button restores the SHIPPED column li
     end
 end)
 
+test("Options: the Columns page's Defaults button ALSO restores the window.columnHeader.* schema rows",
+function()
+    -- This branch moved eight window.columnHeader.* schema rows onto the Columns page's "Header
+    -- text" and "Header background" tabs. options-ui-§13 makes the Defaults button page-wide, not
+    -- tab-wide, so a click on the block-editor tab must still put those rows back even though they
+    -- are not the tab on screen. red under: defaultsOnClick pointed only at restoreShippedColumns.
+    local inst = T.load()
+    local NS = inst.NS
+    local ctx = showPage(inst, "columns")
+
+    assertTrue(ctx.panel.defaultsOnClick ~= nil, "the Columns page must wire a Defaults handler")
+
+    assertTrue(NS.SetByPath("window.columnHeader.font", "Skurri"))
+    assertTrue(NS.SetByPath("window.columnHeader.outline", "THICKOUTLINE"))
+
+    ctx.panel.defaultsOnClick()
+
+    local w = NS.Database.GetWindows()[1]
+    assertEqual(w.columnHeader.font, "Friz Quadrata TT",
+        "the header font must be back to shipped after the page-wide Defaults click")
+    assertEqual(w.columnHeader.outline, "OUTLINE",
+        "the header outline must be back to shipped after the page-wide Defaults click")
+end)
+
 test("Options: the canvas footer's Defaults control reaches the same handler as the header button",
 function()
     local inst = T.load()

@@ -17,7 +17,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 §1 and the settings-panel steps in §3 and §4 — page names, tab names, control names and the
 lock/Test-mode relationship — were re-checked against `settings/Schema.lua` and the current page
 files as part of documenting that branch's tab redesign. The rest of §1, and all of §2 and §5 through
-§25, was **not** re-audited in that pass and may still describe older behaviour; treat any step
+§26, was **not** re-audited in that pass and may still describe older behaviour; treat any step
 outside those specific bullets as unverified against the current branch until it has been walked
 in-client.
 
@@ -67,9 +67,10 @@ in-client.
 | 20 | Names | [Realm strip and truncation](#20-realm-strip-and-truncation) |
 | 21 | **Segments** | [**The header segment selector**](#21-the-header-segment-selector) |
 | 22 | Migration | [v1 → v2 uniform column widths](#22-v1--v2-uniform-column-widths) |
-| 23 | Tooltip styling | [Tooltip appearance, anchor and offsets](#23-tooltip-appearance-anchor-and-offsets) |
-| 24 | **Targets** | [**The Targets section, and its absence mid-pull**](#24-the-targets-section-and-its-absence-mid-pull) |
-| 25 | **Export** | [**The export modal, the CSV and the chat dump**](#25-the-export-modal-the-csv-and-the-chat-dump) |
+| 23 | Migration | [v12 → v13 title bar and control-colour migration](#23-v12--v13-title-bar-and-control-colour-migration) |
+| 24 | Tooltip styling | [Tooltip appearance, anchor and offsets](#24-tooltip-appearance-anchor-and-offsets) |
+| 25 | **Targets** | [**The Targets section, and its absence mid-pull**](#25-the-targets-section-and-its-absence-mid-pull) |
+| 26 | **Export** | [**The export modal, the CSV and the chat dump**](#26-the-export-modal-the-csv-and-the-chat-dump) |
 
 ---
 
@@ -211,9 +212,19 @@ second edge to catch.
 (checkbox, slider, dropdown, color, edit box) and watch the window.
 
 **Pass.**
+- **The banner, and switching windows.** Frame, Header, Bars, Tooltip, Visibility, Columns and
+  Windows each draw a banner naming the active window at the top of the page. Change the window from
+  the dropdown on any one of the seven and every other one of the seven reflects it the next time you
+  visit — the controls on that page now show the newly-picked window's values, not the old one's.
+  **The active tab survives the switch**: land on Bars → **Bar border**, change windows from the
+  banner, and you are still looking at *Bar border*, now for the new window — the active tab is
+  per-page UI state, not tied to which window is selected, and must not snap back to the first tab.
 - Every page draws on **first show** with correctly sized widgets — nothing squashed into a
-  zero-width column, and every widget carries the same skin as the rest of your AceGUI addons. (Both
-  symptoms are the lazy-build rules failing; see
+  zero-width column, and every widget carries the same skin as the rest of your AceGUI addons. With a
+  skinning addon (ElvUI / AddOnSkins) loaded, this reaches the banner's window dropdown and the tab
+  strip too, not only the row controls — both are built lazily on first `OnShow`, like the Defaults
+  button, and a skin that reaches everything else but not one of these three is the lazy-build rule
+  failing for that one piece. (Both symptoms are the lazy-build rules failing; see
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
 - **The tooltip.** *Tooltip behavior* now holds the **scale** slider and the **Targets** pair (they
@@ -301,6 +312,17 @@ second edge to catch.
   `window.frame.*` (`/mm get window.frame.showClose` answers), which is deliberate: a row's page is
   where it is edited, its path is where it is stored. There is **no** *Column headers* tab here any
   more — that strip's rows moved to the **Columns** page, which is the page that labels it.
+- **The Visibility page's shape.** Three tabs: *Where to show this window* (the seven context
+  checkboxes), *When to hide this window* (the mount/skyriding/housing/pet-battle/death/combat
+  rules) and *Combat* (hide in/out of combat). Those first two are by a wide margin the longest tab
+  labels in the whole panel, and the likeliest strip to wrap.
+- **The tab strips all fit one row at default UI scale.** Frame's six tabs, Bars' six, Header's five
+  and Visibility's three — note any that wrap onto a second row; a wrapped strip is a layout bug in
+  `placeTabs`' coordinate arithmetic, not a copy problem.
+- **Tab art — open question.** The strip is currently a flat backing with the active tab drawn
+  darker. Whether that reads as tabs, or wants Blizzard's tab atlas instead, is a deliberately open
+  call the plan left for the client: look at it and decide. Changing it is a
+  `LibKa0s/OptionsWidgets.lua` edit plus a minor version bump, not a MultiMeters change.
 - **The header background stops at the title bar.** Header → Title bar → **Header background** to
   something loud, and Columns → Header background → **Background color** to something else: two
   distinct bands, the second starting exactly where the first ends. One colour covering both rows is
@@ -314,10 +336,18 @@ second edge to catch.
   child frame that is not part of the backdrop the border settings rewrite. Check **None** at a
   non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
   addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
-  border style, checked in §23.
+  border style, checked in §24.
 - Six pages carry a **Defaults** button in the header (Frame, Header, Bars, Tooltip, Visibility,
   Columns); **Windows and Profiles do not.** Columns' button resets its block editor to the shipped
   catalog, ticked and ordered — it is **not** absent the way it used to be.
+- **The Defaults blast radius stays page-wide on every tabbed page** (`options-ui-§13`): the button
+  MUST NOT narrow to the tab on screen. On each of the six Defaults pages, change a value on a tab
+  that is **not** the one showing, switch to a different tab, press **Defaults**, then switch back
+  and confirm the value you changed is gone too. Columns is the sharpest version of this check —
+  ticking/reordering a block lives on its *Columns* tab, but the header text and background rows the
+  same button also restores live on the other two — so leave the page on the block-editor tab, change
+  a value on *Header text* or *Header background* without visiting it, and confirm Defaults still
+  reaches it.
 - **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows.
   Its **General** tab carries Test mode alongside the master enable and minimap toggle; its **Data**
   tab carries **Merge pets into their owner** and **Refresh interval**, both addon-wide: change either
@@ -338,6 +368,13 @@ second edge to catch.
   `window.frame.minimised`, which the **panel does not draw** — that row is `hidden`, because it is
   state the header's own minimise button writes rather than a preference. `/mm set
   window.frame.minimised true` must still collapse the window.
+- **A tab click works in combat.** With a tabbed page already open, enter combat (a dummy is fine)
+  and click a different tab. It redraws normally with **no** refusal — the strip is deliberately not
+  combat-guarded (`options-ui-§13`): redrawing widgets inside an already-open panel is not a
+  protected action. What **is** refused is *reaching* the panel mid-combat in the first place, which
+  is the next bullet — a tab click that refuses is the defect here, not one that works.
+- **Clicking the tab you are already on does nothing at all** — no flicker, no repaint, no refusal
+  message.
 - **Combat refusal.** Enter combat (a dummy is fine here). `/mm config` **refuses** and prints one
   gray notice. It must **not** queue the request and open the panel when combat ends.
 - **Profiles page mid-combat.** With the Settings window closed, enter combat, then open Settings →
@@ -1058,7 +1095,29 @@ Needs a profile written by v0.1.0, so do this before wiping SavedVariables.
 
 ---
 
-### 23. Tooltip appearance, anchor and offsets
+### 23. v12 → v13 title bar and control-colour migration
+
+Needs a profile written before this branch (`schemaVersion` 12 or earlier), so do this before wiping
+SavedVariables — same constraint as §22.
+
+1. Log in with an existing `MultiMeters.lua` SavedVariables file from before this branch, on a window
+   that had its title bar **turned off** and at least one of *Control class colour* / *Control hover
+   class colour* **ticked**.
+2. The window opens with its title bar **still off** and its control colours **exactly as they were**
+   — the migration carries the stored value across; it does not re-default it. A title bar that comes
+   back ON, or control colours that reset to Custom, is the migration writing a default instead of
+   carrying the stored value.
+3. Header → **Title bar** shows the toggle unticked, matching what §2 showed on the window itself; the
+   old Frame → *Frame behavior* location is gone.
+4. Frame → **All surfaces** (or wherever the control colour dropdowns now live) shows **Class** for
+   whichever of the two flags was ticked before, not Custom.
+5. `/reload` and confirm nothing moves again: the step is idempotent and `schemaVersion` is now 13.
+6. Check a **second profile** you had not activated this session; its title bar and control colours
+   are carried across too.
+
+---
+
+### 24. Tooltip appearance, anchor and offsets
 
 Everything here is cosmetic except the last item, which is the one that can damage another addon.
 
@@ -1097,7 +1156,7 @@ Everything here is cosmetic except the last item, which is the one that can dama
   addon has restyled the shared `GameTooltip` and left it that way, which persists until a reload
   and is invisible until somebody else's tooltip looks wrong.
 
-### 24. The Targets section, and its absence mid-pull
+### 25. The Targets section, and its absence mid-pull
 
 The one place in this addon where the restriction costs *information* rather than decoration. Read
 [data-flow.md §9](data-flow.md) before judging a failure here — "the section is missing mid-pull" is
@@ -1131,7 +1190,7 @@ the **correct** behavior, not the bug.
   activity at all**. The section costs one provider call per enemy, and an off switch that still
   pays for the walk is a bug.
 
-### 25. The export modal, the CSV and the chat dump
+### 26. The export modal, the CSV and the chat dump
 
 Two frames, two destinations and one hard refusal. Most of this is checkable at a target dummy —
 **except the last block, which needs a real pull**, because the refusal keys off the `Combat` addon
