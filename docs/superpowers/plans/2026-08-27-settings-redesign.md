@@ -1816,45 +1816,36 @@ test("Database: v12 -> v13 moves the title-bar toggle onto the header", function
     -- page misleads the next reader and reads wrong in `/mm set`. Carried across rather than
     -- dropped: a player who turned their title bar OFF must not log in to it back on.
     -- red under: writing the default instead of the stored value, or forgetting the prune.
-    local inst = T.load()
-    local db = inst.NS.db
+    local inst = preSeeded({
+        profiles = { Default = { windows = { { id = 1, name = "Mine",
+            frame = { titleBar = false } } } } },
+        global   = { schemaVersion = 12 },
+    })
+    local w = inst.NS.Database.FindWindow(1)
 
-    db.global.schemaVersion = 12
-    local w = db.profile.windows[1]
-    w.frame.titleBar = false
-    w.header.show = nil
-
-    inst.NS.Database.Migrate(db)
-
-    assertEqual(db.global.schemaVersion, 13)
+    assertEqual(inst.NS.db.global.schemaVersion, 13)
     assertFalse(w.header.show, "the stored value carried across")
-    assertNil(w.frame.titleBar, "AceDB merges defaults in and never removes what they stopped naming")
+    assertNil(w.frame.titleBar,
+        "AceDB merges defaults in and never removes what they stopped naming")
 end)
 
 test("Database: v12 -> v13 leaves a window that never stored the toggle alone", function()
     -- An absent key means "never changed from the default", and writing one during a migration
     -- would freeze today's default into every profile -- so the default could never move again.
-    -- red under: unconditionally assigning header.show.
-    local inst = T.load()
-    local db = inst.NS.db
-
-    db.global.schemaVersion = 12
-    local w = db.profile.windows[1]
-    w.frame.titleBar = nil
-    w.header.show = nil
-
-    inst.NS.Database.Migrate(db)
-    assertNil(w.header.show)
+    -- The merge fills it from the template afterwards, which is a different thing: what this
+    -- pins is that the MIGRATION did not decide the value.
+    -- red under: unconditionally assigning header.show inside the step.
+    local inst = preSeeded({
+        profiles = { Default = { windows = { { id = 1, name = "Mine", frame = {} } } } },
+        global   = { schemaVersion = 12 },
+    })
+    local w = inst.NS.Database.FindWindow(1)
+    assertNil(w.frame.titleBar, "nothing to carry, nothing left behind")
+    assertEqual(w.header.show, true, "the shipped default arrived through the merge, not the step")
 end)
 ```
 
-Confirm the migrate entry point's real name first — the file may expose it as `NS.Database.Migrate` or run it inside `InitDB`:
-
-```sh
-grep -n 'function M.Migrate\|Database.Migrate\|local function migrate' core/Database.lua | head
-```
-
-Use whatever the file actually publishes; if migration is only reachable through `InitDB`, drive it that way instead and say so in the test's comment.
+`preSeeded(saved)` is the file's own helper at `tests/test_database.lua:64` — it loads with `initDB = false`, plants `saved` as `MultiMetersDB`, then runs `NS:InitDB()` and `NS:RunMigrations()`. **There is no `NS.Database.Migrate`**; `NS:RunMigrations()` (`core/Database.lua`) is the walker, and every existing migration case in this file drives it through `preSeeded`. Follow that idiom.
 
 - [ ] **Step 3: Run and confirm failure**
 
