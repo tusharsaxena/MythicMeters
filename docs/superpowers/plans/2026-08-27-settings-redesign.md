@@ -969,7 +969,7 @@ synchronisation problem the design invented and would then own."
 
 - [ ] **Step 1: Add a third fixture page**
 
-In `../LibKa0s/tests/fixture_options.lua`, add `"tabbed"` to `Fixture.PAGES` and append these rows to `buildRows()`:
+In `../LibKa0s/tests/fixture_options.lua`, add `"tabbed"` **and `"solo"`** to `Fixture.PAGES` and append these rows to `buildRows()`:
 
 ```lua
     -- tabbed ─────────────────────────────────────────────────────────────────────────────────
@@ -987,6 +987,15 @@ In `../LibKa0s/tests/fixture_options.lua`, add `"tabbed"` to `Fixture.PAGES` and
       label = "Gamma one", default = 5, min = 0, max = 10, step = 1 },
     { path = "tabDelta",   page = "tabbed", group = "Delta", order = 10, type = "string",
       label = "Delta one", default = "", dialogControl = "EditBox" },
+
+    -- solo ───────────────────────────────────────────────────────────────────────────────────
+    -- ONE group, which no other fixture page has. Without it the "a one-group page draws no
+    -- strip" case has nothing to point at, and an earlier draft aimed it at a two-group page
+    -- behind an `if #groups == 1` guard that therefore never opened.
+    { path = "soloOne", page = "solo", group = "Only", order = 10, type = "bool",
+      label = "Solo one", default = false },
+    { path = "soloTwo", page = "solo", group = "Only", order = 20, type = "bool",
+      label = "Solo two", default = true },
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -1088,13 +1097,16 @@ end)
 test("widgets: a one-group page draws no strip at all", function()
   -- A strip over a single tab is chrome for its own sake, and it would reserve a band that
   -- pushes the page down for nothing.
+  --
+  -- Pointed at the "solo" fixture page, which exists for exactly this and holds ONE group. An
+  -- earlier draft aimed this at "bar" and wrapped the assertion in `if #groups == 1` -- "bar"
+  -- has two groups, so the guard never opened and the case could not fail.
   -- red under: drawing the strip before counting the groups.
   local O, _, ctx = bench()
-  local groups = O.RenderTabbedSchema(ctx, "bar")
-  assertTrue(#groups >= 1)
-  if #groups == 1 then
-    assertEqual(ctx.chromeHeight, 0, "a single-group page reserved a band")
-  end
+  local groups = O.RenderTabbedSchema(ctx, "solo")
+  assertEqual(#groups, 1, "the solo fixture page must hold exactly one group")
+  assertEqual(ctx.chromeHeight, 0, "a single-group page reserved a band")
+  assertEqual(#(ctx.__tabKids or {}), 0, "a single-group page built tab buttons")
 end)
 
 test("widgets: with no AceGUI a tabbed page falls back to the flat scroll", function()
@@ -1164,8 +1176,12 @@ Append to `LibKa0s/OptionsWidgets.lua`, after `O.RenderSchema`:
   --- first time a section is renamed, and nothing would say so.
   ---
   --- Returns the group names, in tab order. A page with fewer than two groups draws no strip --
-  --- a single tab is chrome for its own sake, and its band would push the page down for
-  --- nothing -- and a host with no AceGUI gets today's flat scroll rather than an empty canvas.
+  --- a single tab is chrome for its own sake, and its band would push the page down for nothing.
+  ---
+  --- With no AceGUI there is nothing to draw AT ALL: EnsureScroll answers nil and every maker in
+  --- this file refuses, so this reports an empty tab list and draws nothing -- which is what
+  --- RenderSchema would also have done, reached or not. The fallback that matters is the
+  --- single-group one above it, not this.
   function O.RenderTabbedSchema(ctx, pageKey, afterGroup, pairWith)
     local rows = d.rowsForPage(pageKey, ctx.unit) or {}
 
