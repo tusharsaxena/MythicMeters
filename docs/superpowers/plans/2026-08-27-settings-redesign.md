@@ -370,6 +370,19 @@ In `LibKa0s/Options.lua`, immediately before `function O.EnsureScroll(ctx)`:
     return L.CHROME_GAP + ((ctx and ctx.chromeHeight) or 0)
   end
 
+  --- Anchor a page's scroll under whatever chrome the page reserved.
+  ---
+  --- BOTH anchors in one place, not just the top one. EnsureScroll and SetChromeHeight each need
+  --- the full pair -- the second re-anchors a LIVE scroll -- and a bottom inset restated at two
+  --- sites is the same drift __scrollTopInset exists to prevent, one edge over.
+  local function anchorScroll(O, ctx)
+    local f = ctx.scroll and ctx.scroll.frame
+    if not f then return end
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",      L.PADDING_X - 4, -O.__scrollTopInset(ctx))
+    f:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -(L.PADDING_X + 12), 8)
+  end
+
   --- Reserve `height` pixels of pinned furniture above the scroll, and move a live scroll to
   --- match. Idempotent: reserving the same height twice reserves it once.
   function O.SetChromeHeight(ctx, height)
@@ -385,29 +398,23 @@ In `LibKa0s/Options.lua`, immediately before `function O.EnsureScroll(ctx)`:
         ctx.chrome:Hide()
       end
     end
-    if ctx.scroll and ctx.scroll.frame then
-      ctx.scroll.frame:ClearAllPoints()
-      ctx.scroll.frame:SetPoint("TOPLEFT", ctx.body, "TOPLEFT",
-        L.PADDING_X - 4, -O.__scrollTopInset(ctx))
-      ctx.scroll.frame:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -(L.PADDING_X + 12), 8)
-    end
+    anchorScroll(O, ctx)
   end
 ```
 
 - [ ] **Step 7: Re-anchor `EnsureScroll`**
 
-In `O.EnsureScroll`, replace:
+In `O.EnsureScroll`, replace **both** anchor lines with the shared helper:
 
 ```lua
-    scroll.frame:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",      L.PADDING_X - 4, -8)
+    ctx.scroll = scroll          -- anchorScroll reads ctx.scroll, so assign before anchoring
+    anchorScroll(O, ctx)
 ```
 
-with:
-
-```lua
-    scroll.frame:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",      L.PADDING_X - 4,
-                          -O.__scrollTopInset(ctx))
-```
+Adjust to the surrounding code's shape — if `O` is already an upvalue there, drop the parameter.
+What matters is that **each anchor value is written once**. `EnsureScroll` previously set points on
+a freshly created frame without clearing; routing through the helper adds a `ClearAllPoints` on a
+new frame, which is harmless — note it in the report so the reviewer is not surprised.
 
 - [ ] **Step 8: Run the tests**
 
