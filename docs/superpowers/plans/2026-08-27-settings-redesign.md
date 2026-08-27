@@ -1680,15 +1680,31 @@ Within `general`: `enabled`, `minimap.hide`, `state.testMode` → `L["General"]`
 
 `window.name` → `group = L["Window"]` (was `L["Active window"]`, whose picker Task 12 deletes).
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Repoint the hidden-row assertion at the page the row moved to**
+
+`tests/test_schema.lua:536` currently walks `NS.SchemaForPage("frame")` asserting that
+`window.frame.minimised` is not drawn. This task moves that row to the **header** page, which
+makes the existing loop vacuously true — it would pass for the wrong reason forever. Change the
+page it walks:
+
+```lua
+    for _, row in ipairs(NS.SchemaForPage("header")) do
+        assertTrue(row.path ~= "window.frame.minimised",
+            "a state row was rendered as a setting")
+    end
+```
+
+Leave the rest of that case, and the export case below it, alone — the export rows do not move.
+
+- [ ] **Step 6: Run the tests**
 
 ```sh
 lua tests/run.lua 2>&1 | tail -30
 ```
 
-Expected: PASS on the three new cases. Other suites may still fail — `test_schema_defaults.lua` and `test_options_panel.lua` are Task 9's and Task 11's. If `Schema: every group on every page is CONTIGUOUS` fails, a row was moved without moving its neighbours.
+Expected: PASS on the new cases. Other suites may still fail — `test_schema_defaults.lua` and `test_options_panel.lua` are Task 9's and Task 11's. If `Schema: every group on every page is CONTIGUOUS` fails, a row was moved without moving its neighbours.
 
-- [ ] **Step 6: Confirm `COPY_GROUPS` needs no change**
+- [ ] **Step 7: Confirm `COPY_GROUPS` needs no change**
 
 The spec's ripple list named `modules/WindowManager.lua`'s `COPY_GROUPS`. Check it rather than
 edit it:
@@ -1702,7 +1718,7 @@ are **storage sub-tree keys**, not page keys, and this task moved no storage. `w
 still lives under `rows` however the Frame page draws it. **Make no edit here.** If a later task
 renames a storage key, that task owns the `COPY_GROUPS` change.
 
-- [ ] **Step 7: Lint and commit**
+- [ ] **Step 8: Lint and commit**
 
 ```sh
 luacheck .
