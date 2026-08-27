@@ -562,8 +562,10 @@ test("widgets: TabStrip refuses politely with no AceGUI and with no tabs", funct
   -- Every maker in this file answers nil having drawn nothing rather than raising, because the
   -- degraded path is a real one: a consumer vendored without AceGUI must show a plain page.
   -- red under: indexing spec.tabs before checking it.
-  local O, _, ctx = bench({ aceGUI = false })
-  assertNil(O.TabStrip(ctx, { tabs = { { key = "a", label = "A" } } }))
+  withoutAceGUI(function()
+    local O, _, ctx = bench()
+    assertNil(O.TabStrip(ctx, { tabs = { { key = "a", label = "A" } } }))
+  end)
 
   local O2, _, ctx2 = bench()
   assertNil(O2.TabStrip(ctx2, { tabs = {} }))
@@ -571,13 +573,28 @@ test("widgets: TabStrip refuses politely with no AceGUI and with no tabs", funct
 end)
 ```
 
-- [ ] **Step 2: Confirm the fixture can express `aceGUI = false`**
+Add this helper alongside `bench` at the top of `tests/test_options_widgets.lua` — the three
+degraded-path cases in Tasks 3, 4 and 5 all use it:
 
-```sh
-cd ../LibKa0s && grep -n 'aceGUI' tests/fixture_options.lua | head
+```lua
+--- Run `fn` with AceGUI absent, restoring it afterwards.
+---
+--- The instance resolves AceGUI ONCE, at New() time (`LibKa0s/Options.lua:217`), so the library
+--- has to be built INSIDE this: flipping the mock after Fixture.new leaves the instance holding
+--- the handle it already resolved, and the degraded path never runs. Save-and-restore rather
+--- than assign-and-hope, copied from `tests/test_options.lua`'s own missing-AceGUI case.
+local function withoutAceGUI(fn)
+  local saved = T.mocks.__libs["AceGUI-3.0"]
+  T.mocks.__libs["AceGUI-3.0"] = nil
+  local ok, err = pcall(fn)
+  T.mocks.__libs["AceGUI-3.0"] = saved
+  if not ok then error(err) end
+end
 ```
 
-If the fixture has no such override, add one: `Fixture.new` must skip `onAceGUI` and leave `O.AceGUI` nil when `overrides.aceGUI == false`. Follow whatever shape the file already uses for its other overrides.
+- [ ] **Step 2: Add the `withoutAceGUI` helper**
+
+Add the helper shown above next to `bench` in `tests/test_options_widgets.lua`. **Do not add an override to `tests/fixture_options.lua`** — `Fixture.new`'s `overrides` are merged into the *descriptor* (`fixture_options.lua:173`), and `O.AceGUI` does not come from the descriptor; it is resolved from LibStub inside `New()`. An `aceGUI = false` override would set a descriptor field nothing reads and the test would silently exercise the normal path.
 
 - [ ] **Step 3: Run and confirm failure**
 
@@ -800,8 +817,10 @@ end)
 
 test("widgets: PageBanner refuses politely with no AceGUI and with no spec", function()
   -- red under: reading spec.list before checking spec.
-  local O, _, ctx = bench({ aceGUI = false })
-  assertNil(O.PageBanner(ctx, { label = "W", list = {}, order = {}, value = 1 }))
+  withoutAceGUI(function()
+    local O, _, ctx = bench()
+    assertNil(O.PageBanner(ctx, { label = "W", list = {}, order = {}, value = 1 }))
+  end)
 
   local O2, _, ctx2 = bench()
   assertNil(O2.PageBanner(ctx2, nil))
@@ -959,14 +978,20 @@ Append to `../LibKa0s/tests/test_options_widgets.lua`:
 ```lua
 -- ── the tabbed page ────────────────────────────────────────────────────────────────────────
 
---- Every label currently sitting in a ctx's scroll, in order.
+--- Every label and heading currently sitting in a ctx's scroll, in order.
+---
+--- Built on Fixture.flatten rather than on a second hand-rolled walk: the fixture already owns
+--- "every widget below this one, depth first", and a private copy here would be the thing that
+--- disagrees with it the next time the flow engine nests a row one level deeper.
 local function scrollLabels(ctx)
   local out = {}
-  for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
-    for _, child in ipairs(w.children or {}) do
-      if child.labelText then out[#out + 1] = child.labelText end
+  if not ctx.scroll then return out end
+  for _, w in ipairs(Fixture.flatten(ctx.scroll)) do
+    if w.type == "Heading" then
+      out[#out + 1] = "HEADING:" .. tostring(w.text)
+    elseif w.labelText then
+      out[#out + 1] = w.labelText
     end
-    if w.text then out[#out + 1] = "HEADING:" .. w.text end
   end
   return out
 end
@@ -1058,9 +1083,11 @@ test("widgets: with no AceGUI a tabbed page falls back to the flat scroll", func
   -- The degraded path shows the SETTINGS, not an empty canvas: a host that lost the strip has
   -- lost a convenience, not its options.
   -- red under: returning early before RenderSchema.
-  local O, _, ctx = bench({ aceGUI = false })
-  local groups = O.RenderTabbedSchema(ctx, "tabbed")
-  assertEqual(#groups, 0, "no AceGUI, no tabs to report")
+  withoutAceGUI(function()
+    local O, _, ctx = bench()
+    local groups = O.RenderTabbedSchema(ctx, "tabbed")
+    assertEqual(#groups, 0, "no AceGUI, no tabs to report")
+  end)
 end)
 ```
 
