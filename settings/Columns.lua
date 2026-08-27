@@ -250,28 +250,29 @@ local function items(w)
     return out
 end
 
---- NO SECTION HEADINGS, and no Add section. Each column used to get its own
---- `1. Damage` heading over four controls, so eight columns was eight headings
---- and forty widgets to scroll past. The array is the catalog now: there is
---- nothing to add and nothing to remove, only an order and which of them you
---- want to see.
-local function render(ctx)
-    -- BEFORE ClearScroll, not after. ClearScroll hands every AceGUI container on this page back to
-    -- a process-wide pool, and a drag handle is parented to one of them until the controller is
-    -- cancelled -- so cancelling afterwards means some unrelated widget has already been handed a
-    -- frame with a live handle on it.
-    if NS.CancelReorder then NS.CancelReorder(ctx) end
-    H.ClearScroll(ctx)
-
-    if NS.State and NS.State.debug and NS.Debug then
-        local w0 = activeWindow()
-        NS.Debug("Columns", "paint window=%s", tostring(w0 and w0.id))
+--- The rows of one schema group on this page, in declaration order.
+---
+--- Filtered rather than driven by H.RenderTabbedSchema, because the Columns tab is the block
+--- editor and not a schema group at all -- RenderTabbedSchema partitions ALL of a page's rows
+--- by `group`, and would have nothing to say about where a non-schema tab belongs in that
+--- partition. Filtering NS.SchemaForPage by group directly is the same partition, done by hand,
+--- for the two tabs that ARE schema rows.
+local function rowsOfGroup(groupName)
+    local out = {}
+    for _, row in ipairs(NS.SchemaForPage and NS.SchemaForPage(PAGE) or {}) do
+        if row.group == groupName then out[#out + 1] = row end
     end
+    return out
+end
 
+--- NO SECTION HEADINGS on the block editor, and no Add section. Each column used to get its own
+--- `1. Damage` heading over four controls, so eight columns was eight headings and forty widgets
+--- to scroll past. The array is the catalog now: there is nothing to add and nothing to remove,
+--- only an order and which of them you want to see.
+local function renderBlockEditor(ctx)
     local w = activeWindow()
     if not w then
         H.TextRow(ctx, L["No window is selected."])
-        H.Relayout(ctx)
         return
     end
 
@@ -290,6 +291,54 @@ local function render(ctx)
         onToggle = toggle,
         onMove   = reorder,
     })
+end
+
+-- Three tabs: the block editor (bespoke, not schema rows) and the two schema groups that used
+-- to sit under it with no heading saying which window they belonged to. H.RenderTabbedSchema
+-- cannot drive this page -- it partitions ALL of a page's rows by group, and the Columns tab has
+-- none -- so the strip is drawn directly with H.TabStrip and each schema tab renders its own
+-- filtered row list through H.RenderRows.
+local TAB_COLUMNS = L["Columns"]
+local TAB_HEADER_TEXT = L["Header text"]
+local TAB_HEADER_BG = L["Header background"]
+
+local function render(ctx)
+    -- BEFORE ClearScroll, not after. ClearScroll hands every AceGUI container on this page back to
+    -- a process-wide pool, and a drag handle is parented to one of them until the controller is
+    -- cancelled -- so cancelling afterwards means some unrelated widget has already been handed a
+    -- frame with a live handle on it.
+    if NS.CancelReorder then NS.CancelReorder(ctx) end
+    H.ClearScroll(ctx)
+
+    if NS.State and NS.State.debug and NS.Debug then
+        local w0 = activeWindow()
+        NS.Debug("Columns", "paint window=%s", tostring(w0 and w0.id))
+    end
+
+    H.WindowBanner(ctx)
+    H.TabStrip(ctx, {
+        tabs = {
+            { key = TAB_COLUMNS,    label = TAB_COLUMNS },
+            { key = TAB_HEADER_TEXT, label = TAB_HEADER_TEXT },
+            { key = TAB_HEADER_BG,   label = TAB_HEADER_BG },
+        },
+        value = ctx.activeTab or TAB_COLUMNS,
+        onSelect = function(key)
+            if key == ctx.activeTab then return end
+            ctx.activeTab = key
+            H.ClearScroll(ctx)
+            H.RefreshPanel(ctx, true)
+        end,
+    })
+    ctx.activeTab = ctx.activeTab or TAB_COLUMNS
+
+    if ctx.activeTab == TAB_HEADER_TEXT then
+        H.RenderRows(ctx, rowsOfGroup(TAB_HEADER_TEXT), nil, nil, { noHeadings = true })
+    elseif ctx.activeTab == TAB_HEADER_BG then
+        H.RenderRows(ctx, rowsOfGroup(TAB_HEADER_BG), nil, nil, { noHeadings = true })
+    else
+        renderBlockEditor(ctx)
+    end
 
     H.Relayout(ctx)
 end

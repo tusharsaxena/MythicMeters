@@ -40,7 +40,8 @@ local function Build(mainCategory)
     H.SetRenderer(ctx, function(c)
         c.unit = NS.State and NS.State.activeWindowId or nil
         H.ClearScroll(c)
-        H.RenderSchema(c, PAGE)
+        H.WindowBanner(c)
+        H.RenderTabbedSchema(c, PAGE)
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Header"]))

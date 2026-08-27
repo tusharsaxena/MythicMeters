@@ -427,9 +427,14 @@ end)
 test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     local inst = T.load()
     local ctx = panelFor(inst, "frame")
-    local before = #aceGUI(inst).__created
     ctx.panel:Hide()
     ctx.panel:Show()
+
+    local before = #aceGUI(inst).__created
+
+    -- "Lock window" lives on the page's "Behavior" tab, not the one it opens on, since the
+    -- settings redesign grouped it there. Switch to it before looking for the checkbox.
+    ctx.__tabKids[5]:__fire("OnClick")
 
     -- "Lock window" rather than "Show title bar": the title-bar toggle moved to the Header page
     -- with the settings redesign, and it is about to be renamed as well. This case is about the
@@ -572,4 +577,118 @@ test("Options: AceGUI is resolved once and published for the page builders", fun
     assertTrue(inst.NS.AceGUI ~= nil,
         "library-stack-§4: resolve once and hand it over, rather than per page")
     assertEqual(inst.NS.AceGUI, inst.mocks.__libs["AceGUI-3.0"])
+end)
+
+-- ---------------------------------------------------------------------------
+-- Tabs
+-- ---------------------------------------------------------------------------
+
+-- Every page that draws a strip, and the tab it opens on. Profiles is absent because its widget
+-- tree is AceConfigDialog's; Windows and Columns are here because they are tabbed too, through
+-- their own bespoke builders rather than through RenderTabbedSchema.
+local TABBED = {
+    general    = "General",
+    windows    = "Window",
+    frame      = "Size and position",
+    header     = "Title bar",
+    bars       = "Bar",
+    tooltip    = "Tooltip",
+    visibility = "Where to show this window",
+    columns    = "Columns",
+}
+
+test("Panel: every tabbed page opens on its first tab and draws a strip", function()
+    -- red under: a page left on RenderSchema, or one whose renderer draws the strip after the
+    -- rows so the band is reserved too late.
+    local inst = T.load()
+    local L = inst.NS.L
+    for page, firstTab in pairs(TABBED) do
+        local ctx = showPage(inst, page)
+        assertEqual(ctx.activeTab, L[firstTab], page .. ": opens on its first tab")
+        assertTrue(#(ctx.__tabKids or {}) >= 2, page .. ": drew a strip")
+    end
+end)
+
+test("Panel: Profiles draws no strip", function()
+    -- Its widget tree belongs to AceConfigDialog, which reuses it and re-reads the profile on
+    -- every Open. A strip over that would be tabs this addon cannot fill.
+    -- red under: adding profiles to the tabbed set for consistency's sake.
+    local inst = T.load()
+    local ctx = showPage(inst, "profiles")
+    assertEqual(#(ctx.__tabKids or {}), 0)
+end)
+
+test("Panel: switching tabs re-renders without leaving the previous tab's widgets behind",
+function()
+    -- The Frame page's second tab is Rows. Asserting on the TAB rather than on a child count is
+    -- deliberate: a renderer that appended instead of clearing would still change the count, so
+    -- a count assertion passes for the wrong reason. What proves the clear is that a widget from
+    -- the tab we LEFT is gone.
+    -- red under: rendering the new group without ClearScroll, which appends it under the old.
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "frame")
+
+    local function labelled(name)
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            for _, child in ipairs(w.children or {}) do
+                if child.labelText == name then return true end
+            end
+        end
+        return false
+    end
+
+    assertTrue(labelled(L["Width"]), "the Frame page did not open on Size and position")
+    ctx.__tabKids[2]:__fire("OnClick")
+    assertEqual(ctx.activeTab, L["Rows"])
+    assertTrue(labelled(L["Maximum rows"]), "the Rows tab did not render")
+    assertFalse(labelled(L["Width"]), "the previous tab's widgets were left behind")
+end)
+
+test("Panel: every window sub-page banners the active window, and Windows has no second picker",
+function()
+    -- The banner is the ONLY picker (options-ui-§14). A page that kept its own would be a
+    -- second writer of one piece of session state -- a synchronisation problem invented by the
+    -- design, which would then have to be solved forever.
+    -- red under: leaving the Active window dropdown on the Windows page, or bannering only some
+    -- of the sub-pages.
+    local inst = T.load()
+    local SUBPAGES = { "windows", "frame", "header", "bars", "tooltip", "visibility", "columns" }
+    for _, page in ipairs(SUBPAGES) do
+        local ctx = showPage(inst, page)
+        assertTrue(ctx.__bannerHeight ~= nil and ctx.__bannerHeight > 0,
+            page .. ": drew no banner")
+    end
+
+    -- The banner's own dropdown is parented into the chrome band, NOT added to the scroll, so
+    -- anything still carrying this label INSIDE the scroll is the old picker surviving.
+    local dropdowns = 0
+    local ctx = showPage(inst, "windows")
+    for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+        for _, child in ipairs(w.children or {}) do
+            if child.type == "Dropdown" and child.labelText == inst.NS.L["Active window"] then
+                dropdowns = dropdowns + 1
+            end
+        end
+    end
+    assertEqual(dropdowns, 0, "the Windows page kept its own picker")
+end)
+
+test("Panel: choosing a window in the banner retargets every page and keeps the tab", function()
+    -- Comparing one surface across two windows is the reason to switch from a sub-page at all,
+    -- so the tab is a property of the page and not of the window (options-ui-§14).
+    -- red under: resetting activeTab on a structural refresh.
+    local inst = T.load()
+    assertTrue(inst.NS.WindowManager:Create("Second"))
+    local list = inst.NS.Database.GetWindows()
+
+    local ctx = showPage(inst, "bars")
+    ctx.__tabKids[3]:__fire("OnClick")
+    assertEqual(ctx.activeTab, inst.NS.L["Bar border"])
+
+    local banner = ctx.__bannerWidget
+    banner:__fire("OnValueChanged", list[2].id)
+
+    assertEqual(inst.NS.State.activeWindowId, list[2].id)
+    assertEqual(ctx.activeTab, inst.NS.L["Bar border"], "the tab survived the retarget")
 end)

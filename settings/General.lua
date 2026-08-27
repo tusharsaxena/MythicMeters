@@ -157,21 +157,20 @@ local function Build(mainCategory)
     })
     ctx.panel.defaultsOnClick = function() H.RestoreDefaults(PAGE, ctx) end
 
-    H.SetRenderer(ctx, function(c)
-        H.ClearScroll(c)
-        -- The WHOLE page. Test mode and the debug console are schema rows on this
-        -- page (settings/Schema.lua, `sessionOnly`), so rendering the schema
-        -- renders them — drawing either one here as well is what produced the
-        -- duplicate checkboxes and the duplicate "Debug" heading.
-        H.RenderSchema(c, PAGE)
-
-        -- The page's two non-setting controls, side by side because both are
-        -- resets and a player looking for one is looking for the other.
-        --
-        -- RESET POSITION IS PER-WINDOW on an otherwise addon-wide page, and that
-        -- is why its tooltip names the window rather than saying "the window".
-        -- It moved here from Frame because a reset is what a player comes to
-        -- General for; what it resets did not change with the move.
+    -- The page's two non-setting controls, side by side because both are resets and a player
+    -- looking for one is looking for the other.
+    --
+    -- RESET POSITION IS PER-WINDOW on an otherwise addon-wide page, and that is why its
+    -- tooltip names the window rather than saying "the window". It moved here from Frame
+    -- because a reset is what a player comes to General for; what it resets did not change
+    -- with the move.
+    --
+    -- Fired through RenderTabbedSchema's afterGroup hook, keyed to the Maintenance tab (the
+    -- group the Debug console row already lives in) rather than drawn unconditionally after
+    -- the schema: with the page tabbed, "after the schema" is no longer "at the bottom of the
+    -- page" for every tab, and these buttons belong with Maintenance, not appended under
+    -- whichever group happens to be open.
+    local function afterMaintenance(c)
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
             tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."],
@@ -187,6 +186,15 @@ local function Build(mainCategory)
             end,
         })
         if H.Relayout then H.Relayout(c) end
+    end
+
+    H.SetRenderer(ctx, function(c)
+        H.ClearScroll(c)
+        -- The WHOLE page. Test mode and the debug console are schema rows on this
+        -- page (settings/Schema.lua, `sessionOnly`), so rendering the schema
+        -- renders them — drawing either one here as well is what produced the
+        -- duplicate checkboxes and the duplicate "Debug" heading.
+        H.RenderTabbedSchema(c, PAGE, { [L["Maintenance"]] = afterMaintenance })
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["General"])
