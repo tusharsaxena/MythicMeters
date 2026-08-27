@@ -131,9 +131,39 @@ lib.LAYOUT = {
   -- INTERNAL: TAB_ROW_GAP — vertical gap between two wrapped rows of tabs, consumed by
   -- O.TabStrip alone; a host reads the finished band height off O.TAB_H instead.
   TAB_ROW_GAP   = 2,
+
+  -- The gap below the banner, the hairline rule under it, and the gap below THAT before the tab
+  -- strip begins (options-ui-§14). Three numbers rather than one, because the rule wants to sit
+  -- clear of the banner's own art on one side and the first tab's border on the other.
+  -- INTERNAL: CHROME_DIVIDER_GAP_TOP — consumed by O.PageBanner alone, which draws the rule
+  -- immediately under its own measured height; no host draws a banner divider itself.
+  -- INTERNAL: CHROME_DIVIDER_H — same reason, and it is also the rule TEXTURE's height, not
+  -- just a spacing number.
+  -- INTERNAL: CHROME_DIVIDER_GAP_BOTTOM — same reason as CHROME_DIVIDER_GAP_TOP.
+  CHROME_DIVIDER_GAP_TOP    = 6,
+  CHROME_DIVIDER_H          = 1,
+  CHROME_DIVIDER_GAP_BOTTOM = 6,
+  -- The 1px baseline under the whole tab strip -- the tab/content separator (options-ui-§13) --
+  -- reserved as band height so the first row of settings does not sit under it.
+  -- INTERNAL: TAB_BASELINE_H — consumed by O.TabStrip alone, which draws the baseline and
+  -- reserves it in the same call; no host draws its own strip.
+  TAB_BASELINE_H = 1,
 }
 
 local L = lib.LAYOUT
+
+-- The chrome band's and the scroll's shared horizontal insets, so the banner and the tab strip
+-- span exactly the content column beneath them rather than a wider guess restated at
+-- CreatePanel's chrome anchor AND at anchorScroll. CONTENT_RIGHT is wider than PADDING_X because
+-- anchorScroll's right inset leaves room for AceGUI's always-shown scrollbar (which AceGUI nudges
+-- 20px right of the scrollframe when visible); CONTENT_LEFT is narrower than PADDING_X for the
+-- same reason __scrollTopInset exists -- one seam, computed once here and read at both anchor
+-- sites, so the two cannot drift the way they had.
+-- INTERNAL: CONTENT_LEFT — no host draws its own chrome or scroll; both consumers (CreatePanel's
+-- chrome anchor and anchorScroll) are in this file.
+-- INTERNAL: CONTENT_RIGHT — same reason as CONTENT_LEFT.
+L.CONTENT_LEFT  = L.PADDING_X - 4
+L.CONTENT_RIGHT = L.PADDING_X + 12
 
 -- ── strings ────────────────────────────────────────────────────────────────────────────────
 
@@ -341,8 +371,8 @@ function lib:New(d)
     -- starts at zero so a page that reserves nothing is byte-identical to one built before the
     -- slot existed.
     local chrome = CreateFrame("Frame", nil, body)
-    chrome:SetPoint("TOPLEFT",  body, "TOPLEFT",  L.PADDING_X, 0)
-    chrome:SetPoint("TOPRIGHT", body, "TOPRIGHT", -L.PADDING_X, 0)
+    chrome:SetPoint("TOPLEFT",  body, "TOPLEFT",   L.CONTENT_LEFT, 0)
+    chrome:SetPoint("TOPRIGHT", body, "TOPRIGHT", -L.CONTENT_RIGHT, 0)
     panel.chrome = chrome
 
     local ctx = {
@@ -421,12 +451,17 @@ function lib:New(d)
   --- BOTH anchors in one place, not just the top one. EnsureScroll and SetChromeHeight each need
   --- the full pair -- the second re-anchors a live scroll -- and a bottom inset restated at two
   --- sites is the same drift __scrollTopInset exists to prevent, one edge over.
+  ---
+  --- The horizontal insets are L.CONTENT_LEFT / L.CONTENT_RIGHT -- the SAME two numbers
+  --- CreatePanel's chrome anchor uses -- so the chrome band and the scroll beneath it can never
+  --- drift apart the way they once did (the chrome ran 12px wider than the content on the
+  --- right).
   local function anchorScroll(ctx)
     local f = ctx.scroll and ctx.scroll.frame
     if not f then return end
     f:ClearAllPoints()
-    f:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",      L.PADDING_X - 4, -O.__scrollTopInset(ctx))
-    f:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -(L.PADDING_X + 12), 8)
+    f:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",     L.CONTENT_LEFT, -O.__scrollTopInset(ctx))
+    f:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -L.CONTENT_RIGHT, 8)
   end
 
   --- Reserve `height` pixels of pinned furniture above the scroll, and move a live scroll to
@@ -457,8 +492,9 @@ function lib:New(d)
     scroll:SetLayout("List")
     scroll.frame:SetParent(ctx.body)
     ctx.scroll = scroll
-    -- The right-edge inset of PADDING_X+12 leaves room for the scrollbar (which AceGUI nudges 20px
-    -- right of the scrollframe when visible) without it sitting flush against the panel border.
+    -- The right-edge inset of L.CONTENT_RIGHT leaves room for the scrollbar (which AceGUI nudges
+    -- 20px right of the scrollframe when visible) without it sitting flush against the panel
+    -- border.
     anchorScroll(ctx)
     scroll.frame:Show()
 

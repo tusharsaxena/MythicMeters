@@ -320,6 +320,103 @@ local function landingSections(O, ctx, spec)
   end
 end
 
+-- ── tab strip art (options-ui-§13) ──────────────────────────────────────────────────────────
+--
+-- Drawn with plain color textures rather than a Blizzard tab template: this file builds its own
+-- art everywhere else, and a template's exact name and metrics cannot be verified outside a live
+-- client. Four thin borders and a flat fill per button is the whole vocabulary.
+
+-- Inactive: a dark translucent fill and a dim gold edge, so an unselected tab reads as present
+-- but recessed. Active: a lighter fill and a brighter edge -- the two states are meant to be
+-- readable at a glance, not merely different.
+local TAB_FILL_INACTIVE   = { 0, 0, 0, 0.35 }
+local TAB_FILL_ACTIVE     = { 0.15, 0.12, 0.04, 0.9 }
+local TAB_BORDER_INACTIVE = { 0.5, 0.4, 0.15, 0.6 }
+local TAB_BORDER_ACTIVE   = { 1, 0.82, 0, 0.85 }
+-- The banner/strip hairline and the strip's own baseline share this dim-gold, low-alpha
+-- treatment (options-ui-§14): a border needs to read, a separator needs to disappear.
+local CHROME_RULE_COLOR   = { 1, 0.82, 0, 0.16 }
+local TAB_BASELINE_COLOR  = TAB_BORDER_INACTIVE
+
+--- Create and color one 1px edge texture. Guarded like every other texture path in this file --
+--- a headless mock's CreateTexture can answer an inert table with no SetColorTexture -- so a
+--- caller gets nil rather than a half-built texture to keep positioning.
+local function edgeTexture(parent, layer, color)
+  local tex = parent.CreateTexture and parent:CreateTexture(nil, layer)
+  if not (tex and tex.SetColorTexture) then return nil end
+  tex:SetColorTexture(color[1], color[2], color[3], color[4])
+  return tex
+end
+
+--- Draw one tab button's four edges as thin color textures, omitting the ACTIVE tab's bottom
+--- edge so it visually merges with the content below -- the single detail that makes a row of
+--- buttons read as tabs rather than a row of bordered rectangles.
+---
+--- Lifted out of makeTab so that function's cyclomatic count stays with its own six unrelated
+--- decisions rather than growing with the art. The four textures are children of `b`, so they
+--- share the button's own lifecycle: releaseLedger hides and unparents `b`, and every edge goes
+--- with it -- no separate ledger entry needed for them.
+local function drawTabBorder(b, active)
+  local color = active and TAB_BORDER_ACTIVE or TAB_BORDER_INACTIVE
+
+  local top = edgeTexture(b, "BORDER", color)
+  if top then
+    top:SetPoint("TOPLEFT",  b, "TOPLEFT",  0, 0)
+    top:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0, 0)
+    top:SetHeight(1)
+  end
+
+  local left = edgeTexture(b, "BORDER", color)
+  if left then
+    left:SetPoint("TOPLEFT",    b, "TOPLEFT",    0, 0)
+    left:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
+    left:SetWidth(1)
+  end
+
+  local right = edgeTexture(b, "BORDER", color)
+  if right then
+    right:SetPoint("TOPRIGHT",    b, "TOPRIGHT",    0, 0)
+    right:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+    right:SetWidth(1)
+  end
+
+  if not active then
+    local bottom = edgeTexture(b, "BORDER", color)
+    if bottom then
+      bottom:SetPoint("BOTTOMLEFT",  b, "BOTTOMLEFT",  0, 0)
+      bottom:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+      bottom:SetHeight(1)
+    end
+  end
+end
+
+--- The hairline rule between the banner and the tab strip (options-ui-§14), spanning the
+--- chrome's full width. Parked in the BANNER's own ledger (`ctx.__chromeKids`), not the strip's:
+--- only a full page render redraws the banner, so a tab click alone must never touch this
+--- texture the way it touches `ctx.__tabKids`.
+local function drawChromeDivider(ctx, rawBannerHeight)
+  local tex = edgeTexture(ctx.chrome, "ARTWORK", CHROME_RULE_COLOR)
+  if not tex then return end
+  local y = -(rawBannerHeight + L.CHROME_DIVIDER_GAP_TOP)
+  tex:SetPoint("TOPLEFT",  ctx.chrome, "TOPLEFT",  0, y)
+  tex:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, y)
+  tex:SetHeight(L.CHROME_DIVIDER_H)
+  ctx.__chromeKids[#ctx.__chromeKids + 1] = tex
+end
+
+--- The 1px baseline under the whole tab strip -- the tab/content separator (options-ui-§13).
+--- Parked in the STRIP's own ledger (`ctx.__tabKids`): a tab click redraws the strip alone and
+--- must redraw this with it, or a click that shrinks the strip from two rows to one leaves the
+--- old baseline floating over the page's first row of settings.
+local function drawTabBaseline(ctx, y)
+  local tex = edgeTexture(ctx.chrome, "ARTWORK", TAB_BASELINE_COLOR)
+  if not tex then return end
+  tex:SetPoint("TOPLEFT",  ctx.chrome, "TOPLEFT",  0, -y)
+  tex:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, -y)
+  tex:SetHeight(L.TAB_BASELINE_H)
+  ctx.__tabKids[#ctx.__tabKids + 1] = tex
+end
+
 --- Attach the widget makers and the flow engine to one instance. Called at the end of lib:New, so
 --- every host gets its own closures over its own descriptor.
 function lib.__AttachWidgets(O, d)
@@ -470,6 +567,32 @@ function lib.__AttachWidgets(O, d)
     return out, #rows
   end
 
+  --- The banner's own measured (or floor) height, widened by the small gap, the hairline rule
+  --- and the second gap that separate it from the tab strip (options-ui-§14). Pure, and a
+  --- sibling of __tabPlacement rather than arithmetic folded into PageBanner, so the widening of
+  --- the band is checkable without a measured font or a live texture.
+  ---
+  --- Zero in, zero out: a page that draws no banner has nothing for a divider to separate, so
+  --- placeTabs' `top` (which reads this straight off ctx.__bannerHeight) stays exactly 0 for a
+  --- tabs-only page, same as before this seam existed.
+  function O.__bannerBand(rawHeight)
+    rawHeight = tonumber(rawHeight) or 0
+    if rawHeight <= 0 then return 0 end
+    return rawHeight + L.CHROME_DIVIDER_GAP_TOP + L.CHROME_DIVIDER_H + L.CHROME_DIVIDER_GAP_BOTTOM
+  end
+
+  --- The strip's own reserved band: where its baseline sits, and the total height (baseline
+  --- included) to hand SetChromeHeight. A sibling of __tabPlacement for the same reason
+  --- __bannerBand is -- the arithmetic that decides whether the page's first row of settings
+  --- lands under the baseline or below it has to be checkable without a live frame.
+  --- @return number  baselineY -- pixels down from ctx.chrome's top to the baseline itself
+  --- @return number  the total band height to reserve, baseline included
+  function O.__tabBand(top, rowCount, tabH, rowGap, baselineH)
+    rowCount = math.max(tonumber(rowCount) or 1, 1)
+    local baselineY = top + (rowCount * tabH) + ((rowCount - 1) * rowGap)
+    return baselineY, baselineY + (tonumber(baselineH) or 0)
+  end
+
   --- Hide, unparent and forget every widget in one of a page's chrome ledgers.
   local function releaseLedger(ctx, key)
     for _, f in ipairs(ctx[key] or {}) do
@@ -526,14 +649,17 @@ function lib.__AttachWidgets(O, d)
     b:SetDisabledFontObject(_G.GameFontHighlightSmall)
     b:SetText(tab.label or "")
 
-    -- A flat backing rather than a Blizzard tab atlas. The art is deliberately minimal here;
-    -- what the strip owes the page is a readable active/inactive distinction, and the atlas
-    -- question is one for a live client rather than for this file.
+    -- A flat backing plus a four-edge border rather than a Blizzard tab atlas. The art is
+    -- deliberately minimal here; what the strip owes the page is a readable active/inactive
+    -- distinction with the look of a tab, and the atlas question is one for a live client
+    -- rather than for this file.
     local bg = b.CreateTexture and b:CreateTexture(nil, "BACKGROUND")
     if bg and bg.SetColorTexture then
       bg:SetAllPoints(b)
-      bg:SetColorTexture(0, 0, 0, active and 0.55 or 0.25)
+      local fill = active and TAB_FILL_ACTIVE or TAB_FILL_INACTIVE
+      bg:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
     end
+    drawTabBorder(b, active)
 
     b:SetEnabled(not active)
     b:SetScript("OnClick", function()
@@ -550,10 +676,14 @@ function lib.__AttachWidgets(O, d)
     return b, labelWidth(b.GetFontString and b:GetFontString())
   end
 
-  --- Pack `buttons` into their wrapped rows and reserve the band those rows need.
+  --- Pack `buttons` into their wrapped rows, draw the baseline under the last one, and reserve
+  --- the band those rows plus the baseline need.
   ---
   --- The band is reserved AFTER the wrap is known, never before: a strip that reserved one row
-  --- and then laid out two would put its second row on top of the page's first widget.
+  --- and then laid out two would put its second row on top of the page's first widget. `top`
+  --- already carries the banner's own gap/rule/gap (options-ui-§14) -- ctx.__bannerHeight is
+  --- O.__bannerBand's OUTPUT, not the raw dropdown height -- so this function never re-derives
+  --- that arithmetic itself.
   local function placeTabs(ctx, buttons, widths)
     -- The strip's own width, not the panel's: a body inset by PADDING_X on both edges.
     local available = ctx.chrome.GetWidth and ctx.chrome:GetWidth()
@@ -570,8 +700,10 @@ function lib.__AttachWidgets(O, d)
       b:Show()
     end
 
-    rowCount = math.max(rowCount, 1)
-    O.SetChromeHeight(ctx, top + (rowCount * L.TAB_H) + ((rowCount - 1) * L.TAB_ROW_GAP))
+    local baselineY, reserved =
+      O.__tabBand(top, rowCount, L.TAB_H, L.TAB_ROW_GAP, L.TAB_BASELINE_H)
+    drawTabBaseline(ctx, baselineY)
+    O.SetChromeHeight(ctx, reserved)
   end
 
   --- A pinned tab strip in the page's chrome band (options-ui-§13). One tab per section.
@@ -608,9 +740,11 @@ function lib.__AttachWidgets(O, d)
   --- problem the design invented and would then own forever -- here there is one value, read at
   --- render time, and the structural refresh the write already triggers repaints every panel.
   ---
-  --- Draw it BEFORE the strip. It records its own share of the band in `ctx.__bannerHeight`,
-  --- which TabStrip adds to the rows it reserves for itself; called the other way round, the
-  --- strip's reservation would not know about it.
+  --- Draw it BEFORE the strip. It records its own share of the band in `ctx.__bannerHeight` --
+  --- widened by O.__bannerBand to include the small gap, the hairline rule and the second gap
+  --- that separate the banner from the strip (options-ui-§14) -- which TabStrip's placeTabs adds
+  --- to the rows it reserves for itself; called the other way round, the strip's reservation
+  --- would not know about it.
   ---
   --- `spec` = { label, list, order, value, onSelect, tooltip }. Returns the dropdown, or nil
   --- having drawn nothing.
@@ -649,8 +783,15 @@ function lib.__AttachWidgets(O, d)
       -- harness is exactly the case that produces a frameless AceGUI widget.
       local h = dd.frame.GetHeight and dd.frame:GetHeight()
       if type(h) ~= "number" or h < L.BANNER_H then h = L.BANNER_H end
-      ctx.__bannerHeight = h
-      O.SetChromeHeight(ctx, h)
+
+      -- The hairline rule sits at the raw height, never the widened one -- it separates the
+      -- banner from what comes after it, so it has to be measured off the banner's own bottom
+      -- edge rather than off a band that already includes it.
+      drawChromeDivider(ctx, h)
+
+      local band = O.__bannerBand(h)
+      ctx.__bannerHeight = band
+      O.SetChromeHeight(ctx, band)
     end
     O.AttachTooltip(dd, spec.label, spec.tooltip)
 
