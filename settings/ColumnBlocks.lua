@@ -147,6 +147,7 @@ function NS.ReorderableBlocks(ctx, spec)
         boundary   = boundary,
         handleIcon = NS.Icon and NS.Icon(HANDLE_ICON) or nil,
         handleSize = 30,
+        handleTooltip = NS.L and NS.L["Drag to reorder"] or nil,
         onMove     = spec.onMove,
         debug      = (NS.State and NS.State.debug and NS.Debug)
             and function(fmt, ...) NS.Debug("Blocks", fmt, ...) end or nil,

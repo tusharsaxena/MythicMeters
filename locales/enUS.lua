@@ -533,6 +533,9 @@ L["Columns cannot be changed during combat."] =
 L["A window must keep at least one column."] =
     "A window must keep at least one column."
 
+L["Drag to reorder"] = "Drag to reorder"
+L["Restore the statistics this window ships with, ticked and in their shipped order."] =
+    "Restore the statistics this window ships with, ticked and in their shipped order."
 L["Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."] =
     "Every statistic this build offers. Ticked ones are the columns this window shows, left to right, top to bottom. Drag a block by its handle to reorder them. Columns can only be changed out of combat."
 

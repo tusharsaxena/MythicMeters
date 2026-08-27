@@ -279,13 +279,48 @@ test("Options: EnsureDefaultsButton runs OUTSIDE the already-rendered guard", fu
 end)
 
 test("Options: a page that declines a Defaults button never grows one", function()
-    -- The column list is not a set of schema rows, so there is nothing per-row to
-    -- restore; the Profiles page's rows are user data.
+    -- The Profiles page's rows are user data, and the Windows page's are the registry -- restoring
+    -- either would delete something the player made rather than reset a preference.
+    --
+    -- COLUMNS IS NO LONGER AMONG THEM. It declined for as long as its list was a subset the player
+    -- assembled, when there was nothing per-row to restore and the library's row walk would have
+    -- found nothing to do. The array is the catalog now, so the button has an exact meaning -- the
+    -- statistics that ship ticked, in their shipped order -- and the page supplies its own handler
+    -- for it, because a row walk still cannot reach an array.
     local inst = T.load()
-    for _, key in ipairs({ "columns", "profiles", "windows" }) do
+    for _, key in ipairs({ "profiles", "windows" }) do
         local ctx = showPage(inst, key)
         assertFalse(ctx.panel.wantsDefaultsButton, key .. " asked for a Defaults button")
         assertEqual(ctx.panel.defaultsBtn, nil, key .. " grew a Defaults button anyway")
+    end
+end)
+
+test("Options: the Columns page's Defaults button restores the SHIPPED column list", function()
+    -- The library's RestoreDefaults walks a page's schema ROWS, and this page has none, so a
+    -- button wired to it would have looked live and done nothing at all.
+    -- red under: defaultsOnClick left pointing at H.RestoreDefaults.
+    local inst = T.load()
+    local NS = inst.NS
+    local ctx = showPage(inst, "columns")
+
+    assertTrue(ctx.panel.wantsDefaultsButton, "the Columns page must offer a Defaults button")
+    assertTrue(ctx.panel.defaultsOnClick ~= nil, "and wire a handler to it")
+
+    -- Move away from the shipped list in both ways the page can: order and which are ticked.
+    local shipped = NS.DefaultWindow(NS.Database.GetWindows()[1].id).columns
+    local scrambled = {}
+    for i = #shipped, 1, -1 do
+        scrambled[#scrambled + 1] = { stat = shipped[i].stat, enabled = i % 2 == 0 }
+    end
+    assertTrue(NS.SetByPath("window.columns", scrambled))
+
+    ctx.panel.defaultsOnClick()
+
+    local after = NS.Database.GetWindows()[1].columns
+    assertEqual(#after, #shipped)
+    for i, col in ipairs(shipped) do
+        assertEqual(after[i].stat, col.stat, "column " .. i .. " is not the shipped statistic")
+        assertEqual(after[i].enabled, col.enabled, "column " .. i .. " is not shipped-ticked")
     end
 end)
 

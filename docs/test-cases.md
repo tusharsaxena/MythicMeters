@@ -1409,7 +1409,7 @@ badge and any count quoted in the docs must agree with it.
 - Slash: no raw SLASH_* global is claimed anywhere
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
 
-### test_options_panel.lua (25)
+### test_options_panel.lua (26)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1423,6 +1423,7 @@ badge and any count quoted in the docs must agree with it.
 - Options: the Defaults button is built on first show, not at registration
 - Options: EnsureDefaultsButton runs OUTSIDE the already-rendered guard
 - Options: a page that declines a Defaults button never grows one
+- Options: the Columns page's Defaults button restores the SHIPPED column list
 - Options: the canvas footer's Defaults control reaches the same handler as the header button
 - Options: opening the panel is REFUSED under combat lockdown, with a notice
 - Options: a refused open is NOT deferred and replayed when combat ends
@@ -1535,8 +1536,8 @@ badge and any count quoted in the docs must agree with it.
 | test_schema.lua | 46 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 33 |
-| test_options_panel.lua | 25 |
+| test_options_panel.lua | 26 |
 | test_columnblocks.lua | 12 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1373** |
+| **Total** | **1374** |

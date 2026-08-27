@@ -364,6 +364,14 @@ the wrong frame.
 - **5** — refused, with "A window must keep at least one column." printed. A window of nothing but
   names reads as a broken addon rather than as a configuration.
 
+**Hover the handle before pressing it:** it goes **gold** and says *Drag to reorder*.
+
+**Drag twice in a row.** The second drag must work exactly like the first — a handle that responds
+once and then does nothing means a stale one from the previous render is taking the press, and the
+carried copy is usually left floating over the list as the other half of that symptom.
+
+**The Defaults button** (top right) puts the shipped statistics back, ticked and in shipped order.
+
 Also check: every column draws its **bar** (there is no numbers-only column any more), and the
 columns share the frame width evenly (there is no per-column width to set).
 

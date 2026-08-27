@@ -752,6 +752,122 @@ local function mouseHeld()
   return held and true or false
 end
 
+-- ── the drag, hoisted out of the controller ───────────────────────────────────────────────────
+--
+-- These take a ROW and reach the controller through `row.list`, rather than closing over one.
+--
+-- THAT IS NOT STYLE. The handle is cached on a frame its host POOLS and reused across renders, so
+-- a handler closing over the controller that built it would still be calling that controller after
+-- it had been Cancel()led -- which is a drag that works exactly once and then freezes. `handle.__row`
+-- fixes which row; this fixes which controller. Both halves are needed, and fixing only the first
+-- is a bug that still passes a test written against the first.
+
+local function showLine(row, to)
+  local list = row.list
+  local target = list.rows[to]
+  if not (list.line and target) then return end
+  local f = target.frame
+  list.line:ClearAllPoints()
+  -- ANCHORED TO THE TARGET ROW, never positioned by arithmetic. The index comes from the cursor,
+  -- but where that index sits on screen is a question only the frames can answer -- and anchoring
+  -- asks it without reading a single coordinate back.
+  if to <= row.index then
+    list.line:SetPoint("BOTTOMLEFT",  f, "TOPLEFT",  0, 0)
+    list.line:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
+  else
+    list.line:SetPoint("TOPLEFT",  f, "BOTTOMLEFT",  0, 0)
+    list.line:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, 0)
+  end
+  list.line:Show()
+end
+
+local function finishDrag(row)
+  if not row then return end
+  local list = row.list
+
+  row.frame:SetScript("OnUpdate", nil)
+  if ghost then ghost:Hide() end
+  if list.line then list.line:Hide() end
+  if row.frame.SetAlpha then row.frame:SetAlpha(1) end
+
+  if not row.startY then return end
+  row.startY  = nil
+  row.sawDown = nil
+  list.dragging = nil
+
+  local to = dropIndex(row.index, row.rows or 0, #list.rows, list.boundary)
+  list.say("drop %d -> %d (%d rows)", row.index, to, row.rows or 0)
+  -- A drag that lands where it started is not a reorder, and reporting one would have the host
+  -- rewrite its list and repaint for no change at all.
+  if to ~= row.index and list.onMove and not list.dead then
+    list.onMove(row.index, to)
+  end
+end
+
+local function trackDrag(row)
+  if not row or not row.startY then return end
+  local list = row.list
+
+  local _, y = GetCursorPosition()
+  local scale = UIParent:GetEffectiveScale()
+  if type(y) == "number" and type(scale) == "number" and scale ~= 0 then
+    -- +0.5 then floor is round-to-nearest: a row dragged 60% of the way to the next slot has
+    -- visibly left its own, and rounding down would drop it back where it started.
+    row.rows = math.floor(((row.startY - (y / scale)) / list.stride) + 0.5)
+  end
+
+  moveGhost()
+  showLine(row, dropIndex(row.index, row.rows or 0, #list.rows, list.boundary))
+
+  -- THE POLL MAY NOT ACT ALONE, and this is why it has to see the button held first. If
+  -- IsMouseButtonDown is unavailable, protected, or simply not true yet on the first frame, a poll
+  -- that ended the drag on `not held` would finish it with zero rows travelled -- no error, no
+  -- message, and indistinguishable from a press that was never received.
+  local held = mouseHeld()
+  if held then
+    row.sawDown = true
+  elseif held == false and row.sawDown then
+    finishDrag(row)
+  end
+end
+
+local function beginDrag(row)
+  if not row then return end
+  local list = row.list
+  if row.startY or list.dead then return end
+
+  local _, y = GetCursorPosition()
+  local scale = UIParent:GetEffectiveScale()
+  if type(y) ~= "number" or type(scale) ~= "number" or scale == 0 then return end
+
+  row.startY  = y / scale
+  row.rows    = 0
+  row.sawDown = nil
+  list.dragging = row
+  row.frame:SetScript("OnUpdate", function() trackDrag(row) end)
+  -- The row you picked up fades IN THE LIST, because the copy under the cursor is the one you are
+  -- looking at now.
+  if row.frame.SetAlpha then row.frame:SetAlpha(0.35) end
+
+  local g = ensureGhost()
+  local w = row.frame.GetWidth and row.frame:GetWidth()
+  if type(w) == "number" and w > 0 then g:SetWidth(w) end
+  g:SetHeight(row.height or list.stride)
+  g.icon:SetTexture(row.ghostIcon or list.handleIcon or HANDLE_FALLBACK)
+  if row.ghostIconColor then
+    g.icon:SetVertexColor(row.ghostIconColor[1], row.ghostIconColor[2], row.ghostIconColor[3])
+  else
+    g.icon:SetVertexColor(1, 1, 1)
+  end
+  g.text:SetText(row.ghostText or "")
+  local c = row.ghostTextColor or { 1, 0.82, 0 }
+  g.text:SetTextColor(c[1], c[2], c[3])
+  g:Show()
+  moveGhost()
+
+  list.say("grab %d at y=%.1f", row.index, row.startY)
+end
+
 --- Build a reorderable list controller.
 ---
 --- One controller per RENDER, not one per list: it holds the rows of the pass that built it, and a
@@ -768,7 +884,11 @@ end
 ---                                list, which is the common case; MultiMeters' Columns page is the
 ---                                other one, where shown columns may not be dragged among hidden.
 ---   handleIcon string|nil        resolved texture path for the handle art; nil falls back.
----   handleSize number|nil        the handle's hit area, defaults to 24 x the row stride.
+---   handleSize number|nil        the handle's hit width; its height is the row's. Defaults to 24.
+---   handleInset number|nil       px from the parent's left edge. Defaults to 0.
+---   handleColor table|nil        { r, g, b } for the handle at rest. Defaults to a neutral gray.
+---   handleHoverColor table|nil   { r, g, b } under the pointer. Defaults to the collection's gold.
+---   handleTooltip string|nil     one line shown on hover. No tooltip without it.
 ---   iconSize   number|nil        the art drawn inside it, defaults to 16.
 ---   lineColor  table|nil         { r, g, b, a } for the insertion line; defaults to gold.
 ---   debug      function|nil      called as debug(fmt, ...) on grab and drop.
@@ -777,17 +897,23 @@ function lib.ReorderList(opts)
   opts = opts or {}
 
   local list = {
-    stride   = opts.stride or 30,
-    boundary = opts.boundary,
-    onMove   = opts.onMove,
-    color    = opts.lineColor or { 1, 0.82, 0, 0.9 },
-    rows     = {},
-    dead     = false,
+    stride     = opts.stride or 30,
+    boundary   = opts.boundary,
+    onMove     = opts.onMove,
+    handleIcon = opts.handleIcon,
+    color      = opts.lineColor or { 1, 0.82, 0, 0.9 },
+    rows       = {},
+    dead       = false,
   }
 
-  local function say(fmt, ...)
+  function list.say(fmt, ...)
     if opts.debug then opts.debug(fmt, ...) end
   end
+
+  -- A GHOST LEFT SHOWN BY A PREVIOUS CONTROLLER IS NOT THIS ONE'S TO INHERIT. Hosts are asked to
+  -- Cancel on repaint and both shipped ones do, but the ghost is a process-wide singleton and this
+  -- is the one moment where "nothing is being dragged" is known for certain.
+  if ghost then ghost:Hide() end
 
   --- Stop any drag in flight and put the chrome away. Idempotent.
   function list:Cancel()
@@ -798,128 +924,16 @@ function lib.ReorderList(opts)
     if row then
       row.frame:SetScript("OnUpdate", nil)
       if row.frame.SetAlpha then row.frame:SetAlpha(1) end
+      row.startY = nil
     end
     self.dragging = nil
   end
 
-  local function showLine(row, to)
-    local target = list.rows[to]
-    if not (list.line and target) then return end
-    local f = target.frame
-    list.line:ClearAllPoints()
-    -- ANCHORED TO THE TARGET ROW, never positioned by arithmetic. The index comes from the cursor,
-    -- but where that index sits on screen is a question only the frames can answer -- and anchoring
-    -- asks it without reading a single coordinate back.
-    if to <= row.index then
-      list.line:SetPoint("BOTTOMLEFT",  f, "TOPLEFT",  0, 0)
-      list.line:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
-    else
-      list.line:SetPoint("TOPLEFT",  f, "BOTTOMLEFT",  0, 0)
-      list.line:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, 0)
-    end
-    list.line:Show()
-  end
-
-  local function finish(row)
-    row.frame:SetScript("OnUpdate", nil)
-    if ghost then ghost:Hide() end
-    if list.line then list.line:Hide() end
-    if row.frame.SetAlpha then row.frame:SetAlpha(1) end
-
-    if not row.startY then return end
-    row.startY  = nil
-    row.sawDown = nil
-    list.dragging = nil
-
-    local to = dropIndex(row.index, row.rows or 0, #list.rows, list.boundary)
-    say("drop %d -> %d (%d rows)", row.index, to, row.rows or 0)
-    -- A drag that lands where it started is not a reorder, and reporting one would have the host
-    -- rewrite its list and repaint for no change at all.
-    if to ~= row.index and list.onMove and not list.dead then
-      list.onMove(row.index, to)
-    end
-  end
-
-  local function track(row)
-    if not row.startY then return end
-
-    local _, y = GetCursorPosition()
-    local scale = UIParent:GetEffectiveScale()
-    if type(y) == "number" and type(scale) == "number" and scale ~= 0 then
-      -- +0.5 then floor is round-to-nearest: a row dragged 60% of the way to the next slot has
-      -- visibly left its own, and rounding down would drop it back where it started.
-      row.rows = math.floor(((row.startY - (y / scale)) / list.stride) + 0.5)
-    end
-
-    moveGhost()
-    showLine(row, dropIndex(row.index, row.rows or 0, #list.rows, list.boundary))
-
-    -- THE POLL MAY NOT ACT ALONE, and this is why it has to see the button held first. If
-    -- IsMouseButtonDown is unavailable, protected, or simply not true yet on the first frame, a
-    -- poll that ended the drag on `not held` would finish it with zero rows travelled -- no error,
-    -- no message, and indistinguishable from a press that was never received.
-    local held = mouseHeld()
-    if held then
-      row.sawDown = true
-    elseif held == false and row.sawDown then
-      finish(row)
-    end
-  end
-
-  local function begin(row)
-    if row.startY or list.dead then return end
-    local _, y = GetCursorPosition()
-    local scale = UIParent:GetEffectiveScale()
-    if type(y) ~= "number" or type(scale) ~= "number" or scale == 0 then return end
-
-    row.startY  = y / scale
-    row.rows    = 0
-    row.sawDown = nil
-    list.dragging = row
-    row.frame:SetScript("OnUpdate", function() track(row) end)
-    -- The row you picked up fades IN THE LIST, because the copy under the cursor is the one you are
-    -- looking at now.
-    if row.frame.SetAlpha then row.frame:SetAlpha(0.35) end
-
-    local g = ensureGhost()
-    local w = row.frame.GetWidth and row.frame:GetWidth()
-    if type(w) == "number" and w > 0 then g:SetWidth(w) end
-    g:SetHeight(row.height or list.stride)
-    g.icon:SetTexture(row.ghostIcon or opts.handleIcon or HANDLE_FALLBACK)
-    if row.ghostIconColor then
-      g.icon:SetVertexColor(row.ghostIconColor[1], row.ghostIconColor[2], row.ghostIconColor[3])
-    else
-      g.icon:SetVertexColor(1, 1, 1)
-    end
-    g.text:SetText(row.ghostText or "")
-    local c = row.ghostTextColor or { 1, 0.82, 0 }
-    g.text:SetTextColor(c[1], c[2], c[3])
-    g:Show()
-    moveGhost()
-
-    say("grab %d at y=%.1f", row.index, row.startY)
-  end
-
-  --- Register one row, in display order, and get back the handle that drags it.
-  ---
-  --- The handle is created here rather than accepted from the host because it is the one piece of
-  --- the row this widget must own: it is what a player has to recognize as "drag me", and a
-  --- collection whose lists each invented their own would defeat the point of sharing this at all.
-  --- The host still decides where it sits -- re-anchor the returned frame -- and how big it is.
-  ---
-  --- @param frame table  the row's own frame, whatever built it
-  --- @param spec table|nil
-  ---   ghostText  string|nil  what the carried copy reads; usually the row's own label
-  ---   ghostIcon  string|nil  art for the carried copy; defaults to the handle's
-  ---   ghostIconColor table|nil  { r, g, b }
-  ---   ghostTextColor table|nil  { r, g, b }
-  ---   height     number|nil  the row's own height, for the carried copy. Defaults to the stride.
-  ---   parent     table|nil   what to parent the handle to; defaults to `frame`
-  --- @return table handle
   function list:AddRow(frame, spec)
     spec = spec or {}
 
     local row = {
+      list           = list,
       frame          = frame,
       index          = #self.rows + 1,
       ghostText      = spec.ghostText,
@@ -930,29 +944,74 @@ function lib.ReorderList(opts)
     }
     self.rows[row.index] = row
 
-    local handle = CreateFrame("Button", nil, spec.parent or frame)
+    -- ONE HANDLE PER PARENT, FOR THE LIFE OF THAT PARENT, and this is not an optimization.
+    --
+    -- Both shipped consumers hand over a frame that their UI framework POOLS: AceGUI's
+    -- ReleaseChildren puts a container back and hands the same one out at the next render. A
+    -- handle built fresh each time therefore piled up on that recycled frame -- and every copy but
+    -- the newest was still wired, still mouse-enabled, and still pointing at the controller from
+    -- the render that made it. That controller is Cancel()led on the next render, so the press was
+    -- refused, and the drag simply stopped working after the first successful one.
+    --
+    -- It is the same failure the ROW content hit one layer up, and it has the same two halves:
+    -- cache the frame, and read the state at FIRE time rather than closing over it. `handle.__row`
+    -- is that half here -- and it is only half, which is why beginDrag and finishDrag are hoisted
+    -- out of this function and reach the controller through `row.list`. A handler closing over the
+    -- controller would still be calling a dead one however correct the row was.
+    local parent = spec.parent or frame
+    local handle = parent.__ka0sDragHandle
+
+    if not handle then
+      handle = CreateFrame("Button", nil, parent)
+      handle:EnableMouse(true)
+      handle:RegisterForDrag("LeftButton")
+
+      handle.art = handle:CreateTexture(nil, "ARTWORK")
+      handle.art:SetPoint("CENTER", handle, "CENTER", 0, 0)
+
+      handle:SetScript("OnMouseDown", function(self) beginDrag(self.__row) end)
+      handle:SetScript("OnDragStart", function(self) beginDrag(self.__row) end)
+      handle:SetScript("OnMouseUp",   function(self) finishDrag(self.__row) end)
+      handle:SetScript("OnDragStop",  function(self) finishDrag(self.__row) end)
+
+      -- GOLD ON HOVER, so the handle says it is a control before you press it. The tint is the
+      -- host's to choose and the default is the collection's gold; a host that wants its list's
+      -- affordance to match its own palette says so, and one that says nothing matches everyone
+      -- else's.
+      handle:SetScript("OnEnter", function(self)
+        local h = self.__hoverColor
+        self.art:SetVertexColor(h[1], h[2], h[3])
+        local tip = self.__tooltip
+        if tip and GameTooltip then
+          GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+          GameTooltip:AddLine(tip, 1, 1, 1)
+          GameTooltip:Show()
+        end
+      end)
+      handle:SetScript("OnLeave", function(self)
+        local c = self.__restColor
+        self.art:SetVertexColor(c[1], c[2], c[3])
+        if GameTooltip then GameTooltip:Hide() end
+      end)
+
+      parent.__ka0sDragHandle = handle
+    end
+
+    -- Re-pointed on every render, because the row a given parent carries changes.
+    handle.__row        = row
+    handle.__restColor  = opts.handleColor or { 0.7, 0.7, 0.7 }
+    handle.__hoverColor = opts.handleHoverColor or { 1, 0.82, 0 }
+    handle.__tooltip    = opts.handleTooltip
+
     handle:SetSize(opts.handleSize or 24, spec.height or self.stride)
-    handle:SetPoint("LEFT", spec.parent or frame, "LEFT", 0, 0)
-    handle:EnableMouse(true)
-    handle:RegisterForDrag("LeftButton")
+    handle:ClearAllPoints()
+    handle:SetPoint("LEFT", parent, "LEFT", opts.handleInset or 0, 0)
 
-    local art = handle:CreateTexture(nil, "ARTWORK")
     local size = opts.iconSize or 16
-    art:SetSize(size, size)
-    art:SetPoint("CENTER", handle, "CENTER", 0, 0)
-    art:SetTexture(opts.handleIcon or HANDLE_FALLBACK)
-    art:SetVertexColor(0.7, 0.7, 0.7)
-    handle.art = art
-
-    -- EVERY DELIVERY PATH CAN START IT AND EVERY PATH CAN END IT, and that redundancy is
-    -- deliberate. Which of these a client actually sends turned out not to be something worth
-    -- betting on: OnDragStart waits for the client's own drag threshold, and OnDragStop needs the
-    -- release delivered back to this frame. `begin` and `finish` are both idempotent, so whichever
-    -- order they arrive in, one grab begins once and completes once.
-    handle:SetScript("OnMouseDown", function() begin(row) end)
-    handle:SetScript("OnDragStart", function() begin(row) end)
-    handle:SetScript("OnMouseUp",   function() finish(row) end)
-    handle:SetScript("OnDragStop",  function() finish(row) end)
+    handle.art:SetSize(size, size)
+    handle.art:SetTexture(opts.handleIcon or HANDLE_FALLBACK)
+    handle.art:SetVertexColor(handle.__restColor[1], handle.__restColor[2], handle.__restColor[3])
+    handle:Show()
 
     row.handle = handle
     return handle

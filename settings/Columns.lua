@@ -204,6 +204,25 @@ local function reorder(from, to)
     return commit(cols)
 end
 
+--- Put this window's columns back to the shipped list.
+---
+--- THE PAGE'S OWN, because the library's RestoreDefaults walks a page's schema
+--- ROWS and this page has none -- the column array is addressable only as a
+--- whole, which is the same reason a profile reset cannot reach it row by row.
+---
+--- Built from NS.DefaultWindow rather than from a literal, so a statistic added
+--- to the catalog is in the shipped list here with no edit, exactly as it is for
+--- a brand-new window. The window's id goes in so the template's own `id` field
+--- is not what comes back out.
+local function restoreShippedColumns()
+    local w = activeWindow()
+    if not (w and NS.DefaultWindow) then return false end
+
+    local shipped = NS.DefaultWindow(w.id).columns
+    if type(shipped) ~= "table" then return false end
+    return commit(shipped)
+end
+
 -- ---------------------------------------------------------------------------
 -- The body
 -- ---------------------------------------------------------------------------
@@ -269,14 +288,22 @@ local function Build(mainCategory)
     if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return nil end
     if not (H and H.CreatePanel) then return nil end
 
-    -- No Defaults button. The column list is not a set of schema rows, so there
-    -- is nothing per-row to restore; "reset the columns" is what duplicating a
-    -- fresh window gives, and the global reset already rebuilds them from the
-    -- catalog through NS.ApplyDefault.
+    -- A DEFAULTS BUTTON THAT DOES ITS OWN WORK. The page carried none for as long
+    -- as the column list was a subset the player assembled: it is not a set of
+    -- schema rows, so H.RestoreDefaults -- which walks the rows of a page -- would
+    -- have found nothing to restore and done nothing at all.
+    --
+    -- The array is the catalog now, and that gives the button something exact to
+    -- mean: the statistics that ship ticked, in the order they ship in. Which is
+    -- a thing a player can want and previously could only get by making a whole
+    -- new window.
     local ctx = H.CreatePanel("MultiMetersColumnsPanel", L["Columns"], {
-        pageKey        = PAGE,
-        defaultsButton = false,
+        pageKey          = PAGE,
+        defaultsButton   = true,
+        defaultsTooltip  = L["Restore the statistics this window ships with, ticked and in their shipped order."],
     })
+
+    ctx.panel.defaultsOnClick = restoreShippedColumns
 
     H.SetRenderer(ctx, function(c)
         c.unit = NS.State and NS.State.activeWindowId or nil
