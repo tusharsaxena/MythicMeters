@@ -2394,10 +2394,10 @@ In `settings/Windows.lua`, beside `H.ActionDropdown` and `H.Relayout`, and for t
 --- host-side rather than going upstream because the library's O.PageBanner is the generic half
 --- -- the label, the anchoring and the band -- and this is the part that knows what a window is.
 ---
---- The onSelect writes NS.State.activeWindowId and forces a STRUCTURAL refresh, because the
---- other pages did not change VALUE, they changed SUBJECT. That sweep is also what re-renders
---- every other banner, which is why there is no propagation code here: one writer, one read at
---- render time.
+--- The onSelect RETARGETS the active window -- through NS.State.SetActiveWindow, never by
+--- assigning the pointer here -- and then forces a STRUCTURAL refresh, because the other pages
+--- did not change VALUE, they changed SUBJECT. That sweep is also what re-renders every other
+--- banner, which is why there is no propagation code here: one writer, one read at render time.
 H.WindowBanner = function(ctx)
     if not (H.PageBanner and ctx) then return nil end
 
