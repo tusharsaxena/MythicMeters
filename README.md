@@ -94,9 +94,11 @@ switching between pages in the list on the left does that (see [I cannot open th
 fighting](#troubleshooting) above). Every page below Windows opens with a **banner** naming which
 window it is editing, and that one dropdown is the only window picker in the whole panel.
 
-The seven pages between Windows and Profiles are **indented under it**, because they all configure
-*whichever window the banner is pointed at* — the two that are not indented, General and Profiles,
-configure the addon and draw no banner.
+The six pages between Windows and Profiles are **indented under it**, because they all configure
+*whichever window the banner is pointed at* — the same reason Windows itself draws the banner, though
+Windows is not indented under itself and sits flush with General and Profiles in the tree. Those two,
+General and Profiles, are the only pages that configure the addon rather than a window, and draw no
+banner at all.
 
 | Page | What you set there |
 |---|---|

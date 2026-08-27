@@ -135,8 +135,9 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
     └── General · Windows · Frame · Header · Bars · Tooltip ·
         Visibility · Columns · Profiles
                           — the 9 panel pages, in panel order. General is FIRST;
-                          the nine between Windows and Profiles are drawn with a
-                          "  - " indent, because the Windows picker retargets them
+                          the six between Windows and Profiles are drawn with a
+                          "  - " indent, because the banner (H.WindowBanner) can
+                          retarget them to a different window
 ```
 
 ## What each file publishes and consumes
@@ -222,8 +223,12 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `General.lua` | The General page (9 rows) and both of the addon's bespoke buttons: the master enable, the minimap toggle, the two session-only checkboxes (test mode, debug console), the three addon-wide export preferences and the two addon-wide data settings — plus the reset-everything confirmation and "Reset position", the one per-window control on the page. Also hosts the **reset-meter-data dialog**, which has no button on any page: the header's own reset control is the one way to open it, and it routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration, `NS.ShowResetMeterData` | `NS.Helpers`, `NS.State`, `NS.DebugLog`, `NS.WindowManager.ResetPosition`, `NS.Provider.Reset` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
-Schema rows total 138 across 7 page keys. `columns` and `profiles` are pages with zero schema rows —
-both are bespoke by necessity, and both say why in their file headers.
+Schema rows total 137 across 8 page keys — windows 1, frame 24, header 24, bars 27, tooltip 27,
+visibility 17, columns 8, general 9. `profiles` is the only page with zero schema rows: it hosts
+AceDBOptions' own tree rather than any of ours, which is bespoke by necessity and says why in its
+file header. `columns` carries 8 schema rows (the column-header text and background rows moved here
+from Header) plus a bespoke block editor with none — the array it edits is also bespoke by necessity,
+for the same "a flat path model has no vocabulary for this shape" reason.
 
 ## Load order
 

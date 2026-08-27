@@ -13,6 +13,14 @@ a mock cannot fail the way a Mythic+ pull can.
 Companion docs: [testing.md](testing.md) for the headless harness,
 [ARCHITECTURE.md](ARCHITECTURE.md) for the secret-value rules referenced throughout.
 
+**Re-verification note (2026-08-27, settings-redesign branch).** The header-controls bullets in
+§1 and the settings-panel steps in §3 and §4 — page names, tab names, control names and the
+lock/Test-mode relationship — were re-checked against `settings/Schema.lua` and the current page
+files as part of documenting that branch's tab redesign. The rest of §1, and all of §2 and §5 through
+§25, was **not** re-audited in that pass and may still describe older behaviour; treat any step
+outside those specific bullets as unverified against the current branch until it has been walked
+in-client.
+
 ## Conventions
 
 - **`/reload`** abbreviates `/console reloadui`.
@@ -39,7 +47,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 |---|---|---|
 | 1 | Cold start | [Fresh install + first login](#1-fresh-install--first-login) |
 | 2 | Reload | [`/reload` integrity](#2-reload-integrity) |
-| 3 | Window handling | [Lock, drag, resize, preview](#3-lock-drag-resize-preview) |
+| 3 | Window handling | [Lock, drag, resize, Test mode](#3-lock-drag-resize-test-mode) |
 | 4 | Settings panel | [Page sweep and panel/CLI parity](#4-settings-panel-sweep) |
 | 5 | Columns | [Column editor](#5-column-editor) |
 | 6 | Multi-window | [Second window, copy settings, independence](#6-multi-window) |
@@ -170,20 +178,24 @@ without errors — `NS:OnEnable` seeds `NS.State.restricted` from `Secrets.IsRes
 assuming "inactive", because `ADDON_RESTRICTION_STATE_CHANGED` has already fired and there is no
 second edge to catch.
 
-### 3. Lock, drag, resize, preview
+### 3. Lock, drag, resize, Test mode
 
 **Steps.**
 - `/mm lock off` (or uncheck **Frame → Lock window**).
 - Drag the window by its body. Drag the bottom-right grip.
 - `/mm lock on`. Try to drag again.
-- `/mm preview` on and off.
+- `/mm test` on and off (or **General → General → Test mode**).
 
 **Pass.**
-- Unlocking **fills the window with placeholder rows** — ten Ka0s-named members with plausible,
+- **Locking and Test mode are independent — not coupled.** `WindowManager:SetLocked` used to also
+  switch Test mode on, on the theory that someone positioning a window wants a full grid to aim at;
+  that coupling is gone. `/mm lock off` no longer fills the window with placeholder rows on its own,
+  and unchecking Test mode while a window is unlocked now actually clears the placeholder rows rather
+  than being a no-op. Confirm both halves: lock off with Test mode off shows a real (possibly empty)
+  grid, and Test mode on with the window locked still shows placeholders.
+- **Test mode fills the window with placeholder rows** — ten Ka0s-named members with plausible,
   **non-jittering** numbers. The numbers are deterministic; a preview that changes every refresh is
   unusable for judging column widths, which is the job it exists for.
-- Unlocking implies preview: the two are coupled in `WindowManager:SetLocked`, and the General page's
-  Preview mode checkbox agrees with the lock state.
 - Dragging moves the window; the position persists across `/reload`.
 - The resize grip is visible only while unlocked, and resizing persists. That is the **only** thing
   that governs it — there is no "Show resize grip" setting any more, and there must not be: the one
@@ -483,7 +495,7 @@ die · pull a target dummy.
 - After every one of these, `/mm debug diag` names the rule that decided in its `ShouldShow` line.
 - **Master enable off** (`/mm set enabled false`, or General → Enable Multi Meters) hides every
   window immediately and stops the addon reading the meter at all.
-- **Preview mode overrides context**: with preview on, the window shows wherever you are standing.
+- **Test mode overrides context**: with Test mode on, the window shows wherever you are standing.
 
 ### 8. Mythic+ pull — the secret-value path
 
@@ -622,8 +634,8 @@ a raider most wants to know what killed them is the moment they are still fighti
 - Hovering an **Avoidable Damage** cell draws **one line per spell and nothing else** — no
   "Avoidable" / "Avoidable, Deadly" sub-line beneath a bar, and no Overkill line. Every spell in that
   breakdown is avoidable by definition, so the tag restated the column once per row. Check this in
-  **test mode** (`/mm test`) especially: the preview detail sets both flags on alternating spells,
-  which is where the tags were most visible.
+  **Test mode** (`/mm test`) especially: its placeholder data sets both flags on alternating
+  spells, which is where the tags were most visible.
 - **Name tooltip** lists **every** tracked statistic for that player, including the ones this window
   is not showing. Each line wears **its own statistic's color, label and amount alike** — the same
   palette a bar takes under `bars.colorMode == "stat"`, and it wears it whatever that setting is
@@ -838,7 +850,7 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 /mm list                     /mm version
 /mm get window.frame.width   /mm set window.frame.width 520
 /mm reset window.frame.width /mm resetall
-/mm lock            /mm lock off        /mm preview        /mm preview on
+/mm lock            /mm lock off        /mm test            /mm test on
 /mm toggle          /mm toggle Meter
 /mm window list     /mm window new Raid /mm window copy Meter Raid
 /mm window delete Raid
@@ -864,7 +876,9 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 - `/mm toggle` with no name flips every window; with a name it flips one, and the name keeps its case
   and spacing.
 - `/mm lock` with no argument **toggles**; `/mm lock off` sets. Unlocking prints "unlocked — drag
-  them into place" and turns preview on.
+  them into place" and does **not** touch Test mode — the two used to be coupled
+  (`WindowManager:SetLocked` also flipped it on) and are not any more; ask for placeholder rows
+  with `/mm test` explicitly.
 - `/mm debug` toggles the console **window**; `/mm debug on|off` sets the logging **flag**. They are
   separate on purpose: logging runs with the console closed so a bug can be reproduced first and the
   log read afterwards.
@@ -930,7 +944,7 @@ switch back to Default → copy from Test → reset.
   libs/LibKa0s)"* — followed by what is unavailable.
 - `/mm config` says the settings panel is unavailable. `/mm list|get|set|reset|resetall` each name the
   missing library. `/mm perf` says performance measurement is unavailable.
-- **The host verbs still work**: `/mm lock`, `/mm preview`, `/mm toggle`, `/mm window list`,
+- **The host verbs still work**: `/mm lock`, `/mm test`, `/mm toggle`, `/mm window list`,
   `/mm reset-positions`. They never went to the library.
 - **`/mm resetall` still works.** The user whose panel will not open is exactly the user who needs
   "reset everything", and the schema loaded fine.
