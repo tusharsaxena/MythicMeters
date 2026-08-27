@@ -2165,9 +2165,10 @@ local TABBED = {
 test("Panel: every tabbed page opens on its first tab and draws a strip", function()
     -- red under: a page left on RenderSchema, or one whose renderer draws the strip after the
     -- rows so the band is reserved too late.
-    local L = NS.L
+    local inst = T.load()
+    local L = inst.NS.L
     for page, firstTab in pairs(TABBED) do
-        local ctx = T.showPage(page)
+        local ctx = showPage(inst, page)
         assertEqual(ctx.activeTab, L[firstTab], page .. ": opens on its first tab")
         assertTrue(#(ctx.__tabKids or {}) >= 2, page .. ": drew a strip")
     end
@@ -2177,29 +2178,43 @@ test("Panel: Profiles draws no strip", function()
     -- Its widget tree belongs to AceConfigDialog, which reuses it and re-reads the profile on
     -- every Open. A strip over that would be tabs this addon cannot fill.
     -- red under: adding profiles to the tabbed set for consistency's sake.
-    local ctx = T.showPage("profiles")
+    local inst = T.load()
+    local ctx = showPage(inst, "profiles")
     assertEqual(#(ctx.__tabKids or {}), 0)
 end)
 
 test("Panel: switching tabs re-renders without leaving the previous tab's widgets behind",
 function()
+    -- The Frame page's second tab is Rows. Asserting on the TAB rather than on a child count is
+    -- deliberate: a renderer that appended instead of clearing would still change the count, so
+    -- a count assertion passes for the wrong reason. What proves the clear is that a widget from
+    -- the tab we LEFT is gone.
     -- red under: rendering the new group without ClearScroll, which appends it under the old.
-    local ctx = T.showPage("frame")
-    local before = #ctx.scroll.children
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "frame")
+
+    local function labelled(name)
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            for _, child in ipairs(w.children or {}) do
+                if child.labelText == name then return true end
+            end
+        end
+        return false
+    end
+
+    assertTrue(labelled(L["Width"]), "the Frame page did not open on Size and position")
     ctx.__tabKids[2]:__fire("OnClick")
-    assertEqual(ctx.activeTab, NS.L["Rows"])
-    assertTrue(#ctx.scroll.children > 0)
-    assertTrue(#ctx.scroll.children ~= before or true, "the scroll was rebuilt, not appended to")
+    assertEqual(ctx.activeTab, L["Rows"])
+    assertTrue(labelled(L["Maximum rows"]), "the Rows tab did not render")
+    assertFalse(labelled(L["Width"]), "the previous tab's widgets were left behind")
 end)
 ```
 
-`T.showPage` may not exist. Check first:
-
-```sh
-grep -n 'showPage\|function T\.' tests/run.lua tests/test_options_panel.lua | head
-```
-
-If it does not, add a local helper to `test_options_panel.lua` that reaches the panel by its `PANEL_NAME` entry and fires `OnShow` — the file already does this for its lazy-render cases, so copy that helper rather than inventing a second one.
+`showPage(inst, pageKey)` is the file's own local at `tests/test_options_panel.lua:92` — it takes
+**two** arguments and drives the genuine deferred first render through `panelFor` (line 64). Use
+it as-is; do not add a second helper. Every case above builds its own instance with `T.load()`,
+matching the file's existing cases.
 
 - [ ] **Step 2: Run and confirm failure**
 
@@ -2259,18 +2274,21 @@ function()
     -- design, which would then have to be solved forever.
     -- red under: leaving the Active window dropdown on the Windows page, or bannering only some
     -- of the sub-pages.
+    local inst = T.load()
     local SUBPAGES = { "windows", "frame", "header", "bars", "tooltip", "visibility", "columns" }
     for _, page in ipairs(SUBPAGES) do
-        local ctx = T.showPage(page)
+        local ctx = showPage(inst, page)
         assertTrue(ctx.__bannerHeight ~= nil and ctx.__bannerHeight > 0,
             page .. ": drew no banner")
     end
 
+    -- The banner's own dropdown is parented into the chrome band, NOT added to the scroll, so
+    -- anything still carrying this label INSIDE the scroll is the old picker surviving.
     local dropdowns = 0
-    local ctx = T.showPage("windows")
-    for _, w in ipairs(ctx.scroll.children) do
+    local ctx = showPage(inst, "windows")
+    for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
         for _, child in ipairs(w.children or {}) do
-            if child.type == "Dropdown" and child.labelText == NS.L["Active window"] then
+            if child.type == "Dropdown" and child.labelText == inst.NS.L["Active window"] then
                 dropdowns = dropdowns + 1
             end
         end
@@ -2286,7 +2304,7 @@ test("Panel: choosing a window in the banner retargets every page and keeps the 
     assertTrue(inst.NS.WindowManager:Create("Second"))
     local list = inst.NS.Database.GetWindows()
 
-    local ctx = T.showPage("bars")
+    local ctx = showPage(inst, "bars")
     ctx.__tabKids[3]:__fire("OnClick")
     assertEqual(ctx.activeTab, inst.NS.L["Bar border"])
 
