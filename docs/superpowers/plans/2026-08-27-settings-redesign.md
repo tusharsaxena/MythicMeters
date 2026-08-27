@@ -2339,9 +2339,13 @@ H.WindowBanner = function(ctx)
         order = order,
         value = active and active.id,
         onSelect = function(id)
-            if not id or id == NS.State.activeWindowId then return end
-            NS.State.activeWindowId = id
-            if NS.RefreshOptionsPanel then NS.RefreshOptionsPanel(true) end
+            if not id or (NS.State and id == NS.State.activeWindowId) then return end
+            -- The SAME two calls the dropdown this replaces made, in the same order. Assigning
+            -- NS.State.activeWindowId here instead would be a second writer of the pointer that
+            -- skips whatever State.SetActiveWindow grows next, and afterRegistryChange is the
+            -- file's one name for "every panel is now looking at a different window".
+            if NS.State then NS.State.SetActiveWindow(id) end
+            afterRegistryChange()
         end,
     })
     -- Parked on the ctx so a suite can drive the selection the way a click would; the library
@@ -2352,13 +2356,11 @@ H.WindowBanner = function(ctx)
 end
 ```
 
-Confirm `NS.RefreshOptionsPanel`'s real name and its structural argument before writing the call:
-
-```sh
-grep -n 'RefreshOptionsPanel' settings/*.lua modules/*.lua core/*.lua | head
-```
-
-Use whatever the existing picker in `settings/Windows.lua` calls today — this is a move of that call, not a new one.
+`afterRegistryChange()` is this file's existing local at `settings/Windows.lua:203`; it wraps the
+argument-less `NS.RefreshOptionsPanel()`, which is `Helpers.RefreshAllPanels()`
+(`settings/OptionsSetup.lua:369`). **`NS.RefreshOptionsPanel` takes no argument** — do not pass
+one. `NS.State.SetActiveWindow(id)` is `core/State.lua:105`. All three already exist; this is a
+move of the dropdown's two-line handler, not a new one.
 
 - [ ] **Step 4: Rebuild the Windows page**
 
