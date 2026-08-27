@@ -52,10 +52,11 @@ meter window, the debug console and the perf step panel wear the same Ka0s edge 
 addon. Nine LibKa0s majors are consumed — Core, Media, Perf, DebugLog, Env, Pool, Slash, Options and
 Widgets. Eight are reached through a seam file of their own (`core/CoreSetup.lua`,
 `core/MediaSetup.lua`, `core/PerfSetup.lua`, `core/DebugLogSetup.lua`, `core/EnvSetup.lua`,
-`core/PoolSetup.lua`, `settings/Slash.lua`, `settings/OptionsSetup.lua`); Widgets is resolved at its
-one call site, `modules/Export.lua`, because the export modal is the only thing in the addon that
-builds a dropdown. Every one of the nine degrades rather than erroring when `libs/LibKa0s` is
-absent. Two of them pass the addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
+`core/PoolSetup.lua`, `settings/Slash.lua`, `settings/OptionsSetup.lua`); Widgets has no seam file and
+is resolved at each of its two call sites — `modules/Export.lua`, whose modal builds the addon's only
+dropdowns, and `settings/ColumnBlocks.lua`, whose block list is the library's `ReorderList` — because
+both widgets are built lazily on first use rather than wired at load. Every one of the nine degrades
+rather than erroring when `libs/LibKa0s` is absent. Two of them pass the addon's own **folder name** to the library (`core/CoreSetup.lua`'s `MakeCloseButton` wrapper and
 `core/DebugLogSetup.lua`'s descriptor), and a third gets there by accident of its own descriptor —
 `core/PerfSetup.lua` passes the folder name as `name`, which is what the perf panel's own close
 control is built from (`PerfPanel.lua` minor 4). This is why that file passes **no** `decorate` hook:
@@ -91,7 +92,7 @@ lifecycle: **[module-map.md](module-map.md)**. The shape at a glance:
 | `modules/` data | `Provider`, `Roster`, `Feign`, `Aggregator`, `Format` | Read → join → order → render as text. `Feign` is the one source row the addon deliberately discards. |
 | `modules/` display | `WindowManager`, `Window`, `HeaderControls`, `Row`, `Targets`, `Tooltip`, `DrillDown`, `Visibility`, `Minimap` | The registry, one window, one row, the enemy cross-reference, the two hover surfaces, the breakdown, the context predicate, the launcher. |
 | `modules/` output | `Export` | The segment a window is pointed at, as CSV or as ranked chat lines. Calls no meter API — it asks the aggregator, exactly as a window does. |
-| `settings/` | `Schema`, `Slash`, `OptionsSetup` + 9 pages | One schema drives the panel, the CLI and the defaults reset. |
+| `settings/` | `Schema`, `Slash`, `OptionsSetup`, `ColumnBlocks` + 9 pages | One schema drives the panel, the CLI and the defaults reset; `ColumnBlocks` is the Columns page's row, drawn into `LibKa0s-Widgets-1.0`'s `ReorderList`. |
 
 The path a number takes through those layers — the throttle, the GUID join, pet folding, the sort
 identity build, the formatter and the widget setters — is **[data-flow.md](data-flow.md)**. Read it before
@@ -652,9 +653,18 @@ Rows are shaped `| Rule | What differs | Why | Decided | Re-check trigger |`.
 | Rule | What differs | Why | Decided | Re-check trigger |
 |---|---|---|---|---|
 | debug-logging §8 — each recompute logged "as a single summary line" | A refresh pass whose summary line is **unchanged** from the previous pass is not logged. The line is emitted on every *change*, plus a heartbeat at most every 10s carrying `(xN)` for the passes it stood for. | `throttle = 0.25` is four passes a second, each emitting an `[Aggregator]` and a `[Render]` line (three while restricted) into a buffer capped at 500 lines (§1) — **the console holds 40 seconds**. (Measured 2026-08-21 against the cap of the day; LibKa0s v1.15.0 raised it to 1500, which buys two minutes rather than forty seconds and evicts the console just the same.) A live capture showed one identity line repeating byte-identically for 41 seconds: ~160 passes, ~480 lines, one string, evicting every other line in the buffer. That is the harm §9 names ("it **evicts** it") arriving by a route §9 does not cover: §9 bounds *per-item* emission and says nothing about a pass repeating unchanged on a timer. A change is never delayed and never dropped, so nothing a reader wants is what goes missing. Implementation and reasoning: `core/DebugLogSetup.lua` → the steady-state sink. | 2026-08-21 | debug-logging gains a rule for repeating timer-driven passes — the gap is general to any Ka0s addon with a refresh timer, so the standard is the right long-term home and this row retires the day it lands. |
-| options-ui — generic options widgets live in `LibKa0s-Options` | The drag-to-reorder block list is `settings/ColumnBlocks.lua`, private to this addon, rather than a `LibKa0s-Options` member beside `Section`, `TextRow`, `RenderGrid` and `InlineButtonPair`. | A LibKa0s widget re-vendors into every addon in the collection, so its API is expensive to change once shipped, and one consumer is not enough evidence to freeze a signature on — the first real page it serves is what tells you which parts of the signature were guesses. It is kept in its own file rather than inside `settings/Columns.lua` precisely so the promotion is a file move rather than an extraction. Tracked as [issue #21](https://github.com/tusharsaxena/MultiMeters/issues/21). | 2026-08-27 | Any addon in the collection adding a second user-orderable list. That is the second consumer the API needs; the widget moves to LibKa0s and this row retires. |
 
-**Two rows are ratified.** The register also carried a row for a root `TODO.md`
+**One row is ratified.** The register also carried a row for the drag-to-reorder block list living
+in `settings/ColumnBlocks.lua` rather than in LibKa0s, adopted because a library widget re-vendors
+into every addon in the collection and one consumer is not enough evidence to freeze a signature on.
+That row was retired on 2026-08-27, on precisely the re-check trigger it was written with:
+ConsumableMaster's priority list wanted the same gesture, the second consumer arrived, and the
+widget moved to `LibKa0s-Widgets-1.0` as `ReorderList` at minor 8 ([issue
+#21](https://github.com/tusharsaxena/MultiMeters/issues/21)). What moved was the gesture alone — the
+handle, the carried copy, the insertion line, the clamp; the row itself stayed here, because the two
+adopting lists draw nothing alike.
+
+**One row is ratified.** The register also carried a row for a root `TODO.md`
 holding work that was decided but unscheduled, adopted as a stopgap until the repo had an issue store.
 That row was retired on 2026-08-11 when the backlog moved to
 [GitHub issues](https://github.com/tusharsaxena/MultiMeters/issues), which is precisely the re-check
