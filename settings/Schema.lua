@@ -845,7 +845,7 @@ NS.Schema = {
         path = "window.header.bgColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 0.5 },
         page = "header", group = L["Title bar"],
-        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."],
+        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, on the Columns page."],
     },
     -- ── Title text ──────────────────────────────────────────────
     -- NO `header.colorMode` ROW, and no setting behind it. The title bar is ONE

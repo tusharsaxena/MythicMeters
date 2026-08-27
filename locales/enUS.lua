@@ -259,8 +259,8 @@ L["Set the font outline for the cell text, both header strips and the tooltip at
 L["Header height"] = "Header height"
 L["Height of the header strip in pixels."] = "Height of the header strip in pixels."
 L["Header background"] = "Header background"
-L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."] =
-    "Color drawn behind the title bar. The column-header strip has its own, under Column headers."
+L["Color drawn behind the title bar. The column-header strip has its own, on the Columns page."] =
+    "Color drawn behind the title bar. The column-header strip has its own, on the Columns page."
 L["Alignment"] = "Alignment"
 L["Where the header text sits horizontally."] = "Where the header text sits horizontally."
 
@@ -309,6 +309,7 @@ L["Bar color"] = "Bar color"
 L["Fill color used when the color mode is set to Custom color."] =
     "Fill color used when the color mode is set to Custom color."
 L["Bar background"] = "Bar background"
+L["Bar background color"] = "Bar background color"
 L["Color drawn behind the unfilled part of each bar."] =
     "Color drawn behind the unfilled part of each bar."
 L["Bar background opacity"] = "Bar background opacity"

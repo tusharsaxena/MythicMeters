@@ -800,23 +800,35 @@ test("Schema: a hidden row is filed under a tab that exists, and draws nothing",
     end
 end)
 
-test("Schema: every tab name is a localized string, not a bare literal", function()
+test("Schema: every tab name and row label is a localized string, not a bare literal", function()
     -- A tab label is now the most visible string on a page -- it is the heading AND the control
     -- you click -- and a group declared as a raw literal is a page that cannot be translated
     -- past its own headings. `L` answers its own key when a translation is missing, so the test
     -- is that the key EXISTS in the locale table rather than that the answer differs.
-    -- red under: adding a group as "Bar border" instead of L["Bar border"].
+    --
+    -- LABELS ARE WALKED TOO, and that is what this case is really for: a regroup moves `group`
+    -- and `label` in two different fields, and a retirement checked only the first can retire a
+    -- key still carrying the second -- exactly what happened to "Bar background color", which
+    -- retired as a group name while still labelling window.bars.bgColor and
+    -- window.tooltip.barBgColor. NOT `desc`: several desc strings were already missing their key
+    -- before this case existed, and asserting on them here would fail this suite on a pre-existing
+    -- gap this case is not the one to fix.
+    -- red under: adding a group as "Bar border" instead of L["Bar border"], or retiring a locale
+    -- key that is still a row's label.
     local inst = T.load()
     local NS = inst.NS
     local missing = {}
     for _, row in ipairs(NS.Schema) do
         if row.group and rawget(NS.L, row.group) == nil then
-            missing[#missing + 1] = row.group
+            missing[#missing + 1] = "group: " .. row.group
+        end
+        if row.label and rawget(NS.L, row.label) == nil then
+            missing[#missing + 1] = row.path .. " label: " .. row.label
         end
     end
     table.sort(missing)
     assertEqual(table.concat(missing, ", "), "",
-        "these group names are not in locales/enUS.lua")
+        "these strings are not in locales/enUS.lua")
 end)
 
 test("Schema: the active tab is session state and has no home in the schema", function()
@@ -853,6 +865,32 @@ function()
         assertFalse(row.path:find("^window%.columnHeader%.") and true or false,
             "the Header page kept a column-header row: " .. row.path)
     end
+end)
+
+
+test("Schema: the header controls are EDITED on Header and STORED under frame", function()
+    -- A row's page is where it is edited; its path is where it is stored, and the two are
+    -- allowed to disagree. Every one of these draws a control into the title bar, so a player
+    -- looks for them under Header -- but they are stored at `window.frame.*`, and renaming the
+    -- keys for symmetry would migrate every saved profile for a tidiness nobody can see.
+    -- red under: moving the group back to Frame, or renaming the paths to match the page.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+    local TABS = { [L["Window buttons"]] = true, [L["Meter buttons"]] = true,
+                   [L["Button style"]] = true }
+
+    local n = 0
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and TABS[row.group] then
+            n = n + 1
+            assertTrue(row.path:find("^window%.frame%.") ~= nil,
+                row.path .. " is a header control and must still be stored under frame")
+        end
+    end
+    -- Exactly 15: Window buttons (close/showMinimise/showLock/showSettings, plus the hidden
+    -- `window.frame.minimised`) + Meter buttons (4) + Button style (6). Walked over NS.Schema,
+    -- not SchemaForPage, so the hidden row counts.
+    assertEqual(n, 15, "the whole set moved, not one row of it")
 end)
 
 
