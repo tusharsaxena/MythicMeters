@@ -21,7 +21,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Options-1.0", 12
+local MAJOR, MINOR = "LibKa0s-Options-1.0", 13
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -136,9 +136,6 @@ lib.LAYOUT = {
   -- INTERNAL: TAB_MIN_W — floor width of one tab, and the width every tab takes when the label
   -- cannot be measured (a headless harness, a font not yet loaded); never read by a host.
   TAB_MIN_W     = 60,
-  -- INTERNAL: TAB_ROW_GAP — vertical gap between two wrapped rows of tabs, consumed by
-  -- O.TabStrip alone; a host reads the finished band height off O.TAB_H instead.
-  TAB_ROW_GAP   = 2,
 
   -- The gap below the banner, the hairline rule under it, and the gap below THAT before the tab
   -- strip begins (options-ui-§14). Three numbers rather than one, because the rule wants to sit
@@ -151,11 +148,26 @@ lib.LAYOUT = {
   CHROME_DIVIDER_GAP_TOP    = 6,
   CHROME_DIVIDER_H          = 1,
   CHROME_DIVIDER_GAP_BOTTOM = 6,
-  -- The page content box's bottom inset (options-ui-§13). The scroll and the panel behind it
-  -- share it, so the art cannot end anywhere but where the content does.
-  -- INTERNAL: CONTENT_BOTTOM — both consumers (anchorScroll here, drawContentPanel in
-  -- OptionsWidgets.lua) are inside this major; no host anchors its own scroll.
+  -- The scroll's bottom inset within the body.
+  -- INTERNAL: CONTENT_BOTTOM — anchorScroll is the only consumer; no host anchors its own scroll.
   CONTENT_BOTTOM = 8,
+
+  -- The content box's own insets within the body (options-ui-§13), and they are deliberately
+  -- SMALLER than the content column's. The box has to sit OUTSIDE everything it contains: the
+  -- page's widgets start at CONTENT_LEFT, and AceGUI's always-shown scrollbar sits outboard of
+  -- CONTENT_RIGHT, so a box drawn on the content column's own edges is a box the scrollbar is
+  -- painted on top of and the left-hand labels butt against. That is what shipped at 12.11.3.
+  --
+  -- The tab strip stays on the content column, which puts the leftmost tab a few pixels inside
+  -- the box's left edge -- OPie's arrangement, and the reason its tabs read as sitting ON the
+  -- panel rather than as being the panel's top row.
+  -- INTERNAL: PANEL_LEFT — drawContentPanel in OptionsWidgets.lua is the only consumer; no host
+  -- draws its own content box.
+  -- INTERNAL: PANEL_RIGHT — same reason as PANEL_LEFT.
+  -- INTERNAL: PANEL_BOTTOM — same reason as PANEL_LEFT.
+  PANEL_LEFT    = 4,
+  PANEL_RIGHT   = 4,
+  PANEL_BOTTOM  = 2,
 }
 
 local L = lib.LAYOUT

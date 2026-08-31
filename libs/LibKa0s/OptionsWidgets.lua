@@ -12,7 +12,7 @@
 local lib = LibStub and LibStub("LibKa0s-Options-1.0", true)
 if not lib then return end
 
-local WIDGETS_MINOR = 11
+local WIDGETS_MINOR = 12
 -- Paired on the SHELL's minor as well as this file's own — see OptionsScroll.lua for why the
 -- file's own counter is not enough.
 if lib.__widgetsMinor and lib.__widgetsMinor >= WIDGETS_MINOR
@@ -408,11 +408,21 @@ end
 --- The three atlas slices: two end caps at their NATURAL atlas size, and a middle stretched
 --- horizontally between their inner edges. A tab narrower than the two caps would draw them
 --- overlapping rather than tearing, which is why TAB_MIN_W is comfortably wider than either.
+---
+--- Returns the ART's height, which is NOT the button's. The art is anchored to the button's
+--- BOTTOM and takes the atlas's own size, so a 37px button carrying 28px of art has nine empty
+--- pixels along its top. That number is only knowable from the client -- an atlas has no size
+--- until one is resolved -- and it is what a second row of tabs has to be packed by, or the empty
+--- strip is drawn as a gap between the rows.
+--- @return number|nil  the cap atlas's height in pixels, or nil where none can be measured
 local function drawTabSlices(b, atlas)
+  local artH
   local left = tabTexture(b, "BACKGROUND")
   if left then
     if left.SetAtlas then left:SetAtlas(atlas[1], true) end
     left:SetPoint("BOTTOMLEFT")
+    local h = left.GetHeight and left:GetHeight()
+    if type(h) == "number" and h > 0 then artH = h end
   end
 
   local right = tabTexture(b, "BACKGROUND")
@@ -427,6 +437,8 @@ local function drawTabSlices(b, atlas)
     mid:SetPoint("TOPLEFT",  left,  "TOPRIGHT")
     mid:SetPoint("TOPRIGHT", right, "TOPLEFT")
   end
+
+  return artH
 end
 
 --- The dark backing behind the label, inset so it never touches the caps' lit edges. It stops
@@ -460,11 +472,19 @@ end
 --- ceiling the release gate enforces. Every texture is a child of `b`, so they share the button's
 --- lifecycle: releaseLedger hides and unparents `b` and the art goes with it -- no separate
 --- ledger entry needed for any of them.
+--- @return number|nil  the art's own height, for the strip to pack its rows by
 local function drawTabArt(b, active)
-  drawTabSlices(b, TAB_ATLAS[active])
+  local artH = drawTabSlices(b, TAB_ATLAS[active])
   drawTabFill(b, active)
   drawTabGlow(b, "HIGHLIGHT",  nil, TAB_HL_TOP,  not active)
   drawTabGlow(b, "BACKGROUND", -1,  TAB_SEL_TOP, active)
+
+  -- The empty strip along the button's top is not part of the tab and must not be clickable:
+  -- a wrapped strip packs the next row by the ART's height, so row 2's button overlaps row 1's
+  -- art by exactly that many pixels, and without this it would swallow clicks meant for row 1.
+  if artH and b.SetHitRectInsets then b:SetHitRectInsets(0, 0, L.TAB_H - artH, 0) end
+
+  return artH
 end
 
 --- The tab's label, anchored to the tab's BOTTOM rather than its centre.
@@ -509,9 +529,14 @@ local function drawContentPanel(ctx)
     local level = ctx.body:GetFrameLevel()
     if type(level) == "number" then panel:SetFrameLevel(level) end
   end
-  panel:SetPoint("TOPLEFT",  ctx.chrome, "BOTTOMLEFT",  0, 0)
-  panel:SetPoint("TOPRIGHT", ctx.chrome, "BOTTOMRIGHT", 0, 0)
-  panel:SetPoint("BOTTOM",   ctx.body,   "BOTTOM",      0, L.CONTENT_BOTTOM)
+  -- Vertically it hangs off the chrome, so it follows the band when a strip wraps to a second
+  -- row. Horizontally it is anchored to the BODY, not the chrome: the box has to be wider than
+  -- the content column it encloses, or the scrollbar is painted on its right edge and the
+  -- left-hand labels butt against its left one.
+  panel:SetPoint("TOPLEFT",     ctx.chrome, "BOTTOMLEFT",  -(L.CONTENT_LEFT - L.PANEL_LEFT), 0)
+  panel:SetPoint("TOPRIGHT",    ctx.chrome, "BOTTOMRIGHT",   L.CONTENT_RIGHT - L.PANEL_RIGHT, 0)
+  panel:SetPoint("BOTTOMLEFT",  ctx.body,   "BOTTOMLEFT",    L.PANEL_LEFT,  L.PANEL_BOTTOM)
+  panel:SetPoint("BOTTOMRIGHT", ctx.body,   "BOTTOMRIGHT",  -L.PANEL_RIGHT, L.PANEL_BOTTOM)
 
   -- Two halves meeting at the panel's midpoint, the left one mirrored by a reversed u range.
   local leftHalf = panel.CreateTexture and panel:CreateTexture(nil, "BACKGROUND")
@@ -683,12 +708,12 @@ function lib.__AttachWidgets(O, d)
   --- `top` is the band already spoken for above the strip (the banner's height, or 0).
   --- @return table  { { index, x, y, width } … }, in tab order
   --- @return number the number of rows the strip wrapped into
-  function O.__tabPlacement(widths, available, gap, top, tabH, rowGap)
+  function O.__tabPlacement(widths, available, gap, top, rowPitch)
     local rows = O.__layoutTabs(widths, available, gap)
     local out = {}
     for r, indices in ipairs(rows) do
       local x = 0
-      local y = -(top + (r - 1) * (tabH + rowGap))
+      local y = -(top + (r - 1) * rowPitch)
       for _, i in ipairs(indices) do
         out[#out + 1] = { index = i, x = x, y = y, width = widths[i] }
         x = x + widths[i] + gap
@@ -721,9 +746,9 @@ function lib.__AttachWidgets(O, d)
   --- pixel here for a hairline it drew itself; the panel replaced the hairline, and the pixel
   --- went with it -- a panel drawn BELOW the band must not also be reserved INSIDE it.
   --- @return number  the band height to reserve, banner included
-  function O.__tabBand(top, rowCount, tabH, rowGap)
+  function O.__tabBand(top, rowCount, tabH, rowPitch)
     rowCount = math.max(tonumber(rowCount) or 1, 1)
-    return top + (rowCount * tabH) + ((rowCount - 1) * rowGap)
+    return top + ((rowCount - 1) * rowPitch) + tabH
   end
 
   --- Hide, unparent and forget every widget in one of a page's chrome ledgers.
@@ -785,7 +810,7 @@ function lib.__AttachWidgets(O, d)
     end
 
     setTabLabel(b, active, tab.label)
-    drawTabArt(b, active)
+    local artH = drawTabArt(b, active)
 
     b:SetEnabled(not active)
     b:SetScript("OnClick", function()
@@ -799,7 +824,7 @@ function lib.__AttachWidgets(O, d)
     end)
     if tab.tooltip then O.AttachTooltip(b, tab.label, tab.tooltip) end
 
-    return b, labelWidth(b.GetFontString and b:GetFontString())
+    return b, labelWidth(b.GetFontString and b:GetFontString()), artH
   end
 
   --- Pack `buttons` into their wrapped rows, draw the baseline under the last one, and reserve
@@ -820,12 +845,23 @@ function lib.__AttachWidgets(O, d)
     return w
   end
 
+  --- How far apart two rows of tabs sit: the ART's height, so a wrapped row is FLUSH with the
+  --- one above it rather than separated by the empty strip along each button's top. Falls back to
+  --- the button height where nothing can be measured -- a headless harness, or a client that
+  --- answered no size for the atlas -- which is the pre-measurement behavior with no gap.
+  local function rowPitch(ctx)
+    local h = ctx.__tabArtH
+    if type(h) ~= "number" or h <= 0 or h > L.TAB_H then return L.TAB_H end
+    return h
+  end
+
   local function placeTabs(ctx, buttons, widths, available)
     ctx.__tabPlacedAt = available
 
     local top = ctx.__bannerHeight or 0
+    local pitch = rowPitch(ctx)
     local placement, rowCount =
-      O.__tabPlacement(widths, available, L.TAB_GAP, top, L.TAB_H, L.TAB_ROW_GAP)
+      O.__tabPlacement(widths, available, L.TAB_GAP, top, pitch)
     for _, p in ipairs(placement) do
       local b = buttons[p.index]
       b:SetWidth(p.width)
@@ -834,7 +870,7 @@ function lib.__AttachWidgets(O, d)
       b:Show()
     end
 
-    O.SetChromeHeight(ctx, O.__tabBand(top, rowCount, L.TAB_H, L.TAB_ROW_GAP))
+    O.SetChromeHeight(ctx, O.__tabBand(top, rowCount, L.TAB_H, pitch))
   end
 
   --- Re-run the wrap the first time the chrome learns how wide it actually is.
@@ -884,10 +920,12 @@ function lib.__AttachWidgets(O, d)
     ctx.__tabLayout = nil
 
     local buttons, widths = {}, {}
+    ctx.__tabArtH = nil
     for i, tab in ipairs(spec.tabs) do
-      local b, w = makeTab(ctx, tab, tab.key == spec.value, spec.onSelect)
+      local b, w, artH = makeTab(ctx, tab, tab.key == spec.value, spec.onSelect)
       buttons[i] = b
       widths[i]  = w
+      ctx.__tabArtH = ctx.__tabArtH or artH
       ctx.__tabKids[#ctx.__tabKids + 1] = b
     end
 
