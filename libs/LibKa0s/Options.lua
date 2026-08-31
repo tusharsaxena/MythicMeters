@@ -21,7 +21,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Options-1.0", 11
+local MAJOR, MINOR = "LibKa0s-Options-1.0", 12
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -112,7 +112,12 @@ lib.LAYOUT = {
   CHROME_GAP    = 8,
   -- Height of one row of tabs. PUBLISHED as O.TAB_H: a host that measures its own strip -- to
   -- reserve the band before drawing into it -- has no other way to read the number.
-  TAB_H         = 24,
+  --
+  -- Taller than the art it carries, on purpose. The bottom of a tab is a FOOT that overlaps the
+  -- content panel's top edge, which is what makes the selected tab merge into the page instead of
+  -- floating above it; the label is therefore anchored to the tab's bottom rather than centred.
+  -- OPie's number, from the reference implementation named in OptionsWidgets.lua's art section.
+  TAB_H         = 37,
   -- Floor and fallback for the page banner's height. PUBLISHED as O.BANNER_H, same reason as
   -- TAB_H. PageBanner measures the dropdown's own frame and uses that when it is a taller
   -- number than this; this is what a headless harness (GetHeight answers 0) and any real
@@ -120,10 +125,11 @@ lib.LAYOUT = {
   -- label renders above the control and pushes the whole widget past a bare control's height.
   BANNER_H      = 44,
   -- INTERNAL: TAB_PAD_X — horizontal padding inside one tab, consumed by O.TabStrip when it
-  -- sizes a button around its measured label; no host draws a tab itself. Wide enough that the
-  -- label clears the 20px end caps of the client tab art the strip is drawn from: at 12 the text
-  -- sat on the rounded shoulder, which is what made a bordered rectangle out of a tab.
-  TAB_PAD_X     = 18,
+  -- sizes a button around its measured label; no host draws a tab itself. 20 a side is OPie's
+  -- `GetStringWidth() + 40`, and it is the number that stops a label sitting on the atlas's end
+  -- cap. It has been too small twice: at 12 the text sat on the cap outright, at 18 it cleared it
+  -- but left the tabs looking cramped next to every other tab strip in the client.
+  TAB_PAD_X     = 20,
   -- INTERNAL: TAB_GAP — horizontal gap between two tabs on one row, consumed by O.TabStrip and
   -- by O.__layoutTabs; a host that needed it would be laying out its own strip.
   TAB_GAP       = 4,
@@ -145,11 +151,11 @@ lib.LAYOUT = {
   CHROME_DIVIDER_GAP_TOP    = 6,
   CHROME_DIVIDER_H          = 1,
   CHROME_DIVIDER_GAP_BOTTOM = 6,
-  -- The 1px baseline under the whole tab strip -- the tab/content separator (options-ui-§13) --
-  -- reserved as band height so the first row of settings does not sit under it.
-  -- INTERNAL: TAB_BASELINE_H — consumed by O.TabStrip alone, which draws the baseline and
-  -- reserves it in the same call; no host draws its own strip.
-  TAB_BASELINE_H = 1,
+  -- The page content box's bottom inset (options-ui-§13). The scroll and the panel behind it
+  -- share it, so the art cannot end anywhere but where the content does.
+  -- INTERNAL: CONTENT_BOTTOM — both consumers (anchorScroll here, drawContentPanel in
+  -- OptionsWidgets.lua) are inside this major; no host anchors its own scroll.
+  CONTENT_BOTTOM = 8,
 }
 
 local L = lib.LAYOUT
@@ -463,7 +469,7 @@ function lib:New(d)
     if not f then return end
     f:ClearAllPoints()
     f:SetPoint("TOPLEFT",     ctx.body, "TOPLEFT",     L.CONTENT_LEFT, -O.__scrollTopInset(ctx))
-    f:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -L.CONTENT_RIGHT, 8)
+    f:SetPoint("BOTTOMRIGHT", ctx.body, "BOTTOMRIGHT", -L.CONTENT_RIGHT, L.CONTENT_BOTTOM)
   end
 
   --- Reserve `height` pixels of pinned furniture above the scroll, and move a live scroll to

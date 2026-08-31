@@ -12,7 +12,7 @@
 local lib = LibStub and LibStub("LibKa0s-Options-1.0", true)
 if not lib then return end
 
-local WIDGETS_MINOR = 10
+local WIDGETS_MINOR = 11
 -- Paired on the SHELL's minor as well as this file's own — see OptionsScroll.lua for why the
 -- file's own counter is not enough.
 if lib.__widgetsMinor and lib.__widgetsMinor >= WIDGETS_MINOR
@@ -322,41 +322,53 @@ end
 
 -- ── tab strip art (options-ui-§13) ──────────────────────────────────────────────────────────
 --
--- The CLIENT'S OWN three-slice options-tab art, not color rectangles. These are the two files
--- the client's own tab template cuts its tabs from, and they are live on 12.x -- HidingBar's
--- options panel draws its tab strip from exactly this pair today. A strip built on them inherits
--- the rounded shoulders and the light gray edge the rest of the UI has, rather than asserting a
--- gold vocabulary of its own.
+-- The CLIENT'S OWN modern tab atlases, and the client's own inner-frame art under them. Every
+-- number and every anchor below is lifted from OPie's `Libs/TenSettings.lua` (`minitab_new`,
+-- `minitab_select`, `container_new`), which is the reference implementation this strip is meant
+-- to look like -- with one deliberate departure: OPie chains its tabs rightward from the frame's
+-- right edge, and this strip packs them left to right, because a wrapping strip has to grow
+-- downward from a fixed origin and the left edge is the one our content column already uses.
 --
--- This is the one place in this file that prefers a Blizzard texture to a drawn one, and the
--- reason is that the look is the requirement: a tab is a piece of client chrome a player already
--- recognizes, and an approximation of it reads as a near-miss in a way a drawn slider or a drawn
--- section rule never does.
-local TAB_ART_ACTIVE   = "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab"
-local TAB_ART_INACTIVE = "Interface\\OptionsFrame\\UI-OptionsFrame-InActiveTab"
--- The client's tab hover glow, drawn additively over the tab's face.
-local TAB_ART_HILIGHT  = "Interface\\PaperDollInfoFrame\\UI-Character-Tab-Highlight"
--- Both tab files are 128px wide with a 20px end cap at each end: 20/128 = 0.15625, and the right
--- cap begins at 1 - that. The middle slice stretches between the two caps, which is why a tab
--- narrower than 2 * TAB_CAP_W would draw its caps overlapping -- and why TAB_MIN_W is wider.
-local TAB_CAP_W        = 20
-local TAB_CAP_U        = 0.15625
--- How far the SELECTED tab's art hangs below the row, in pixels, so its foot covers the strip's
--- baseline and the tab merges into the page under it. That merge is the single detail that makes
--- a row of buttons read as tabs, and 3 is Blizzard's own number: the client's tab template
--- anchors its selected art from the BOTTOM at -3.
-local TAB_ART_DROP     = 3
--- The label sits below the button's geometric center, because the art's own bottom few pixels
--- are drawn as a shadow rather than as face. Also Blizzard's number, and for the same reason.
-local TAB_LABEL_DROP   = 3
+-- Copied rather than approximated on purpose. A tab is a piece of client chrome a player already
+-- recognizes, so a near-miss reads worse than a drawn control that never claimed to be one --
+-- which is exactly how the previous two attempts here failed: first flat fills with gold borders,
+-- then the OLD `Interface/OptionsFrame/` tab textures, whose sloped transparent shoulders made a
+-- 4px gap look like twelve.
+local TAB_ATLAS = {
+  [false] = { "Options_Tab_Left",        "Options_Tab_Middle",        "Options_Tab_Right"        },
+  [true]  = { "Options_Tab_Active_Left", "Options_Tab_Active_Middle", "Options_Tab_Active_Right" },
+}
+-- The page's content box. Its TOP EDGE is the tab/content separator (options-ui-§13) -- there is
+-- no hairline rule any more, because in this design the divider is a real panel edge that the
+-- selected tab's foot sits on, which is the whole reason the strip reads as attached to the page
+-- rather than floating above it.
+local PANEL_ATLAS = "Options_InnerFrame"
+-- The atlas is one piece of frame art with the good corner on its right, so it is drawn TWICE --
+-- each half spanning an outer edge to the panel's midpoint, the left half horizontally MIRRORED
+-- by a reversed u range. That is what keeps both corners crisp instead of stretching one across
+-- the whole width. OPie's trick and OPie's numbers.
+local PANEL_SEAM_U = 0.64
+
+-- Per-state geometry, all of it OPie's. The label rides 2px higher on the selected tab, and the
+-- dark backing stops 3px lower, so a selected tab reads as standing slightly proud of the row.
+local TAB_LABEL_Y = { [false] = 6,   [true] = 8   }
+local TAB_BG_TOP  = { [false] = -15, [true] = -12 }
+-- The hover glow and the selected glow are the same gradient at different heights; which of the
+-- two is visible is a color-texture toggle, not a Show/Hide, because they live on different
+-- layers (HIGHLIGHT vs BACKGROUND) and only the HIGHLIGHT one is drawn on mouseover at all.
+local TAB_HL_TOP   = 12
+local TAB_SEL_TOP  = 16
+local TAB_BG_INSET = 2
+
+local TAB_BG_BOTTOM_COLOR = { r = 0.10, g = 0.10, b = 0.10, a = 0.85 }
+local TAB_BG_TOP_COLOR    = { r = 0.15, g = 0.15, b = 0.15, a = 0.85 }
+local TAB_GLOW_BOTTOM     = { r = 1,    g = 1,    b = 1,    a = 0.15 }
+local TAB_GLOW_TOP        = { r = 0,    g = 0,    b = 0,    a = 0    }
 
 -- The banner/strip hairline keeps a dim-gold, low-alpha treatment (options-ui-§14): a separator
--- between two pieces of chrome should disappear rather than read.
+-- between two pieces of chrome should disappear rather than read. It is the LAST drawn rule in
+-- this file -- the strip's own separator became the content panel's edge.
 local CHROME_RULE_COLOR   = { 1, 0.82, 0, 0.16 }
--- The strip's baseline is NOT that. It is the top edge of the content area -- the line the
--- selected tab breaks through -- so it is drawn in the same neutral gray the client borders a
--- panel with, and the tabs sit on something that looks like a panel instead of on a gold rule.
-local TAB_BASELINE_COLOR  = { 0.5, 0.5, 0.5, 0.8 }
 
 --- Create and color one 1px edge texture. Guarded like every other texture path in this file --
 --- a headless mock's CreateTexture can answer an inert table with no SetColorTexture -- so a
@@ -368,67 +380,157 @@ local function edgeTexture(parent, layer, color)
   return tex
 end
 
---- Create one slice of a tab's three-slice art, or nil when this frame cannot make textures.
+--- Create one texture on `b`, or nil when this frame cannot make them.
 ---
---- Guarded the way edgeTexture is, and for the same reason: a headless mock's CreateTexture can
---- answer an inert table, so a caller gets nil rather than a half-built texture to position.
-local function artTexture(b, file, u1, u2)
-  local tex = b.CreateTexture and b:CreateTexture(nil, "BACKGROUND")
-  if not (tex and tex.SetTexture and tex.SetTexCoord) then return nil end
-  tex:SetTexture(file)
-  tex:SetTexCoord(u1, u2, 0, 1)
+--- Guarded like every other texture path in this file: a headless mock's CreateTexture can answer
+--- an inert table, so a caller gets nil rather than a half-built texture to keep positioning.
+local function tabTexture(b, layer, sublevel)
+  local tex = b.CreateTexture and b:CreateTexture(nil, layer, nil, sublevel)
+  if not (tex and tex.SetPoint) then return nil end
   return tex
 end
 
---- Draw one tab button's art: two fixed end caps and a middle stretched between them, cut from
---- the client's own options-tab file (TAB_ART_ACTIVE / TAB_ART_INACTIVE).
----
---- Lifted out of makeTab so that function keeps to its own six unrelated decisions rather than
---- growing with the art. The three textures are children of `b`, so they share the button's
---- lifecycle: releaseLedger hides and unparents `b`, and every slice goes with it -- no separate
---- ledger entry needed for them.
----
---- The selected tab is not merely a different color. Its art is drawn TAB_ART_DROP lower, so
---- its foot covers the strip's baseline and it joins the page below; an unselected tab sits on
---- that baseline instead. Nothing tints either file -- the gray edge and the rounded shoulders
---- are the point of using them.
-local function drawTabArt(b, active)
-  local file = active and TAB_ART_ACTIVE or TAB_ART_INACTIVE
-  local drop = active and TAB_ART_DROP or 0
+--- Apply a vertical gradient, bottom color first. Split out only because every call site needs
+--- the same two guards and the modern table-color signature is easy to get subtly wrong.
+local function gradient(tex, bottom, top)
+  if tex and tex.SetGradient then tex:SetGradient("VERTICAL", bottom, top) end
+end
 
-  local left = artTexture(b, file, 0, TAB_CAP_U)
+--- Show or hide one of the two glow textures. They are toggled by color rather than by
+--- Show/Hide because that is how OPie does it and because a hidden HIGHLIGHT texture and a
+--- transparent one are not the same thing to the mouseover machinery.
+local function setGlow(tex, on)
+  if tex and tex.SetColorTexture then
+    if on then tex:SetColorTexture(1, 1, 1, 1) else tex:SetColorTexture(0, 0, 0, 0) end
+  end
+end
+
+--- The three atlas slices: two end caps at their NATURAL atlas size, and a middle stretched
+--- horizontally between their inner edges. A tab narrower than the two caps would draw them
+--- overlapping rather than tearing, which is why TAB_MIN_W is comfortably wider than either.
+local function drawTabSlices(b, atlas)
+  local left = tabTexture(b, "BACKGROUND")
   if left then
-    left:SetSize(TAB_CAP_W, L.TAB_H)
-    left:SetPoint("TOPLEFT", b, "TOPLEFT", 0, -drop)
+    if left.SetAtlas then left:SetAtlas(atlas[1], true) end
+    left:SetPoint("BOTTOMLEFT")
   end
 
-  local right = artTexture(b, file, 1 - TAB_CAP_U, 1)
+  local right = tabTexture(b, "BACKGROUND")
   if right then
-    right:SetSize(TAB_CAP_W, L.TAB_H)
-    right:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0, -drop)
+    if right.SetAtlas then right:SetAtlas(atlas[3], true) end
+    right:SetPoint("BOTTOMRIGHT")
   end
 
-  -- The only slice with no fixed width: it spans whatever the measured label left between the
-  -- two caps. Anchored to the caps rather than to the button so the three move as one piece.
-  local mid = artTexture(b, file, TAB_CAP_U, 1 - TAB_CAP_U)
+  local mid = tabTexture(b, "BACKGROUND")
   if mid and left and right then
-    mid:SetHeight(L.TAB_H)
+    if mid.SetAtlas then mid:SetAtlas(atlas[2], true) end
     mid:SetPoint("TOPLEFT",  left,  "TOPRIGHT")
     mid:SetPoint("TOPRIGHT", right, "TOPLEFT")
   end
 end
 
---- Give a tab the client's hover glow, inset so it lights the tab's face rather than its
---- shoulders. A disabled button draws no highlight, which is what keeps the SELECTED tab -- the
---- disabled one -- from glowing under the cursor.
-local function drawTabHighlight(b)
-  if not b.SetHighlightTexture then return end
-  b:SetHighlightTexture(TAB_ART_HILIGHT, "ADD")
-  local hl = b.GetHighlightTexture and b:GetHighlightTexture()
-  if not (hl and hl.ClearAllPoints and hl.SetPoint) then return end
-  hl:ClearAllPoints()
-  hl:SetPoint("LEFT",  b, "LEFT",   10, -(TAB_LABEL_DROP + 1))
-  hl:SetPoint("RIGHT", b, "RIGHT", -10, -(TAB_LABEL_DROP + 1))
+--- The dark backing behind the label, inset so it never touches the caps' lit edges. It stops
+--- 3px higher on the selected tab, which is half of how the two states differ.
+local function drawTabFill(b, active)
+  local bg = tabTexture(b, "BACKGROUND", -2)
+  if not bg then return end
+  bg:SetPoint("BOTTOMLEFT", TAB_BG_INSET, 0)
+  bg:SetPoint("TOPRIGHT", -TAB_BG_INSET, TAB_BG_TOP[active])
+  if bg.SetColorTexture then bg:SetColorTexture(1, 1, 1, 1) end
+  gradient(bg, TAB_BG_BOTTOM_COLOR, TAB_BG_TOP_COLOR)
+end
+
+--- One of the two glows. They are the same gradient at different heights on different layers:
+--- the HIGHLIGHT one is drawn by the client on mouseover only, the BACKGROUND one is lit for as
+--- long as the tab is selected. Only one is ever on, which is why `on` is a parameter rather
+--- than a second function.
+local function drawTabGlow(b, layer, sublevel, top, on)
+  local tex = tabTexture(b, layer, sublevel)
+  if not tex then return end
+  tex:SetPoint("BOTTOMLEFT", TAB_BG_INSET, 0)
+  tex:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", -TAB_BG_INSET, top)
+  setGlow(tex, on)
+  gradient(tex, TAB_GLOW_BOTTOM, TAB_GLOW_TOP)
+end
+
+--- Draw one tab button's art: three atlas slices, a dark backing, and the two glows.
+---
+--- Split four ways rather than written straight through, because every texture path in this file
+--- carries the same two guards and a single function wearing all of them measured past the CCN
+--- ceiling the release gate enforces. Every texture is a child of `b`, so they share the button's
+--- lifecycle: releaseLedger hides and unparents `b` and the art goes with it -- no separate
+--- ledger entry needed for any of them.
+local function drawTabArt(b, active)
+  drawTabSlices(b, TAB_ATLAS[active])
+  drawTabFill(b, active)
+  drawTabGlow(b, "HIGHLIGHT",  nil, TAB_HL_TOP,  not active)
+  drawTabGlow(b, "BACKGROUND", -1,  TAB_SEL_TOP, active)
+end
+
+--- The tab's label, anchored to the tab's BOTTOM rather than its centre.
+---
+--- A tab is taller than its text by design -- the extra height is the foot that overlaps the
+--- content panel -- so a centred label would float in the middle of the overlap instead of
+--- sitting on the tab's face. The selected tab lifts its label 2px and brightens the font, which
+--- is the other half of how the two states differ.
+local function setTabLabel(b, active, text)
+  local fs = b.CreateFontString and b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  if fs and b.SetFontString then
+    b:SetFontString(fs)
+    if fs.ClearAllPoints then fs:ClearAllPoints() end
+    if fs.SetPoint then fs:SetPoint("BOTTOM", 0, TAB_LABEL_Y[active]) end
+  end
+  b:SetNormalFontObject(active and _G.GameFontHighlightSmall or _G.GameFontNormalSmall)
+  b:SetHighlightFontObject(_G.GameFontHighlightSmall)
+  b:SetDisabledFontObject(_G.GameFontHighlightSmall)
+  if b.SetPushedTextOffset then b:SetPushedTextOffset(0, 0) end
+  b:SetText(text or "")
+end
+
+--- The page's content box (options-ui-§13): the client's inner-frame art, spanning the content
+--- column from the bottom of the chrome band to the bottom of the page.
+---
+--- **Its top edge is the tab/content separator.** The strip draws no rule of its own — the
+--- selected tab's foot lands on this panel's top edge and merges into it, which is the whole
+--- reason a row of buttons reads as tabs attached to a page rather than as chrome floating above
+--- one. A 1px line cannot do that job; it was tried, and it read as disconnected.
+---
+--- Drawn only by TabStrip, so an UNTABBED page — every page in eight of the nine consumers — is
+--- untouched and keeps rendering exactly as it always has.
+---
+--- The frame is parented to `ctx.body` and anchored to `ctx.chrome`'s bottom, so it follows the
+--- band automatically when a strip wraps to a second row. It is forced to the body's OWN frame
+--- level: a child frame otherwise sits one level above its parent, which would put this art in
+--- front of the scroll it is supposed to sit behind.
+local function drawContentPanel(ctx)
+  if not (ctx.body and ctx.chrome) then return end
+  local panel = CreateFrame("Frame", nil, ctx.body)
+  if panel.SetFrameLevel and ctx.body.GetFrameLevel then
+    local level = ctx.body:GetFrameLevel()
+    if type(level) == "number" then panel:SetFrameLevel(level) end
+  end
+  panel:SetPoint("TOPLEFT",  ctx.chrome, "BOTTOMLEFT",  0, 0)
+  panel:SetPoint("TOPRIGHT", ctx.chrome, "BOTTOMRIGHT", 0, 0)
+  panel:SetPoint("BOTTOM",   ctx.body,   "BOTTOM",      0, L.CONTENT_BOTTOM)
+
+  -- Two halves meeting at the panel's midpoint, the left one mirrored by a reversed u range.
+  local leftHalf = panel.CreateTexture and panel:CreateTexture(nil, "BACKGROUND")
+  if leftHalf and leftHalf.SetAtlas and leftHalf.SetTexCoord then
+    leftHalf:SetAtlas(PANEL_ATLAS)
+    leftHalf:SetPoint("TOPLEFT")
+    leftHalf:SetPoint("BOTTOMRIGHT", panel, "BOTTOM", 0, 0)
+    leftHalf:SetTexCoord(1, PANEL_SEAM_U, 0, 1)
+  end
+
+  local rightHalf = panel.CreateTexture and panel:CreateTexture(nil, "BACKGROUND")
+  if rightHalf and rightHalf.SetAtlas and rightHalf.SetTexCoord then
+    rightHalf:SetAtlas(PANEL_ATLAS)
+    rightHalf:SetPoint("TOPRIGHT")
+    rightHalf:SetPoint("BOTTOMLEFT", panel, "BOTTOM", 0, 0)
+    rightHalf:SetTexCoord(PANEL_SEAM_U, 1, 0, 1)
+  end
+
+  ctx.__tabKids[#ctx.__tabKids + 1] = panel
 end
 
 --- The hairline rule between the banner and the tab strip (options-ui-§14), spanning the
@@ -443,19 +545,6 @@ local function drawChromeDivider(ctx, rawBannerHeight)
   tex:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, y)
   tex:SetHeight(L.CHROME_DIVIDER_H)
   ctx.__chromeKids[#ctx.__chromeKids + 1] = tex
-end
-
---- The 1px baseline under the whole tab strip -- the tab/content separator (options-ui-§13).
---- Parked in the STRIP's own ledger (`ctx.__tabKids`): a tab click redraws the strip alone and
---- must redraw this with it, or a click that shrinks the strip from two rows to one leaves the
---- old baseline floating over the page's first row of settings.
-local function drawTabBaseline(ctx, y)
-  local tex = edgeTexture(ctx.chrome, "ARTWORK", TAB_BASELINE_COLOR)
-  if not tex then return end
-  tex:SetPoint("TOPLEFT",  ctx.chrome, "TOPLEFT",  0, -y)
-  tex:SetPoint("TOPRIGHT", ctx.chrome, "TOPRIGHT", 0, -y)
-  tex:SetHeight(L.TAB_BASELINE_H)
-  ctx.__tabKids[#ctx.__tabKids + 1] = tex
 end
 
 --- Attach the widget makers and the flow engine to one instance. Called at the end of lib:New, so
@@ -622,16 +711,19 @@ function lib.__AttachWidgets(O, d)
     return rawHeight + L.CHROME_DIVIDER_GAP_TOP + L.CHROME_DIVIDER_H + L.CHROME_DIVIDER_GAP_BOTTOM
   end
 
-  --- The strip's own reserved band: where its baseline sits, and the total height (baseline
-  --- included) to hand SetChromeHeight. A sibling of __tabPlacement for the same reason
-  --- __bannerBand is -- the arithmetic that decides whether the page's first row of settings
-  --- lands under the baseline or below it has to be checkable without a live frame.
-  --- @return number  baselineY -- pixels down from ctx.chrome's top to the baseline itself
-  --- @return number  the total band height to reserve, baseline included
-  function O.__tabBand(top, rowCount, tabH, rowGap, baselineH)
+  --- The strip's own reserved band: the total height to hand SetChromeHeight, banner included.
+  --- A sibling of __tabPlacement for the same reason __bannerBand is -- the arithmetic that
+  --- decides whether the page's first row of settings lands under the strip or on top of it has
+  --- to be checkable without a live frame.
+  ---
+  --- It is also where the content panel's TOP EDGE lands, because the panel anchors to the
+  --- chrome's bottom and this number IS the chrome's height. The strip used to reserve one extra
+  --- pixel here for a hairline it drew itself; the panel replaced the hairline, and the pixel
+  --- went with it -- a panel drawn BELOW the band must not also be reserved INSIDE it.
+  --- @return number  the band height to reserve, banner included
+  function O.__tabBand(top, rowCount, tabH, rowGap)
     rowCount = math.max(tonumber(rowCount) or 1, 1)
-    local baselineY = top + (rowCount * tabH) + ((rowCount - 1) * rowGap)
-    return baselineY, baselineY + (tonumber(baselineH) or 0)
+    return top + (rowCount * tabH) + ((rowCount - 1) * rowGap)
   end
 
   --- Hide, unparent and forget every widget in one of a page's chrome ledgers.
@@ -685,27 +777,15 @@ function lib.__AttachWidgets(O, d)
   local function makeTab(ctx, tab, active, onSelect)
     local b = CreateFrame("Button", nil, ctx.chrome)
     b:SetHeight(L.TAB_H)
-    -- One level above the chrome, so the SELECTED tab's dropped foot draws OVER the baseline
-    -- rather than under it. The client's own tab template raises itself for the same reason.
+    -- One level above the chrome, so a tab's art draws OVER the content panel's top edge rather
+    -- than under it -- which is what lets the selected tab merge into the page below it.
     if b.GetFrameLevel and b.SetFrameLevel then
       local level = b:GetFrameLevel()
       if type(level) == "number" then b:SetFrameLevel(level + 1) end
     end
-    b:SetNormalFontObject(_G.GameFontNormalSmall)
-    b:SetHighlightFontObject(_G.GameFontHighlightSmall)
-    b:SetDisabledFontObject(_G.GameFontHighlightSmall)
-    b:SetText(tab.label or "")
 
+    setTabLabel(b, active, tab.label)
     drawTabArt(b, active)
-    drawTabHighlight(b)
-
-    -- The label rides down with the art rather than sitting in the button's geometric centre:
-    -- the tab file's bottom few pixels are shadow, not face, so a centered label reads low.
-    local fs = b.GetFontString and b:GetFontString()
-    if fs and fs.ClearAllPoints and fs.SetPoint then
-      fs:ClearAllPoints()
-      fs:SetPoint("CENTER", b, "CENTER", 0, -TAB_LABEL_DROP)
-    end
 
     b:SetEnabled(not active)
     b:SetScript("OnClick", function()
@@ -730,10 +810,18 @@ function lib.__AttachWidgets(O, d)
   --- already carries the banner's own gap/rule/gap (options-ui-§14) -- ctx.__bannerHeight is
   --- O.__bannerBand's OUTPUT, not the raw dropdown height -- so this function never re-derives
   --- that arithmetic itself.
-  local function placeTabs(ctx, buttons, widths)
-    -- The strip's own width, not the panel's: a body inset by PADDING_X on both edges.
-    local available = ctx.chrome.GetWidth and ctx.chrome:GetWidth()
-    if type(available) ~= "number" or available <= 0 then available = L.TAB_MIN_W end
+  --- CREATES NOTHING. Every widget it touches already exists, which is what makes it safe to run
+  --- again on a later frame -- see repaceOnResize below.
+  --- The strip's own width: the chrome's, which is the body inset by CONTENT_LEFT/RIGHT. Zero
+  --- until the canvas has laid itself out, which is the whole subject of replaceOnResize below.
+  local function chromeWidth(ctx)
+    local w = ctx.chrome and ctx.chrome.GetWidth and ctx.chrome:GetWidth()
+    if type(w) ~= "number" or w <= 0 then return L.TAB_MIN_W end
+    return w
+  end
+
+  local function placeTabs(ctx, buttons, widths, available)
+    ctx.__tabPlacedAt = available
 
     local top = ctx.__bannerHeight or 0
     local placement, rowCount =
@@ -746,10 +834,38 @@ function lib.__AttachWidgets(O, d)
       b:Show()
     end
 
-    local baselineY, reserved =
-      O.__tabBand(top, rowCount, L.TAB_H, L.TAB_ROW_GAP, L.TAB_BASELINE_H)
-    drawTabBaseline(ctx, baselineY)
-    O.SetChromeHeight(ctx, reserved)
+    O.SetChromeHeight(ctx, O.__tabBand(top, rowCount, L.TAB_H, L.TAB_ROW_GAP))
+  end
+
+  --- Re-run the wrap the first time the chrome learns how wide it actually is.
+  ---
+  --- THE BUG THIS FIXES: `ctx.chrome` has zero width until the settings canvas has laid itself
+  --- out, and the FIRST page a player opens is rendered before that happens. `placeTabs` read
+  --- `0`, fell back to `TAB_MIN_W`, and every tab wrapped onto its own row -- a vertical stack of
+  --- tabs that healed itself the moment you clicked any of them, because by the second render the
+  --- width was real. `O.EnsureDefaultsButton` already carries a note about `ctx.body` having zero
+  --- width at enable time; this is the same client behavior reaching a second piece of chrome.
+  ---
+  --- A width cannot be computed from config instead: it is the canvas's, and the canvas is
+  --- Blizzard's. So the strip re-places itself when the width arrives, which is what
+  --- `OnSizeChanged` is for.
+  ---
+  --- Two things keep this from looping. The handler ignores everything but a CHANGE in width, and
+  --- `placeTabs` records the width it used -- so the height change that `SetChromeHeight` causes,
+  --- which fires this same script, is a no-op. And the hook is installed once per panel, because
+  --- `ctx` outlives every render while the buttons do not: the handler reads the CURRENT layout
+  --- out of `ctx` rather than closing over one strip's buttons, which would otherwise pin a
+  --- released set of buttons alive forever and re-place them after they were hidden.
+  local function replaceOnResize(ctx)
+    if ctx.__tabResizeHooked then return end
+    if not (ctx.chrome and ctx.chrome.SetScript) then return end
+    ctx.__tabResizeHooked = true
+    ctx.chrome:SetScript("OnSizeChanged", function(_, width)
+      if type(width) ~= "number" or width <= 0 then return end
+      if ctx.__tabPlacedAt == width then return end
+      local layout = ctx.__tabLayout
+      if layout then placeTabs(ctx, layout.buttons, layout.widths, width) end
+    end)
   end
 
   --- A pinned tab strip in the page's chrome band (options-ui-§13). One tab per section.
@@ -765,6 +881,7 @@ function lib.__AttachWidgets(O, d)
     -- Only the strip's own buttons, never the banner: the banner is drawn first and a blanket
     -- release here would take it with them.
     releaseLedger(ctx, "__tabKids")
+    ctx.__tabLayout = nil
 
     local buttons, widths = {}, {}
     for i, tab in ipairs(spec.tabs) do
@@ -774,7 +891,14 @@ function lib.__AttachWidgets(O, d)
       ctx.__tabKids[#ctx.__tabKids + 1] = b
     end
 
-    placeTabs(ctx, buttons, widths)
+    -- The panel is built before the tabs are placed, because it anchors to the chrome's BOTTOM
+    -- and SetChromeHeight is what moves that edge; built after, it would still land correctly,
+    -- but the ledger order would no longer say which of the two owns the separator.
+    drawContentPanel(ctx)
+
+    ctx.__tabLayout = { buttons = buttons, widths = widths }
+    placeTabs(ctx, buttons, widths, chromeWidth(ctx))
+    replaceOnResize(ctx)
     return buttons
   end
 
