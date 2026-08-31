@@ -21,7 +21,7 @@ local core = LibStub and LibStub("LibKa0s-Core-1.0", true)
 local NEEDS_CORE = 1
 if not core or (core.MINOR or 0) < NEEDS_CORE then return end   -- no NewLibrary; module absent
 
-local MAJOR, MINOR = "LibKa0s-Options-1.0", 10
+local MAJOR, MINOR = "LibKa0s-Options-1.0", 11
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 
@@ -120,8 +120,10 @@ lib.LAYOUT = {
   -- label renders above the control and pushes the whole widget past a bare control's height.
   BANNER_H      = 44,
   -- INTERNAL: TAB_PAD_X — horizontal padding inside one tab, consumed by O.TabStrip when it
-  -- sizes a button around its measured label; no host draws a tab itself.
-  TAB_PAD_X     = 12,
+  -- sizes a button around its measured label; no host draws a tab itself. Wide enough that the
+  -- label clears the 20px end caps of the client tab art the strip is drawn from: at 12 the text
+  -- sat on the rounded shoulder, which is what made a bordered rectangle out of a tab.
+  TAB_PAD_X     = 18,
   -- INTERNAL: TAB_GAP — horizontal gap between two tabs on one row, consumed by O.TabStrip and
   -- by O.__layoutTabs; a host that needed it would be laying out its own strip.
   TAB_GAP       = 4,

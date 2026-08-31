@@ -322,21 +322,41 @@ end
 
 -- ── tab strip art (options-ui-§13) ──────────────────────────────────────────────────────────
 --
--- Drawn with plain color textures rather than a Blizzard tab template: this file builds its own
--- art everywhere else, and a template's exact name and metrics cannot be verified outside a live
--- client. Four thin borders and a flat fill per button is the whole vocabulary.
+-- The CLIENT'S OWN three-slice options-tab art, not color rectangles. These are the two files
+-- the client's own tab template cuts its tabs from, and they are live on 12.x -- HidingBar's
+-- options panel draws its tab strip from exactly this pair today. A strip built on them inherits
+-- the rounded shoulders and the light gray edge the rest of the UI has, rather than asserting a
+-- gold vocabulary of its own.
+--
+-- This is the one place in this file that prefers a Blizzard texture to a drawn one, and the
+-- reason is that the look is the requirement: a tab is a piece of client chrome a player already
+-- recognizes, and an approximation of it reads as a near-miss in a way a drawn slider or a drawn
+-- section rule never does.
+local TAB_ART_ACTIVE   = "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab"
+local TAB_ART_INACTIVE = "Interface\\OptionsFrame\\UI-OptionsFrame-InActiveTab"
+-- The client's tab hover glow, drawn additively over the tab's face.
+local TAB_ART_HILIGHT  = "Interface\\PaperDollInfoFrame\\UI-Character-Tab-Highlight"
+-- Both tab files are 128px wide with a 20px end cap at each end: 20/128 = 0.15625, and the right
+-- cap begins at 1 - that. The middle slice stretches between the two caps, which is why a tab
+-- narrower than 2 * TAB_CAP_W would draw its caps overlapping -- and why TAB_MIN_W is wider.
+local TAB_CAP_W        = 20
+local TAB_CAP_U        = 0.15625
+-- How far the SELECTED tab's art hangs below the row, in pixels, so its foot covers the strip's
+-- baseline and the tab merges into the page under it. That merge is the single detail that makes
+-- a row of buttons read as tabs, and 3 is Blizzard's own number: the client's tab template
+-- anchors its selected art from the BOTTOM at -3.
+local TAB_ART_DROP     = 3
+-- The label sits below the button's geometric center, because the art's own bottom few pixels
+-- are drawn as a shadow rather than as face. Also Blizzard's number, and for the same reason.
+local TAB_LABEL_DROP   = 3
 
--- Inactive: a dark translucent fill and a dim gold edge, so an unselected tab reads as present
--- but recessed. Active: a lighter fill and a brighter edge -- the two states are meant to be
--- readable at a glance, not merely different.
-local TAB_FILL_INACTIVE   = { 0, 0, 0, 0.35 }
-local TAB_FILL_ACTIVE     = { 0.15, 0.12, 0.04, 0.9 }
-local TAB_BORDER_INACTIVE = { 0.5, 0.4, 0.15, 0.6 }
-local TAB_BORDER_ACTIVE   = { 1, 0.82, 0, 0.85 }
--- The banner/strip hairline and the strip's own baseline share this dim-gold, low-alpha
--- treatment (options-ui-§14): a border needs to read, a separator needs to disappear.
+-- The banner/strip hairline keeps a dim-gold, low-alpha treatment (options-ui-§14): a separator
+-- between two pieces of chrome should disappear rather than read.
 local CHROME_RULE_COLOR   = { 1, 0.82, 0, 0.16 }
-local TAB_BASELINE_COLOR  = TAB_BORDER_INACTIVE
+-- The strip's baseline is NOT that. It is the top edge of the content area -- the line the
+-- selected tab breaks through -- so it is drawn in the same neutral gray the client borders a
+-- panel with, and the tabs sit on something that looks like a panel instead of on a gold rule.
+local TAB_BASELINE_COLOR  = { 0.5, 0.5, 0.5, 0.8 }
 
 --- Create and color one 1px edge texture. Guarded like every other texture path in this file --
 --- a headless mock's CreateTexture can answer an inert table with no SetColorTexture -- so a
@@ -348,46 +368,67 @@ local function edgeTexture(parent, layer, color)
   return tex
 end
 
---- Draw one tab button's four edges as thin color textures, omitting the ACTIVE tab's bottom
---- edge so it visually merges with the content below -- the single detail that makes a row of
---- buttons read as tabs rather than a row of bordered rectangles.
+--- Create one slice of a tab's three-slice art, or nil when this frame cannot make textures.
 ---
---- Lifted out of makeTab so that function's cyclomatic count stays with its own six unrelated
---- decisions rather than growing with the art. The four textures are children of `b`, so they
---- share the button's own lifecycle: releaseLedger hides and unparents `b`, and every edge goes
---- with it -- no separate ledger entry needed for them.
-local function drawTabBorder(b, active)
-  local color = active and TAB_BORDER_ACTIVE or TAB_BORDER_INACTIVE
+--- Guarded the way edgeTexture is, and for the same reason: a headless mock's CreateTexture can
+--- answer an inert table, so a caller gets nil rather than a half-built texture to position.
+local function artTexture(b, file, u1, u2)
+  local tex = b.CreateTexture and b:CreateTexture(nil, "BACKGROUND")
+  if not (tex and tex.SetTexture and tex.SetTexCoord) then return nil end
+  tex:SetTexture(file)
+  tex:SetTexCoord(u1, u2, 0, 1)
+  return tex
+end
 
-  local top = edgeTexture(b, "BORDER", color)
-  if top then
-    top:SetPoint("TOPLEFT",  b, "TOPLEFT",  0, 0)
-    top:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0, 0)
-    top:SetHeight(1)
-  end
+--- Draw one tab button's art: two fixed end caps and a middle stretched between them, cut from
+--- the client's own options-tab file (TAB_ART_ACTIVE / TAB_ART_INACTIVE).
+---
+--- Lifted out of makeTab so that function keeps to its own six unrelated decisions rather than
+--- growing with the art. The three textures are children of `b`, so they share the button's
+--- lifecycle: releaseLedger hides and unparents `b`, and every slice goes with it -- no separate
+--- ledger entry needed for them.
+---
+--- The selected tab is not merely a different color. Its art is drawn TAB_ART_DROP lower, so
+--- its foot covers the strip's baseline and it joins the page below; an unselected tab sits on
+--- that baseline instead. Nothing tints either file -- the gray edge and the rounded shoulders
+--- are the point of using them.
+local function drawTabArt(b, active)
+  local file = active and TAB_ART_ACTIVE or TAB_ART_INACTIVE
+  local drop = active and TAB_ART_DROP or 0
 
-  local left = edgeTexture(b, "BORDER", color)
+  local left = artTexture(b, file, 0, TAB_CAP_U)
   if left then
-    left:SetPoint("TOPLEFT",    b, "TOPLEFT",    0, 0)
-    left:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
-    left:SetWidth(1)
+    left:SetSize(TAB_CAP_W, L.TAB_H)
+    left:SetPoint("TOPLEFT", b, "TOPLEFT", 0, -drop)
   end
 
-  local right = edgeTexture(b, "BORDER", color)
+  local right = artTexture(b, file, 1 - TAB_CAP_U, 1)
   if right then
-    right:SetPoint("TOPRIGHT",    b, "TOPRIGHT",    0, 0)
-    right:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
-    right:SetWidth(1)
+    right:SetSize(TAB_CAP_W, L.TAB_H)
+    right:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0, -drop)
   end
 
-  if not active then
-    local bottom = edgeTexture(b, "BORDER", color)
-    if bottom then
-      bottom:SetPoint("BOTTOMLEFT",  b, "BOTTOMLEFT",  0, 0)
-      bottom:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
-      bottom:SetHeight(1)
-    end
+  -- The only slice with no fixed width: it spans whatever the measured label left between the
+  -- two caps. Anchored to the caps rather than to the button so the three move as one piece.
+  local mid = artTexture(b, file, TAB_CAP_U, 1 - TAB_CAP_U)
+  if mid and left and right then
+    mid:SetHeight(L.TAB_H)
+    mid:SetPoint("TOPLEFT",  left,  "TOPRIGHT")
+    mid:SetPoint("TOPRIGHT", right, "TOPLEFT")
   end
+end
+
+--- Give a tab the client's hover glow, inset so it lights the tab's face rather than its
+--- shoulders. A disabled button draws no highlight, which is what keeps the SELECTED tab -- the
+--- disabled one -- from glowing under the cursor.
+local function drawTabHighlight(b)
+  if not b.SetHighlightTexture then return end
+  b:SetHighlightTexture(TAB_ART_HILIGHT, "ADD")
+  local hl = b.GetHighlightTexture and b:GetHighlightTexture()
+  if not (hl and hl.ClearAllPoints and hl.SetPoint) then return end
+  hl:ClearAllPoints()
+  hl:SetPoint("LEFT",  b, "LEFT",   10, -(TAB_LABEL_DROP + 1))
+  hl:SetPoint("RIGHT", b, "RIGHT", -10, -(TAB_LABEL_DROP + 1))
 end
 
 --- The hairline rule between the banner and the tab strip (options-ui-§14), spanning the
@@ -644,22 +685,27 @@ function lib.__AttachWidgets(O, d)
   local function makeTab(ctx, tab, active, onSelect)
     local b = CreateFrame("Button", nil, ctx.chrome)
     b:SetHeight(L.TAB_H)
+    -- One level above the chrome, so the SELECTED tab's dropped foot draws OVER the baseline
+    -- rather than under it. The client's own tab template raises itself for the same reason.
+    if b.GetFrameLevel and b.SetFrameLevel then
+      local level = b:GetFrameLevel()
+      if type(level) == "number" then b:SetFrameLevel(level + 1) end
+    end
     b:SetNormalFontObject(_G.GameFontNormalSmall)
     b:SetHighlightFontObject(_G.GameFontHighlightSmall)
     b:SetDisabledFontObject(_G.GameFontHighlightSmall)
     b:SetText(tab.label or "")
 
-    -- A flat backing plus a four-edge border rather than a Blizzard tab atlas. The art is
-    -- deliberately minimal here; what the strip owes the page is a readable active/inactive
-    -- distinction with the look of a tab, and the atlas question is one for a live client
-    -- rather than for this file.
-    local bg = b.CreateTexture and b:CreateTexture(nil, "BACKGROUND")
-    if bg and bg.SetColorTexture then
-      bg:SetAllPoints(b)
-      local fill = active and TAB_FILL_ACTIVE or TAB_FILL_INACTIVE
-      bg:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
+    drawTabArt(b, active)
+    drawTabHighlight(b)
+
+    -- The label rides down with the art rather than sitting in the button's geometric centre:
+    -- the tab file's bottom few pixels are shadow, not face, so a centered label reads low.
+    local fs = b.GetFontString and b:GetFontString()
+    if fs and fs.ClearAllPoints and fs.SetPoint then
+      fs:ClearAllPoints()
+      fs:SetPoint("CENTER", b, "CENTER", 0, -TAB_LABEL_DROP)
     end
-    drawTabBorder(b, active)
 
     b:SetEnabled(not active)
     b:SetScript("OnClick", function()
