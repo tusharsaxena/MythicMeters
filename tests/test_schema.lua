@@ -702,12 +702,12 @@ local PARTITION = {
     windows    = { { "Window", 1 } },
     frame      = { { "General", 6 }, { "Size and position", 6 },
                    { "Background and border", 4 }, { "Row", 8 } },
-    header     = { { "Title bar", 4 }, { "Title text", 5 }, { "Controls", 8 },
-                   { "Button style", 6 } },
+    header     = { { "Title bar", 8 }, { "Title text", 6 }, { "Controls", 8 },
+                   { "Button style", 8 } },
     bars       = { { "Bar", 5 }, { "Background", 3 }, { "Border", 4 },
                    { "Text content", 5 }, { "Text style", 7 }, { "Icons", 3 } },
-    tooltip    = { { "General", 5 }, { "Text", 6 }, { "Bar", 5 },
-                   { "Bar background", 3 }, { "Bar border", 3 }, { "Contents", 7 } },
+    tooltip    = { { "General", 5 }, { "Bar", 5 }, { "Bar background", 3 },
+                   { "Bar border", 3 }, { "Text", 6 }, { "Contents", 7 } },
     visibility = { { "Where to show this window", 7 }, { "When to hide this window", 8 },
                    { "Combat", 2 } },
     columns    = { { "Header text", 6 }, { "Header background", 2 } },
@@ -942,10 +942,10 @@ test("Schema: the header controls are EDITED on Header and STORED under frame", 
                 row.path .. " is a header control and must still be stored under frame")
         end
     end
-    -- Exactly 15: Controls (close/showMinimise/showLock/showSettings, the hidden
-    -- `window.frame.minimised`, and the four meter buttons) + Button style (6). Walked over
+    -- Exactly 17: Controls (close/showMinimise/showLock/showSettings, the hidden
+    -- `window.frame.minimised`, and the four meter buttons) + Button style (8). Walked over
     -- NS.Schema, not SchemaForPage, so the hidden row counts.
-    assertEqual(n, 15, "the whole set moved, not one row of it")
+    assertEqual(n, 17, "the whole set moved, not one row of it")
 end)
 
 

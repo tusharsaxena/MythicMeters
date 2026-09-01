@@ -852,15 +852,37 @@ end
 
 --- The header's text color, defaulting to the gold WoW uses for its own headers.
 ---
---- NO MODE, AND NO STATISTIC. The title bar is one strip over the whole window,
---- so neither mode this used to answer could say anything true about it:
---- "per statistic" could only ever paint it the SORT column's colour, which is
---- already on screen in that column's own header and in its arrow, and "class"
---- could only be the local player's, which the title bar is not about either --
---- it names the window. The picker is the whole setting now.
+--- TWO MODES, NOT THREE, AND NO STATISTIC. "Per statistic" could only ever paint
+--- this the SORT column's colour -- a fact already on screen twice, in that
+--- column's own header and in its arrow -- and the title bar is one strip over
+--- the whole window rather than a thing that belongs to a column. That refusal
+--- stands and is why the mode list here is the CONTROLS' pair (class/custom)
+--- rather than the three every cell surface answers.
+---
+--- CLASS DID NOT SURVIVE THE SAME ARGUMENT, and the note here used to say it had:
+--- that "class could only be the local player's, which the title bar is not about
+--- -- it names the window". What settled it the other way is that the rest of the
+--- strip already wears it. The controls take a class colour, and so does the
+--- divider under them; a title that alone could not was the odd one out, and
+--- "the header is yours" is a perfectly good thing for a player to want a window
+--- to say. It is still the LOCAL player's class, because that is the only class a
+--- window-wide strip can mean.
+---
+--- The configured ALPHA survives the mode, the same rule every other surface in
+--- this addon keeps: a class colour carries none of its own, so taking the
+--- swatch's is what stops a mode change from silently altering the opacity.
+---
+--- @return number r, number g, number b, number a
 local function headerColor(header)
-    local c = header.color
-    return RGBA(c, 1, 0.82, 0, 1)
+    local r, g, b, a = RGBA(header.color, 1, 0.82, 0, 1)
+    if header.colorMode == "class" then
+        local cr, cg, cb = PlayerClassRGB()
+        -- An unknown class keeps the configured colour rather than falling back
+        -- to a tenth hue invented here -- the same answer every other mode reader
+        -- in this addon gives.
+        if cr then return cr, cg, cb, a end
+    end
+    return r, g, b, a
 end
 
 --- How far the text is offset to draw its drop shadow, or 0, 0 for none.
@@ -1046,12 +1068,54 @@ function WindowProto:ApplyHeaderStrip()
     self.dragBar:SetHeight(layout.titleHeight > 0 and layout.titleHeight or 1)
     self.dragBar:SetShown(layout.titleHeight > 0)
 
+    -- THE HAIRLINE UNDER THE TITLE BAR, and the one piece of the window's chrome
+    -- a player can switch off. It separates the title strip from the column
+    -- labels under it, which is worth having when both are drawn and is a line
+    -- across the window for nothing when the title bar's own background already
+    -- separates them.
+    --
+    -- ITS COLOUR IS THE SKIN'S UNTIL THE PLAYER SAYS OTHERWISE, and `skin` is the
+    -- shipped mode. That mode does not resolve a colour and then write it -- it
+    -- writes NOTHING, leaving whatever `NS.ApplySkin` put on the texture a few
+    -- lines earlier in ApplyConfig. That is the whole of how standalone-windows
+    -- is honoured here: the shared value is never copied into this file, never
+    -- stored in a profile and never migrated, so a re-skin lands on this window
+    -- along with the debug console and the perf panel exactly as before.
+    --
+    -- The two override modes follow `frame.title`'s precedent one screen up:
+    -- ApplySkin owns the accent, and a setting that claims to govern it writes
+    -- after the library rather than instead of it.
+    --
+    -- The TITLE ROW DOES NOT MOVE when it is switched off. `TitleRowTop` centres
+    -- the row in the space above DIVIDER_INSET, which is a constant and not a
+    -- measurement of this texture -- so hiding the line leaves every other thing
+    -- in the header exactly where it was, which is what a player toggling it
+    -- expects and the opposite of what a measured layout would have done.
     if frame.divider then
         frame.divider:ClearAllPoints()
         local dy = -(pad + layout.titleHeight - DIVIDER_INSET)
+        frame.divider:SetHeight(header.dividerThickness or 1)
         frame.divider:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, dy)
         frame.divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, dy)
-        frame.divider:SetShown(layout.titleHeight > 0)
+
+        -- ONE read of the swatch, and the ALPHA comes off it in both override
+        -- modes. A class colour has no alpha of its own, and inventing one here
+        -- would mean the opacity silently changed when the mode did -- the same
+        -- rule modules/Row.lua's text colours keep: the configured alpha survives
+        -- every mode.
+        local mode = header.dividerColorMode or "skin"
+        local dr, dg, db, da = RGBA(header.dividerColor, 0.5, 0.5, 0.5, 0.85)
+        if mode == "class" then
+            -- An unknown class is NOT a tenth colour and not a guess: it leaves
+            -- the skin's tint standing, which is what `skin` mode does and the
+            -- only other answer this row has.
+            local cr, cg, cb = PlayerClassRGB()
+            if cr then frame.divider:SetColorTexture(cr, cg, cb, da) end
+        elseif mode == "custom" then
+            frame.divider:SetColorTexture(dr, dg, db, da)
+        end
+
+        frame.divider:SetShown(layout.titleHeight > 0 and header.divider ~= false)
     end
 end
 

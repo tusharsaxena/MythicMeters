@@ -33,6 +33,13 @@ local L = NS.L
 
 local PAGE = "general"
 
+-- The gap between the swatch grid and the sentence explaining it. A paragraph
+-- flush against the thing it describes reads as part of it; settings/Columns.lua
+-- asks for the same measurement, for the same reason, and both take it from
+-- LibKa0s' own section spacing rather than inventing a second opinion about what
+-- a gap is.
+local NOTE_GAP = 10
+
 local H = NS.Helpers or {}
 
 -- ---------------------------------------------------------------------------
@@ -190,13 +197,38 @@ local function Build(mainCategory)
         if H.Relayout then H.Relayout(c) end
     end
 
+    -- WHERE THESE COLOURS ARE ACTUALLY WORN, said on the tab rather than left to
+    -- eight tooltips. A grid of swatches with no sentence over it reads as "the
+    -- colour of this statistic", full stop -- and a player who sets Damage to
+    -- green, looks at a class-coloured grid and sees nothing change has been
+    -- misled by the page, not by the setting.
+    --
+    -- BELOW the swatches, because afterGroup is the hook the library offers and
+    -- there is no before-group counterpart. That is the right shape for a caveat
+    -- anyway: the grid is what the tab is for, and this is the footnote on it.
+    --
+    -- The tooltip clause is not padding. The all-statistics list is the one
+    -- surface that wears the palette UNCONDITIONALLY -- it is the only place all
+    -- eight are on screen together, so the colour is doing the work of telling
+    -- them apart rather than answering a mode -- and a note that said "only when
+    -- Per-statistic is set" without it would be wrong.
+    local function afterStatColors(c)
+        local scroll = H.EnsureScroll and H.EnsureScroll(c)
+        if scroll and H.AddSpacer then H.AddSpacer(scroll, NOTE_GAP) end
+        H.TextRow(c, L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."])
+        if H.Relayout then H.Relayout(c) end
+    end
+
     H.SetRenderer(ctx, function(c)
         H.ClearScroll(c)
         -- The WHOLE page. Test mode and the debug console are schema rows on this
         -- page (settings/Schema.lua, `sessionOnly`), so rendering the schema
         -- renders them — drawing either one here as well is what produced the
         -- duplicate checkboxes and the duplicate "Debug" heading.
-        H.RenderTabbedSchema(c, PAGE, { [L["General"]] = afterGeneral })
+        H.RenderTabbedSchema(c, PAGE, {
+            [L["General"]]           = afterGeneral,
+            [L["Statistic colors"]]  = afterStatColors,
+        })
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["General"])

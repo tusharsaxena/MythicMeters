@@ -662,7 +662,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (130)
+### test_window.lua (136)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -676,6 +676,10 @@ badge and any count quoted in the docs must agree with it.
 - The name column's formula is calibrated to the shipped width at a 20 cap
 - A stat column never shrinks below the legible floor
 - The window refuses to be dragged smaller than the grid needs
+- The title-bar divider can be switched off, and does not move the title row
+- The divider's thickness is a setting
+- The divider's SKIN mode writes no colour at all, so a re-skin still reaches it
+- The divider takes a custom colour and a class colour, keeping the configured alpha
 - BuildLayout drops a column whose stat this build does not offer
 - BuildLayout draws only the ENABLED columns, in stored order
 - A layout column carries no show-bar decision
@@ -780,7 +784,9 @@ badge and any count quoted in the docs must agree with it.
 - A collapsed window keeps the notice hidden
 - Header shadow reaches every line of the strip
 - Column header shadow is its OWN setting, not the header's
-- The header's text colour is the picker, and nothing resolves a mode
+- The header's text answers TWO modes, and the custom one is the picker
+- The header's text takes the CLASS colour, keeping the configured alpha
+- The header's text mode offers class and custom, and NOT per-statistic
 - The header colour survives a sort change, having nothing to do with it
 - The window NAME takes the header's colour
 - Column header class color is the local player's too
@@ -795,7 +801,7 @@ badge and any count quoted in the docs must agree with it.
 - pool: a layout change re-applies to FREE rows, not just active ones
 - pool: every row built lands in `all`, including the batch surplus
 
-### test_headercontrols.lua (46)
+### test_headercontrols.lua (51)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -815,6 +821,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: no title bar means no strip and no reservation
 - HeaderControls: with no atlas the ASCII rung draws
 - HeaderControls: an atlas beats the ASCII rung
+- HeaderControls: an unlocked padlock is drawn at the same weight as its neighbours
 - HeaderControls: the padlock's two states do not draw the same
 - HeaderControls: minimise shows the opposite of the state it is in
 - HeaderControls: a glyph is never given text before a font
@@ -826,6 +833,10 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the title bar itself reveals nothing
 - HeaderControls: the reveal moves rather than accumulating
 - HeaderControls: with the reveal off, hover is colour alone
+- HeaderControls: both ends of the reveal are settings, and default to what was hardcoded
+- HeaderControls: the two opacity sliders each move their own end
+- HeaderControls: with the reveal off every control sits at the HOVER opacity
+- HeaderControls: an out-of-range opacity is clamped, not passed through
 - HeaderControls: hover reveal off means always visible
 - HeaderControls: hooking hover does not unseat the drag
 - HeaderControls: a locked window can still reveal its controls
@@ -1433,7 +1444,7 @@ badge and any count quoted in the docs must agree with it.
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
 - Slash: /mm list heads each block with the page AND the tab
 
-### test_options_panel.lua (32)
+### test_options_panel.lua (33)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1465,6 +1476,7 @@ badge and any count quoted in the docs must agree with it.
 - Panel: every tabbed page opens on its first tab and draws a strip
 - Panel: Profiles draws no strip
 - Panel: switching tabs re-renders without leaving the previous tab's widgets behind
+- Panel: the Statistic colors tab says where its colours are actually worn
 - Panel: every window sub-page banners the active window, and Windows has no second picker
 - Panel: choosing a window in the banner retargets every page and keeps the tab
 
@@ -1555,8 +1567,8 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 130 |
-| test_headercontrols.lua | 46 |
+| test_window.lua | 136 |
+| test_headercontrols.lua | 51 |
 | test_row.lua | 89 |
 | test_targets.lua | 24 |
 | test_tooltip.lua | 121 |
@@ -1568,8 +1580,8 @@ badge and any count quoted in the docs must agree with it.
 | test_schema.lua | 53 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 34 |
-| test_options_panel.lua | 32 |
+| test_options_panel.lua | 33 |
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1406** |
+| **Total** | **1418** |

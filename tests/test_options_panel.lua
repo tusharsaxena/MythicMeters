@@ -672,6 +672,45 @@ function()
     assertFalse(labelled(L["Lock window"]), "the previous tab's widgets were left behind")
 end)
 
+test("Panel: the Statistic colors tab says where its colours are actually worn", function()
+    -- A grid of eight swatches with no sentence over it reads as "the colour of
+    -- this statistic", full stop -- and a player who sets Damage to green, looks
+    -- at a class-coloured grid and sees nothing change has been misled by the
+    -- page rather than by the setting. The note is drawn through the same
+    -- afterGroup hook the General tab's two buttons use.
+    -- red under: dropping the note, or keying it to the wrong tab, which would
+    -- put it under the master enable instead.
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "general")
+
+    -- `SetLabel` and `SetText` are two different setters on an AceGUI widget and
+    -- land in two different fields: every schema row uses the first, and TextRow
+    -- -- which is a Label, not a labelled control -- uses the second. Reading only
+    -- one of them is how this case passes for the wrong reason.
+    local function textOnPage()
+        local out = {}
+        local function take(w)
+            if w.labelText then out[#out + 1] = w.labelText end
+            if w.text then out[#out + 1] = w.text end
+        end
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            take(w)
+            for _, child in ipairs(w.children or {}) do take(child) end
+        end
+        return table.concat(out, "\n")
+    end
+
+    local note = L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."]
+    assertTrue(textOnPage():find(note, 1, true) == nil,
+        "the note is on the General tab, which is not the tab it describes")
+
+    ctx.__tabKids[2]:__fire("OnClick")
+    assertEqual(ctx.activeTab, L["Statistic colors"])
+    assertTrue(textOnPage():find(note, 1, true) ~= nil,
+        "the Statistic colors tab drew no note saying where its colours are worn")
+end)
+
 test("Panel: every window sub-page banners the active window, and Windows has no second picker",
 function()
     -- The banner is the ONLY picker (options-ui-§14). A page that kept its own would be a

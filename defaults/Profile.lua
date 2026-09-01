@@ -81,9 +81,16 @@ local WINDOW_TEMPLATE = {
     -- -----------------------------------------------------------------------
     --
     -- The chrome is LibKa0s-Core-1.0's shared SKIN and ApplySkin (never a
-    -- private lookalike), so the edge colors are NOT settings here: the library
-    -- tints frame.title and frame.divider itself. What IS configurable is the
-    -- geometry, the backdrop, and the border the player picks from LSM.
+    -- private lookalike), so the window's EDGE colors are not settings here: the
+    -- library owns the backdrop and its border. What IS configurable is the
+    -- geometry, the backdrop fill, and the border the player picks from LSM.
+    --
+    -- The two SKIN ACCENTS are a different case and both are configurable, under
+    -- `header` below: `frame.title` takes the header text colour, and
+    -- `frame.divider` takes `header.dividerColorMode`, whose shipped value leaves
+    -- the library's tint alone entirely. The rule they honour is "never RESTATE
+    -- SKIN's values" -- not "never let a player choose" -- and neither of them
+    -- copies a value out of that table.
     frame = {
         -- Derived from the grid rather than chosen: the name column, six default
         -- stat columns at Const.COLUMN_WIDTH, the seams between them and the
@@ -150,6 +157,13 @@ local WINDOW_TEMPLATE = {
         controlColor           = { r = 1, g = 1, b = 1, a = 1 },
         controlHoverColorMode  = "custom",
         controlHoverColor      = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- THE TWO ENDS OF THE REVEAL, which were a hardcoded 0.25 and 1 before
+        -- they were settings -- so these two numbers are why a window that never
+        -- touches either slider is drawn exactly as it was. `controlAlpha` is the
+        -- faded level and is read only while `hoverReveal` is on: with the reveal
+        -- off there is no faded state, and every control sits at the hover value.
+        controlAlpha           = 0.25,
+        controlHoverAlpha      = 1.0,
         -- The SLOT a control occupies -- its click target and the strip's layout
         -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
         -- 11px icon on the same line as a 12px title and the strip stops
@@ -186,15 +200,33 @@ local WINDOW_TEMPLATE = {
         -- an outlined face is heavier than either alone, and a class-colored
         -- header is a taste rather than an improvement.
         shadow          = false,
-        -- The ONE thing that colours the header text, and there is deliberately no
-        -- mode beside it. The title bar is one strip over the whole window, so
-        -- "per statistic" could only ever paint it the sort column's colour -- a
-        -- fact already on screen twice over -- and "class" could only be the local
-        -- player's, which the title bar is not about either: it names the window.
+        -- CUSTOM, so a window that never opens the dropdown is drawn from the
+        -- picker below exactly as it was before there was a dropdown. `class` is
+        -- the only other answer: see the note in settings/Schema.lua for why
+        -- there is no `stat` here and why `class` arrived late.
+        colorMode       = "custom",    -- class | custom
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },
+        -- The hairline between the title bar and the column labels. ON, because
+        -- it is what the window has always drawn and a chrome element that
+        -- vanishes on upgrade is a bug report.
+        --
+        divider          = true,
+        dividerThickness = 1,
+        -- SKIN, not a colour. `skin` means *leave the texture alone*, so whatever
+        -- LibKa0s-Core-1.0's ApplySkin wrote stands -- which is how a re-skin
+        -- still reaches this window along with the debug console and the perf
+        -- panel (standalone-windows). The shared value is never copied here,
+        -- never stored in a profile, and never needs migrating when it changes.
+        dividerColorMode = "skin",       -- skin | class | custom
+        -- A MID GREY, and deliberately NOT SKIN.divider's values: seeding it from
+        -- there would be exactly the copy the rule above exists to prevent. It is
+        -- read only under `custom`, where the skin has already been declined, so
+        -- it is a starting point for a picker rather than a claim about the
+        -- collection's look.
+        dividerColor     = { r = 0.5, g = 0.5, b = 0.5, a = 0.85 },
     },
 
     -- -----------------------------------------------------------------------

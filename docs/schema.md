@@ -283,9 +283,10 @@ row of the grid can never disagree about what a warlock looks like.
 — and `modules/Window.lua`'s `NS.SurfaceColor` is the one reader for both header strips and both of
 their backgrounds.
 
-The configured **alpha survives** every mode on every surface. Neither `RAID_CLASS_COLORS` nor
-`Constants.STAT_COLORS` carries one, so taking one from them would make a colour mode silently cancel
-Text opacity — one setting overruling another. A class or statistic that cannot be read keeps the
+The configured **alpha survives** every mode on every surface. `RAID_CLASS_COLORS` carries none, and
+`NS.StatColor` deliberately answers three numbers rather than four even though a stored
+`statColors.*` swatch has an alpha of its own — so taking one from either would make a colour mode
+silently cancel Text opacity, which is one setting overruling another. A class or statistic that cannot be read keeps the
 configured colour rather than falling back to a hue invented for the occasion.
 
 **Text opacity is folded INTO that alpha**, in `modules/Row.lua`'s `textAlpha`, rather than living
@@ -480,6 +481,31 @@ alone: the padding above is not a margin to anyone looking at the window, so cen
 leaves it as dead space above the row and lands the text against the divider. Nothing in the title
 bar is anchored to a hand-picked offset any more.
 
+`divider = true` · `dividerThickness = 1` · `dividerColorMode = "skin"` ·
+`dividerColor = { r=0.5, g=0.5, b=0.5, a=0.85 }` — the hairline between the title bar and the column
+labels, and the one piece of the window's chrome a player can switch off outright. Hiding it moves
+nothing else: `TitleRowTop` centres the title row against the `DIVIDER_INSET` constant rather than
+against the texture.
+
+**`skin` is the shipped mode, and it writes nothing.** It does not resolve `SKIN.divider` and apply
+it — it leaves the texture exactly as `NS.ApplySkin` painted it a few lines earlier in `ApplyConfig`.
+That is how a per-window colour picker coexists with `standalone-windows`: the shared value is never
+copied into this repo, never stored in a profile, and never has to be migrated when it changes, so a
+re-skin still reaches this window along with the debug console and the perf panel. The two override
+modes — `class` (yours) and `custom` — follow `frame.title`'s precedent one screen up: `ApplySkin`
+owns the accent, and a setting that claims to govern it writes *after* the library rather than
+instead of it. An unknown class leaves the skin's tint standing rather than inventing a colour.
+
+The **custom swatch is a mid grey, deliberately not `SKIN.divider`'s values** — seeding it from there
+would be exactly the copy the rule forbids, and it would misdescribe the row besides: it is only ever
+read under `custom`, where the skin has already been declined. The configured **alpha survives the
+mode**, the same rule the cell text keeps: a class colour carries none of its own and takes the
+swatch's, so changing the mode never silently changes the opacity.
+
+There is deliberately **no `stat` mode**, for the reason the header's other surfaces have none: the
+divider is one line across the whole window, so "per statistic" could only paint it the sort column's
+colour — a fact already on screen twice over.
+
 `showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
 `true`. Six of the seven controls; `closeButton` is the seventh and deliberately keeps its older
 name, because renaming it to `showClose` for symmetry would migrate every stored profile in exchange
@@ -495,7 +521,15 @@ window is how you put its grip away.
 
 `hoverReveal = true` fades every control except the one under the pointer — the reveal is per
 control, not per strip, so it *is* the "which one am I about to click" feedback rather than a
-separate highlight drawn behind it. `minimised = false`
+separate highlight drawn behind it. `controlAlpha = 0.25` · `controlHoverAlpha = 1.0` are the two
+ends of that fade and were literals in `restAlpha` until they were rows, so a window that touches
+neither is drawn exactly as before. **`controlAlpha` is read only while the reveal is on** — with
+fading off there is no faded state, and every control sits at the hover value, which is what a
+player who has just switched fading off means by "how visible are these". It is deliberately not
+disabled on the panel in that state, the same bargain `bars.customColor` gets under a non-custom
+colour mode. Both are clamped to 0..1 on read: they come from a file a player can hand-edit, and an
+out-of-range alpha is not an error, it is a control drawn at the nearest legal value, which reads as
+the setting not working. `minimised = false`
 collapses the window to that bar — the stored `frame.height` is untouched, so expanding restores it
 exactly. `controlColor = { r=1, g=1, b=1, a=1 }` and `controlHoverColor = { r=1, g=0.82, b=0, a=1 }` — two
 colours, because hover is the only feedback a control gives, each now paired with its own

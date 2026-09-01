@@ -306,9 +306,10 @@ second edge to catch.
   them — `/mm get window.text.size` still answers; `window.rows.*` is on the **Frame** page's *Row*
   tab now, not on Bars.
 - **The Header page's shape.** Four tabs, top to bottom in the order the strips are drawn: *Title
-  bar* — the strip's own shape: whether it draws, its background, alignment and height — then *Title
-  text* — the face drawn on it, and the window's own name — then *Controls*, and *Button style*
-  (hover reveal and control size, then the two colour-mode dropdowns with their swatches). `showClose` and the rest are still **stored** at
+  bar* — the strip's own shape: whether it draws, its background, alignment, height, and the divider
+  under it (on/off, thickness and colour) — then *Title text* — the face drawn on it, and the
+  window's own name — then *Controls*, and *Button style* (the reveal beside the size, then rest and
+  hover paired down three lines: mode, colour, opacity). `showClose` and the rest are still **stored** at
   `window.frame.*` (`/mm get window.frame.showClose` answers), which is deliberate: a row's page is
   where it is edited, its path is where it is stored. There is **no** *Column headers* tab here any
   more — that strip's rows moved to the **Columns** page, which is the page that labels it.
@@ -322,6 +323,26 @@ second edge to catch.
   checkboxes), *When to hide this window* (the mount/skyriding/housing/pet-battle/death/combat
   rules) and *Combat* (hide in/out of combat). Those first two are by a wide margin the longest tab
   labels in the whole panel, and the likeliest strip to wrap.
+- **The divider under the title bar.** Header → *Title bar* → **Show divider** ships **on**. Turn it
+  off and the hairline between the title strip and the column labels goes, and **nothing else moves**
+  — the window title, the session line and the control strip stay exactly where they were, because
+  the title row is centred against a constant rather than measured off the line. **Divider
+  thickness** grows it downward, into the gap above the column labels. **Divider color mode** ships
+  as **Ka0s skin**, which means the line is left exactly as the shared skin painted it — check that
+  first, then switch to **Class color** and confirm it takes yours, and to **Custom color** and
+  confirm it takes the swatch. Set the swatch's opacity to something low and switch between Custom
+  and Class: the opacity must **not** change with the mode. There is deliberately no per-statistic
+  mode — one line across the whole window could only ever mean the sort column.
+- **The two control opacities.** Header → *Button style* → **Control opacity** (25%) and **Control
+  hover opacity** (100%) are the two ends of the reveal and ship at what used to be hardcoded, so
+  check first that an untouched window looks exactly as it did. Then move each on its own and confirm
+  it moves only its end. Finally set **Control opacity** near zero and turn **Reveal controls on
+  hover** OFF: the strip must come back to the *hover* value, not vanish — with fading off there is
+  no faded state, so the rest slider is not read at all.
+- **The lock icon is the same weight as its neighbours in both states.** Unlock a window and compare
+  the padlock against the six controls beside it — same brightness, same colour; only the glyph
+  changes, from a closed padlock to an open one. It used to be drawn at 45% while unlocked, which is
+  the state a fresh window ships in, so the strip read as having one half-broken icon in it.
 - **The tab strips all fit one row at default UI scale.** Frame's four tabs, Bars' six, Tooltip's
   six, Header's four and Visibility's three — note any that wrap onto a second row; a wrapped strip is a layout bug in
   `placeTabs`' coordinate arithmetic, not a copy problem.
@@ -364,7 +385,9 @@ second edge to catch.
   position is the one control on the page that is **not** addon-wide — it moves the window the
   banner is pointed at and nothing else, which its tooltip says.
 - **The statistic palette is editable, and every surface follows it.** General → **Statistic
-  colors** carries one swatch per statistic, shipped in the catalog's own colours. Change
+  colors** carries one swatch per statistic, shipped in the catalog's own colours, and a note under
+  the grid saying where they are worn — read it and check it is true, because it is the only thing on
+  that tab explaining why setting a colour can appear to do nothing. Change
   **Damage**'s to something unmistakable, then check all four surfaces that wear the palette move
   together: a Bars → *Bar* → Bar color mode of **Per-statistic**, a Bars → *Text style* → Text color
   mode of **Per-statistic**, the Columns → *Header text* / *Header background* modes, and — with no
@@ -388,10 +411,13 @@ second edge to catch.
   and the rest. *Smart value (Absolute | Per Second)* shows both with a bar between them on the
   columns that have both, and the absolute **alone** on a counting column: an Interrupts cell reading
   `9 | 3` is the failure to look for. Check both **mid-pull**, when every figure is secret.
-- **The window name takes the header's colour.** Header → Title text → **Text color**: the title in
+- **The window name takes the header's colour.** Header → *Title text* → **Text color**: the title in
   the window's title bar follows it, along with the font, size, outline and shadow it already
-  followed. Set **Text color mode** to Class color and the title takes your class colour, exactly as
-  the session line beside it does — the two are one header and must never differ.
+  followed. Set **Text color mode** to **Class color** and the title takes your class colour, exactly
+  as the session line beside it does — the two are one header and must never differ. Drop the
+  swatch's opacity and switch between the two modes: the opacity must **not** change with the mode.
+  There is deliberately no per-statistic option — one strip over the whole window could only ever
+  mean the sort column.
   The Settings window's own footer Defaults control works on the same tab.
 - **Panel ↔ CLI parity.** With a page open, run `/mm set window.frame.width 640`. The Frame page's
   Width slider moves to 640 **without being reopened** (`RefreshScalars`). Conversely, move a slider

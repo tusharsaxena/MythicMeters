@@ -108,6 +108,8 @@ L["Columns"] = "Columns"
 L["Data"] = "Data"
 L["General"] = "General"
 L["Statistic colors"] = "Statistic colors"
+L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."] =
+    "These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."
 L["Profiles"] = "Profiles"
 
 -- ---------------------------------------------------------------------------
@@ -218,6 +220,12 @@ L["What colors a header control while the pointer is over it."] =
 L["Control hover color"] = "Control hover color"
 L["Color the control under the pointer is drawn in."] =
     "Color the control under the pointer is drawn in."
+L["Control opacity"] = "Control opacity"
+L["How faint a control NOT under the pointer is drawn, while Reveal controls on hover is on. With the reveal off there is nothing faded and this is not read."] =
+    "How faint a control NOT under the pointer is drawn, while Reveal controls on hover is on. With the reveal off there is nothing faded and this is not read."
+L["Control hover opacity"] = "Control hover opacity"
+L["How opaque the control under the pointer is drawn. With Reveal controls on hover off, every control sits at this."] =
+    "How opaque the control under the pointer is drawn. With Reveal controls on hover off, every control sits at this."
 L["Control size"] = "Control size"
 L["How large each header control is drawn, in pixels."] = "How large each header control is drawn, in pixels."
 L["Show resize grip"] = "Show resize grip"
@@ -272,6 +280,19 @@ L["Set the font outline for the cell text, both header strips and the tooltip at
 L["Header height"] = "Header height"
 L["Height of the header strip in pixels."] = "Height of the header strip in pixels."
 L["Header background"] = "Header background"
+L["Show divider"] = "Show divider"
+L["Draw the hairline between the title bar and the column labels."] =
+    "Draw the hairline between the title bar and the column labels."
+L["Divider thickness"] = "Divider thickness"
+L["Divider color mode"] = "Divider color mode"
+L["Ka0s skin"] = "Ka0s skin"
+L["What colors the hairline. Ka0s skin leaves it to the shared collection skin, so a re-skin reaches this window along with the debug console and the perf panel; Class color is your own class."] =
+    "What colors the hairline. Ka0s skin leaves it to the shared collection skin, so a re-skin reaches this window along with the debug console and the perf panel; Class color is your own class."
+L["Divider color"] = "Divider color"
+L["Color of the hairline under the title bar, used when the mode above is Custom color."] =
+    "Color of the hairline under the title bar, used when the mode above is Custom color."
+L["How thick the hairline under the title bar is, in pixels. It grows downward, into the gap above the column labels."] =
+    "How thick the hairline under the title bar is, in pixels. It grows downward, into the gap above the column labels."
 L["Color drawn behind the title bar. The column-header strip has its own, on the Columns page."] =
     "Color drawn behind the title bar. The column-header strip has its own, on the Columns page."
 L["Alignment"] = "Alignment"

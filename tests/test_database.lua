@@ -816,11 +816,14 @@ test("Database v7: a class-colour boolean becomes a colour mode, on every surfac
 
     local w = inst.NS.Database.FindWindow(1)
     assertEqual(w.text.colorMode, "class")
-    -- v7 set this, and v10 PRUNES it -- the ladder runs all the way, so what a
-    -- middle step wrote is not what the end state holds. The title bar's text has
-    -- no colour mode any more: one strip over the whole window cannot say anything
-    -- true with either of the two the mode offered.
-    assertEqual(w.header.colorMode, nil)
+    -- v7 set this, v10 PRUNES it, and the shipped default fills it back in -- the
+    -- ladder runs all the way, so what a middle step wrote is not what the end
+    -- state holds. `window.header.colorMode` exists again with TWO modes rather
+    -- than three, so what the prune is worth today is scrubbing a stored `stat`
+    -- the new row would not accept. A profile that had `class` reverts to the
+    -- picker; the key was dead for the releases in between and re-deriving intent
+    -- from a value nothing read would be inventing a preference nobody expressed.
+    assertEqual(w.header.colorMode, "custom")
     assertEqual(w.columnHeader.colorMode, "class")
     assertEqual(w.tooltip.colorMode, "class")
 

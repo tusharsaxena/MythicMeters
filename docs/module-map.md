@@ -29,9 +29,10 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │   ├── EnvSetup.lua    — the LibKa0s-Env seam: NS.Meta / NS.Version, the TOC-manifest
 │                         reader Compat used to own. BEFORE Namespace.lua, which
 │                         resolves NS.version at file scope
-│   ├── Constants.lua   — NS.Constants / NS.Const: the STAT CATALOG (9 rows), the
-│                         per-stat palette (STAT_COLORS + STAT_DIM, worn by both
-│                         a bar and a name-tooltip line), the off-catalog reads
+│   ├── Constants.lua   — NS.Constants / NS.Const: the STAT CATALOG (8 rows), the
+│                         SHIPPED per-stat palette (STAT_COLORS + STAT_DIM), which
+│                         seeds the statColors.* setting and is the fallback
+│                         NS.StatColor degrades to, the off-catalog reads
 │                         (EnemyDamageTaken — read, never a column), the
 │                         enum resolutions, the MSG bus catalog (14 names), throttle
 │                         bounds, pool and row caps, the shipped mono font
@@ -125,7 +126,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         no frame; refuses at the source
 │   └── Minimap.lua     — the LibDataBroker launcher and its LibDBIcon button
 └── settings/
-    ├── Schema.lua      — NS.Schema (147 rows) and the write seam: GetSetting,
+    ├── Schema.lua      — NS.Schema (154 rows) and the write seam: GetSetting,
     │                     SetByPath, FindSchemaRow, ApplyDefault, SchemaForPage,
     │                     ValidateSchema. Owns the window-relative path model
     ├── Slash.lua       — LibKa0s-Slash-1.0 seam: NS.COMMANDS (16 verbs), the five
@@ -214,9 +215,9 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — `H.WindowBanner`, **the only writer of `NS.State.activeWindowId`**, decorated onto the library instance and drawn by all seven window pages — and the five registry buttons plus the copy-from group filter, behind a bespoke two-tab strip (Window, Copy from) | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
 | `Frame.lua` | The Frame page (24 rows across four tabs: General, Size and position, Background and border, Row). Pure schema — the header controls moved to Header and "Reset position" to General | a page registration | `NS.Helpers` |
-| `Header.lua` | The Header page (24 rows across four tabs): the title bar's own text, every toggle for the icon strip it carries (Controls) and how those controls are drawn (Button style). The column-header strip moved to the Columns page it labels. Rows are stored at `window.frame.*` / `window.header.*`. Pure schema | a page registration | `NS.Helpers` |
+| `Header.lua` | The Header page (31 rows across four tabs): the title bar's own text, every toggle for the icon strip it carries (Controls) and how those controls are drawn (Button style). The column-header strip moved to the Columns page it labels. Rows are stored at `window.frame.*` / `window.header.*`. Pure schema | a page registration | `NS.Helpers` |
 | `Bars.lua` | The Bars page (27 rows across six tabs: Bar, Background, Border, Text content, Text style, Icons): the bar, its background, its border, the cell's two text slots and the row icon. The Text and Icons pages folded in here; their PATHS did not move with them. Pure schema | a page registration | `NS.Helpers` |
-| `Tooltip.lua` | The Tooltip page (29 rows across six tabs: General, Text, Bar, Bar background, Bar border, Contents). Pure schema | a page registration | `NS.Helpers` |
+| `Tooltip.lua` | The Tooltip page (29 rows across six tabs: General, Bar, Bar background, Bar border, Text, Contents). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (17 rows across three tabs — where, extra rules, combat). Pure schema | a page registration | `NS.Helpers` |
 | `ColumnBlocks.lua` | The ROW of a reorderable list — state glyph, label, and the rule where the enabled ones stop — plus the wiring that hands the list to LibKa0s. The **gesture** is `LibKa0s-Widgets-1.0`'s `ReorderList` (minor 8): handle, carried copy, insertion line, clamp. Loads **before** `Columns.lua` | `NS.ReorderableBlocks(ctx, spec)`, `NS.BLOCK_HEIGHT`, `NS.BLOCK_STRIDE` | `LibKa0s-Widgets-1.0`, `NS.Helpers.EnsureScroll`, `NS.AceGUI`, `NS.Icon` |
 | `Columns.lua` | The Columns page (8 schema rows — the `window.columnHeader.*` text and background rows moved here from Header — across two of its three tabs), plus the block editor: one block per statistic, ticked or not, dragged into order, on the tab that carries **no** schema rows. Every write to the array hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.ReorderableBlocks`, `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |

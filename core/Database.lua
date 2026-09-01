@@ -549,15 +549,26 @@ migrations[9] = function(db)
     db.global.schemaVersion = 10
 end
 
---- v10 -> v11: THE TITLE BAR'S TEXT LOSES ITS COLOUR MODE.
+--- v10 -> v11: THE TITLE BAR'S TEXT LOSES ITS THREE-MODE COLOUR SETTING.
 ---
---- Same argument that took the mode off the title bar's BACKGROUND at v8,
---- arriving at its TEXT a release later. The title bar is ONE strip over the
---- whole window, so neither mode it offered could say anything true about it:
---- "per statistic" could only ever paint it the sort column's colour -- already
---- on screen in that column's own header and in its arrow -- and "class" could
---- only be the local player's, which the title bar is not about either. It names
---- the window. The colour picker is the whole setting now.
+--- WHAT THIS STEP CLEARED, AND WHY IT STILL RUNS. At the time it removed the row
+--- outright: the title bar is ONE strip over the whole window, and neither mode
+--- it offered was thought to say anything true about it.
+---
+--- `window.header.colorMode` EXISTS AGAIN, and half of that argument was later
+--- overturned -- `class` is back, because the controls and the divider on the same
+--- strip both wear one and a title that alone could not was the odd one out. See
+--- settings/Schema.lua's Title text note. The other half stands: there is still no
+--- `stat`, for the reason above.
+---
+--- SO THIS STEP IS NOT A HISTORICAL NO-OP, and it must not be retired into one. A
+--- profile below v11 can be holding `colorMode = "stat"`, which the two-mode row
+--- does not accept and no reader would resolve; clearing it lets the shipped
+--- default (`custom`) fill in, which is the same answer that profile has been
+--- rendering since v10 anyway. A profile holding `"class"` loses it and reverts to
+--- the picker -- deliberate, and not worth a guess: the key was genuinely dead for
+--- the releases in between, and re-deriving intent from a value nothing read is
+--- how a migration invents a preference nobody expressed.
 ---
 --- Pruned rather than left, for the reason every step here gives: AceDB merges
 --- defaults in and never removes what they stopped naming, so a field nobody

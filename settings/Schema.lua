@@ -434,6 +434,23 @@ local CONTROLCOLOR_VALUES = {
 }
 local CONTROLCOLOR_SORT = { "class", "custom" }
 
+-- The divider's three, and the extra one is the point. `skin` is not "a colour
+-- that happens to match the skin" -- it is *don't touch the texture*, so whatever
+-- LibKa0s-Core-1.0's ApplySkin just wrote stands. That is what keeps a re-skin
+-- landing on this window along with the debug console and the perf panel
+-- (standalone-windows): the shared value is never copied into this repo, never
+-- stored in a profile, and never has to be migrated when it changes.
+--
+-- NO `stat` MODE, for the reason the header's other surfaces do not have one: the
+-- divider is one line across the whole window, so "per statistic" could only ever
+-- paint it the sort column's colour -- a fact already on screen twice over.
+local DIVIDERCOLOR_VALUES = {
+    skin   = L["Ka0s skin"],
+    class  = L["Class color"],
+    custom = L["Custom color"],
+}
+local DIVIDERCOLOR_SORT = { "skin", "class", "custom" }
+
 -- ONE set for both slots, and EVERY VALUE IS LITERAL — modules/Row.lua renders
 -- exactly what is asked for and never falls back to another figure. `none` in
 -- particular means nothing at all, which it did not always: both slots set to
@@ -920,16 +937,73 @@ NS.Schema = {
         page = "header", group = L["Title bar"],
         label = L["Header height"], desc = L["Height of the header strip in pixels."],
     },
+    -- THE HAIRLINE BETWEEN THE TITLE BAR AND THE COLUMN LABELS, and the one piece
+    -- of the window's chrome that is a setting. It earns its keep when both
+    -- strips are drawn plainly and is a line across the window for nothing once
+    -- the title bar's own background is doing the separating -- which is a look,
+    -- so it is the player's call rather than a rule.
+    --
+    -- ON by default: it is what the window has always drawn, and a chrome
+    -- element that disappears on upgrade is a bug report.
+    --
+    -- THREE ROWS, NOT ONE, and the colour mode below is where the interesting
+    -- part is. `NS.ApplySkin` tints `frame.divider` from LibKa0s-Core-1.0's shared
+    -- SKIN; the mode's shipped value, `skin`, does not read that table and write
+    -- it -- it writes NOTHING, leaving the library's tint standing. That is what
+    -- keeps standalone-windows intact through a per-window picker: the rule is
+    -- "never restate SKIN's values", and nothing here restates them.
+    {
+        path = "window.header.divider", type = "bool", default = true,
+        page = "header", group = L["Title bar"],
+        label = L["Show divider"],
+        desc = L["Draw the hairline between the title bar and the column labels."],
+    },
+    {
+        path = "window.header.dividerThickness", type = "number", default = 1,
+        min = 1, max = 8, step = 1, fmt = "%d px",
+        page = "header", group = L["Title bar"],
+        label = L["Divider thickness"],
+        desc = L["How thick the hairline under the title bar is, in pixels. It grows downward, into the gap above the column labels."],
+        validate = isNumberIn(1, 8),
+    },
+    {
+        path = "window.header.dividerColorMode", type = "string", default = "skin",
+        values = DIVIDERCOLOR_VALUES, sorting = DIVIDERCOLOR_SORT,
+        page = "header", group = L["Title bar"],
+        label = L["Divider color mode"],
+        desc = L["What colors the hairline. Ka0s skin leaves it to the shared collection skin, so a re-skin reaches this window along with the debug console and the perf panel; Class color is your own class."],
+    },
+    {
+        -- A MID GREY, and deliberately not the skin's own values. Seeding this
+        -- with SKIN.divider would be the copy standalone-windows forbids -- the
+        -- one that drifts a hex digit at a time and then has to be migrated -- and
+        -- it would also be a lie about what the row is: this is the colour the
+        -- player CHOSE, and it is read only under `custom`, where the skin has
+        -- already been declined.
+        path = "window.header.dividerColor", type = "color",
+        default = { r = 0.5, g = 0.5, b = 0.5, a = 0.85 },
+        page = "header", group = L["Title bar"],
+        label = L["Divider color"],
+        desc = L["Color of the hairline under the title bar, used when the mode above is Custom color."],
+    },
     -- ── Title text ──────────────────────────────────────────────
-    -- NO `header.colorMode` ROW, and no setting behind it. The title bar is ONE
-    -- strip over the whole window, so neither of the two modes it offered could
-    -- say anything true about it. Per-statistic could only ever paint it the SORT
-    -- column's colour -- a fact already on screen twice, in that column's own
-    -- header and in its arrow -- and class could only be the local player's,
-    -- which the title bar is not about either: it names the window. This is the
-    -- same argument that took the mode off the title bar's BACKGROUND one change
-    -- earlier, arriving at the text a step later. The colour picker below is what
-    -- the setting was before a mode was added to it.
+    -- TWO MODES, NOT THREE, and the half that is missing is the interesting half.
+    --
+    -- NO `stat`. Per-statistic could only ever paint this the SORT column's
+    -- colour -- a fact already on screen twice, in that column's own header and
+    -- in its arrow -- and the title bar is ONE strip over the whole window rather
+    -- than a thing belonging to a column. That is the same argument that took the
+    -- mode off the title bar's BACKGROUND, and it still holds, which is why this
+    -- row takes the CONTROLS' pair rather than the three every cell surface answers.
+    --
+    -- CLASS DID NOT SURVIVE THE SAME ARGUMENT, and this note used to say it had:
+    -- "class could only be the local player's, which the title bar is not about --
+    -- it names the window". What settled it the other way is the rest of the
+    -- strip. The controls wear a class colour and so does the divider under them;
+    -- a title that alone could not was the odd one out rather than the principled
+    -- one, and "this header is mine" is a perfectly good thing for a player to
+    -- want a window to say. It is still the LOCAL player's class, because that is
+    -- the only class a window-wide strip can mean.
     {
         path = "window.header.font", type = "string", default = "Friz Quadrata TT",
         values = lsmValues("font"), dialogControl = "LSM30_Font",
@@ -943,22 +1017,29 @@ NS.Schema = {
         label = L["Font size"], desc = L["Text size in pixels."],
     },
     {
+        path = "window.header.colorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
+        page = "header", group = L["Title text"],
+        label = L["Text color mode"],
+        desc = L["What colors the window's title and the session line beside it. Class color is your own -- a window-wide strip has no other class it could mean."],
+    },
+    {
         path = "window.header.color", type = "color",
         default = { r = 1, g = 0.82, b = 0, a = 1 },
         page = "header", group = L["Title text"],
         label = L["Text color"], desc = L["Color of the header's own lines."],
     },
     {
-        path = "window.header.shadow", type = "bool", default = false,
-        page = "header", group = L["Title text"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the header text so it stays readable over a bright backdrop."],
-    },
-    {
         path = "window.header.outline", type = "string", default = "OUTLINE",
         values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
         page = "header", group = L["Title text"],
         label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
+    },
+    {
+        path = "window.header.shadow", type = "bool", default = false,
+        page = "header", group = L["Title text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the header text so it stays readable over a bright backdrop."],
     },
     -- ── The meter's controls (issue #6) ────────────────────────────────────
     -- ON THE HEADER PAGE, which is where a player looks for them. They were on
@@ -1054,7 +1135,11 @@ NS.Schema = {
     },
     -- ── Button style ──────────────────────────────────────────────
     -- How every one of the eight controls above is drawn, not what any one of
-    -- them does.
+    -- them does. FOUR PAIRS, and the pairing is the layout: the reveal beside the
+    -- size, then rest and hover side by side down three lines -- mode, colour,
+    -- opacity. Reading down a column is reading one state; reading across a line
+    -- is comparing the two, which is the question a player setting a hover
+    -- actually has.
     {
         path = "window.frame.hoverReveal", type = "bool", default = true,
         page = "header", group = L["Button style"],
@@ -1078,12 +1163,6 @@ NS.Schema = {
         desc = L["What colors the header controls at rest."],
     },
     {
-        path = "window.frame.controlColor", type = "color",
-        default = { r = 1, g = 1, b = 1, a = 1 },
-        page = "header", group = L["Button style"],
-        label = L["Control color"], desc = L["Color the header controls are drawn in."],
-    },
-    {
         path = "window.frame.controlHoverColorMode", type = "string", default = "custom",
         values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
         page = "header", group = L["Button style"],
@@ -1091,11 +1170,44 @@ NS.Schema = {
         desc = L["What colors a header control while the pointer is over it."],
     },
     {
+        path = "window.frame.controlColor", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "header", group = L["Button style"],
+        label = L["Control color"], desc = L["Color the header controls are drawn in."],
+    },
+    {
         path = "window.frame.controlHoverColor", type = "color",
         default = { r = 1, g = 0.82, b = 0, a = 1 },
         page = "header", group = L["Button style"],
         label = L["Control hover color"],
         desc = L["Color the control under the pointer is drawn in."],
+    },
+    -- THE TWO ENDS OF THE REVEAL, and they were a hardcoded 0.25 and 1 until now.
+    -- Both defaults are those two numbers, so a window that never touches either
+    -- slider is drawn exactly as it was.
+    --
+    -- `controlAlpha` IS READ ONLY WHILE THE REVEAL IS ON -- with fading off there
+    -- is no faded state to have an opacity -- and it is deliberately NOT disabled
+    -- on the panel when it is off, which is the same bargain `bars.customColor`
+    -- gets under a non-custom colour mode: setting the faded level before
+    -- switching fading on is the normal order of operations, and a greyed-out
+    -- slider makes that a two-visit job. See modules/HeaderControls.lua's
+    -- stripAlphas.
+    {
+        path = "window.frame.controlAlpha", type = "number", default = 0.25,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "header", group = L["Button style"],
+        label = L["Control opacity"],
+        desc = L["How faint a control NOT under the pointer is drawn, while Reveal controls on hover is on. With the reveal off there is nothing faded and this is not read."],
+        validate = isNumberIn(0, 1),
+    },
+    {
+        path = "window.frame.controlHoverAlpha", type = "number", default = 1.0,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "header", group = L["Button style"],
+        label = L["Control hover opacity"],
+        desc = L["How opaque the control under the pointer is drawn. With Reveal controls on hover off, every control sits at this."],
+        validate = isNumberIn(0, 1),
     },
 
     -- ── Bars ────────────────────────────────────────────────────
@@ -1319,11 +1431,12 @@ NS.Schema = {
     },
 
     -- ── Tooltip ────────────────────────────────────────────────────
-    -- SIX TABS: where it goes and how big it is (General), the face it is drawn
-    -- in (Text), the spell bar's own fill, background and border, and last what
-    -- it lists (Contents). Contents is LAST rather than second because it is the
-    -- one tab a player sets once and leaves -- the other five are the ones they
-    -- come back to. No "At cursor" anchor: over a grid it lands wherever the pointer
+    -- SIX TABS: where it goes and how big it is (General), the spell bar's own
+    -- fill, background and border, the face it is drawn in (Text), and last what
+    -- it lists (Contents). The two tabs a player sets once and leaves are at the
+    -- END -- the three bar tabs are the ones they come back to, and they now sit
+    -- together in the middle rather than with a text tab wedged in front of them.
+    -- No "At cursor" anchor: over a grid it lands wherever the pointer
     -- happens to be inside a cell, so the same hover puts the tooltip somewhere
     -- different every time. TOP is the deliberate version of the same thing --
     -- above the cell, in one place -- and is the default now.
@@ -1369,48 +1482,6 @@ NS.Schema = {
         page = "tooltip", group = L["General"],
         label = L["Hide tooltips in combat"],
         desc = L["Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."],
-    },
-    -- ── Text ────────────────────────────────────────────────────
-    -- The font reaches GameTooltip's own line FontStrings, which are SHARED with
-    -- every other addon -- so modules/Tooltip.lua restores every line it touched
-    -- when the tooltip hides. See that file's `releaseLines`.
-    {
-        path = "window.tooltip.font", type = "string", default = "Friz Quadrata TT",
-        values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "tooltip", group = L["Text"],
-        label = L["Font"], desc = L["Font used for the tooltip's spell names and numbers."],
-    },
-    {
-        path = "window.tooltip.fontSize", type = "number", default = 12,
-        min = 6, max = 32, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Text"],
-        label = L["Font size"], desc = L["Tooltip text size in pixels."],
-        validate = isNumberIn(6, 32),
-    },
-    {
-        path = "window.tooltip.colorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "tooltip", group = L["Text"],
-        label = L["Text color mode"],
-        desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
-    },
-    {
-        path = "window.tooltip.textColor", type = "color",
-        default = { r = 1, g = 1, b = 1, a = 1 },
-        page = "tooltip", group = L["Text"],
-        label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
-    },
-    {
-        path = "window.tooltip.fontOutline", type = "string", default = "NONE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "tooltip", group = L["Text"],
-        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
-    },
-    {
-        path = "window.tooltip.fontShadow", type = "bool", default = false,
-        page = "tooltip", group = L["Text"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the tooltip text so it stays readable over a bright bar."],
     },
     -- ── Bar ────────────────────────────────────────────────────
     -- Tooltip bars are configured SEPARATELY from the grid's, rather than
@@ -1509,6 +1580,48 @@ NS.Schema = {
         default = { r = 0, g = 0, b = 0, a = 1 },
         page = "tooltip", group = L["Bar border"],
         label = L["Bar border color"], desc = L["Color of the border around each spell bar."],
+    },
+    -- ── Text ────────────────────────────────────────────────────
+    -- The font reaches GameTooltip's own line FontStrings, which are SHARED with
+    -- every other addon -- so modules/Tooltip.lua restores every line it touched
+    -- when the tooltip hides. See that file's `releaseLines`.
+    {
+        path = "window.tooltip.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "tooltip", group = L["Text"],
+        label = L["Font"], desc = L["Font used for the tooltip's spell names and numbers."],
+    },
+    {
+        path = "window.tooltip.fontSize", type = "number", default = 12,
+        min = 6, max = 32, step = 1, fmt = "%d px",
+        page = "tooltip", group = L["Text"],
+        label = L["Font size"], desc = L["Tooltip text size in pixels."],
+        validate = isNumberIn(6, 32),
+    },
+    {
+        path = "window.tooltip.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "tooltip", group = L["Text"],
+        label = L["Text color mode"],
+        desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
+    },
+    {
+        path = "window.tooltip.textColor", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "tooltip", group = L["Text"],
+        label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
+    },
+    {
+        path = "window.tooltip.fontOutline", type = "string", default = "NONE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "tooltip", group = L["Text"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
+    },
+    {
+        path = "window.tooltip.fontShadow", type = "bool", default = false,
+        page = "tooltip", group = L["Text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the tooltip text so it stays readable over a bright bar."],
     },
     -- ── Contents ──────────────────────────────────────────────
     {

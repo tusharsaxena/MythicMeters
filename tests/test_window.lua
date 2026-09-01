@@ -133,18 +133,24 @@ test("The header carries a lock and a gear, and the padlock shows the state", fu
     assertTrue(window.controls.lock:GetScript("OnClick") ~= nil)
     assertTrue(window.controls.settings:GetScript("OnClick") ~= nil)
 
-    -- The padlock's art is whatever resolved: an atlas where the client has one,
-    -- an ASCII character where it does not. Either way the two states must not
-    -- look the same, which is the only thing that makes it a state indicator.
-    -- The padlock is ONE asset in two states: there is a confirmed locked atlas
-    -- and no unlocked one, so "unlocked" is the same art desaturated and faded.
-    -- Whatever the mechanism, the two states must not look identical — that is
-    -- the only thing that makes it a state indicator.
+    -- The padlock's art is whatever resolved: our own texture where the payload
+    -- is there, an atlas where the client has one, an ASCII character where it
+    -- has neither. Whatever the mechanism, the two states must not look
+    -- identical — that is the only thing that makes it a state indicator.
+    --
+    -- THE TEXTURE PATH IS IN THE FINGERPRINT, and it was not. The collection
+    -- ships BOTH halves of this one now (`lock` and `unlock`), so on the art rung
+    -- the state is carried by which file is drawn; the atlas rung, which still
+    -- has one asset, carries it by desaturating. Alpha carried it too until the
+    -- dimming came out — brightness is not a state signal, and an unlocked
+    -- padlock at 0.45 read as a half-broken icon beside six full-strength ones.
+    -- Reading only the atlas and the alpha meant this case was measuring the one
+    -- mechanism the shipped install does not use.
     local function art(button)
         return table.concat({
+            tostring(button.tex:GetTexture()),
             tostring(button.tex:GetAtlas()),
             tostring(button.tex.__desaturated),
-            tostring(button.tex:GetAlpha()),
             tostring(button.glyph:GetText()),
         }, "/")
     end
@@ -324,6 +330,76 @@ test("The window refuses to be dragged smaller than the grid needs", function()
     assertEqual(minH, pad * 2 + window.layout.titleHeight
         + window.layout.headerHeight + (cfg.rows.height or 16))
     assertTrue(minW >= Const.NAME_COLUMN_WIDTH + #window.layout.columns * Const.COLUMN_MIN_WIDTH)
+end)
+
+test("The title-bar divider can be switched off, and does not move the title row", function()
+    -- The one piece of the window's chrome a player can hide. What matters as much
+    -- as the hiding is that NOTHING ELSE MOVES: TitleRowTop centres the title row
+    -- against the DIVIDER_INSET constant, not against this texture, so a hidden
+    -- line leaves the title, the session line and the control strip exactly where
+    -- they were. A layout that measured the divider would shift all three.
+    -- red under: gating the title row on the divider, or hiding it by height 0.
+    local inst, window, cfg = scene()
+
+    window:ApplyConfig()
+    local rowTop = window:TitleRowTop(cfg.header.height)
+    assertTrue(window.frame.divider:IsShown(), "the divider ships drawn")
+
+    cfg.header.divider = false
+    window:ApplyConfig()
+    assertFalse(window.frame.divider:IsShown(), "the divider ignored its setting")
+    assertEqual(window:TitleRowTop(cfg.header.height), rowTop,
+        "hiding the divider moved the title row")
+end)
+
+test("The divider's thickness is a setting", function()
+    local _, window, cfg = scene()
+    cfg.header.dividerThickness = 4
+    window:ApplyConfig()
+    assertEqual(window.frame.divider:GetHeight(), 4)
+end)
+
+test("The divider's SKIN mode writes no colour at all, so a re-skin still reaches it", function()
+    -- The shipped mode, and the reason it is a mode rather than a stored colour.
+    -- `skin` does not resolve SKIN.divider and write it -- it writes NOTHING, so
+    -- whatever ApplySkin put on the texture stands. That is how standalone-windows
+    -- survives a per-window colour picker: the shared value is never copied into
+    -- this repo and never into a profile, so changing it upstream still lands here.
+    -- red under: seeding the swatch from SKIN.divider, or "skin" resolving to a
+    -- literal — either one freezes today's skin into every saved profile.
+    local inst, window, cfg = scene()
+    local skin = inst.mocks.LibStub("LibKa0s-Core-1.0", true).SKIN
+
+    cfg.header.dividerColorMode = "skin"
+    window:ApplyConfig()
+    local drawn = window.frame.divider.__colorTexture
+    assertEqual(drawn[1], skin.divider[1], "skin mode did not leave the library's tint standing")
+    assertEqual(drawn[4], skin.divider[4], "the divider's alpha was dropped")
+
+    -- And the profile holds no copy of it, which is the half that would rot.
+    assertFalse(inst.NS.GetSetting("window.header.dividerColor").r == skin.divider[1],
+        "the custom swatch was seeded from the skin")
+end)
+
+test("The divider takes a custom colour and a class colour, keeping the configured alpha", function()
+    -- A class colour has no alpha of its own, so it takes the swatch's — the same
+    -- rule the cell text keeps, where the configured alpha survives every mode.
+    -- red under: a class divider drawn at 1.0 while the swatch says 0.4.
+    local inst, window, cfg = scene()
+
+    cfg.header.dividerColor     = { r = 0.1, g = 0.2, b = 0.3, a = 0.4 }
+    cfg.header.dividerColorMode = "custom"
+    window:ApplyConfig()
+    local c = window.frame.divider.__colorTexture
+    assertEqual(c[1], 0.1)
+    assertEqual(c[4], 0.4)
+
+    cfg.header.dividerColorMode = "class"
+    window:ApplyConfig()
+    local k = window.frame.divider.__colorTexture
+    local cr = inst.NS.PlayerClassRGB()
+    assertEqual(k[1], cr, "the divider ignored the class colour")
+    assertEqual(k[4], 0.4, "the configured alpha did not survive the mode change")
 end)
 
 test("BuildLayout drops a column whose stat this build does not offer", function()
@@ -2246,25 +2322,15 @@ test("Column header shadow is its OWN setting, not the header's", function()
         "the title took the column strip's shadow")
 end)
 
-test("The header's text colour is the picker, and nothing resolves a mode", function()
-    -- The title bar used to answer the same three modes every text surface does,
-    -- and neither of the two it added could say anything true about it. It is ONE
-    -- strip over the whole window: "per statistic" could only ever paint it the
-    -- SORT column's colour -- already on screen in that column's own header and
-    -- in its arrow -- and "class" could only be the local player's, which the
-    -- title bar is not about either. It names the window.
-    --
-    -- Same argument that took the mode off the title bar's BACKGROUND at v9,
-    -- arriving at its text a release later.
-    -- red under: headerColor reading header.colorMode again.
+test("The header's text answers TWO modes, and the custom one is the picker", function()
+    -- Custom is the shipped mode, so a window that never touches the dropdown is
+    -- drawn from the picker exactly as it was before there was a dropdown.
+    -- red under: a default of "class", which would recolour every existing window
+    -- on upgrade.
     local inst, window, cfg = scene()
     inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
-    cfg.header.color = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
-
-    -- A stored mode from a profile that predates the prune must change NOTHING,
-    -- which is the property that makes the migration safe to have missed a window.
-    cfg.header.colorMode = "class"
-    cfg.data.sortColumn  = "HealingDone"
+    cfg.header.color    = { r = 0.2, g = 0.4, b = 0.6, a = 1 }
+    cfg.data.sortColumn = "HealingDone"
     window:ApplyConfig()
 
     local c = window.frame.title.__textColor
@@ -2275,6 +2341,47 @@ test("The header's text colour is the picker, and nothing resolves a mode", func
 
     assertEqual(window.sessionText.__textColor[1], c[1],
         "the title and the session line are one header and must not differ")
+end)
+
+test("The header's text takes the CLASS colour, keeping the configured alpha", function()
+    -- The title used to be the one thing on the strip that could not wear a class
+    -- colour, while the controls and the divider beside it both could -- so it was
+    -- the odd one out rather than the principled one. It is still the LOCAL
+    -- player's class, because that is the only class a window-wide strip can mean.
+    --
+    -- The ALPHA comes off the swatch, the same rule every other surface keeps: a
+    -- class colour carries none of its own, and inventing one would mean the
+    -- opacity changed when the mode did.
+    -- red under: a class title drawn at 1.0 while the swatch says 0.35, or the
+    -- session line beside it disagreeing with the title.
+    local inst, window, cfg = scene()
+    inst.mocks.RAID_CLASS_COLORS.PALADIN = { r = 0.41, g = 0.8, b = 0.94 }
+    cfg.header.color     = { r = 0.2, g = 0.4, b = 0.6, a = 0.35 }
+    cfg.header.colorMode = "class"
+    window:ApplyConfig()
+
+    local c = window.frame.title.__textColor
+    assertEqual(c[1], 0.41, "the title ignored the class colour")
+    assertEqual(c[4], 0.35, "the configured alpha did not survive the mode")
+    assertEqual(window.sessionText.__textColor[1], 0.41,
+        "the session line did not follow the title into class colour")
+end)
+
+test("The header's text mode offers class and custom, and NOT per-statistic", function()
+    -- The one half of the old refusal that stands. "Per statistic" could only ever
+    -- paint this the SORT column's colour -- already on screen in that column's own
+    -- header and in its arrow -- and the title bar is one strip over the whole
+    -- window rather than a thing belonging to a column. Same argument that took
+    -- the mode off the title bar's BACKGROUND.
+    -- red under: widening this row to the three-mode set every cell surface answers.
+    local inst = T.load()
+    local row  = inst.NS.FindSchemaRow("window.header.colorMode")
+    assertTrue(row ~= nil, "the title text has no colour mode row")
+
+    local keys = {}
+    for _, k in ipairs(row.sorting) do keys[#keys + 1] = k end
+    table.sort(keys)
+    assertEqual(table.concat(keys, ","), "class,custom")
 end)
 
 test("The header colour survives a sort change, having nothing to do with it", function()

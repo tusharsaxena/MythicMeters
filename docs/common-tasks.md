@@ -116,12 +116,21 @@ it *and* the order it lands in a new window if it ships enabled.
 | The name tooltip's all-statistics list | `modules/Tooltip.lua` walks `Const.STATS` |
 | The aggregator's per-stat read | `columnKeys(window)` filters the window's columns through `STAT_BY_KEY` |
 
-**4. Optionally add a color** to `Constants.STAT_COLORS` in `core/Constants.lua`. The same three
-numbers are worn in two places: a bar under `bars.colorMode == "stat"`, and — always, whatever that
-setting says — the new statistic's whole line in the name tooltip's all-statistics list, taken down
-by `Constants.STAT_DIM` when the hovered window has no column for it. Absent, the bar falls back to
-the shared neutral and the tooltip line to plain white or gray — correct rather than broken, but it
-means two columns read alike.
+**4. Optionally add a color** to `Constants.STAT_COLORS` in `core/Constants.lua`. Doing so has two
+consequences, and the second one is easy to miss:
+
+- **Four surfaces wear it**, all of them through the one reader `NS.StatColor` (`core/Namespace.lua`):
+  a bar under `bars.colorMode == "stat"`, cell text under `text.colorMode == "stat"`, the
+  column-header strip under `columnHeader.colorMode` / `bgColorMode`, and — always, whatever any of
+  those are set to — the statistic's whole line in the name tooltip's all-statistics list, taken down
+  by `Constants.STAT_DIM` when the hovered window has no column for it.
+- **It generates a settings row.** `settings/Schema.lua` appends one `color` row per palette entry to
+  General → Statistic colors, and `defaults/Profile.lua`'s `statColorDefaults()` seeds the stored
+  table from the same place. A statistic with no palette entry gets **no swatch** and cannot be
+  recoloured, which is the honest outcome rather than a black one.
+
+Absent, the bar falls back to the shared neutral and the tooltip line to plain white or gray —
+correct rather than broken, but it means two columns read alike.
 
 **Gotchas.**
 - `defaultEnabled = true` changes what a **new** window ships with. It does **not** appear in an

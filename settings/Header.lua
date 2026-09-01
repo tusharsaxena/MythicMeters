@@ -7,13 +7,22 @@
 -- file is the registration and the lazy body and nothing else; adding a header
 -- option is one row in settings/Schema.lua.
 --
--- Worth knowing while reading the rows this page renders: the header's EDGE
--- colors are not settings and never will be. The window's chrome comes from
--- LibKa0s-Core-1.0's shared SKIN and ApplySkin, which tints `frame.title` and
--- `frame.divider` itself (library-stack). A per-addon color picker for those
--- would be a private lookalike of the collection's shared look, and the first
--- thing to drift away from it. What IS configurable here is the header's own
--- text and background, which the skin does not own.
+-- Worth knowing while reading the rows this page renders: the two accents the
+-- SKIN owns -- `frame.title` and `frame.divider` -- are both configurable here
+-- now, and the rule they were once withheld under is intact rather than waived.
+--
+-- The rule (standalone-windows) is "never RESTATE Core.SKIN's values", because a
+-- copy drifts a hex digit at a time and then has to be migrated. It is not "never
+-- let a player choose". So both accents are reached the same way: ApplySkin runs
+-- first and owns the accent, and a setting that claims to govern it writes AFTER
+-- the library rather than instead of it.
+--
+-- The divider goes one better, because it is the only one with a *default* that
+-- has to mean "whatever the collection says". Its `skin` mode -- the shipped one
+-- -- resolves nothing and writes nothing, leaving ApplySkin's tint standing. So
+-- the shared value is never copied into this repo and never into a profile, and a
+-- re-skin still lands on this window along with the debug console and the perf
+-- panel. See modules/Window.lua's ApplyHeaderStrip.
 
 local addonName, NS = ...
 

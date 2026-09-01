@@ -100,7 +100,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **147 rows across 8 page keys**
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **154 rows across 8 page keys**
 (windows, frame, header, bars, tooltip, visibility, columns, general), each one wiring automatically
 into its panel widget — one tab per distinct `group`, via `LibKa0s-Options-1.0`'s `RenderTabbedSchema`
 — its `/mm get|set|list|reset` coverage, and the per-page and global defaults reset. A ninth
@@ -117,11 +117,12 @@ have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpres
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
 settings panel's window picker — `H.WindowBanner`, decorated by `settings/Windows.lua` and drawn on
-all seven window pages — moves. The other **nine** rows keep absolute paths and resolve against
+all seven window pages — moves. The other **seventeen** rows keep absolute paths and resolve against
 `db.profile`: `enabled`, `minimap.hide`, `data.mergePets`, `data.throttle` (addon-wide since
-schemaVersion 5), the three `export.*` preferences, and the two `sessionOnly` rows `state.testMode`
-and `state.debugConsole`, whose own `get`/`set` are the whole of their storage. Moving one integer of
-session state retargets **128** rows.
+schemaVersion 5), the three `export.*` preferences, the eight `statColors.*` swatches (generated one
+per `Constants.STAT_COLORS` entry — see [settings-panel.md](settings-panel.md#the-statistic-palette)),
+and the two `sessionOnly` rows `state.testMode` and `state.debugConsole`, whose own `get`/`set` are
+the whole of their storage. Moving one integer of session state retargets **137** rows.
 
 One page carries **zero** schema rows: `settings/Profiles.lua` hosts AceDBOptions' own tree and is
 the one place `AceConfigDialog` is permitted, because the options table is not ours to re-express. It
