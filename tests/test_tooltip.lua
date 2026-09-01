@@ -2137,6 +2137,24 @@ local function killerRecap(overrides)
     }
 end
 
+test("Tooltip: the death line ships naming the KILLER and not the spell", function()
+    -- The split a death list is actually read for. "Death 3" alone says nothing
+    -- the reader did not already know -- the count is in the cell they hovered to
+    -- get here -- and the caster closes that. The spell is the longest thing on
+    -- the line, the half most often absent, and it answers a question a reader has
+    -- after clicking into the recap rather than while scanning the list.
+    -- red under: shipping both on, which is what this shipped as first.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap())
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local shipped = table.concat(lineTexts(inst), "\n")
+    assertTrue(shipped:find("Death 3 | Ragnaros", 1, true) ~= nil,
+        "the shipped death line does not name the killer")
+    assertTrue(shipped:find("Sulfuras Smash", 1, true) == nil,
+        "the spell is drawn on a fresh profile; it ships off")
+end)
+
 test("Tooltip: a death line names who and what landed the killing blow", function()
     -- "Death 3 | Ragnaros | Sulfuras Smash". The recap's newest event IS the
     -- killing blow -- the array arrives newest first -- which is the same fact
@@ -2144,6 +2162,9 @@ test("Tooltip: a death line names who and what landed the killing blow", functio
     -- red under: reading events[#events], or dropping either half of the label.
     local inst, cfg, anchor = bench()
     inst.mocks.setDeathRecap(killerRecap())
+    -- Asked for explicitly: the spell half ships OFF, and this case is about what
+    -- the line draws when both are on rather than about what a fresh profile does.
+    inst.NS.Database.GetWindows()[1].tooltip.showDeathSpell = true
     inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
 
     local texts = table.concat(lineTexts(inst), "\n")
@@ -2162,6 +2183,7 @@ test("Tooltip: either half of a death line can be switched off on its own", func
     inst.mocks.setDeathRecap(killerRecap())
 
     local window = inst.NS.Database.GetWindows()[1]
+    window.tooltip.showDeathSpell  = true          -- ships off; this case needs both live
     window.tooltip.showDeathCaster = false
     inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
     local texts = table.concat(lineTexts(inst), "\n")
@@ -2205,6 +2227,7 @@ test("Tooltip: a melee killing blow is named Melee rather than left blank", func
     inst.mocks.setDeathRecap(killerRecap({
         spellName = ABSENT, spellId = ABSENT, event = "SWING_DAMAGE",
     }))
+    inst.NS.Database.GetWindows()[1].tooltip.showDeathSpell = true
     inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
 
     local texts = table.concat(lineTexts(inst), "\n")

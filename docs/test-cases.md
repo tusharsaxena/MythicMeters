@@ -974,7 +974,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (121)
+### test_tooltip.lua (122)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the default
@@ -1070,6 +1070,7 @@ badge and any count quoted in the docs must agree with it.
 - Tooltip: a death with no recap keeps the header too
 - Tooltip: a Deaths cell lists the DEATHS, not a spell breakdown
 - Tooltip: a Deaths cell shows one line per death, newest first
+- Tooltip: the death line ships naming the KILLER and not the spell
 - Tooltip: a death line names who and what landed the killing blow
 - Tooltip: either half of a death line can be switched off on its own
 - Tooltip: a death with nothing to name is still a numbered death
@@ -1571,7 +1572,7 @@ badge and any count quoted in the docs must agree with it.
 | test_headercontrols.lua | 51 |
 | test_row.lua | 89 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 121 |
+| test_tooltip.lua | 122 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 91 |
 | test_visibility.lua | 33 |
@@ -1584,4 +1585,4 @@ badge and any count quoted in the docs must agree with it.
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1418** |
+| **Total** | **1419** |

@@ -1665,8 +1665,15 @@ NS.Schema = {
     -- killed me is a cooldown question -- and a player who wants one of them
     -- should not have to take the other with it.
     --
-    -- BOTH ON, because the line without them says nothing a reader did not
-    -- already know: the count is in the cell they hovered to get here.
+    -- THE CASTER SHIPS ON AND THE SPELL SHIPS OFF, which is the split a death
+    -- list is actually read for. "Death 3" alone says nothing the reader did not
+    -- already know -- the count is in the cell they hovered to get here -- and
+    -- one name closes that. The SECOND name is what makes the line long: a spell
+    -- name is the longest thing on it, it is the half most often absent (a melee
+    -- swing, an environmental kill, a client that will not resolve the id), and
+    -- it answers a question a reader has after they have clicked into the recap
+    -- rather than while they are scanning the list. Available to anyone who wants
+    -- it, and not paid for by everyone who does not.
     --
     -- Either half goes quiet on its own terms and neither is a failure: an
     -- environmental death has no caster, a melee swing has no spell name, and a
@@ -1679,7 +1686,7 @@ NS.Schema = {
         desc = L["Add whoever landed the killing blow to each line of the Deaths list. Left off a death with no caster to name, such as a fall or a fire."],
     },
     {
-        path = "window.tooltip.showDeathSpell", type = "bool", default = true,
+        path = "window.tooltip.showDeathSpell", type = "bool", default = false,
         page = "tooltip", group = L["Contents"],
         label = L["Name the killing blow"],
         desc = L["Add the spell that landed the killing blow to each line of the Deaths list. A melee swing is named Melee; a spell the client cannot name is left off."],

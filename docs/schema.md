@@ -668,11 +668,18 @@ one line's two figures.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
 
-The death-line section: `showDeathCaster = true` · `showDeathSpell = true`. Each line of a Deaths
-cell's tooltip names what ended that death — `Death 3 | Ragnaros | Sulfuras Smash` — read off the
-recap's **newest** event, which is the killing blow (the array arrives newest first, the same fact
-the timestamp is taken from). Two switches rather than one because they answer different questions:
-who killed me is a positioning question and what killed me is a cooldown question.
+The death-line section: `showDeathCaster = true` · `showDeathSpell = false`. Each line of a Deaths
+cell's tooltip names what ended that death — `Death 3 | Ragnaros`, or `Death 3 | Ragnaros | Sulfuras
+Smash` with both on — read off the recap's **newest** event, which is the killing blow (the array
+arrives newest first, the same fact the timestamp is taken from). Two switches rather than one
+because they answer different questions: who killed me is a positioning question and what killed me
+is a cooldown question.
+
+**The caster ships on and the spell ships off.** `Death 3` alone says nothing the reader did not
+already know — the count is in the cell they hovered to get here — and one name closes that. The
+second name is what makes the line long: a spell name is the longest thing on it, it is the half most
+often absent, and it answers a question a reader has *after* clicking into the recap rather than while
+scanning the list.
 
 Both halves go quiet on their own terms and neither absence is a failure — an environmental death
 sets `hideCaster`, a melee swing has no spell name (and is named "Melee", as Blizzard's own recap

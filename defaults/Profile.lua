@@ -485,9 +485,12 @@ local WINDOW_TEMPLATE = {
         maxTargets         = 3,
 
         -- WHAT ENDED EACH DEATH, on the death list's own line: "Death 3 |
-        -- Ragnaros | Sulfuras Smash". Both ON, because the line without them
-        -- says nothing the reader did not already know -- the count is in the
-        -- cell they hovered to get here.
+        -- Ragnaros". The CASTER ships on -- "Death 3" alone says nothing the
+        -- reader did not already know, since the count is in the cell they
+        -- hovered to get here, and one name closes that. The SPELL ships OFF: it
+        -- is the longest thing on the line, the half most often absent, and it
+        -- answers a question a reader has after clicking into the recap rather
+        -- than while scanning the list.
         --
         -- Two switches rather than one: who killed me is a positioning question
         -- and what killed me is a cooldown question, and a player who wants one
@@ -496,7 +499,7 @@ local WINDOW_TEMPLATE = {
         -- a melee swing has no spell name, and a restricted pull can withhold
         -- either (modules/Tooltip.lua's killingBlowOf).
         showDeathCaster    = true,
-        showDeathSpell     = true,
+        showDeathSpell     = false,
     },
 
     -- -----------------------------------------------------------------------

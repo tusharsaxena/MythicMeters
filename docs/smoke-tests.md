@@ -393,10 +393,12 @@ second edge to catch.
   mode of **Per-statistic**, the Columns → *Header text* / *Header background* modes, and — with no
   mode set anywhere — the **Damage** line of a name tooltip, which wears the palette always. Then
   press the General page's **Defaults** and confirm the shipped colours come back.
-- **The two death-line switches.** Hover a **Deaths** cell for somebody who has died: each line
-  should read *Death 3 | <who> | <what>*. Turn Tooltip → *Contents* → **Name the killer** off and the
-  caster half goes with no separator left behind; turn **Name the killing blow** off instead and the
-  spell half goes the same way. A fall or a fire has no caster to name and a melee swing reads
+- **The two death-line switches.** Hover a **Deaths** cell for somebody who has died: on a fresh
+  profile each line reads *Death 3 | <who>* — **Name the killer** ships on and **Name the killing
+  blow** ships off, because the spell is the longest thing on the line and the half most often
+  absent. Turn the spell on and the line becomes *Death 3 | <who> | <what>*. Turn **Name the killer**
+  off and the caster half goes with no separator left behind; turn the spell back off and it goes the
+  same way. A fall or a fire has no caster to name and a melee swing reads
   **Melee** — neither is a bug, and neither may take the numbered line down with it. **Check this
   mid-pull too**: a restricted client can hand either name back secret, and the correct behaviour is
   the same as "not available" — the half is simply absent.
