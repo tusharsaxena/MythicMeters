@@ -233,3 +233,55 @@ test, a `#`, or a secret used as a table key. Everything in that gap is
 [smoke-tests.md](smoke-tests.md), and the secret-value scenarios there are not optional: they are the
 only place rules R1 and R3 are checked against a client that actually enforces them. Run that file
 before claiming a non-trivial change works.
+
+## Capturing an identity-correlation run
+
+`/mm debug identity` is the measurement [#22](https://github.com/tusharsaxena/MultiMeters/issues/22)
+is being fixed against. Three of the five things it needs are **properties of the running client**
+and cannot be answered offline at all — what the client annotates plain on a source row, how many
+players share a class+spec at raid size, and whether the engine's source ordering is stable. The
+harness proves the report runs and says what it found; it cannot supply the findings.
+
+It prints four blocks:
+
+| Block | Answers |
+|---|---|
+| **the rectangle** | Every row against every correlated column, each miss attributed: `filled` (the correlation worked), `collided` (it refused — two players share a key), `absent` (the column never named the key: an honest blank), `unmatched` (the column *did* name it and produced no cell — **the fault**, and the one to paste into the issue) |
+| **rows per key** | How many keys are worn by one row, by two, by three. Bounds what widening the key could buy, before anything is spent finding out whether it *can* be widened |
+| **collided key seats** | Where each ambiguous key's sources sat in each column. Two captures of one pull, compared, say whether a duplicate pair could be matched by position instead |
+| **source fields** | What the client actually puts on a **raw** source row, sampled across up to 10 rows plus the local player's, with a state, a `rows` count and a `values` count per field. Read through `Provider.ProbeSourceFields`, which reads the raw row rather than `GetColumn`'s projection — a probe reading the projection could only ever report the fields this addon already copies, and would confirm our own opinion back to us |
+
+The field audit has **three states**, and the middle one is the interesting one:
+
+- `plain` / `SECRET` — present on every sampled row; whether this context may put it in a string.
+- `ABSENT` — no sampled row carried it. **A defect, not a fact about the client**: a field the
+  projection reads that is not on the row is silently nil everywhere downstream, in combat and out.
+- `PARTIAL` — carried by *some* rows. This is the state a one-row probe had no word for, and it is
+  what `specIconID` turns out to be in a raid: present on the local player's row and nobody else's.
+
+`values` counts **distinct plain values** across the sampled rows, which is the question a candidate
+field actually has to answer. A field that is plain and outside the key but carries *one* value for
+the whole group is no more a join key than no field at all — the probe says `no use as a key` rather
+than flagging it. It reads `-` for a secret field, because counting distinctness is a comparison and
+rule R1 forbids one on a secret; **capture again after the pull** to get counts for those.
+
+`ABSENCE_COST` in `core/Diagnostics.lua` says what each missing key field costs, and not every one
+costs the same: a missing `specIconID` folds to `0` and collapses the key to class alone, while a
+missing `isLocalPlayer` folds to `false`, which is the correct answer for every row but one.
+
+**How to take one.** `/mm debug on` first — the rectangle is built only while the flag is on, because
+it is 30 rows by 6 columns four times a second and nothing on the render path reads it. Then, **inside
+a pull** in as large a group as you can get: `/mm debug identity`, wait ~15 seconds, and run it again.
+The two captures are the ordering probe; one capture proves nothing about stability. Then **run it
+once more after combat ends** — out of combat nothing is secret, so that is the only capture that can
+fill in the `values` column for fields that read `SECRET` mid-pull, which is how a candidate field
+gets settled either way. The console's copy button takes the whole buffer.
+
+`no identity pass has been measured` means exactly that — the flag was off, or the grid was built by
+the GUID join. It never means "measured, and clean".
+
+**Read after the pull**, the report says so and marks the rectangle as the *last* identity pass
+rather than the grid now. The field audit in that same capture is current and therefore useless for
+the secrecy question: out of combat nothing is secret, so every field reads plain. The `ABSENT` lines
+are the exception — a field the client does not ship is missing in both states, which is what makes a
+post-combat capture worth taking as well as a mid-pull one.

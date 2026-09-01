@@ -339,7 +339,9 @@ Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
   is plain and `UnitGUID("player")` is not secret, so their row keeps the roster's own GUID, name and
   role.
 - **Every other column** is read on its own and correlated back to those rows by an identity key of
-  `classFilename .. specIconID .. isLocalPlayer`.
+  `classFilename .. specIconID .. isLocalPlayer` — in a raid, in practice
+  `classFilename .. 0 .. isLocalPlayer`, because no non-local source carries a `specIconID` there
+  (see below).
 - **The rows are the UNION of every column, not just the sort one.** A source some other column knows
   and no row yet stands for gets its own row, keyed `"ident:<key>"` and parked past every ranked row
   in first-seen order — the same place the GUID join parks a player who appears in one column but not
@@ -347,13 +349,28 @@ Identity mode is built out of the fields Blizzard annotates `NeverSecret`:
   did no damage and a player whose only contribution was one interrupt were missing for the whole of
   a pull and reappeared the instant it ended. An **ambiguous** key gets no invented row: no column
   could ever fill it, and an always-empty line is noise.
-- A key appearing **twice** — two players of one class *and* one spec — is ambiguous, and every
-  secondary cell for it is left **empty**. `/mm debug on` prints one `identity` line per pass —
-  `rows= keys= collisions= filled=/` — which separates the two reasons a secondary column can come
-  out blank: ambiguity doing its job, or keys not matching between columns at all. `kept.ambiguous` says so and the header line reports it.
-  Class alone identifies nobody in a raid; class plus spec plus "is it me" identifies almost
-  everybody almost always, and the exceptions are detected rather than guessed at. An empty cell is a
-  visible absence; a mislabeled number is a lie the player cannot see.
+- A key appearing **twice in any column** — two players of one class *and* one spec — is ambiguous,
+  and every secondary cell for it is left **empty**. `kept.ambiguous` says so and the header line
+  reports it. An empty cell is a visible absence; a mislabeled number is a lie the player cannot see.
+  Every column is swept for duplicates **before any cell is written**; the sweep used to run column
+  by column as the fill walked them, which let a key the third column proved ambiguous keep cells the
+  second had already filled.
+- **In a raid the key is really class + "is it me", and that is issue #22.** `specIconID` is
+  **absent** from every raw raid source row but the local player's — not secret, not
+  nil-under-restriction; it is not sent. In a *dungeon* it arrives and the key works as designed,
+  which is how this survived to a raid ([#24](https://github.com/tusharsaxena/MultiMeters/issues/24)).
+  A missing icon folds to `0`, so every non-local key reads `CLASS_0_false` and two players of one
+  *class* collide whatever their specs are. Measured in a 19-player raid: 8 keys
+  across 19 rows, 18 rows collided, **3 of 133 correlated cells filled**, and `unmatched` zero in
+  every column — the correlation is not failing to match, it has nothing to match on. The refusal
+  above is still right; the assumption that the key had three parts is what was wrong.
+- `/mm debug on` prints one `identity` line per pass — `rows= keys= collided=/ filled=/` — where
+  `keys` is a distinct count and `collided` is `keys/rows`, because the ceiling turns on how many
+  ROWS the collided keys cover rather than on how many keys there are. **`/mm debug identity`** prints
+  the full capture: the correlation rectangle per column with every miss attributed
+  (`filled` / `collided` / `absent` / `unmatched`), the rows-per-key histogram, where each collided
+  key's sources sat in every column, and an audit of what the running client actually annotates plain
+  on a raw source row. See `docs/testing.md` → *Capturing an identity-correlation run*.
 - Enemies are filtered on `sourceDisplayType`, because the roster cannot answer for a source it
   cannot key on — but **that field is secret for the whole of a pull**, measured on a live client
   (`/mm debug diag` mid-pull printed `display types: <secret> x5` over a five-enemy column). So the

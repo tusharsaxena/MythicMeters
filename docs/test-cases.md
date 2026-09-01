@@ -212,7 +212,7 @@ badge and any count quoted in the docs must agree with it.
 - Database: v12 -> v13 leaves a window that never stored the toggle alone
 - Database: v12 -> v13 turns the control class-colour flags into modes
 
-### test_diagnostics.lua (43)
+### test_diagnostics.lua (60)
 
 - Diagnostics: the report is published and reachable
 - Diagnostics: `/mm debug diag` reaches it without the debug log
@@ -257,6 +257,23 @@ badge and any count quoted in the docs must agree with it.
 - Diagnostics: the recap probe reports why a death is dated the way it is
 - Diagnostics: the header section covers every control, by walking them
 - Diagnostics: a window with no controls says so rather than printing nothing
+- Diagnostics: the identity report is published and reachable
+- Diagnostics: `/mm debug identity` reaches it without the debug log
+- Diagnostics: the identity report prints the last pass's rectangle
+- Diagnostics: the identity report prints the rows-per-key histogram
+- Diagnostics: the identity report prints the seats of every collided key
+- Diagnostics: the identity report audits what the CLIENT annotates secret
+- Diagnostics: an un-audited field is named as a CANDIDATE for the key
+- Diagnostics: with NO field outside the key, the audit closes the direction
+- Diagnostics: with no identity pass measured, the report says so honestly
+- Diagnostics: the identity report survives a provider that answers nothing
+- Diagnostics: an ABSENT field the addon reads is called out, loudly
+- Diagnostics: a rectangle from a pull that has ENDED is marked stale
+- Diagnostics: a field on SOME rows reads PARTIAL, and names the local row
+- Diagnostics: a candidate with ONE value across the raid is called useless
+- Diagnostics: a candidate that DOES vary is called out as worth trying
+- Diagnostics: the audit says how many rows it sampled
+- Diagnostics: a missing isLocalPlayer is NOT called a degraded key
 
 ### test_defaults.lua (24)
 
@@ -459,7 +476,7 @@ badge and any count quoted in the docs must agree with it.
 - Format.DeathTime answers nil when there is no timestamp at all
 - Format.DeathTime never inspects a secret
 
-### test_provider.lua (61)
+### test_provider.lua (72)
 
 - Provider: core/Compat.lua is the only file that names C_DamageMeter
 - Provider: modules/Provider.lua is the only caller of the meter shims
@@ -522,6 +539,17 @@ badge and any count quoted in the docs must agree with it.
 - Provider.GetRecap is inert while the perf harness has it suspended
 - Provider.GetRecap answers a PREVIEW recap in test mode
 - Provider.GetRecap in test mode does not poison the live memo
+- Provider describes the RAW source row, not the projection it keeps
+- The probe DESCRIBES a secret field and never carries its value
+- The probe answers an empty list rather than raising on no session
+- The probe is callable in both the dot and the colon shape
+- The probe reports a field the addon READS and the client does not have
+- The projection's field list and collectSource cannot drift apart
+- The probe samples several rows, not just the first
+- A field present on SOME rows only is reported as such, not as absent
+- The LOCAL player's row is sampled even when it sits past the window
+- Distinct PLAIN values are counted, so a constant field reads as one
+- A SECRET value is never compared or keyed on to count distinctness
 
 ### test_roster.lua (22)
 
@@ -566,7 +594,7 @@ badge and any count quoted in the docs must agree with it.
 - Feign: a reset forgets the fake deaths too
 - Feign: ShouldDropDeath answers no for anything it cannot key on
 
-### test_aggregator.lua (70)
+### test_aggregator.lua (81)
 
 - Aggregator joins columns on the GUID, which is the only legal key
 - Aggregator's result table IS the row array, and cells aliases values
@@ -584,12 +612,23 @@ badge and any count quoted in the docs must agree with it.
 - Aggregator sums an attributed pet into its owner out of combat
 - A healer with no damage is on the mid-pull grid, from the healing column
 - An ambiguous key gets no invented row, because no column could ever fill it
+- A collision the LAST column reveals still blanks the FIRST column's cells
+- A sort column the window does not LIST still builds mid-pull
 - A correlated cell carries the RATE, or a rate column renders no text
 - A correlated Deaths column keeps the recap id the death view opens on
 - A pet is a ROW OF ITS OWN while restricted, not a dropped contribution
 - Aggregator adopts a pet's numbers into a column the owner has no cell in
 - A pet's position never moves its owner in the provider order
 - A row seen only outside the sort column is parked past every ranked row
+- Identity stats count collided ROWS, not just collided keys
+- Identity stats attribute every miss to one of three causes
+- A collided key lands in the collided bucket, not the absent one
+- The sort column is named, and is not part of the correlated rectangle
+- Identity stats carry the rows-per-key histogram
+- A collided key records where its sources sat in every column
+- The identity stats are not built at all with the debug flag off
+- The GUID build reports no identity stats, because it correlated nothing
+- Aggregator keeps the last identity pass for the report to print
 - Aggregator computes percent out of combat
 - Aggregator answers nil percent while restricted — never zero
 - ApplyRowLimit truncates to maxRows
@@ -1553,7 +1592,7 @@ badge and any count quoted in the docs must agree with it.
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
 | test_database.lua | 56 |
-| test_diagnostics.lua | 43 |
+| test_diagnostics.lua | 60 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 23 |
 | test_perfsetup.lua | 19 |
@@ -1563,10 +1602,10 @@ badge and any count quoted in the docs must agree with it.
 | test_lifecycle.lua | 26 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 32 |
-| test_provider.lua | 61 |
+| test_provider.lua | 72 |
 | test_roster.lua | 22 |
 | test_feign.lua | 15 |
-| test_aggregator.lua | 70 |
+| test_aggregator.lua | 81 |
 | test_aggregator_sort.lua | 20 |
 | test_window.lua | 136 |
 | test_headercontrols.lua | 51 |
@@ -1585,4 +1624,4 @@ badge and any count quoted in the docs must agree with it.
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1419** |
+| **Total** | **1458** |

@@ -356,6 +356,61 @@ test("An ambiguous key gets no invented row, because no column could ever fill i
     assertTrue(result.ambiguous, "and the header is told the grid is short an answer")
 end)
 
+test("A collision the LAST column reveals still blanks the FIRST column's cells", function()
+    -- ORDER MUST NOT DECIDE HONESTY. `collisions` is one table filled as each
+    -- column is read, so a key proved ambiguous by the third column was already
+    -- written into cells by the second — and those cells stay, carrying one
+    -- priest's number under a row that might be the other priest. That is the
+    -- exact mislabel every other refusal in this file exists to prevent, reached
+    -- by nothing but the order the window happens to list its columns in.
+    --
+    -- The sort column names neither priest, so its pre-pass cannot catch them.
+    -- red under: detecting collisions column-by-column as the fill walks them.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    -- ONE priest here: this column cannot tell there is a second.
+    install(inst, { src(BETA, 7, { class = "PRIEST", specIconID = 5 }) },
+        { statKey = "Interrupts", maxAmount = 7 })
+    -- ...and here they both are.
+    install(inst, {
+        src(BETA,  3, { class = "PRIEST", specIconID = 5 }),
+        src(GAMMA, 2, { class = "PRIEST", specIconID = 5 }),
+    }, { statKey = "Dispels", maxAmount = 3 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "Interrupts", "Dispels" }, sortColumn = "DamageDone" })
+
+    assertTrue(result.ambiguous, "the fixture is only meaningful if the key collided")
+    for _, row in ipairs(result) do
+        if row.identityKey == "PRIEST_5_false" then
+            assertNil(row.values.Interrupts,
+                "an early column's cell survived a collision a later column proved")
+        end
+    end
+    assertEqual(#result, 1, "an always-empty row was invented for a collided key")
+end)
+
+test("A sort column the window does not LIST still builds mid-pull", function()
+    -- `sortColumn` is kept whenever it names a real stat, and nothing requires
+    -- it to be one of the window's own columns — a stored config can point at a
+    -- stat whose column was later removed. The identity build reads its keys out
+    -- of a per-column sweep, and the sweep walks the window's columns: a sort
+    -- column outside that list has no swept keys, and indexing them raised.
+    -- red under: sweeping pass.keys alone.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(ALPHA, 4, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "Interrupts", maxAmount = 4 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone" }, sortColumn = "Interrupts" })
+    assertEqual(#result, 1, "the grid came out empty for a sort column off the list")
+end)
+
 test("A correlated cell carries the RATE, or a rate column renders no text", function()
     -- THE EMPTY HEALING COLUMN. The shipped text layout is `leftSlot = "smart"`,
     -- which on a RATE stat — Damage, Healing — is `amountPerSecond` rather than
@@ -481,6 +536,222 @@ test("A row seen only outside the sort column is parked past every ranked row", 
     assertEqual(result[1].guid, BETA)
     assertEqual(result[1].providerIndex, 1)
     assertTrue(result[2].providerIndex > 1000, "unranked rows sit past every ranked one")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Identity correlation: the diagnostics (issue #22)
+-- ---------------------------------------------------------------------------
+--
+-- The shipped `identity` debug line could not answer the question it was written
+-- for. It reported how many KEYS collided, not how many ROWS those keys covered,
+-- so the ceiling a raid capture should be read against could not be computed;
+-- it summed each column's key count into one figure, so `keys` was neither a
+-- cardinality nor comparable to `rows`; and `filled/possible` accumulated
+-- against a row list that was still GROWING, so `possible` was not rows x
+-- columns and the arithmetic done on a live capture was wrong.
+--
+-- What replaces it is a rectangle: every row against every CORRELATED column,
+-- each cell landing in exactly one of four buckets, and every miss therefore
+-- attributable. Built only while the debug flag is on, because it is 30 rows
+-- times 6 columns four times a second and nothing on the render path reads it.
+
+--- A restricted instance with `n` distinct-class damage rows plus whatever else
+--- the case installs.
+local function debugging(inst)
+    inst.NS.State.debug = true
+    return inst
+end
+
+test("Identity stats count collided ROWS, not just collided keys", function()
+    -- THE MEASUREMENT THE ISSUE ASKED FOR. Six collided keys over eighteen rows
+    -- says nothing about the ceiling until you know how many rows those six keys
+    -- cover, and the shipped line reported only the six.
+    -- red under: reporting the size of the collisions set alone.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "PRIEST",  specIconID = 5 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(ALPHA, 4, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "Interrupts", maxAmount = 4 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "Interrupts" }, sortColumn = "DamageDone" })
+    local stats = result.identityStats
+
+    assertEqual(stats.collidedKeys, 1, "one class+spec pair is shared")
+    assertEqual(stats.collidedRows, 2, "and TWO rows wear it — the ceiling turns on this")
+    assertEqual(stats.rows, 3)
+    assertEqual(stats.keys, 2, "DISTINCT keys, not a per-column count summed")
+end)
+
+test("Identity stats attribute every miss to one of three causes", function()
+    -- `filled/possible` alone cannot separate the blank that is CORRECT (a
+    -- healer did no damage) from the blank that is the fault the line exists to
+    -- surface (the key is in the column and still did not match). One number
+    -- covering both is why a live capture could not be acted on.
+    -- red under: counting only filled and possible.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "ROGUE",   specIconID = 3 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+    -- The priest heals; nobody else appears in the column at all.
+    install(inst, { src(BETA, 500, { class = "PRIEST", specIconID = 5 }) },
+        { statKey = "HealingDone", maxAmount = 500 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" })
+    local col = result.identityStats.columns.HealingDone
+
+    assertEqual(col.rows, 3, "the rectangle is every row, not the rows so far")
+    assertEqual(col.filled, 1)
+    assertEqual(col.absent, 2, "the warrior and the rogue did no healing, honestly")
+    assertEqual(col.collided, 0)
+    assertEqual(col.unmatched, 0,
+        "a key present in the column that still produced no cell is the FAULT bucket")
+end)
+
+test("A collided key lands in the collided bucket, not the absent one", function()
+    -- The two are opposite diagnoses: absent means the correlation worked and
+    -- the player did nothing, collided means the correlation refused. Reporting
+    -- either as the other sends the next change in the wrong direction.
+    -- red under: classifying a miss by whether byKey holds the key alone.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "PRIEST",  specIconID = 5 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, {
+        src(BETA,  500, { class = "PRIEST", specIconID = 5 }),
+        src(GAMMA, 400, { class = "PRIEST", specIconID = 5 }),
+    }, { statKey = "HealingDone", maxAmount = 500 })
+
+    local result = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" })
+    local col = result.identityStats.columns.HealingDone
+
+    assertEqual(col.collided, 2, "both priest rows were refused, and for that reason")
+    assertEqual(col.filled, 0, "the only healing in the column belonged to the pair")
+    assertEqual(col.absent, 1, "and the warrior is absent, which is a different fact")
+end)
+
+test("The sort column is named, and is not part of the correlated rectangle", function()
+    -- Nothing is correlated onto the sort column: every row on the grid came
+    -- FROM it. Counting it as filled would inflate the one ratio the capture is
+    -- read for.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, { src(ALPHA, 4, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "Interrupts", maxAmount = 4 })
+
+    local stats = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "Interrupts" }, sortColumn = "DamageDone" }).identityStats
+
+    assertEqual(stats.sortColumn, "DamageDone")
+    assertNil(stats.columns.DamageDone, "the sort column is not correlated onto anything")
+    assertEqual(stats.possible, 1, "one row times one correlated column")
+    assertEqual(stats.filled, 1)
+end)
+
+test("Identity stats carry the rows-per-key histogram", function()
+    -- THE MEASUREMENT THAT BOUNDS THE FIX. Widening the key is worth doing in
+    -- proportion to how many rows currently share one, and nothing in the
+    -- shipped line said. `{ [1] = 1, [2] = 1 }` reads as "one key worn alone,
+    -- one key worn by a pair".
+    -- red under: reporting a collision count without the shape of it.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "PRIEST",  specIconID = 5 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+
+    local stats = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone" }, sortColumn = "DamageDone" }).identityStats
+
+    assertEqual(stats.multiplicity[1], 1, "the warrior's key stands for one row")
+    assertEqual(stats.multiplicity[2], 1, "the priests' key stands for two")
+    assertNil(stats.multiplicity[3])
+end)
+
+test("A collided key records where its sources sat in every column", function()
+    -- THE ORDERING PROBE. Pairing two same-spec players by their POSITION is the
+    -- only direction left if the key cannot be widened, and it may only be taken
+    -- if the engine's order is stable across columns. That is a question about a
+    -- live client, so what ships is the capture, not the conclusion — and it is
+    -- captured only for the keys where it would be used.
+    -- red under: recording no positions at all.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "PRIEST",  specIconID = 5 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+    install(inst, {
+        src(GAMMA, 400, { class = "PRIEST", specIconID = 5 }),
+        src(BETA,  500, { class = "PRIEST", specIconID = 5 }),
+    }, { statKey = "HealingDone", maxAmount = 500 })
+
+    local stats = inst.NS.Aggregator.Build(makeWindow{
+        columns = { "DamageDone", "HealingDone" }, sortColumn = "DamageDone" }).identityStats
+    local seats = stats.positions["PRIEST_5_false"]
+
+    assertTrue(seats ~= nil, "the collided key recorded no seats")
+    assertEqual(table.concat(seats.DamageDone, ","), "2,3")
+    assertEqual(table.concat(seats.HealingDone, ","), "1,2")
+    assertNil(stats.positions["WARRIOR_9_false"], "an unambiguous key needs no probe")
+end)
+
+test("The identity stats are not built at all with the debug flag off", function()
+    -- It is a rectangle of rows times columns walked four times a second, and
+    -- nothing on the render path reads it. A diagnostic that costs the player
+    -- frames is a diagnostic that gets turned off and then is not there when it
+    -- is wanted.
+    -- red under: computing the stats unconditionally.
+    local inst = loaded()
+    inst.mocks.setRestricted(true)
+    install(inst, { src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }) },
+        { statKey = "DamageDone", maxAmount = 100 })
+
+    assertNil(inst.NS.Aggregator.Build(makeWindow{ columns = { "DamageDone" } }).identityStats)
+end)
+
+test("The GUID build reports no identity stats, because it correlated nothing", function()
+    -- Out of combat the join is exact. A rectangle of misses would read as a
+    -- fault where there is none.
+    local inst = debugging(loaded())
+    install(inst, { src(ALPHA, 100) }, { statKey = "DamageDone", maxAmount = 100 })
+
+    assertNil(inst.NS.Aggregator.Build(makeWindow{ columns = { "DamageDone" } }).identityStats)
+end)
+
+test("Aggregator keeps the last identity pass for the report to print", function()
+    -- `/mm debug identity` is typed AFTER the pull it is about, and it has no
+    -- window handle. The stats therefore outlive the pass that produced them.
+    -- red under: publishing the stats on the result alone.
+    local inst = debugging(loaded())
+    inst.mocks.setRestricted(true)
+    install(inst, {
+        src(ALPHA, 100, { class = "WARRIOR", specIconID = 9 }),
+        src(BETA,   50, { class = "PRIEST",  specIconID = 5 }),
+        src(GAMMA,  30, { class = "PRIEST",  specIconID = 5 }),
+    }, { statKey = "DamageDone", maxAmount = 100 })
+    inst.NS.Aggregator.Build(makeWindow{ columns = { "DamageDone" } })
+
+    local kept = inst.NS.Aggregator.LastIdentityStats()
+    assertEqual(kept.collidedRows, 2)
+    assertEqual(kept.rows, 3)
 end)
 
 -- ---------------------------------------------------------------------------

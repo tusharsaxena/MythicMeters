@@ -198,7 +198,7 @@ that a load-time cycle between two majors.
 | `set <path> <value>` | Write one setting |
 | `reset <path>` | Reset one setting to its default |
 | `resetall` | Reset the active profile to the shipped defaults — a **profile reset**, so it is the equivalent of a new profile: extra windows are deleted and one fresh window is left. The same act as Profiles → Reset Profile; other profiles are never touched. See [settings-panel.md](settings-panel.md#reset-all-settings-vs-reset-profile) |
-| `debug` | Toggle the console window; `on` / `off` set session logging; **`diag`** prints the diagnostic report; **`recap`** prints the death-recap probe alone |
+| `debug` | Toggle the console window; `on` / `off` set session logging; **`diag`** prints the diagnostic report; **`recap`** prints the death-recap probe alone; **`identity`** prints the mid-pull identity-correlation capture (issue #22) |
 | `perf` | Performance capture — `/mm perf help` for the run's own verbs |
 | `version` | Print the addon version, read from the TOC manifest |
 | `lock` | Lock or unlock every window for dragging (unlocking implies preview) |
@@ -441,6 +441,37 @@ comment, which argues the same split from the other side.
 
 ## Known limitations
 
+- **`specIconID` does not arrive in a raid, so the identity key is class alone and a raid grid is 98%
+  blank mid-pull.** With `sourceGUID` secret, every column but the sort one is joined by
+  `classFilename .. specIconID .. isLocalPlayer` — except that in a 19-player raid `specIconID` is
+  **absent** from every raw source row but the local player's, in combat *and* immediately after. It
+  is not secret and not nil-under-restriction; it is not sent. **In a dungeon it arrives normally**
+  and the key works as designed, which is how this survived to a raid. `identityKey` folds a missing
+  icon to `0`, so every non-local key reads `CLASS_0_false` and two players of one **class** collide
+  whatever their specs are. What separates the two cases is not established — see
+  [#24](https://github.com/tusharsaxena/MultiMeters/issues/24).
+
+  Measured with `/mm debug identity` in a 19-player raid, 2026-09-01: **8 distinct keys across 19
+  rows, 18 of those rows wearing a collided key, 3 of 133 correlated cells filled (2%)**. `unmatched`
+  was **0 in every column**, so the correlation is not failing to match — there is almost nothing
+  left to tell two players apart with. The blanking itself is correct and does not change; a
+  mislabeled number is a lie the player cannot see.
+
+  The same capture killed the second direction: engine source order is **value-ranked per column and
+  re-ranks between passes**, so a duplicate pair's seats differ between columns and between two
+  captures of one pull. Positional pairing has nothing stable to rest on. The only plain field on the
+  row outside the key is `classification`, whose usefulness is unmeasured.
+
+  `specIconID`'s absence has a **second, visible consequence**, filed separately as
+  [#24](https://github.com/tusharsaxena/MultiMeters/issues/24): `modules/Row.lua`'s spec-icon branch
+  fires for the local player's row and no other, so every other row draws the class icon. The
+  fallback hides the cause. Blizzard's own meter shows the same thing on the same pull, so the
+  ceiling here may be the client's rather than ours.
+
+  Tracked as [#22](https://github.com/tusharsaxena/MultiMeters/issues/22). Nothing is fixed yet.
+  What shipped is the instrumentation, one ordering bug it exposed (a key proved ambiguous by a late
+  column used to keep cells an early column had already written), and the absent-field report that
+  found the cause — see [testing.md](testing.md#capturing-an-identity-correlation-run).
 - **The feign-death filter cannot run mid-pull, and that is structural.** `C_DamageMeter` hands a
   Feign Death a valid `deathRecapID`, so the Deaths column counts a hunter's feign as a death.
   `modules/Feign.lua` records the GUID off the cast and `modules/Aggregator.lua` drops that source —
@@ -641,7 +672,7 @@ registered above.
 | `compat-layer.md` | **Re-measure — the trigger now fires** | **`core/Compat.lua` is 753 lines and 28 shims** (8 of them `C_DamageMeter`, 4 death-recap, plus the recap-namespace probe `RecapMembers` / `RecapAPIs` / `CallRecap`), each still a guarded namespace check around one passthrough, with no feature decisions and no state, and nothing there inspects a meter value. But the comparison point — KickCD's 490-line Compat, which ships the doc — has been passed by half again. It was 389 lines and 18 shims when this row was last measured. Raise the doc, or re-argue the trigger, through `/wow-addon:standards-audit`; it is not this register's call to make. |
 | `midnight-quirks.md` (secret values) | Not applicable | The 12.0 secret-value model is this addon's **defining** constraint, not a quirk beside its main subject — so it is carried by [Taint notes](#taint-notes) (the operation lists, R1/R3, the `Combat`-not-`ChallengeMode` fact) and by [data-flow.md](data-flow.md), which is Tier 1 and mandatory here regardless. A third copy would be the one that drifts. |
 | `profiles.md` | Not applicable | `settings/Profiles.lua` is 113 lines hosting **AceDBOptions-3.0's own tree** unchanged. The addon adds no profile semantics beyond the `PROFILE_CHANGED` fan-out already tabulated above and the reset-all veto already stated under [Settings schema](#settings-schema); the persisted shape is [schema.md](schema.md)'s. |
-| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. This addon's own surface is `/mm debug diag` and `/mm debug recap` — `core/Diagnostics.lua`, ~1240 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the death-recap probe for issue #1 is the newest section, the first with a verb of its own, and the first to search the client two ways because one was measured to be unreliable — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
+| `debug.md` | Not applicable | The console is `LibKa0s-DebugLog-1.0`'s window. `/mm debug` toggles it and takes `on` / `off`. This addon's own surface is `/mm debug diag`, `/mm debug recap` and `/mm debug identity` — `core/Diagnostics.lua`, ~1240 lines of print statements whose header explains itself, with no state and no options for a doc to describe. It has grown — the death-recap probe for issue #1 is the newest section, the first with a verb of its own, and the first to search the client two ways because one was measured to be unreliable — so this is the Tier 2 trigger nearest to firing; re-measure it when a section gains state or an option. |
 
 ## Documented deviations
 

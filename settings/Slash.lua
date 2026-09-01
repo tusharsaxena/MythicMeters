@@ -77,7 +77,7 @@ NS.COMMANDS = {
     { "set",      "Write one setting: /mm set <path> <value>", function(a) cli:CliSet(a) end },
     { "reset",    "Reset one setting: /mm reset <path>",   function(a) cli:CliReset(a) end },
     { "resetall", "Reset every setting to its default",    function() cli:CliResetAll() end },
-    { "debug",    "Console; 'on'/'off' set logging, 'diag' a diagnostic report, 'recap' the death-recap probe",
+    { "debug",    "Console; 'on'/'off' set logging, 'diag' a diagnostic report, 'recap' the death-recap probe, 'identity' the mid-pull correlation capture",
                                                                      function(a) doDebug(a) end },
     { "perf",     "Performance capture; try /mm perf help", function(a) doPerf(a) end },
     { "version",  "Print the addon version",   function() cli:CliVersion() end },
@@ -449,6 +449,16 @@ function doDebug(rest)
     -- step between us and the answer.
     if word == "recap" then
         if NS.Diagnostics then NS.Diagnostics.ReportDeathRecap() end
+        return
+    end
+
+    -- `identity` is the issue #22 capture, and it sits on this branch for the
+    -- third time for the same reason: it is typed mid-pull, by a player who was
+    -- asked to type it, and a console they must open first is a step between us
+    -- and the measurement. The report itself says what it needs — the flag on,
+    -- and a pull running — rather than going quiet when it has neither.
+    if word == "identity" then
+        if NS.Diagnostics then NS.Diagnostics.ReportIdentity() end
         return
     end
 

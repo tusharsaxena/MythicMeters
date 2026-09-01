@@ -243,6 +243,11 @@ local function collectSource(_, src)
     -- raises on a secret.
     if guid == nil and creatureID == nil then return end
 
+    -- A FIXED LITERAL, and it stays one. Its size is settled at compile time,
+    -- and this runs once per source per column per refresh; building it from a
+    -- name map in a loop would allocate per field. Provider.SOURCE_FIELDS below
+    -- restates what it reads for the field probe, and a test scans this literal
+    -- to prove the two cannot drift.
     collect[#collect + 1] = {
         guid              = guid,
         creatureID        = creatureID,
@@ -442,6 +447,192 @@ function Provider.ProbeSourceByGuid(sessionType, statKey, guid)
     if type(source) ~= "table" then return "nil" end
     if not Secrets.CanAccessTable(source) then return "sealed" end
     return (source.totalAmount ~= nil) and "resolved" or "no total"
+end
+
+-- Every field `collectSource` reads off a raw source row, by the name the CLIENT
+-- uses for it. Restated rather than derived: the projection above is a literal on
+-- the hot path and must stay one. A test scans that literal and fails if this
+-- list and it disagree in either direction, which is the only thing that keeps
+-- the absent-field report below honest.
+Provider.SOURCE_FIELDS = {
+    "sourceGUID", "sourceCreatureID", "name", "classFilename", "specIconID",
+    "isLocalPlayer", "totalAmount", "amountPerSecond", "deathTimeSeconds",
+    "deathRecapID", "classification", "sourceDisplayType", "factionGroup",
+}
+
+-- How many source rows the field probe describes.
+--
+-- Bounded because it runs on demand from a slash command and walks `pairs` on
+-- every sampled row; large enough that a raid's spread of classes shows up in
+-- the distinct-value counts. The local player's row is sampled IN ADDITION when
+-- it falls outside this window — see gatherSamples.
+local FIELD_SAMPLE_ROWS = 10
+
+--- Up to FIELD_SAMPLE_ROWS source rows, plus the local player's wherever it sits.
+---
+--- THE LOCAL PLAYER IS SOUGHT DELIBERATELY. In a raid `specIconID` arrives for
+--- that row and for no other (issue #24), so a probe reading the head of the
+--- list reports the field absent and is wrong in the single most interesting
+--- way available. Their position is wherever their damage puts them.
+---
+--- `isLocalPlayer` is truth-tested only when it is a plain boolean. It is
+--- annotated NeverSecret, but a probe is the wrong place to assume an annotation
+--- — that assumption is exactly what issue #24 is.
+---
+--- @return table samples  array of source rows
+--- @return table|nil localRow  the local player's row, when it was found
+local function gatherSamples(session)
+    local samples, localRow = {}, nil
+    Secrets.SafeIterate(session.combatSources, function(_, src)
+        if not Secrets.CanAccessTable(src) then return end
+        if #samples < FIELD_SAMPLE_ROWS then samples[#samples + 1] = src end
+
+        local isLocal = src.isLocalPlayer
+        if localRow == nil and isLocal == true then localRow = src end
+        -- Keep walking past the window ONLY while the local row is still
+        -- unfound; there is nothing else out there worth the pairs() walk.
+        return not (localRow ~= nil and #samples >= FIELD_SAMPLE_ROWS)
+    end)
+
+    if localRow ~= nil then
+        local held = false
+        for i = 1, #samples do
+            if samples[i] == localRow then held = true break end
+        end
+        if not held then samples[#samples + 1] = localRow end
+    end
+    return samples, localRow
+end
+
+--- Fold one row's value for `name` into that field's running description.
+---
+--- DISTINCTNESS IS COUNTED OVER PLAIN VALUES ONLY, and the gate is per VALUE
+--- rather than per field: a field can be plain on one row and secret on the
+--- next, and counting is a comparison — `distinct` keys a table on the value,
+--- which rule R1 forbids on a secret. `tostring` is applied only after the gate,
+--- so what is keyed is always a plain string.
+local function noteValue(entry, value, isLocalRow)
+    entry.present = entry.present + 1
+    if isLocalRow then entry.local_ = true end
+
+    local plain = type(value) == "boolean" or not Secrets.IsSecret(value)
+    if not plain then
+        entry.secret = entry.secret + 1
+        return
+    end
+
+    entry.plainCount = entry.plainCount + 1
+    if entry.type == nil then entry.type = type(value) end
+
+    local seen = entry.seen
+    if seen == nil then seen = {} entry.seen = seen end
+    local k = tostring(value)
+    if seen[k] == nil then
+        seen[k] = true
+        entry.distinct = (entry.distinct or 0) + 1
+    end
+end
+
+--- Describe every field the CLIENT puts on a raw source row — issues #22, #24.
+---
+--- WHY THIS IS NOT A READ OF GetColumn, and why it would be worthless if it
+--- were. `collectSource` projects a source onto a fixed list of thirteen fields.
+--- A probe asking "what plain fields does the client put on a source row" that
+--- read a projected source would be asking which fields THIS FILE copies: it
+--- would confirm our own opinion back to us and report "nothing new here" on a
+--- client that had something. So it reads the RAW row, which is why it lives in
+--- this file — the only one that may reach the meter at all.
+---
+--- WHAT THE ANSWER IS FOR. The identity correlation that stands in for the GUID
+--- join mid-pull keys on `classFilename` plus `specIconID` plus `isLocalPlayer`,
+--- because those were the plain fields on a source row when it was written. In a
+--- raid that key is shared by every player of one class, because `specIconID`
+--- does not arrive there at all. Whether there is another plain field to widen
+--- the key with, and whether it would DISCRIMINATE, are properties of the
+--- running client and cannot be answered from here — only asked, in-game.
+---
+--- A DESCRIPTION, NEVER A VALUE. Each entry is
+--- `{ name, sampled, present, plain, secret, distinct, type, absent, local_ }`.
+--- No value is carried out, so nothing downstream can accidentally format one:
+--- `distinct` is a COUNT of how many different plain values were seen, which is
+--- the whole question ("would this tell two players apart?") answered without
+--- printing anybody's data.
+---
+--- THREE STATES, NOT TWO. `absent` (no sampled row carried it), present on every
+--- sampled row, and present on SOME — which is the state a one-row probe had no
+--- word for and which turned out to be the answer: in a raid `specIconID` is on
+--- the local player's row and nobody else's (#24). `local_` says the local
+--- player's row was one of the rows carrying it.
+---
+--- @param sessionType number
+--- @param statKey string
+--- @param sessionID number|nil
+--- @return table  array of field descriptors, sorted by name
+function Provider.ProbeSourceFields(a, b, c, d)
+    local sessionType, statKey, sessionID = args(a, b, c, d)
+    local fields = {}
+    if suspended then return fields end
+
+    local stat = STAT_BY_KEY[statKey]
+    if not stat then return fields end
+    if not Provider.IsAvailable() then return fields end
+
+    local session = sessionFor(sessionType, sessionID, stat.enumValue)
+    if type(session) ~= "table" or not Secrets.CanAccessTable(session) then
+        return fields
+    end
+
+    local samples, localRow = gatherSamples(session)
+    if samples[1] == nil then return fields end
+
+    local byName = {}
+    local function entryFor(name)
+        local entry = byName[name]
+        if entry == nil then
+            entry = { name = name, sampled = #samples, present = 0,
+                      plainCount = 0, secret = 0 }
+            byName[name] = entry
+            fields[#fields + 1] = entry
+        end
+        return entry
+    end
+
+    for i = 1, #samples do
+        local src = samples[i]
+        local isLocalRow = (src == localRow)
+        -- `pairs` on the row itself, never on a value in it. The row is a table
+        -- this context may access — CanAccessTable said so — and the KEYS of a
+        -- source row are plain strings; it is the values that are annotated.
+        for name, value in pairs(src) do
+            if type(name) == "string" then
+                noteValue(entryFor(name), value, isLocalRow)
+            end
+        end
+    end
+
+    -- ...and then everything the projection reads that NO sampled row carried.
+    -- Nil-ness only: a field present with a secret value is NOT absent, and
+    -- testing a non-boolean for nil-ness is the one boolean-shaped operation the
+    -- contract permits.
+    for _, name in ipairs(Provider.SOURCE_FIELDS) do
+        if byName[name] == nil then
+            fields[#fields + 1] = { name = name, sampled = #samples, present = 0,
+                                    plainCount = 0, secret = 0, absent = true }
+        end
+    end
+
+    for i = 1, #fields do
+        local entry = fields[i]
+        -- `seen` is working state and must not travel: it is keyed on rendered
+        -- values, and nothing outside this function has a use for them.
+        entry.seen = nil
+        -- The old two-state shape, kept for readers that only want the headline:
+        -- plain means every sampled occurrence was plain.
+        entry.plain = entry.present > 0 and entry.secret == 0
+    end
+
+    table.sort(fields, function(x, y) return x.name < y.name end)
+    return fields
 end
 
 -- ---------------------------------------------------------------------------

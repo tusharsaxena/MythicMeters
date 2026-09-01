@@ -1065,9 +1065,16 @@ end
 -- ---------------------------------------------------------------------------
 --
 -- Same widget as any other cell — it is a StatusBar so the leading column can
--- carry a class-colored bar too — plus the icons. `classFilename` and
--- `specIconID` are NeverSecret, so this column renders in full even when every
--- number to its right is opaque.
+-- carry a class-colored bar too — plus the icons. `classFilename` is NeverSecret,
+-- so this column renders in full even when every number to its right is opaque.
+--
+-- `specIconID` was believed to be available alongside it on every row. In a
+-- dungeon it is. In a 19-player raid it was ABSENT from every source row but the
+-- local player's — so the spec branch below fires for exactly one row and every
+-- other row draws the CLASS icon. That degradation is silent by construction:
+-- the fallback was written for a source that had no spec, and it cannot tell
+-- "this source has no spec" from "this client did not send one". Issue #24
+-- carries the capture and the screenshots.
 
 -- The gap between the name column's icon and the name beside it, in pixels. It
 -- was a literal 1 folded into the icon's own stride, which reads as the two

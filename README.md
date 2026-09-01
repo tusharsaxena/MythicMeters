@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1419%2F1419_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1458%2F1458_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -81,7 +81,7 @@ Type `/mm` for the command list. `/multimeters` does the same thing if you prefe
 | `/mm reset PATH` | Reset one setting to its default |
 | `/mm resetall` | Reset every setting to defaults |
 | `/mm version` | Print the addon version |
-| `/mm debug` | Open the debug console (`on` / `off` control logging, `diag` prints a diagnostic report, `recap` the death-recap probe) |
+| `/mm debug` | Open the debug console (`on` / `off` control logging, `diag` prints a diagnostic report, `recap` the death-recap probe, `identity` the mid-pull correlation capture) |
 | `/mm perf` | Measure performance — run `/mm perf` for the workflow |
 
 Settings that belong to a window are written as `window.something`, and they apply to whichever

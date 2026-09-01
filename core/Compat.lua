@@ -79,10 +79,18 @@ end
 -- spec INDEX, GetSpecializationInfo(index) returns
 -- (id, localizedName, description, iconID, role, ...).
 --
--- The meter ships specIconID on every source row, so the row icons do NOT go
--- through here. What does is modules/Roster.lua's role lookup for the `roster`
--- sort mode, which needs the LOCAL player's spec when the group APIs have not
--- caught up yet (the first frame after a zone-in).
+-- The meter was believed to ship specIconID on EVERY source row, so the row
+-- icons do NOT go through here. That is true in a dungeon and measured false in
+-- a raid: in a 19-player raid on 2026-09-01 the field was ABSENT — not secret,
+-- missing — from every source row but the local player's, in combat and
+-- immediately after. modules/Row.lua falls back to the class icon, so the loss
+-- is silent; modules/Aggregator.lua's identity key has no such fallback and
+-- collapses to class alone. What separates the two cases is not established —
+-- group size, instance type and unit-resolvability all move together between a
+-- party and a raid. Issue #24 carries the capture. What DOES go through here is
+-- modules/Roster.lua's role lookup for the `roster` sort mode, which needs the
+-- LOCAL player's spec when the group APIs have not caught up yet (the first
+-- frame after a zone-in).
 
 --- Active specialization index (or nil when unavailable).
 --- @return number|nil

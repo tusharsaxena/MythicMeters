@@ -1612,6 +1612,64 @@ addon restriction, and the restriction is the entire subject.
 **Record for the report:** which of the three atlas candidates resolved (or that `>` was drawn),
 dungeon and key level, whether the error frame stayed empty, and the exact header line of one CSV.
 
+### 27. The identity-correlation capture (issue #22)
+
+**Why this one is different.** Every other scenario here checks that something *works*. This one
+takes a **measurement**, and three of the numbers it exists for cannot be produced offline at any
+effort: what the running client annotates plain on a raw source row, how many players share one
+class+spec at raid size, and whether the engine's ordering of sources is stable. The headless suite
+proves the report runs; only a raid can tell it what to say.
+
+**Take it in the largest group you can get.** A 5-player dungeon will produce a clean-looking capture
+and prove nothing — the whole finding is that the correlation works at party size and falls apart
+above it. 20+ is where it starts to be worth reading; 30 is what the issue was filed on.
+
+1. `/mm debug on` **before** the pull. The rectangle is built only while the flag is on.
+2. Pull. Roughly ten seconds in, `/mm debug identity`.
+3. Wait ~15 seconds, still in combat, and run `/mm debug identity` **again**. Two captures is the
+   ordering probe; one proves nothing about stability.
+4. **After combat ends, run `/mm debug identity` once more.** Out of combat nothing is secret, so
+   this is the only capture that can fill in the `values` column for fields that read `SECRET`
+   mid-pull — which is how a candidate field gets settled either way. The `ABSENT` and `PARTIAL`
+   lines hold in both states.
+5. `/mm debug` to open the console and copy the whole buffer.
+
+**What to read in it, and what each answer would mean:**
+
+- **`unmatched` above zero in any column.** This is the fault the instrumentation was built to find:
+  the column named a key and still produced no cell, which would mean a field the correlation trusts
+  is less stable across columns than it looks. Report it with the column name — it is the highest
+  value line in the whole capture.
+- **`collided` dominating, `unmatched` zero.** The expected shape, and it says the blanking is
+  working correctly and the *key* is the problem. Compare `collidedRows` against `rows`: that ratio,
+  not the key count, is what bounds any fix.
+- **`rows per key`.** Anything past "worn by 1 row" is a key blanking cells for every row wearing it.
+- **A `PARTIAL` line.** A field the client sends for some rows and not others — the state a one-row
+  probe had no word for. `specIconID` is the known case ([#24](https://github.com/tusharsaxena/MultiMeters/issues/24));
+  report any *other* field that reads PARTIAL, with its `rows` count.
+- **An `ABSENT` line.** A field the addon reads that the client does not send at all. Report these
+  first: they are defects rather than facts about the client, and they are nil out of combat too.
+- **A `WOULD widen the key` line in the field audit.** A plain field outside the key that actually
+  *varies* across players. This is the single most valuable thing the capture can come back with,
+  because it is the only one of the three directions that costs a player nothing — report the field
+  name and its `values` count. `No usable candidates` is equally worth reporting: it retires that
+  direction permanently. A field marked `no use as a key` carries one value for the whole group;
+  don't chase it.
+- **The seats of a collided key, across the two captures.** If a key's sources hold the same relative
+  order in every column *and* in both captures, positional pairing is at least possible. If they move
+  between captures, that direction is dead and should be recorded as such.
+
+**What would make the capture worthless:** running it out of combat (there is no identity pass — the
+GUID join is exact, and the report will say `no identity pass has been measured`), running it with
+the debug flag off (same message, different cause — the report does not distinguish, and does not
+pretend to), or running it in a party. None of the three raise; all three produce a clean-looking
+nothing.
+
+**Record for the report:** group size and composition (specifically, which class+spec pairs were
+duplicated), instance and difficulty, both captures in full, and whether any Lua error appeared —
+the probe walks a raw source row with `pairs`, which is the one thing here that touches a shape the
+mock can only approximate.
+
 ## What to report
 
 For any failure, the minimum useful report is:
