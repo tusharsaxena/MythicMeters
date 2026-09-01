@@ -154,6 +154,29 @@ local function cellFigures(entry, key)
     return total, c.rate, max, c.percent, c.displayText
 end
 
+--- Two rendered figures on one line, separated by a bar.
+---
+--- THROUGH string.format, NEVER `..`. Both halves came out of the native
+--- formatter with a SECRET value in them, and core/Secrets.lua's contract permits
+--- string.format on a secret by name while `..` is the operator this addon has
+--- already been bitten by once (see modules/Tooltip.lua's eventColumns, which
+--- refuses to join a spell name to a caster name for exactly this reason).
+---
+--- The pcall is not superstition either, and it has a real fallback: the
+--- permitted-operation list is a 12.0 contract this addon consumes rather than
+--- owns, and the cost of being wrong about one entry is a Lua error on a
+--- coalesced refresh ticker. When the join is refused the ABSOLUTE figure stands
+--- alone, which is the same thing this slot renders on a column that has no rate.
+---
+--- @param left any   the absolute figure, already rendered
+--- @param right any  the per-second figure, already rendered
+--- @return any
+local function joinFigures(left, right)
+    local ok, out = pcall(string.format, "%s | %s", left, right)
+    if ok then return out end
+    return left
+end
+
 --- Render a share-of-the-group figure.
 ---
 --- The SHARE IS ALREADY COMPUTED. modules/Aggregator.lua holds both the cell's
@@ -205,11 +228,17 @@ local ClassRGB = NS.ClassRGB or function() return nil end
 -- window tells you which column you are reading without tracing back up to the
 -- header.
 --
--- THE CATALOG OWNS THE PALETTE, not this file: modules/Tooltip.lua colors the
--- name tooltip's "All statistics" labels with the same eight colors whatever this
--- window's `colorMode` is set to, and two copies of eight colors is the duplicate
--- that drifts the first time one of them is tuned.
-local STAT_COLORS = Const.STAT_COLORS
+-- ONE READER OWNS THE PALETTE, not this file: core/Namespace.lua's NS.StatColor
+-- answers for every surface that wears one -- the bar here, the cell text below
+-- it, both header strips and the tooltip's "All statistics" list -- and it is a
+-- reader rather than a table because the palette is a SETTING now (General ->
+-- Statistic colors). Five private lookups into Const.STAT_COLORS is five
+-- surfaces that would go on drawing the shipped hue after the player changed it.
+--
+-- Resolved defensively for the reason RGBA below is: a degraded install must
+-- render rows rather than raise, and "no palette" is a shape every caller here
+-- already handles.
+local StatColor = NS.StatColor or function() return nil end
 
 local ROLE_COLORS = {
     TANK    = { 0.30, 0.50, 0.85 },
@@ -237,8 +266,8 @@ local function barColor(bars, entry, statKey)
         local c = ROLE_COLORS[entry.role or ""]
         if c then return c[1], c[2], c[3] end
     elseif mode == "stat" then
-        local c = STAT_COLORS[statKey or ""]
-        if c then return c[1], c[2], c[3] end
+        local r, g, b = StatColor(statKey)
+        if r then return r, g, b end
     elseif mode == "custom" then
         -- `bars.customColor` is the setting; the literal is the LAST-RESORT
         -- fallback for a profile written before the key existed, not the color
@@ -824,8 +853,8 @@ function Cell:ApplyEntryTextColor(entry)
         -- PER STATISTIC IS PER COLUMN in a cell: `self.key` is the stat this cell
         -- draws, so the number takes the colour of the column it is in — the same
         -- palette `bars.colorMode == "stat"` paints the bar behind it with.
-        local c = STAT_COLORS[self.key or ""]
-        if c then r, g, b = c[1], c[2], c[3] end
+        local sr, sg, sb = StatColor(self.key)
+        if sr then r, g, b = sr, sg, sb end
     end
 
     local a = textAlpha(text)
@@ -952,6 +981,12 @@ function Cell:SetValue(entry)
     ---   smart   the per-second figure on a stat that HAS one (Damage, Healing),
     ---           the total on every other. The one value whose meaning depends on
     ---           the column, and the shipped default for the left slot.
+    ---   combined the absolute figure and the per-second one, "12.4M | 53.5K", on
+    ---           a stat that has both -- and the absolute ALONE where there is no
+    ---           rate, which is the same answer `smart` gives there. It is the
+    ---           other reading of "smart": one picks between the two figures, this
+    ---           one shows them. Both branch on `isRate` and neither ever prints a
+    ---           per-second figure for a counting stat.
     ---   total   the absolute figure, always. Never a rate, never a fallback.
     ---   rate    the per-second figure, and NOTHING on a counting stat — "0.42
     ---           interrupts per second" is not a thing a meter should say. That is
@@ -973,6 +1008,11 @@ function Cell:SetValue(entry)
         if which == "smart" then
             if isRate then return renderValue(rate, "rate", mode) end
             return renderValue(total, "total", mode)
+        end
+        if which == "combined" then
+            local absolute = renderValue(total, "total", mode)
+            if not isRate then return absolute end
+            return joinFigures(absolute, renderValue(rate, "rate", mode))
         end
         return nil
     end

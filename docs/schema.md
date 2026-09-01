@@ -228,7 +228,8 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 
 ### The four meta rows
 
-`window.colorMode`, `window.barTexture`, `window.font` and `window.fontOutline` are rows on the
+`window.colorMode`, `window.barTexture`, `window.font` and `window.fontOutline` (which ships as
+`NONE`, matching the two text surfaces that ship without an outline) are rows on the
 **Frame** page that set the others rather than being read by anything. Each fans out to every surface
 that has a setting of its kind: the colour mode to nine, the bar texture to two (the grid and the
 tooltip), and the font and its outline to four each (the cells, both header strips and the tooltip).
@@ -482,9 +483,10 @@ bar is anchored to a hand-picked offset any more.
 `showMinimise` · `showLock` · `showSettings` · `showSegment` · `showReset` · `showExport` — all
 `true`. Six of the seven controls; `closeButton` is the seventh and deliberately keeps its older
 name, because renaming it to `showClose` for symmetry would migrate every stored profile in exchange
-for a consistency nobody can see. All seven sit on the Header page, split across two tabs by what they
-act on: **Window buttons** (close, minimise, lock, settings) and **Meter buttons** (segment picker,
-reset, export). Their size, hover reveal and colours sit in a third tab, **Button style**, below.
+for a consistency nobody can see. All seven sit on the Header page, on one tab —
+**Controls** — window-acting first (close, minimise, lock, settings), then meter-acting (segment
+picker, reset, export). Their size, hover reveal and colours sit in the tab below it, **Button
+style**.
 
 **There is no `resizeGrip` key.** There was, and it was read once while the frame was being built —
 so unticking it did nothing until a reload. The grip follows the **lock**: drawn while the window is
@@ -523,10 +525,10 @@ property of hiding: `OnUpdate` is installed on the frame, and the frame stays sh
 
 ### `text` — the FontString in every cell
 
-`leftSlot = "smart"` · `rightSlot = "none"` — **both take the same five values**, `none` / `smart` /
-`total` / `rate` / `percent`, in either position. They used to take different three-value sets
-overlapping on two, which made "the total on the right" unexpressible for no reason anyone could
-state.
+`leftSlot = "smart"` · `rightSlot = "none"` — **both take the same six values**, `none` / `smart` /
+`combined` / `total` / `rate` / `percent`, in either position. They used to take different
+three-value sets overlapping on two, which made "the total on the right" unexpressible for no reason
+anyone could state.
 
 **Every value is literal and nothing falls back.** `none` renders nothing, `rate` renders nothing on
 a stat with no per-second figure, and a cell whose slots both come back empty stays empty — a bar
@@ -534,11 +536,23 @@ with no text is a legitimate thing to want. The old code substituted the total w
 otherwise have been blank, which meant setting both slots to None appeared to do nothing at all. A
 lone right-slot figure likewise stays on the right rather than sliding into the empty left slot.
 
-`smart` is the one value whose meaning depends on the column: the per-second figure where the stat
-has one (`Constants.STATS[].isRate` — Damage and Healing), the absolute figure everywhere else. It is
-`isRate` read for you, so one setting says "the figure this column is about" across a grid that mixes
-both kinds, and it is what the left slot ships as. · `numberFormat = "abbreviated"` (`abbreviated` / `full`) ·
-`deathTimeFormat = "clock"` (`clock` / `ago`) · `maxNameLength = 20` (0 = no
+`smart` and `combined` are the two values whose meaning depends on the column, and both branch on
+the same flag (`Constants.STATS[].isRate` — Damage and Healing). `smart` **picks**: the per-second
+figure where the stat has one, the absolute figure everywhere else — one setting saying "the figure
+this column is about" across a grid that mixes both kinds, and what the left slot ships as.
+`combined` **shows both**, `12.4M | 53.5K`, and falls back to the absolute alone on a counting stat,
+where "9 | 3 per second" is a sentence no meter should write. The join goes through `string.format`
+and never `..`: both halves came out of the native formatter with a secret inside them.
+
+`numberFormat = "abbreviated"` — four values, three of them one ladder at three fraction divisors
+(`abbreviated` 12.4M · `abbreviatedWhole` 12M · `abbreviatedTwo` 12.40M) and `full` (12400000), which
+is the other formatter entirely. **There is no thousands-separated form and there cannot be one**:
+grouping digits means reading them, and `BreakUpLargeNumbers` raises on a handle. Each abbreviating
+mode gets its own cache slot in `modules/Format.lua`, so two windows on two decimal counts do not
+rebuild each other's formatter every refresh, and each is **probed against its own expected string**
+— a client that accepts `SetBreakpoints` and keeps its own rules is detected rather than assumed.
+
+`deathTimeFormat = "clock"` (`clock` / `ago`) · `maxNameLength = 15` (0 = no
 cap) · `font = Const.FONT_MONO_NAME` ("JetBrains Mono") · `size = 11` · `outline = "NONE"` ·
 `shadow = true` · `color = { r=1, g=1, b=1, a=1 }` · `alpha = 1.0`.
 
@@ -552,7 +566,14 @@ and never the reverse.
 `maxNameLength` counts **characters, not bytes** — a byte slice can land inside a multi-byte
 character and emit half a code point, and the names most likely to need truncating are exactly the
 accented ones. It sits above WoW's 12-character player-name limit because a group meter also lists
-NPCs, which are not bound by it. The realm is stripped regardless of the number.
+NPCs, which are not bound by it — but not far above it: it shipped at 20, which is wider than any
+name in a full group of players and spent that width on the columns beside it. The realm is stripped
+regardless of the number.
+
+The name column's own width is computed from this cap (`modules/Window.lua`'s `nameColumnWidth`), and
+`Constants.NAME_CHAR_RATIO` / `NAME_COLUMN_PAD` are calibrated so a **20**-character cap at 11pt with
+the icon on lands on exactly `NAME_COLUMN_WIDTH`, a measured value. The shipped cap computes
+narrower, which is the point of the setting; `tests/test_window.lua` pins the calibration.
 
 Both the strip and the cap are **gated on the concat probe**: `string.match` and `string.sub` read
 the characters of a value, and doing that to a secret is what rule R1 forbids, so a `ConditionalSecret`
@@ -612,6 +633,18 @@ to be hardcoded gold and the share hardcoded white, which read as two kinds of n
 one line's two figures.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
+
+The death-line section: `showDeathCaster = true` · `showDeathSpell = true`. Each line of a Deaths
+cell's tooltip names what ended that death — `Death 3 | Ragnaros | Sulfuras Smash` — read off the
+recap's **newest** event, which is the killing blow (the array arrives newest first, the same fact
+the timestamp is taken from). Two switches rather than one because they answer different questions:
+who killed me is a positioning question and what killed me is a cooldown question.
+
+Both halves go quiet on their own terms and neither absence is a failure — an environmental death
+sets `hideCaster`, a melee swing has no spell name (and is named "Melee", as Blizzard's own recap
+does), and a restricted pull can hand either back **secret**. Everything leaves
+`modules/Tooltip.lua`'s `killingBlowOf` through `plainWord`, so what cannot be read plainly is simply
+not drawn: the label is built with `..` and every piece of it is a plain string by construction.
 
 `anchor` takes eight values — the four edges and the four corners — and each names **a box of a 3×3
 drawn around the hovered cell**. "Top left" is the box above and

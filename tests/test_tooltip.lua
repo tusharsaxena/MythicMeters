@@ -2109,6 +2109,133 @@ test("Tooltip: a Deaths cell shows one line per death, newest first", function()
     assertEqual(slots[1], inst.mocks.date("%H:%M:%S", 29), "newest first")
 end)
 
+--- "Take this field OFF the event", which `nil` cannot say: a nil in a table
+--- literal is a key that was never written, so `pairs` never sees it and the
+--- override silently does nothing. Half of these cases are about a field the
+--- client did NOT send, so the absence has to be expressible.
+local ABSENT = {}
+
+--- A recap whose killing blow names a caster and a spell.
+local function killerRecap(overrides)
+    return {
+        HasRecapEvents = function() return true end,
+        GetRecapEvents = function(id)
+            local newest = { spellId = 1, spellName = "Sulfuras Smash",
+                             sourceName = "Ragnaros", amount = 1, currentHP = 1,
+                             timestamp = id }
+            for k, v in pairs(overrides or {}) do
+                if v == ABSENT then v = nil end
+                newest[k] = v
+            end
+            -- Two events, so the case also pins that it is the NEWEST one that
+            -- gets read: element two is a hit that did not kill anybody.
+            return { newest, { spellId = 2, spellName = "Living Meteor",
+                               sourceName = "Sulfuron Harbinger", amount = 1,
+                               currentHP = 50, timestamp = id - 4 } }
+        end,
+        GetRecapMaxHealth = function() return 100 end,
+    }
+end
+
+test("Tooltip: a death line names who and what landed the killing blow", function()
+    -- "Death 3 | Ragnaros | Sulfuras Smash". The recap's newest event IS the
+    -- killing blow -- the array arrives newest first -- which is the same fact
+    -- the timestamp is read off one line above.
+    -- red under: reading events[#events], or dropping either half of the label.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap())
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3 | Ragnaros | Sulfuras Smash", 1, true) ~= nil,
+        "the death line did not name the killing blow")
+    assertTrue(texts:find("Living Meteor", 1, true) == nil,
+        "an earlier event was read as the killing blow")
+end)
+
+test("Tooltip: either half of a death line can be switched off on its own", function()
+    -- Who killed me is a positioning question and what killed me is a cooldown
+    -- question, which is why they are two settings and not one.
+    -- red under: one switch governing both, or a separator left behind by the
+    -- half that was turned off.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap())
+
+    local window = inst.NS.Database.GetWindows()[1]
+    window.tooltip.showDeathCaster = false
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3 | Sulfuras Smash", 1, true) ~= nil,
+        "the spell did not survive the caster being switched off")
+    assertTrue(texts:find("Ragnaros", 1, true) == nil, "the caster was still drawn")
+
+    window.tooltip.showDeathCaster = true
+    window.tooltip.showDeathSpell  = false
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+    texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3 | Ragnaros", 1, true) ~= nil,
+        "the caster did not survive the spell being switched off")
+    assertTrue(texts:find("Sulfuras Smash", 1, true) == nil, "the spell was still drawn")
+end)
+
+test("Tooltip: a death with nothing to name is still a numbered death", function()
+    -- An environmental kill sets `hideCaster` and a melee swing has no spell name
+    -- at all. Neither is a failure and neither may take the line down with it --
+    -- what is missing is simply not drawn.
+    -- red under: printing "nil", a dangling separator, or skipping the line.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap({
+        hideCaster = true, spellName = ABSENT, spellId = ABSENT,
+        event = "ENVIRONMENTAL_DAMAGE",
+    }))
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3", 1, true) ~= nil, "the death line went missing")
+    assertTrue(texts:find("Death 3 |", 1, true) == nil, "a separator was left behind")
+    assertTrue(texts:find("nil", 1, true) == nil, "a missing name rendered as 'nil'")
+end)
+
+test("Tooltip: a melee killing blow is named Melee rather than left blank", function()
+    -- The same call Blizzard's own recap makes, and the same one eventColumns
+    -- makes one screen down: a swing has no spell at all, and "#?" reads as a bug
+    -- in the addon rather than as a melee hit.
+    -- red under: falling through to the spell-id placeholder in a one-line summary.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap({
+        spellName = ABSENT, spellId = ABSENT, event = "SWING_DAMAGE",
+    }))
+    inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3 | Ragnaros | Melee", 1, true) ~= nil,
+        "a melee killing blow was not named")
+end)
+
+test("Tooltip: a secret caster or spell name is left off rather than joined", function()
+    -- Both are resolved off ids the client may hand back SECRET, and the label is
+    -- built with `..`. So everything goes through plainWord on the way out and a
+    -- name that cannot be read is simply absent -- "not available" and "secret
+    -- right now" are the same thing to a reader.
+    -- red under: concatenating a secret name into the line, which raises on a
+    -- coalesced refresh ticker rather than in front of anybody.
+    local inst, cfg, anchor = bench()
+    inst.mocks.setDeathRecap(killerRecap({
+        sourceName = inst.mocks.secret("Ragnaros"),
+        spellName  = inst.mocks.secret("Sulfuras Smash"),
+    }))
+    inst.mocks.setRestricted(true)
+
+    local ok = pcall(function()
+        inst.NS.Tooltip:CellTooltip(deadGridRow(), "Deaths", anchor, cfg)
+    end)
+    assertTrue(ok, "joining a secret name raised")
+
+    local texts = table.concat(lineTexts(inst), "\n")
+    assertTrue(texts:find("Death 3", 1, true) ~= nil, "the death line went missing")
+    assertTrue(texts:find("Death 3 |", 1, true) == nil, "a separator was left behind")
+end)
+
 test("Tooltip: a Deaths cell still says a click opens the list", function()
     local inst, cfg, anchor = bench()
     inst.mocks.setDeathRecap({

@@ -70,7 +70,11 @@ local WINDOW_TEMPLATE = {
     -- is read by nothing.
     barTexture  = "Blizzard Raid Bar",
     font        = "Friz Quadrata TT",
-    fontOutline = "OUTLINE",
+    -- NONE, matching the two text surfaces that ship without one (`text.outline`
+    -- and `tooltip.fontOutline`). An outline is a legibility tool for text over a
+    -- bright bar, not a default look, and broadcasting one to every surface at
+    -- once was the meta row's most visible effect on a fresh profile.
+    fontOutline = "NONE",
 
     -- -----------------------------------------------------------------------
     -- frame — the standalone window itself
@@ -291,13 +295,17 @@ local WINDOW_TEMPLATE = {
     -- -----------------------------------------------------------------------
     --
     -- Two slots per cell, each rendering exactly what it is set to and nothing
-    -- else — none | smart | total | rate | percent, the same five in either
-    -- position. `rate` is empty on a stat that has no per-second figure
-    -- (Constants.STATS[].isRate), and `smart` is what reads that flag for you.
+    -- else — none | smart | combined | total | rate | percent, the same six in
+    -- either position. `rate` is empty on a stat that has no per-second figure
+    -- (Constants.STATS[].isRate), and `smart` and `combined` are what read that
+    -- flag for you: one PICKS between the two figures, the other SHOWS BOTH and
+    -- falls back to the absolute alone where there is no rate.
     --
     -- `numberFormat` picks which NumericRuleFormatter instance modules/Format.lua
     -- hands the value to. NOTHING here divides: abbreviating is arithmetic and
-    -- arithmetic on a secret raises (design §4).
+    -- arithmetic on a secret raises (design §4). The three abbreviated forms are
+    -- one ladder at three fraction divisors, and there is no thousands-separated
+    -- form because separating digits means reading them.
     text = {
         -- ONE FIGURE, AND IT IS THE ONE THE COLUMN IS ABOUT. `smart` is the
         -- per-second figure on a stat that has one — "who is doing the most
@@ -309,16 +317,19 @@ local WINDOW_TEMPLATE = {
         -- EVERY VALUE IS LITERAL. There is no fallback anywhere in modules/Row.lua:
         -- `none` renders nothing, `rate` on a counting stat renders nothing, and
         -- a cell whose slots both come back empty stays empty. Both slots take all
-        -- five values in either position.
-        leftSlot     = "smart",   -- none | smart | total | rate | percent
-        rightSlot    = "none",    -- none | smart | total | rate | percent
-        numberFormat = "abbreviated",  -- abbreviated | full
+        -- six values in either position.
+        leftSlot     = "smart",   -- none | smart | combined | total | rate | percent
+        rightSlot    = "none",    -- none | smart | combined | total | rate | percent
+        -- abbreviated | abbreviatedWhole | abbreviatedTwo | full
+        numberFormat = "abbreviated",
         -- How a death is labelled in the Deaths tooltip and the death list.
         deathTimeFormat = "clock",     -- clock | ago
         -- Characters, not bytes, and 0 means "no cap". Above WoW's 12-character
         -- player-name limit because a meter also lists NPCs, which are not bound
-        -- by it. The realm is stripped regardless of this number.
-        maxNameLength = 20,
+        -- by it -- but not far above it: 20 left the name column wider than the
+        -- names in it for a full group of players. The realm is stripped
+        -- regardless of this number.
+        maxNameLength = 15,
         -- THE HEADER'S FACE, not the monospace one.
         --
         -- A monospace grid keeps columns of digits from jittering as they tick,
@@ -440,6 +451,20 @@ local WINDOW_TEMPLATE = {
         -- absent for the whole of a pull (see that file's header).
         showTargets        = false,
         maxTargets         = 3,
+
+        -- WHAT ENDED EACH DEATH, on the death list's own line: "Death 3 |
+        -- Ragnaros | Sulfuras Smash". Both ON, because the line without them
+        -- says nothing the reader did not already know -- the count is in the
+        -- cell they hovered to get here.
+        --
+        -- Two switches rather than one: who killed me is a positioning question
+        -- and what killed me is a cooldown question, and a player who wants one
+        -- should not have to take the other. Either half goes quiet on its own
+        -- terms and neither is a failure -- an environmental death has no caster,
+        -- a melee swing has no spell name, and a restricted pull can withhold
+        -- either (modules/Tooltip.lua's killingBlowOf).
+        showDeathCaster    = true,
+        showDeathSpell     = true,
     },
 
     -- -----------------------------------------------------------------------
@@ -586,6 +611,21 @@ function NS.DataSetting(key)
     return NS.defaults.profile.data[key]
 end
 
+--- The shipped statistic palette, in the keyed color shape every stored color
+--- in this addon uses.
+---
+--- BUILT FROM THE CATALOG rather than restated: a stat added to core/Constants.lua
+--- with a palette entry gets a stored colour and a settings row without this file
+--- being touched, and one added WITHOUT a palette entry gets neither, which is
+--- the honest outcome -- settings/Schema.lua's generator walks the same table.
+local function statColorDefaults()
+    local out = {}
+    for key, c in pairs(Const.STAT_COLORS) do
+        out[key] = { r = c[1], g = c[2], b = c[3], a = 1 }
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------------------
 -- The profile
 -- ---------------------------------------------------------------------------
@@ -633,6 +673,20 @@ NS.defaults = {
             -- rebuild per event. Clamped to Constants.THROTTLE_MIN/MAX.
             throttle  = 0.25,
         },
+
+        -- ONE COLOR PER STATISTIC, addon-wide, and the palette every surface that
+        -- wears one reads through NS.StatColor. Per-window would be the wrong
+        -- shape twice over: the palette's whole job is telling one column from
+        -- another AT A GLANCE, and two windows disagreeing about what green means
+        -- is the one thing that breaks; and the tooltip's "All statistics" block
+        -- lists every stat whether the hovered window has a column for it or not,
+        -- so there is no window to read the colour off in the first place.
+        --
+        -- SEEDED FROM core/Constants.lua's STAT_COLORS, which stays the shipped
+        -- palette and the fallback for a key the profile has never stored. The
+        -- constant is not retired: it is what "Defaults" restores to and what a
+        -- degraded install with no database still draws.
+        statColors   = statColorDefaults(),
 
         -- What the export surface remembers between uses. ADDON-WIDE rather
         -- than per-window, and that is the one deliberate exception to the rule

@@ -424,7 +424,7 @@ badge and any count quoted in the docs must agree with it.
 - libs/LibKa0s is the LibKa0s release CLAUDE.md says this addon bundles
 - tests/_kit is the test kit that shipped with that release
 
-### test_format.lua (29)
+### test_format.lua (32)
 
 - Format: NS.Format is a callable table carrying both contracts
 - Format.Number goes through the native ABBREVIATING formatter
@@ -450,6 +450,9 @@ badge and any count quoted in the docs must agree with it.
 - modules/Format.lua never calls tonumber on anything
 - modules/Format.lua never calls table.concat
 - Format.Number and Format.Rate contain no division at all
+- The three abbreviated modes are one ladder at three decimal counts
+- Each abbreviated mode caches its own formatter, so two windows cannot fight
+- An unknown number format renders as the shipped one rather than raising
 - A ladder the client silently refuses is DETECTED, not assumed
 - Format.DeathTime renders the wall clock by default
 - Format.DeathTime counts backwards from now
@@ -659,7 +662,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (129)
+### test_window.lua (130)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -670,6 +673,7 @@ badge and any count quoted in the docs must agree with it.
 - SavePosition reads GetPoint off the anchor and off nothing else
 - SaveSize uses the size OnSizeChanged was handed, never a getter
 - BuildLayout computes every coordinate from config alone
+- The name column's formula is calibrated to the shipped width at a 20 cap
 - A stat column never shrinks below the legible floor
 - The window refuses to be dragged smaller than the grid needs
 - BuildLayout drops a column whose stat this build does not offer
@@ -840,7 +844,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (85)
+### test_row.lua (89)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -850,6 +854,8 @@ badge and any count quoted in the docs must agree with it.
 - Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden one
 - A rate-capable column renders its RATE ALONE by default
 - Smart falls to the ABSOLUTE figure on a stat that has no rate
+- Combined shows BOTH figures in one slot, absolute first
+- Combined falls to the absolute ALONE on a stat with no rate
 - Both figures appear when the right slot is turned on
 - A counting column renders the total only
 - The text slots are configurable, and percent is the one that goes quiet
@@ -874,6 +880,8 @@ badge and any count quoted in the docs must agree with it.
 - Border style art moves to a backdrop and takes the flat outline down
 - A window that sets neither keeps the border it always had
 - Per-statistic cell text is the colour of the column the cell is in
+- The statistic palette is a SETTING, and every surface reads it through one seam
+- A statistic the profile has never coloured keeps the shipped palette
 - Text opacity reaches the NAME and the numbers alike, class colour or not
 - Text opacity and the colour's own alpha multiply, rather than one winning
 - Bar opacity fades the FILL, and nothing else in the cell
@@ -955,7 +963,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (116)
+### test_tooltip.lua (121)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the default
@@ -1051,6 +1059,11 @@ badge and any count quoted in the docs must agree with it.
 - Tooltip: a death with no recap keeps the header too
 - Tooltip: a Deaths cell lists the DEATHS, not a spell breakdown
 - Tooltip: a Deaths cell shows one line per death, newest first
+- Tooltip: a death line names who and what landed the killing blow
+- Tooltip: either half of a death line can be switched off on its own
+- Tooltip: a death with nothing to name is still a numbered death
+- Tooltip: a melee killing blow is named Melee rather than left blank
+- Tooltip: a secret caster or spell name is left off rather than joined
 - Tooltip: a Deaths cell still says a click opens the list
 - Tooltip: a cell for a player who has NOT died is unchanged
 - Tooltip: the death breakdown gets the same gap and caption every section has
@@ -1314,7 +1327,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (51)
+### test_schema.lua (53)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1357,6 +1370,8 @@ badge and any count quoted in the docs must agree with it.
 - Schema: no tab holds fewer than two controls
 - Schema: a hidden row is filed under a tab that exists, and draws nothing
 - Schema: every tab name and row label is a localized string, not a bare literal
+- Schema: every Controls row carries its own icon in front of its words
+- Schema: a control label degrades to its words when there is no art
 - Schema: the active tab is session state and has no home in the schema
 - Schema: the column header strip is styled on the page where columns are chosen
 - Schema: the header controls are EDITED on Header and STORED under frame
@@ -1418,7 +1433,7 @@ badge and any count quoted in the docs must agree with it.
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
 - Slash: /mm list heads each block with the page AND the tab
 
-### test_options_panel.lua (31)
+### test_options_panel.lua (32)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1433,6 +1448,7 @@ badge and any count quoted in the docs must agree with it.
 - Options: EnsureDefaultsButton runs OUTSIDE the already-rendered guard
 - Options: a page that declines a Defaults button never grows one
 - Options: the Columns page's Defaults button restores the SHIPPED column list
+- Options: the Columns page's Defaults button ALSO restores the window.columnHeader.* schema rows
 - Options: the canvas footer's Defaults control reaches the same handler as the header button
 - Options: opening the panel is REFUSED under combat lockdown, with a notice
 - Options: a refused open is NOT deferred and replayed when combat ends
@@ -1533,27 +1549,27 @@ badge and any count quoted in the docs must agree with it.
 | test_envsetup.lua | 11 |
 | test_lifecycle.lua | 26 |
 | test_vendor_sync.lua | 2 |
-| test_format.lua | 29 |
+| test_format.lua | 32 |
 | test_provider.lua | 61 |
 | test_roster.lua | 22 |
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 129 |
+| test_window.lua | 130 |
 | test_headercontrols.lua | 46 |
-| test_row.lua | 85 |
+| test_row.lua | 89 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 116 |
+| test_tooltip.lua | 121 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 91 |
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 51 |
+| test_schema.lua | 53 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 34 |
-| test_options_panel.lua | 31 |
+| test_options_panel.lua | 32 |
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1390** |
+| **Total** | **1406** |

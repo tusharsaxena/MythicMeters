@@ -100,7 +100,7 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **137 rows across 8 page keys**
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **147 rows across 8 page keys**
 (windows, frame, header, bars, tooltip, visibility, columns, general), each one wiring automatically
 into its panel widget — one tab per distinct `group`, via `LibKa0s-Options-1.0`'s `RenderTabbedSchema`
 — its `/mm get|set|list|reset` coverage, and the per-page and global defaults reset. A ninth

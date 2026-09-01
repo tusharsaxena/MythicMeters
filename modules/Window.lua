@@ -824,8 +824,15 @@ local function surfaceColor(mode, stored, statKey, dr, dg, db, da)
         local cr, cg, cb = PlayerClassRGB()
         if cr then r, g, b = cr, cg, cb end
     elseif mode == "stat" then
-        local c = Const.STAT_COLORS[statKey or ""]
-        if c then r, g, b = c[1], c[2], c[3] end
+        -- The palette through its one reader (core/Namespace.lua), which is what
+        -- makes the column-header strip follow General -> Statistic colors rather
+        -- than the shipped constant. Resolved to a local FIRST: `f and f(x)` is a
+        -- truncating expression, and this reader answers three values.
+        local StatColor = NS.StatColor
+        if StatColor then
+            local sr, sg, sb = StatColor(statKey)
+            if sr then r, g, b = sr, sg, sb end
+        end
     end
 
     return r, g, b, a

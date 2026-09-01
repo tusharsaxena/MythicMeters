@@ -243,6 +243,12 @@ test("BuildLayout computes every coordinate from config alone", function()
     cfg.frame.padding = 6
     cfg.rows.height   = 16
     cfg.rows.spacing  = 1
+    -- 0 is the documented "no cap", and a window with no cap keeps the shipped
+    -- NAME_COLUMN_WIDTH. Said here rather than inherited from the default cap:
+    -- this case is about the ARITHMETIC around the name column, and it used to
+    -- pass only because the shipped cap happened to compute back to the same
+    -- number. The case below pins that calibration on its own.
+    cfg.text.maxNameLength = 0
     cfg.columns = {
         { stat = "DamageDone", enabled = true },
         { stat = "Interrupts", enabled = true },
@@ -263,6 +269,25 @@ test("BuildLayout computes every coordinate from config alone", function()
     assertEqual(layout.columns[1].x, Const.NAME_COLUMN_WIDTH + 2)
     assertEqual(layout.columns[2].x, Const.NAME_COLUMN_WIDTH + 2 + expected + 2)
     assertEqual(layout.rowHeight, 16)
+end)
+
+test("The name column's formula is calibrated to the shipped width at a 20 cap", function()
+    -- NAME_CHAR_RATIO and NAME_COLUMN_PAD are set so that a 20-character cap at
+    -- 11pt with the icon on lands on exactly NAME_COLUMN_WIDTH -- a measured
+    -- value that has been right in the client for as long as this addon has had
+    -- a name column. The SHIPPED cap is 15 and computes narrower, which is the
+    -- point of the setting; what this pins is that the formula is still anchored
+    -- to a real measurement rather than drifting off one.
+    -- red under: retuning the ratio or the pad for the look of it.
+    local inst, window, cfg = scene()
+    local Const = inst.NS.Constants
+
+    cfg.text.maxNameLength = 20
+    cfg.text.size          = 11
+    cfg.icons.showIcon     = true
+    cfg.icons.size         = 14
+
+    assertEqual(window:BuildLayout().nameColumn.width, Const.NAME_COLUMN_WIDTH)
 end)
 
 test("A stat column never shrinks below the legible floor", function()

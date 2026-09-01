@@ -292,7 +292,7 @@ add to an existing tab; see [Split an over-full tab](#split-an-over-full-tab) be
 ```lua
 {
     path = "window.rows.compactMode", type = "bool", default = false,
-    page = "frame", group = L["Rows"],
+    page = "frame", group = L["Row"],
     label = L["Compact mode"], desc = L["Draw rows without spacing."],
 },
 ```
@@ -354,7 +354,7 @@ other row.
 
 **Gotchas.**
 - `/mm list` headings are `page › group` (`settings/Slash.lua`'s `groupKey`), so splitting a group
-  also splits the CLI heading — `frame › Rows` becomes two headings if `Rows` splits into two groups,
+  also splits the CLI heading — `frame › Row` becomes two headings if `Row` splits into two groups,
   same as the panel gaining a tab.
 - If every row moving to the new group is `hidden`, the split produces a tab nobody sees — check the
   `Export` case above before assuming a new group is a new tab.

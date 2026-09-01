@@ -85,7 +85,8 @@ L["EDT"] = "EDT"
 L["Player"] = "Player"
 L["Total"] = "Total"
 L["Per second"] = "Per second"
-L["Smart value"] = "Smart value"
+L["Smart value (Per Second or Absolute)"] = "Smart value (Per Second or Absolute)"
+L["Smart value (Absolute | Per Second)"] = "Smart value (Absolute | Per Second)"
 L["Absolute value"] = "Absolute value"
 L["Per second value"] = "Per second value"
 L["Percent"] = "Percent"
@@ -106,6 +107,7 @@ L["Visibility"] = "Visibility"
 L["Columns"] = "Columns"
 L["Data"] = "Data"
 L["General"] = "General"
+L["Statistic colors"] = "Statistic colors"
 L["Profiles"] = "Profiles"
 
 -- ---------------------------------------------------------------------------
@@ -178,7 +180,6 @@ L["Gap in pixels between the window edge and the rows inside it."] =
 L["Lock window"] = "Lock window"
 L["When unlocked you can drag the window to reposition it, and it fills with placeholder data so you can see the layout."] =
     "When unlocked you can drag the window to reposition it, and it fills with placeholder data so you can see the layout."
-L["Behavior"] = "Behavior"
 L["Keep on screen"] = "Keep on screen"
 L["Prevent the window from being dragged off the edge of the screen."] =
     "Prevent the window from being dragged off the edge of the screen."
@@ -232,10 +233,8 @@ L["Move the window selected on the Windows page back to the center of the screen
 
 L["Title bar"] = "Title bar"
 L["Title text"] = "Title text"
-L["Window buttons"] = "Window buttons"
-L["Meter buttons"] = "Meter buttons"
+L["Controls"] = "Controls"
 L["Button style"] = "Button style"
-L["All surfaces"] = "All surfaces"
 
 L["Text color mode"] = "Text color mode"
 L["Background color mode"] = "Background color mode"
@@ -292,7 +291,7 @@ L["Gap in pixels between adjacent rows."] = "Gap in pixels between adjacent rows
 L["Growth direction"] = "Growth direction"
 L["Whether rows stack downward from the header or upward from the bottom."] =
     "Whether rows stack downward from the header or upward from the bottom."
-L["Row behavior"] = "Row behavior"
+L["Row"] = "Row"
 L["Always show yourself"] = "Always show yourself"
 L["Keep your own row visible even when it would fall outside the maximum row count."] =
     "Keep your own row visible even when it would fall outside the maximum row count."
@@ -322,6 +321,7 @@ L["Custom color"] = "Custom color"
 L["Bar color"] = "Bar color"
 L["Fill color used when the color mode is set to Custom color."] =
     "Fill color used when the color mode is set to Custom color."
+L["Background"] = "Background"
 L["Bar background"] = "Bar background"
 L["Bar background color"] = "Bar background color"
 L["Color drawn behind the unfilled part of each bar."] =
@@ -331,6 +331,7 @@ L["Opacity of the unfilled part of each bar."] =
     "Opacity of the unfilled part of each bar."
 L["Bar opacity"] = "Bar opacity"
 L["Opacity of the filled part of each bar."] = "Opacity of the filled part of each bar."
+L["Border"] = "Border"
 L["Bar border"] = "Bar border"
 L["Draw an outline around each bar."] = "Draw an outline around each bar."
 L["How thick the outline around each bar is, in pixels."] =
@@ -358,8 +359,10 @@ L["What to show on the right of each cell. Per-second figures are only shown for
 L["Number format"] = "Number format"
 L["Abbreviate large numbers (12.4M) or show them in full (12,400,000)."] =
     "Abbreviate large numbers (12.4M) or show them in full (12,400,000)."
-L["Abbreviated"] = "Abbreviated"
-L["Full"] = "Full"
+L["Abbreviated (12.4M)"] = "Abbreviated (12.4M)"
+L["Abbreviated, no decimals (12M)"] = "Abbreviated, no decimals (12M)"
+L["Abbreviated, two decimals (12.40M)"] = "Abbreviated, two decimals (12.40M)"
+L["Full (12400000)"] = "Full (12400000)"
 L["Max name length"] = "Max name length"
 L["Truncate a name past this many characters. 0 shows the whole name. The realm is always stripped."] =
     "Truncate a name past this many characters. 0 shows the whole name. The realm is always stripped."
@@ -460,6 +463,12 @@ L["Outline and monochrome flags applied to the tooltip text."] =
 
 L["Tooltip targets"] = "Tooltip targets"
 L["Show targets"] = "Show targets"
+L["Name the killer"] = "Name the killer"
+L["Add whoever landed the killing blow to each line of the Deaths list. Left off a death with no caster to name, such as a fall or a fire."] =
+    "Add whoever landed the killing blow to each line of the Deaths list. Left off a death with no caster to name, such as a fall or a fire."
+L["Name the killing blow"] = "Name the killing blow"
+L["Add the spell that landed the killing blow to each line of the Deaths list. A melee swing is named Melee; a spell the client cannot name is left off."] =
+    "Add the spell that landed the killing blow to each line of the Deaths list. A melee swing is named Melee; a spell the client cannot name is left off."
 L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."] =
     "On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."
 L["Maximum targets"] = "Maximum targets"
@@ -629,12 +638,13 @@ L["Enable Multi Meters"] = "Enable Multi Meters"
 L["Master switch for the addon. When off, no window is drawn and no data is read."] =
     "Master switch for the addon. When off, no window is drawn and no data is read."
 L["Show minimap button"] = "Show minimap button"
+L["Color for this statistic wherever it identifies a column: bars set to Per-statistic, the column header, and the tooltip's all-statistics list."] =
+    "Color for this statistic wherever it identifies a column: bars set to Per-statistic, the column header, and the tooltip's all-statistics list."
 L["Show the minimap button for opening these settings."] =
     "Show the minimap button for opening these settings."
 L["Test mode"] = "Test mode"
 L["Fill every window with placeholder data so you can lay out columns without being in combat."] =
     "Fill every window with placeholder data so you can lay out columns without being in combat."
-L["Maintenance"] = "Maintenance"
 L["Debug console"] = "Debug console"
 L["Show or hide the on-screen debug console. Session only; it does not turn debug logging on."] =
     "Show or hide the on-screen debug console. Session only; it does not turn debug logging on."

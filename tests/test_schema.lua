@@ -695,19 +695,19 @@ end)
 ---
 --- VISIBLE rows only, because NS.SchemaForPage filters `hidden` and this table describes what
 --- the panel DRAWS. So General has no Export tab -- its three export rows are hidden -- and
---- Window buttons counts four, not the five rows filed under it. The case below this one is
---- what keeps those hidden rows honest.
+--- the Header page's Controls counts eight, not the nine rows filed under it. The case below
+--- this one is what keeps those hidden rows honest.
 local PARTITION = {
-    general    = { { "General", 3 }, { "Data", 2 }, { "Maintenance", 1 } },
+    general    = { { "General", 6 }, { "Statistic colors", 8 } },
     windows    = { { "Window", 1 } },
-    frame      = { { "Size and position", 6 }, { "Rows", 4 }, { "Row behavior", 4 },
-                   { "Background and border", 4 }, { "Behavior", 2 }, { "All surfaces", 4 } },
-    header     = { { "Title bar", 4 }, { "Title text", 5 }, { "Window buttons", 4 },
-                   { "Meter buttons", 4 }, { "Button style", 6 } },
-    bars       = { { "Bar", 5 }, { "Bar background", 3 }, { "Bar border", 4 },
+    frame      = { { "General", 6 }, { "Size and position", 6 },
+                   { "Background and border", 4 }, { "Row", 8 } },
+    header     = { { "Title bar", 4 }, { "Title text", 5 }, { "Controls", 8 },
+                   { "Button style", 6 } },
+    bars       = { { "Bar", 5 }, { "Background", 3 }, { "Border", 4 },
                    { "Text content", 5 }, { "Text style", 7 }, { "Icons", 3 } },
-    tooltip    = { { "Tooltip", 5 }, { "Contents", 5 }, { "Bar", 5 },
-                   { "Bar background", 3 }, { "Bar border", 3 }, { "Text", 6 } },
+    tooltip    = { { "General", 5 }, { "Text", 6 }, { "Bar", 5 },
+                   { "Bar background", 3 }, { "Bar border", 3 }, { "Contents", 7 } },
     visibility = { { "Where to show this window", 7 }, { "When to hide this window", 8 },
                    { "Combat", 2 } },
     columns    = { { "Header text", 6 }, { "Header background", 2 } },
@@ -744,15 +744,16 @@ function()
 end)
 
 test("Schema: no tab holds fewer than two controls", function()
-    -- A tab over one control is a click that reveals a single checkbox. General's Maintenance
-    -- and Windows' Window are the two exemptions and they are exempted BY NAME: each is a
-    -- single stored row sharing its tab with BESPOKE commands that have no stored value and
-    -- cannot be rows and cannot be counted here -- Maintenance's two reset buttons, Window's
-    -- picker and create/duplicate/delete buttons.
+    -- A tab over one control is a click that reveals a single checkbox. Windows' Window is the
+    -- one exemption and it is exempted BY NAME: a single stored row sharing its tab with
+    -- BESPOKE commands that have no stored value and cannot be rows and cannot be counted here
+    -- -- the picker and the create/duplicate/delete buttons. General's Maintenance was the
+    -- second, and it is gone: one checkbox and two reset buttons were not a subject worth a
+    -- tab, and all three sit on General now.
     -- red under: a tab losing rows until one is left, or a new one-row section.
     local inst = T.load()
     local NS, L = inst.NS, inst.NS.L
-    local EXEMPT = { [L["Maintenance"]] = true, [L["Window"]] = true }
+    local EXEMPT = { [L["Window"]] = true }
 
     local counts, pageOf = {}, {}
     for _, row in ipairs(NS.Schema) do
@@ -818,17 +819,72 @@ test("Schema: every tab name and row label is a localized string, not a bare lit
     local inst = T.load()
     local NS = inst.NS
     local missing = {}
+
+    --- A label with its texture escape taken back off.
+    ---
+    --- The Header page's Controls rows carry their own icon in front of the words
+    --- (settings/Schema.lua's controlLabel), which is a PREFIX and not a
+    --- replacement -- so the check is that what remains is still a locale key. A
+    --- row that lost its translation while gaining a picture fails here exactly as
+    --- a bare literal does.
+    local function words(label)
+        return (label:gsub("^|T[^|]*|t ", ""))
+    end
+
     for _, row in ipairs(NS.Schema) do
         if row.group and rawget(NS.L, row.group) == nil then
             missing[#missing + 1] = "group: " .. row.group
         end
-        if row.label and rawget(NS.L, row.label) == nil then
+        if row.label and rawget(NS.L, words(row.label)) == nil then
             missing[#missing + 1] = row.path .. " label: " .. row.label
         end
     end
     table.sort(missing)
     assertEqual(table.concat(missing, ", "), "",
         "these strings are not in locales/enUS.lua")
+end)
+
+test("Schema: every Controls row carries its own icon in front of its words", function()
+    -- The strip is the index into that tab: eight checkboxes named "Show close",
+    -- "Show lock", "Show segment picker" ask a reader to translate a word back
+    -- into the glyph they were looking at. The icon removes the translation.
+    -- red under: a row added to Controls without one, which is the row a player
+    -- then cannot match to anything in the header.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    -- The one exemption, and it is not a control: `showSegmentText` governs the
+    -- session LINE -- the words "Overall" at the left of the header -- which is
+    -- text the title face draws and has no glyph in the strip. Giving it one of
+    -- the seven would put the same picture beside two different checkboxes,
+    -- which is worse than the row sitting a few pixels left of its neighbours.
+    local NO_GLYPH = { ["window.frame.showSegmentText"] = true }
+
+    local bare = {}
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and row.group == L["Controls"]
+           and not row.hidden and not NO_GLYPH[row.path] then
+            if not row.label:find("^|T") then bare[#bare + 1] = row.path end
+        end
+    end
+    assertEqual(table.concat(bare, ", "), "",
+        "these Controls rows draw no icon beside their checkbox")
+end)
+
+test("Schema: a control label degrades to its words when there is no art", function()
+    -- NS.Icon answers nil on a degraded install -- the art is inside the LibKa0s
+    -- payload that is missing (core/MediaSetup.lua) -- and a label built out of
+    -- that answer must be the plain sentence rather than a broken escape.
+    -- red under: string.format-ing a nil path into the label.
+    local inst = T.load{ libFiles = {} }
+    local NS, L = inst.NS, inst.NS.L
+
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and row.group == L["Controls"] then
+            assertFalse(row.label:find("|T") ~= nil,
+                row.path .. " drew a texture escape with no texture behind it")
+        end
+    end
 end)
 
 test("Schema: the active tab is session state and has no home in the schema", function()
@@ -876,8 +932,7 @@ test("Schema: the header controls are EDITED on Header and STORED under frame", 
     -- red under: moving the group back to Frame, or renaming the paths to match the page.
     local inst = T.load()
     local NS, L = inst.NS, inst.NS.L
-    local TABS = { [L["Window buttons"]] = true, [L["Meter buttons"]] = true,
-                   [L["Button style"]] = true }
+    local TABS = { [L["Controls"]] = true, [L["Button style"]] = true }
 
     local n = 0
     for _, row in ipairs(NS.Schema) do
@@ -887,9 +942,9 @@ test("Schema: the header controls are EDITED on Header and STORED under frame", 
                 row.path .. " is a header control and must still be stored under frame")
         end
     end
-    -- Exactly 15: Window buttons (close/showMinimise/showLock/showSettings, plus the hidden
-    -- `window.frame.minimised`) + Meter buttons (4) + Button style (6). Walked over NS.Schema,
-    -- not SchemaForPage, so the hidden row counts.
+    -- Exactly 15: Controls (close/showMinimise/showLock/showSettings, the hidden
+    -- `window.frame.minimised`, and the four meter buttons) + Button style (6). Walked over
+    -- NS.Schema, not SchemaForPage, so the hidden row counts.
     assertEqual(n, 15, "the whole set moved, not one row of it")
 end)
 

@@ -73,6 +73,43 @@ function NS.ClassRGB(classFilename)
     return c.r, c.g, c.b
 end
 
+--- One statistic's color as three plain numbers, or nil when the key has none.
+---
+--- ONE READER FOR EVERY SURFACE THAT WEARS THE PALETTE, exactly as ClassRGB above
+--- is for class colors, and added for the same reason: the palette became a
+--- SETTING (General -> Statistic colors), and five files each doing their own
+--- `Const.STAT_COLORS[key]` would have been five surfaces that ignored it.
+---
+--- THE CONSTANT IS THE FALLBACK, NOT THE DEAD LETTER. It answers for a key the
+--- profile has never stored, for a stat added to the catalog after a profile was
+--- written, and for a degraded install with no database at all -- which is the
+--- case that decides the shape here: a window must still draw its palette when
+--- there is nothing to read a setting out of.
+---
+--- Plain numbers throughout: no part of this is a meter value, so none of it is
+--- secret and all of it is legal at the height of a pull (design §4).
+---
+--- @param statKey string|nil
+--- @return number|nil r, number|nil g, number|nil b
+function NS.StatColor(statKey)
+    if type(statKey) ~= "string" then return nil end
+
+    local shipped = NS.Constants and NS.Constants.STAT_COLORS
+    shipped = shipped and shipped[statKey]
+    -- A key with no shipped entry has no row in the settings panel either
+    -- (settings/Schema.lua generates one per palette entry), so there is nothing
+    -- stored for it and nothing to fall back to.
+    if not shipped then return nil end
+
+    local stored = NS.GetSetting and NS.GetSetting("statColors." .. statKey)
+    if stored ~= nil and NS.RGBA then
+        local r, g, b = NS.RGBA(stored, shipped[1], shipped[2], shipped[3], 1)
+        return r, g, b
+    end
+
+    return shipped[1], shipped[2], shipped[3]
+end
+
 --- The LOCAL player's class color, for a surface with no row to ask about.
 ---
 --- The title bar and the column-header strip are about the window, not about any

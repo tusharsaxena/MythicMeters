@@ -76,7 +76,10 @@ test("Row.OffsetFor is a pure function of the index and the row config", functio
 end)
 
 test("Cell:ApplyLayout places every cell from the layout table", function()
-    local inst, window, row = bench()
+    -- No cap, so the name column is the shipped NAME_COLUMN_WIDTH and the x below
+    -- is a stated number rather than one that happens to fall out of the default
+    -- cap. See the calibration case in tests/test_window.lua.
+    local inst, window, row = bench(function(c) c.text.maxNameLength = 0 end)
     local layout = window.layout
     local Const = inst.NS.Constants
 
@@ -205,6 +208,41 @@ test("Smart falls to the ABSOLUTE figure on a stat that has no rate", function()
 
     assertEqual(row.cells.Interrupts.left:GetText(), "9", "a kick count per second is not a number")
     assertEqual(row.cells.DamageDone.left:GetText(), "10")
+end)
+
+test("Combined shows BOTH figures in one slot, absolute first", function()
+    -- The other reading of "smart": `smart` PICKS between the two figures,
+    -- `combined` SHOWS them. One slot, one bar, absolute then per-second, in that
+    -- order because the absolute is the one that is still true after the pull.
+    -- red under: reversing the pair, losing the separator, or reaching for `..`
+    -- on a formatted secret instead of string.format (see joinFigures).
+    local inst, _, row = bench(function(c) c.text.leftSlot = "combined" end)
+    inst.mocks.setRestricted(true)
+
+    row:Update(entry{
+        DamageDone = { total = inst.mocks.secret(4200000),
+                       rate  = inst.mocks.secret(14000),
+                       maxAmount = inst.mocks.secret(4200000) },
+    }, 1)
+
+    assertEqual(row.cells.DamageDone.left:GetText(), "4.2M | 14.0K")
+    assertEqual(row.cells.DamageDone.right:GetText(), "",
+        "combined is ONE slot's value, not a way of filling both")
+end)
+
+test("Combined falls to the absolute ALONE on a stat with no rate", function()
+    -- Same promise `rate` and `smart` keep, arrived at from the third direction:
+    -- "9 | 3 per second" is the sentence about interrupts that no meter should
+    -- write, so the bar and the second figure both go rather than the second
+    -- figure being substituted.
+    -- red under: combined printing a rate, or a trailing separator, on a counting
+    -- stat.
+    local _, _, row = bench(function(c) c.text.leftSlot = "combined" end)
+    row:Update(entry{ Interrupts = { total = 9, rate = 3, maxAmount = 9 },
+                      DamageDone = { total = 100, rate = 10, maxAmount = 100 } }, 1)
+
+    assertEqual(row.cells.Interrupts.left:GetText(), "9")
+    assertEqual(row.cells.DamageDone.left:GetText(), "100 | 10")
 end)
 
 test("Both figures appear when the right slot is turned on", function()
@@ -634,6 +672,41 @@ test("Per-statistic cell text is the colour of the column the cell is in", funct
     assertTrue(row.nameCell.left.__textColor ~= nil)
 end)
 
+test("The statistic palette is a SETTING, and every surface reads it through one seam", function()
+    -- General -> Statistic colors. The bar and the cell text both take their
+    -- per-statistic colour through NS.StatColor, which reads the profile and
+    -- falls back to the shipped constant -- so changing the setting has to move
+    -- both without either file being told about it.
+    -- red under: a private Const.STAT_COLORS lookup left in modules/Row.lua,
+    -- which would go on drawing the shipped hue after the player changed it.
+    local inst, _, row = bench(function(cfg)
+        cfg.text.colorMode = "stat"
+        cfg.bars.colorMode = "stat"
+    end)
+
+    inst.NS.SetByPath("statColors.DamageDone", { r = 0.1, g = 0.2, b = 0.3, a = 1 })
+    row:Update(entry({ DamageDone = { total = 5, maxAmount = 10 } }), 1)
+
+    local cell = row.cells.DamageDone
+    assertEqual(cell.left.__textColor[1], 0.1, "the cell text ignored the setting")
+    assertEqual(cell.left.__textColor[2], 0.2)
+    assertEqual(cell.frame.__barColor[1], 0.1, "the bar ignored the setting")
+end)
+
+test("A statistic the profile has never coloured keeps the shipped palette", function()
+    -- The constant is the FALLBACK, not the dead letter: it answers for a key
+    -- nothing has stored, for a stat added to the catalog after the profile was
+    -- written, and for a degraded install with no database to read at all.
+    -- red under: retiring Const.STAT_COLORS in favour of the stored table.
+    local inst, _, row = bench(function(cfg) cfg.text.colorMode = "stat" end)
+    local want = inst.NS.Constants.STAT_COLORS.Interrupts
+
+    inst.NS.db.profile.statColors.Interrupts = nil
+    row:Update(entry({ Interrupts = { total = 2, maxAmount = 10 } }), 1)
+
+    assertEqual(row.cells.Interrupts.left.__textColor[1], want[1])
+end)
+
 test("Text opacity reaches the NAME and the numbers alike, class colour or not", function()
     -- IT REACHED ONLY THE NAME in the client, with Use class color on: the
     -- per-row colour passes wrote their own alpha through SetTextColor after
@@ -913,7 +986,9 @@ end)
 test("A drill-down row keeps a hyphen, which is part of a spell name", function()
     -- The realm strip is anchored to the first hyphen. On a spell that is not a
     -- separator, and stripping there would silently shorten it to its first word.
-    local _, _, row = bench()
+    -- No cap, because this name is longer than the shipped one and the case is
+    -- about the hyphen rather than about the truncation three cases above.
+    local _, _, row = bench(function(c) c.text.maxNameLength = 0 end)
     local spell = { guid = "s1", name = "Fire-and-Brimstone", isDrillDown = true,
                     classFilename = "WARLOCK", role = "NONE",
                     values = { DamageDone = { total = 1, maxAmount = 1 } } }

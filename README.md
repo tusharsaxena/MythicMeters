@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1390%2F1390_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1406%2F1406_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -33,9 +33,9 @@ The first release.
 
 - **One window, every statistic.** Damage, Healing, Interrupts, Dispels, Avoidable Damage and Deaths
   as columns of a single grid, each cell with its own bar and text. Each cell has a left and a right
-  text slot, and each takes the same five values — None, Smart value, Absolute value, Per second
-  value, Percent — so "the rate alone", "the total and the rate", "a bar with no text at all" and
-  "share of the column" are all one dropdown away.
+  text slot, and each takes the same six values — None, the two smart values, Absolute value, Per
+  second value, Percent — so "the rate alone", "the total and the rate", "a bar with no text at all"
+  and "share of the column" are all one dropdown away.
 - **Current or overall.** Switch between the pull you are in and the whole run.
 - **As many windows as you want.** Each one configured separately, with "copy settings from" so you
   do not have to set up the second one by hand.

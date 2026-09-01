@@ -7,7 +7,7 @@ by `group`, in declaration order, and draws one tab per distinct group — there
 naming a tab, because one tab *is* one group. A page with fewer than two visible groups falls back to
 the library's older `RenderSchema` (no strip at all) rather than drawing a strip with one tab on it.
 
-`settings/Schema.lua` currently carries **137 rows across 8 page keys** (windows, frame, header,
+`settings/Schema.lua` currently carries **147 rows across 8 page keys** (windows, frame, header,
 bars, tooltip, visibility, columns, general); a ninth registered page, Profiles, hosts no schema rows
 at all — see [The pages](#the-pages) below for the per-page breakdown, read straight out of the
 schema rather than carried over from any design document.
@@ -47,17 +47,17 @@ that filter drops `hidden` rows before grouping runs).
 
 | # | Page | Panel key | Schema rows | Tabs | Defaults | Banner | What is on it |
 |---|---|---|---|---|---|---|---|
-| 1 | General | `general` | 9 (6 visible + 3 `hidden`) | 3 — **General**, **Data**, **Maintenance** | yes | no | Master enable, minimap button and Test mode (General) · **Merge pets** and **Refresh interval**, addon-wide since schemaVersion 5 (Data) · the debug console's visibility, plus the **Reset all settings** and **Reset position** buttons, fired through `RenderTabbedSchema`'s `afterGroup` hook keyed to Maintenance (Maintenance). A fourth schema group, **Export**, holds the export modal's three remembered choices — all three `hidden`, so the group is real for `/mm list` and the schema-vs-defaults validator and never appears as a tab: this is the one *section that is not a tab*. General is not a window page, so it draws no banner. |
+| 1 | General | `general` | 17 (14 visible + 3 `hidden`) | 2 — **General**, **Statistic colors** | yes | no | **General** — master enable, minimap button, **Merge pets** and **Refresh interval** (addon-wide since schemaVersion 5), Test mode and the debug console's visibility, plus the **Reset all settings** and **Reset position** buttons, fired through `RenderTabbedSchema`'s `afterGroup` hook keyed to General. **Statistic colors** — one swatch per entry of `Constants.STAT_COLORS`, [generated rather than written out](#the-statistic-palette), read back through `NS.StatColor`. Two tabs were retired into General along the way: **Maintenance** (the console toggle and the two buttons) and **Data** (the two addon-wide data rows); neither was a subject worth a click. A third schema group, **Export**, holds the export modal's three remembered choices — all three `hidden`, so the group is real for `/mm list` and the schema-vs-defaults validator and never appears as a tab: this is the one *section that is not a tab*. General is not a window page, so it draws no banner. |
 | 2 | Windows | `windows` | 1 (`window.name`) | 2 bespoke — **Window**, **Copy from** | no | yes | The picker, New / Duplicate / Delete, and Copy settings from, on the Window tab; the source picker, group filter and Copy button on Copy from. Content is bespoke rather than schema rows, so the strip is drawn directly with `H.TabStrip` rather than `RenderTabbedSchema`, which has nothing here to partition. |
-| 3 | `  - `Frame | `frame` | 24 | 6 — Size and position, Rows, Row behavior, Background and border, Behavior, All surfaces | yes | yes | Geometry, scale, opacity, strata and padding; row height/count/spacing/growth; lock and keep-on-screen; background and border; and the four **meta rows** (Color mode, Bar texture, Font, Font outline, each "(all surfaces)"), which broadcast one value to every surface with a setting of that kind and are read by nothing. |
-| 4 | `  - `Header | `header` | 24 (23 visible + 1 `hidden`) | 5 — Title bar, Title text, Window buttons, Meter buttons, Button style | yes | yes | **Title bar** — whether it draws, alignment, height, background, and `window.frame.minimised` (the one `hidden` row: state the header's own minimise button writes). **Title text** — the five text controls for the window's own name. **Window buttons** — close, minimise, lock, settings. **Meter buttons** — segment picker, reset, export. **Button style** — size, hover reveal, and the two color-mode dropdowns (rest and hover) that replaced the old `controlClassColor` / `controlHoverClassColor` booleans at schemaVersion 13. |
-| 5 | `  - `Bars | `bars` | 27 | 6 — Bar, Bar background, Bar border, Text content, Text style, Icons | yes | yes | **Everything drawn inside a cell.** Bar texture/color mode/opacity/fill direction; the background's mode, color and opacity plus the alternating row stripe; the border; the two text slots, number format, max name length; the four text controls; and the row icon, its size and which side of the name it sits on. |
-| 6 | `  - `Tooltip | `tooltip` | 27 | 6 — Tooltip, Contents, Bar, Bar background, Bar border, Text | yes | yes | Anchor and offset; spell breakdown, max spells (0 = all), summarize-on-name, hide in combat; its own bar texture/color mode/border; and its own four text controls. |
+| 3 | `  - `Frame | `frame` | 24 | 4 — General, Size and position, Row, Background and border | yes | yes | **General** — lock and keep-on-screen, plus the four **meta rows** (Color mode, Bar texture, Font, Font outline, each "(all surfaces)"), which broadcast one value to every surface with a setting of that kind and are read by nothing. **Size and position** — geometry, scale, opacity, strata and padding. **Row** — height, count, spacing and growth, then always-show-self, highlight-self, mouseover highlight and the alternating stripe. **Background and border** — the fill inside the window and the LSM edge around it. |
+| 4 | `  - `Header | `header` | 24 (23 visible + 1 `hidden`) | 4 — Title bar, Title text, Controls, Button style | yes | yes | **Title bar** — whether it draws, its background, alignment and height. **Title text** — the five text controls for the window's own name. **Controls** — every toggle for the icon strip, **in the order the strip reads left to right** and each carrying **its own icon in front of its label** (`controlLabel`): the segment line, then export, reset, segment picker, settings, lock, minimise, close — plus `window.frame.minimised` (the one `hidden` row: state the header's own minimise button writes). **Button style** — size, hover reveal, and the two color-mode dropdowns (rest and hover) that replaced the old `controlClassColor` / `controlHoverClassColor` booleans at schemaVersion 13. |
+| 5 | `  - `Bars | `bars` | 27 | 6 — Bar, Background, Border, Text content, Text style, Icons | yes | yes | **Everything drawn inside a cell.** Bar texture/color mode/opacity/fill direction; the background's mode, color and opacity plus the alternating row stripe; the border; the two text slots, number format, max name length; the four text controls; and the row icon, its size and which side of the name it sits on. |
+| 6 | `  - `Tooltip | `tooltip` | 29 | 6 — General, Text, Bar, Bar background, Bar border, Contents | yes | yes | **General** — anchor, scale, the two offsets and hide-in-combat. **Text** — its own six text controls. **Bar** / **Bar background** / **Bar border** — the spell line's own surfaces, configured separately from the grid's. **Contents**, last because it is the tab you set once — spell breakdown and max spells (0 = all), targets and max targets, the two **death-line** switches (name the killer, name the killing blow), and summarize-on-name. |
 | 7 | `  - `Visibility | `visibility` | 17 | 3 — Where to show this window, When to hide this window, Combat | yes | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on. **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off. **Combat** — hide in combat, hide out of combat, both off. |
 | 8 | `  - `Columns | `columns` | 8 (Header text 6, Header background 2) | 3 — **Columns** (bespoke block editor), Header text, Header background | yes | yes | **Columns** — one block per statistic, a drag handle, a tick/cross toggle and a name; ticked ones are the columns, in block order. This is the *page that is not tabbed by `RenderTabbedSchema`*: its Columns tab holds no schema rows at all, so the strip is drawn directly with `H.TabStrip` and each tab renders its own filtered row list. **Header text** and **Header background** are the `window.columnHeader.*` rows that used to sit on the Header page — they moved here because this is the page that labels the strip they style. |
 | 9 | Profiles | `profiles` | 0 | none | no | no | AceDBOptions' create / switch / copy / reset / delete. The one page with no tab strip at all — see [Profiles — the one place AceConfigDialog is permitted](#profiles--the-one-place-aceconfigdialog-is-permitted). |
 
-**137 schema rows total.** Five of the nine pages — Frame, Header, Bars, Tooltip, Visibility — draw
+**147 schema rows total.** Five of the nine pages — Frame, Header, Bars, Tooltip, Visibility — draw
 their entire body from one `H.WindowBanner(c)` plus one `H.RenderTabbedSchema(c, PAGE)` call and
 nothing else. Adding an option to any of them means adding one row in `settings/Schema.lua` — with
 the `group` you want it to land on — and touching no page file at all; adding an option to a *new*
@@ -72,6 +72,26 @@ Four pages are not schema-driven bodies:
   become a stored value — plus the addon's three bespoke reset buttons.
 - **Profiles** hosts an options table this addon does not own.
 
+## The statistic palette
+
+The General page's **Statistic colors** tab is the one **generated** block in `settings/Schema.lua`:
+a loop after the literal appends one `color` row per entry of `Constants.STAT_COLORS`, in catalog
+order, at `statColors.<StatKey>`. The rows are not a design decision — they are one swatch per
+palette entry — and writing them by hand would be a second copy of that table that goes stale the
+day a statistic is added. A stat with no palette entry gets no row rather than a black swatch.
+
+The palette is **addon-wide**, not per-window, which makes it the third exception to "everything
+display-related is per-window" alongside `data` and `export`: its whole job is telling one column
+from another *at a glance*, and two windows disagreeing about what green means is the one thing that
+breaks it. The tooltip's all-statistics block also lists every stat whether the hovered window has a
+column for it or not, so there is no window to read a colour off in the first place.
+
+Every surface that wears a statistic colour reads it through **one seam**, `NS.StatColor(statKey)`
+in `core/Namespace.lua` — the grid's bars and cell text (`modules/Row.lua`), the column-header strip
+(`modules/Window.lua`) and both tooltip paths (`modules/Tooltip.lua`). `Constants.STAT_COLORS` stays
+the shipped palette and the **fallback**: it answers for a key nothing has stored, for a stat added to
+the catalog after a profile was written, and for a degraded install with no database to read.
+
 ## The tab strip and the banner
 
 **One tab is exactly one group.** `RenderTabbedSchema(ctx, pageKey)` reads `rowsForPage(pageKey,
@@ -83,12 +103,13 @@ single schema row (the `Window` group) never grows a strip of its own — the pa
 are drawn by its own bespoke `H.TabStrip` call instead, alongside the picker.
 
 **The strip wraps.** `H.TabStrip` lays tabs out left to right and wraps onto a second row at the
-panel's width rather than shrinking or scrolling; whether the widest pages (Frame and Bars, six tabs
-each) wrap at default UI scale is a client check, not something this doc can assert from the schema.
+panel's width rather than shrinking or scrolling; whether the widest pages (Bars and Tooltip, six
+tabs each) wrap at default UI scale is a client check, not something this doc can assert from the
+schema.
 
 **The active tab is session-only, per page.** `ctx.activeTab` lives on the page's own render context,
-not in the schema or the profile — switching a window while sat on Bars' *Bar border* tab keeps you
-on *Bar border* for the new window, and reloading or closing the panel forgets which tab you were on.
+not in the schema or the profile — switching a window while sat on Bars' *Border* tab keeps you
+on *Border* for the new window, and reloading or closing the panel forgets which tab you were on.
 A tab pointing at a group the current page no longer has (a stale `activeTab` surviving a schema
 change) heals to the first group rather than rendering a blank page under the strip.
 
@@ -154,7 +175,7 @@ Two groups make the point, and both are deliberate:
   draws a control into the title bar, which is what a player looks for under Header — but renaming
   the keys to `window.header.*` for symmetry would migrate every saved profile in exchange for a
   tidiness nobody can see.
-- **Reset position** sits on **General**'s **Maintenance** tab and acts on the **selected window**.
+- **Reset position** sits on **General**'s **General** tab and acts on the **selected window**.
   It is the one control on that page that is not addon-wide, which is why its tooltip names the
   window rather than saying "the window".
 
@@ -444,11 +465,11 @@ or restore, so none of them can be a schema row.
 
 | Control | Page | Tab | What it does |
 |---|---|---|---|
-| **Reset position** | General | Maintenance | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
+| **Reset position** | General | General | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
 | **Reset meter data** | *the window header, not a page* | — | Confirms, then `NS.Provider.Reset()`. Irreversible and reaches **outside** this addon: `C_DamageMeter.ResetAllCombatSessions` wipes the data Blizzard's own meter is showing too. Routed through the provider and never straight at the Compat shim — the provider is the only permitted caller of the meter shims, and it also forgets the memoized availability answer and announces `METER_RESET`. |
-| **Reset all settings** | General | Maintenance | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
+| **Reset all settings** | General | General | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
 | **Test mode** | General | General | `Helpers.SessionCheckbox` over `NS.State.testMode`. Fills every window with placeholder rows so columns can be laid out without being in combat. Session-only: persisting it would mean logging in to a screen full of fake numbers. Also reachable as `/mm test`. **Not** implied by unlocking a window any more — `WindowManager:SetLocked` used to also switch it on, which made `/mm lock off` silently turn placeholder data on and made unchecking Test mode a no-op while any window was unlocked; locking is now about movement and nothing else, and a player who wants a grid to aim at asks for one with `/mm test`. |
-| **Debug console** | General | Maintenance | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The spec comes from `LibKa0s-DebugLog-1.0` itself (`D:ConsoleCheckbox()`) rather than being hand-written, so its label, tooltip and show/hide are the library's. |
+| **Debug console** | General | General | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The spec comes from `LibKa0s-DebugLog-1.0` itself (`D:ConsoleCheckbox()`) rather than being hand-written, so its label, tooltip and show/hide are the library's. |
 
 Both General toggles are also `sessionOnly` schema rows (`state.testMode`, `state.debugConsole`) so
 that `/mm list` and `/mm get` can reach them — a toggle that exists only in the panel is a toggle the

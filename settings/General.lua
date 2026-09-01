@@ -165,12 +165,14 @@ local function Build(mainCategory)
     -- because a reset is what a player comes to General for; what it resets did not change
     -- with the move.
     --
-    -- Fired through RenderTabbedSchema's afterGroup hook, keyed to the Maintenance tab (the
-    -- group the Debug console row already lives in) rather than drawn unconditionally after
-    -- the schema: with the page tabbed, "after the schema" is no longer "at the bottom of the
-    -- page" for every tab, and these buttons belong with Maintenance, not appended under
-    -- whichever group happens to be open.
-    local function afterMaintenance(c)
+    -- Fired through RenderTabbedSchema's afterGroup hook, keyed to the General tab rather than
+    -- drawn unconditionally after the schema: with the page tabbed, "after the schema" is no
+    -- longer "at the bottom of the page" for every tab, and these buttons belong on General,
+    -- not appended under whichever group happens to be open.
+    --
+    -- THEY USED TO HANG OFF "Maintenance", which was that tab's whole reason to exist -- one
+    -- checkbox and these two buttons. The tab is retired and all four sit on General now.
+    local function afterGeneral(c)
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
             tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."],
@@ -194,7 +196,7 @@ local function Build(mainCategory)
         -- page (settings/Schema.lua, `sessionOnly`), so rendering the schema
         -- renders them — drawing either one here as well is what produced the
         -- duplicate checkboxes and the duplicate "Debug" heading.
-        H.RenderTabbedSchema(c, PAGE, { [L["Maintenance"]] = afterMaintenance })
+        H.RenderTabbedSchema(c, PAGE, { [L["General"]] = afterGeneral })
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, L["General"])

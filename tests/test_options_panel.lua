@@ -426,9 +426,14 @@ end)
 test("Options: a widget's set() routes through NS.SetByPath", function()
     local inst = T.load()
     local ctx = panelFor(inst, "frame")
-    local before = #aceGUI(inst).__created
     ctx.panel:Hide()
     ctx.panel:Show()
+
+    -- Width is on Size and position, the page's SECOND tab, so the tab is clicked and the
+    -- widgets counted after it: the strip re-renders on select, and anything created before
+    -- the click belongs to the tab we left.
+    local before = #aceGUI(inst).__created
+    ctx.__tabKids[2]:__fire("OnClick")
 
     local slider = findWidget(widgetsSince(inst, before), "Slider", inst.NS.L["Width"])
     assertTrue(slider ~= nil, "the Frame page's Width slider was not rendered")
@@ -451,7 +456,7 @@ end)
 test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     local inst = T.load()
     -- The HEADER page, whose first tab opens on a checkbox -- so this needs no tab click and is
-    -- not coupled to tab order. (Frame's checkboxes live on its "Behavior" tab, and reaching them
+    -- not coupled to tab order. (Frame's checkboxes live on its "General" tab, and reaching them
     -- by index would break silently the day the tabs are reordered.) This is the same control the
     -- case used before the settings redesign moved it off Frame, now at its new path -- matching
     -- the file's own idiom above (panelFor, capture `before`, THEN render) rather than showPage,
@@ -611,10 +616,10 @@ end)
 local TABBED = {
     general    = "General",
     windows    = "Window",
-    frame      = "Size and position",
+    frame      = "General",
     header     = "Title bar",
     bars       = "Bar",
-    tooltip    = "Tooltip",
+    tooltip    = "General",
     visibility = "Where to show this window",
     columns    = "Columns",
 }
@@ -642,7 +647,7 @@ end)
 
 test("Panel: switching tabs re-renders without leaving the previous tab's widgets behind",
 function()
-    -- The Frame page's second tab is Rows. Asserting on the TAB rather than on a child count is
+    -- The Frame page's second tab is Size and position. Asserting on the TAB rather than on a child count is
     -- deliberate: a renderer that appended instead of clearing would still change the count, so
     -- a count assertion passes for the wrong reason. What proves the clear is that a widget from
     -- the tab we LEFT is gone.
@@ -660,11 +665,11 @@ function()
         return false
     end
 
-    assertTrue(labelled(L["Width"]), "the Frame page did not open on Size and position")
+    assertTrue(labelled(L["Lock window"]), "the Frame page did not open on General")
     ctx.__tabKids[2]:__fire("OnClick")
-    assertEqual(ctx.activeTab, L["Rows"])
-    assertTrue(labelled(L["Maximum rows"]), "the Rows tab did not render")
-    assertFalse(labelled(L["Width"]), "the previous tab's widgets were left behind")
+    assertEqual(ctx.activeTab, L["Size and position"])
+    assertTrue(labelled(L["Width"]), "the Size and position tab did not render")
+    assertFalse(labelled(L["Lock window"]), "the previous tab's widgets were left behind")
 end)
 
 test("Panel: every window sub-page banners the active window, and Windows has no second picker",
@@ -706,11 +711,11 @@ test("Panel: choosing a window in the banner retargets every page and keeps the 
 
     local ctx = showPage(inst, "bars")
     ctx.__tabKids[3]:__fire("OnClick")
-    assertEqual(ctx.activeTab, inst.NS.L["Bar border"])
+    assertEqual(ctx.activeTab, inst.NS.L["Border"])
 
     local banner = ctx.__bannerWidget
     banner:__fire("OnValueChanged", list[2].id)
 
     assertEqual(inst.NS.State.activeWindowId, list[2].id)
-    assertEqual(ctx.activeTab, inst.NS.L["Bar border"], "the tab survived the retarget")
+    assertEqual(ctx.activeTab, inst.NS.L["Border"], "the tab survived the retarget")
 end)
