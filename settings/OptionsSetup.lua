@@ -15,9 +15,13 @@ local addonName, NS = ...
 -- Helpers.RenderRows like any other page does, and a suite that swaps a member
 -- out to spy on it must be swapping the one the library's own callers see.
 --
--- TOC POSITION: BEFORE every settings/<page>.lua, because those page files call
--- Helpers members INSIDE schema-row literals at FILE LOAD. See the stub below for
--- what that costs.
+-- TOC POSITION: BEFORE every settings/<page>.lua, and load-bearing. Each page
+-- file ends by calling `NS.RegisterOptionsPage(...)` at FILE LOAD, and this file
+-- is what publishes that function -- below it, every page registers into nil and
+-- the tree has no pages in it. What the page files do NOT do is reach a Helpers
+-- member at load: their builders guard on `H and H.CreatePanel` and run later,
+-- and settings/Schema.lua's `lsmValues` reads NS.Helpers from inside a closure at
+-- render time. See the stub below for why that still needs a table.
 
 -- ---------------------------------------------------------------------
 -- The one rule about what a global reset must not touch
@@ -257,7 +261,7 @@ local descriptor = {
 }
 
 -- ---------------------------------------------------------------------
--- The degradation stub — LOAD-COMPLETING, not member-answering
+-- The degradation stub — VALUE-ANSWERING, not message-answering
 -- ---------------------------------------------------------------------
 --
 -- Every other setup file in this addon degrades to a table whose members each
@@ -265,18 +269,28 @@ local descriptor = {
 -- importance but WHEN the missing code is reached (options-ui-§1, the documented
 -- exception).
 --
--- The page files evaluate Helpers members INSIDE schema-row literals, at FILE
--- LOAD — `H.LSMValues("font")` on every text row, `H.ColumnValues()` on the
--- Columns page. With those members nil the page file RAISES, so its
--- RegisterSchemaRows never runs, so a third of NS.Schema is simply missing — and
--- `/mm list`, `/mm get`, `/mm set`, `/mm reset` and the profile defaults all
--- break with it, silently. The addon would not degrade; it would half-load and
--- say nothing.
+-- THE PAGE FILES GUARD ON THE MEMBER, NOT ON THE TABLE — `if not (H and
+-- H.CreatePanel) then return nil end` — so what they need from a missing library
+-- is a table whose members are the right SHAPE, not a table whose members
+-- announce themselves. A member that printed "not installed" where a caller
+-- expects a value is not a degradation, it is a different bug: `H.LSMValues` has
+-- to answer something a dropdown can open AND `/mm set` can parse against, and a
+-- chat line is neither.
 --
--- So this branch's job is to let every page file FINISH LOADING. Members reached
--- at load are real enough to return a usable value; members reached from a
--- builder or a user action are no-ops, because by then there is no panel to draw
--- into and a no-op is honest.
+-- So this branch's job is to keep every page file's guards ANSWERABLE. A member
+-- reached for a value returns a usable one; a member reached from a builder or a
+-- user action is a no-op, because by then there is no panel to draw into and a
+-- no-op is honest.
+--
+-- WHAT THE OLD NOTE HERE CLAIMED, AND WHY IT WAS WRONG. It said the page files
+-- evaluate Helpers members inside schema-row literals at FILE LOAD, so a nil
+-- member would raise and take a third of NS.Schema with it. Nothing does that.
+-- settings/Schema.lua's `lsmValues` returns a CLOSURE and reads NS.Helpers from
+-- inside it, at render and parse time, guarded, answering `{}` when it is absent
+-- — and its own header says why: that file loads BEFORE this one, so the
+-- library's LSMValues cannot be called at declaration at all. The conclusion
+-- survived the argument that was supposed to support it; the argument is now the
+-- one above.
 --
 -- Note what is NOT here: no widget maker, no flow engine, no header, and none of
 -- the library's LAYOUT constants. A host copy of a library constant is the copy
@@ -290,8 +304,8 @@ if not lib then
     local Helpers = {}
     NS.Helpers = Helpers
 
-    -- Reached at LOAD, from inside schema-row literals, so these have to answer
-    -- with something a row can hold rather than with nil.
+    -- Reached for a VALUE rather than for an effect, so these have to answer with
+    -- something the caller can use rather than with nil or with a chat line.
     --
     -- LSMValues is a DEFERRED closure on the live path — the media hash is pulled
     -- at dropdown-render time, because the addons that register media have not

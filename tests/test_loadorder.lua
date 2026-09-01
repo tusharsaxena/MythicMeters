@@ -234,8 +234,9 @@ test("loadorder: the LibKa0s seams load in the order their headers pin", functio
         assertTrue(at > core, rel .. " must load after core/CoreSetup.lua")
     end
 
-    -- settings/OptionsSetup.lua's stub exists so every settings/<page>.lua can
-    -- FINISH LOADING; it is worth nothing if a page file loads first.
+    -- settings/OptionsSetup.lua publishes NS.RegisterOptionsPage, and every
+    -- settings/<page>.lua CALLS it at file load -- so a page above this one
+    -- registers into nil and the tree quietly has no pages in it.
     local optionsSetup = index["settings/optionssetup.lua"]
     for _, rel in ipairs({
         "settings/windows.lua", "settings/frame.lua", "settings/columns.lua",
