@@ -153,7 +153,7 @@ badge and any count quoted in the docs must agree with it.
 - Locale: the locale file registers no second table over NS.L
 - Locale: enUS is the only locale shipped, and it is unconditional
 
-### test_database.lua (53)
+### test_database.lua (56)
 
 - Database: InitDB publishes the live instance under both names
 - Database: the profile is the SHARED Default, not a per-character one
@@ -208,6 +208,9 @@ badge and any count quoted in the docs must agree with it.
 - Database v8: a window that was named itself keeps its own name
 - Database v9: the title bar's background mode is pruned, the column strip's is kept
 - Database v10: a stored cursor anchor becomes TOP, and other anchors are left alone
+- Database: v12 -> v13 moves the title-bar toggle onto the header
+- Database: v12 -> v13 leaves a window that never stored the toggle alone
+- Database: v12 -> v13 turns the control class-colour flags into modes
 
 ### test_diagnostics.lua (43)
 
@@ -421,7 +424,7 @@ badge and any count quoted in the docs must agree with it.
 - libs/LibKa0s is the LibKa0s release CLAUDE.md says this addon bundles
 - tests/_kit is the test kit that shipped with that release
 
-### test_format.lua (29)
+### test_format.lua (32)
 
 - Format: NS.Format is a callable table carrying both contracts
 - Format.Number goes through the native ABBREVIATING formatter
@@ -447,6 +450,9 @@ badge and any count quoted in the docs must agree with it.
 - modules/Format.lua never calls tonumber on anything
 - modules/Format.lua never calls table.concat
 - Format.Number and Format.Rate contain no division at all
+- The three abbreviated modes are one ladder at three decimal counts
+- Each abbreviated mode caches its own formatter, so two windows cannot fight
+- An unknown number format renders as the shipped one rather than raising
 - A ladder the client silently refuses is DETECTED, not assumed
 - Format.DeathTime renders the wall clock by default
 - Format.DeathTime counts backwards from now
@@ -656,7 +662,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (129)
+### test_window.lua (136)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -667,8 +673,13 @@ badge and any count quoted in the docs must agree with it.
 - SavePosition reads GetPoint off the anchor and off nothing else
 - SaveSize uses the size OnSizeChanged was handed, never a getter
 - BuildLayout computes every coordinate from config alone
+- The name column's formula is calibrated to the shipped width at a 20 cap
 - A stat column never shrinks below the legible floor
 - The window refuses to be dragged smaller than the grid needs
+- The title-bar divider can be switched off, and does not move the title row
+- The divider's thickness is a setting
+- The divider's SKIN mode writes no colour at all, so a re-skin still reaches it
+- The divider takes a custom colour and a class colour, keeping the configured alpha
 - BuildLayout drops a column whose stat this build does not offer
 - BuildLayout draws only the ENABLED columns, in stored order
 - A layout column carries no show-bar decision
@@ -773,7 +784,9 @@ badge and any count quoted in the docs must agree with it.
 - A collapsed window keeps the notice hidden
 - Header shadow reaches every line of the strip
 - Column header shadow is its OWN setting, not the header's
-- The header's text colour is the picker, and nothing resolves a mode
+- The header's text answers TWO modes, and the custom one is the picker
+- The header's text takes the CLASS colour, keeping the configured alpha
+- The header's text mode offers class and custom, and NOT per-statistic
 - The header colour survives a sort change, having nothing to do with it
 - The window NAME takes the header's colour
 - Column header class color is the local player's too
@@ -788,7 +801,7 @@ badge and any count quoted in the docs must agree with it.
 - pool: a layout change re-applies to FREE rows, not just active ones
 - pool: every row built lands in `all`, including the batch surplus
 
-### test_headercontrols.lua (46)
+### test_headercontrols.lua (51)
 
 - HeaderControls: every control this addon builds is attached
 - HeaderControls: a control turned off is not placed at all
@@ -800,14 +813,15 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: a control at rest takes the control colour
 - HeaderControls: the control under the pointer takes the HOVER colour
 - HeaderControls: both colours come from config
-- HeaderControls: each colour has its OWN class-colour flag
-- HeaderControls: the hover flag classes the hover colour and nothing else
+- HeaderControls: each colour has its OWN colour mode
+- HeaderControls: the hover mode classes the hover colour and nothing else
 - HeaderControls: both flags off is the shipped look, unchanged
 - HeaderControls: control size comes from config
 - HeaderControls: the width reserved equals the width occupied
 - HeaderControls: no title bar means no strip and no reservation
 - HeaderControls: with no atlas the ASCII rung draws
 - HeaderControls: an atlas beats the ASCII rung
+- HeaderControls: an unlocked padlock is drawn at the same weight as its neighbours
 - HeaderControls: the padlock's two states do not draw the same
 - HeaderControls: minimise shows the opposite of the state it is in
 - HeaderControls: a glyph is never given text before a font
@@ -819,6 +833,10 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the title bar itself reveals nothing
 - HeaderControls: the reveal moves rather than accumulating
 - HeaderControls: with the reveal off, hover is colour alone
+- HeaderControls: both ends of the reveal are settings, and default to what was hardcoded
+- HeaderControls: the two opacity sliders each move their own end
+- HeaderControls: with the reveal off every control sits at the HOVER opacity
+- HeaderControls: an out-of-range opacity is clamped, not passed through
 - HeaderControls: hover reveal off means always visible
 - HeaderControls: hooking hover does not unseat the drag
 - HeaderControls: a locked window can still reveal its controls
@@ -837,7 +855,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (85)
+### test_row.lua (89)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -847,6 +865,8 @@ badge and any count quoted in the docs must agree with it.
 - Cell:SetValue substitutes 0 and 1 for an ABSENT figure, not for a hidden one
 - A rate-capable column renders its RATE ALONE by default
 - Smart falls to the ABSOLUTE figure on a stat that has no rate
+- Combined shows BOTH figures in one slot, absolute first
+- Combined falls to the absolute ALONE on a stat with no rate
 - Both figures appear when the right slot is turned on
 - A counting column renders the total only
 - The text slots are configurable, and percent is the one that goes quiet
@@ -871,6 +891,8 @@ badge and any count quoted in the docs must agree with it.
 - Border style art moves to a backdrop and takes the flat outline down
 - A window that sets neither keeps the border it always had
 - Per-statistic cell text is the colour of the column the cell is in
+- The statistic palette is a SETTING, and every surface reads it through one seam
+- A statistic the profile has never coloured keeps the shipped palette
 - Text opacity reaches the NAME and the numbers alike, class colour or not
 - Text opacity and the colour's own alpha multiply, rather than one winning
 - Bar opacity fades the FILL, and nothing else in the cell
@@ -952,7 +974,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (116)
+### test_tooltip.lua (121)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the default
@@ -1048,6 +1070,11 @@ badge and any count quoted in the docs must agree with it.
 - Tooltip: a death with no recap keeps the header too
 - Tooltip: a Deaths cell lists the DEATHS, not a spell breakdown
 - Tooltip: a Deaths cell shows one line per death, newest first
+- Tooltip: a death line names who and what landed the killing blow
+- Tooltip: either half of a death line can be switched off on its own
+- Tooltip: a death with nothing to name is still a numbered death
+- Tooltip: a melee killing blow is named Melee rather than left blank
+- Tooltip: a secret caster or spell name is left off rather than joined
 - Tooltip: a Deaths cell still says a click opens the list
 - Tooltip: a cell for a player who has NOT died is unchanged
 - Tooltip: the death breakdown gets the same gap and caption every section has
@@ -1311,7 +1338,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (46)
+### test_schema.lua (53)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1350,7 +1377,14 @@ badge and any count quoted in the docs must agree with it.
 - The other three meta rows broadcast their own kind of setting
 - A surface changed after the broadcast keeps its own answer
 - The Frame page's Defaults button does NOT broadcast
-- Schema: the Header page's three groups are named and ordered for the strip they describe
+- Schema: every page's tabs are the designed ones, in order, at the designed size
+- Schema: no tab holds fewer than two controls
+- Schema: a hidden row is filed under a tab that exists, and draws nothing
+- Schema: every tab name and row label is a localized string, not a bare literal
+- Schema: every Controls row carries its own icon in front of its words
+- Schema: a control label degrades to its words when there is no art
+- Schema: the active tab is session state and has no home in the schema
+- Schema: the column header strip is styled on the page where columns are chosen
 - Schema: the header controls are EDITED on Header and STORED under frame
 - Schema: every group on every page is CONTIGUOUS, or a heading prints twice
 - Schema: every LSM border setting is one this suite knows honours "None"
@@ -1373,7 +1407,7 @@ badge and any count quoted in the docs must agree with it.
 - ValidateSchema: counts a row whose path does not resolve
 - ValidateSchema: compares a color CHANNEL, not just the presence of a table
 
-### test_slash.lua (33)
+### test_slash.lua (34)
 
 - Slash: NS.COMMANDS entries are positional triples, not named fields
 - Slash: no verb is declared twice
@@ -1408,8 +1442,9 @@ badge and any count quoted in the docs must agree with it.
 - Slash: both registered tokens reach the SAME dispatcher
 - Slash: no raw SLASH_* global is claimed anywhere
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
+- Slash: /mm list heads each block with the page AND the tab
 
-### test_options_panel.lua (26)
+### test_options_panel.lua (33)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1424,6 +1459,7 @@ badge and any count quoted in the docs must agree with it.
 - Options: EnsureDefaultsButton runs OUTSIDE the already-rendered guard
 - Options: a page that declines a Defaults button never grows one
 - Options: the Columns page's Defaults button restores the SHIPPED column list
+- Options: the Columns page's Defaults button ALSO restores the window.columnHeader.* schema rows
 - Options: the canvas footer's Defaults control reaches the same handler as the header button
 - Options: opening the panel is REFUSED under combat lockdown, with a notice
 - Options: a refused open is NOT deferred and replayed when combat ends
@@ -1437,6 +1473,12 @@ badge and any count quoted in the docs must agree with it.
 - Options: CreateOptionsPanel is idempotent
 - Options: CreateOptionsPanel runs the schema validator
 - Options: AceGUI is resolved once and published for the page builders
+- Panel: every tabbed page opens on its first tab and draws a strip
+- Panel: Profiles draws no strip
+- Panel: switching tabs re-renders without leaving the previous tab's widgets behind
+- Panel: the Statistic colors tab says where its colours are actually worn
+- Panel: every window sub-page banners the active window, and Windows has no second picker
+- Panel: choosing a window in the banner retargets every page and keeps the tab
 
 ### test_columnblocks.lua (14)
 
@@ -1509,7 +1551,7 @@ badge and any count quoted in the docs must agree with it.
 | test_compat.lua | 33 |
 | test_state.lua | 17 |
 | test_locale.lua | 11 |
-| test_database.lua | 53 |
+| test_database.lua | 56 |
 | test_diagnostics.lua | 43 |
 | test_defaults.lua | 24 |
 | test_coresetup.lua | 23 |
@@ -1519,27 +1561,27 @@ badge and any count quoted in the docs must agree with it.
 | test_envsetup.lua | 11 |
 | test_lifecycle.lua | 26 |
 | test_vendor_sync.lua | 2 |
-| test_format.lua | 29 |
+| test_format.lua | 32 |
 | test_provider.lua | 61 |
 | test_roster.lua | 22 |
 | test_feign.lua | 15 |
 | test_aggregator.lua | 70 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 129 |
-| test_headercontrols.lua | 46 |
-| test_row.lua | 85 |
+| test_window.lua | 136 |
+| test_headercontrols.lua | 51 |
+| test_row.lua | 89 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 116 |
+| test_tooltip.lua | 121 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 91 |
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 46 |
+| test_schema.lua | 53 |
 | test_schema_defaults.lua | 10 |
-| test_slash.lua | 33 |
-| test_options_panel.lua | 26 |
+| test_slash.lua | 34 |
+| test_options_panel.lua | 33 |
 | test_columnblocks.lua | 14 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1376** |
+| **Total** | **1418** |

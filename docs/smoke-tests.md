@@ -13,6 +13,14 @@ a mock cannot fail the way a Mythic+ pull can.
 Companion docs: [testing.md](testing.md) for the headless harness,
 [ARCHITECTURE.md](ARCHITECTURE.md) for the secret-value rules referenced throughout.
 
+**Re-verification note (2026-08-27, settings-redesign branch).** The header-controls bullets in
+§1 and the settings-panel steps in §3 and §4 — page names, tab names, control names and the
+lock/Test-mode relationship — were re-checked against `settings/Schema.lua` and the current page
+files as part of documenting that branch's tab redesign. The rest of §1, and all of §2 and §5 through
+§26, was **not** re-audited in that pass and may still describe older behaviour; treat any step
+outside those specific bullets as unverified against the current branch until it has been walked
+in-client.
+
 ## Conventions
 
 - **`/reload`** abbreviates `/console reloadui`.
@@ -39,7 +47,7 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 |---|---|---|
 | 1 | Cold start | [Fresh install + first login](#1-fresh-install--first-login) |
 | 2 | Reload | [`/reload` integrity](#2-reload-integrity) |
-| 3 | Window handling | [Lock, drag, resize, preview](#3-lock-drag-resize-preview) |
+| 3 | Window handling | [Lock, drag, resize, Test mode](#3-lock-drag-resize-test-mode) |
 | 4 | Settings panel | [Page sweep and panel/CLI parity](#4-settings-panel-sweep) |
 | 5 | Columns | [Column editor](#5-column-editor) |
 | 6 | Multi-window | [Second window, copy settings, independence](#6-multi-window) |
@@ -59,9 +67,10 @@ Companion docs: [testing.md](testing.md) for the headless harness,
 | 20 | Names | [Realm strip and truncation](#20-realm-strip-and-truncation) |
 | 21 | **Segments** | [**The header segment selector**](#21-the-header-segment-selector) |
 | 22 | Migration | [v1 → v2 uniform column widths](#22-v1--v2-uniform-column-widths) |
-| 23 | Tooltip styling | [Tooltip appearance, anchor and offsets](#23-tooltip-appearance-anchor-and-offsets) |
-| 24 | **Targets** | [**The Targets section, and its absence mid-pull**](#24-the-targets-section-and-its-absence-mid-pull) |
-| 25 | **Export** | [**The export modal, the CSV and the chat dump**](#25-the-export-modal-the-csv-and-the-chat-dump) |
+| 23 | Migration | [v12 → v13 title bar and control-colour migration](#23-v12--v13-title-bar-and-control-colour-migration) |
+| 24 | Tooltip styling | [Tooltip appearance, anchor and offsets](#24-tooltip-appearance-anchor-and-offsets) |
+| 25 | **Targets** | [**The Targets section, and its absence mid-pull**](#25-the-targets-section-and-its-absence-mid-pull) |
+| 26 | **Export** | [**The export modal, the CSV and the chat dump**](#26-the-export-modal-the-csv-and-the-chat-dump) |
 
 ---
 
@@ -104,14 +113,16 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
   already moved. **Sweep along the strip**: the bright one must follow the pointer control by
   control, without a flicker in the gaps and without the whole set coming up as you cross the title
   bar. **Check this on a LOCKED window too**: locking used to disable the title bar's mouse.
-- **The colours are both settings.** Header → Header controls → **Control color** (white by default)
+- **The colours are both settings.** Header → Button style → **Control color** (white by default)
   and **Control hover color** (gold). Change either and the strip must follow immediately, at rest
   and under the pointer.
-- **Each colour has its OWN class-colour flag.** Tick **Use class color** under Control color: the
-  strip goes to your class colour at rest and the **hover colour is unchanged**. Tick the one under
-  Control hover color instead: the resting colour is unchanged and the control under the pointer
-  takes your class. Both ticked is legal and makes hover indistinguishable from rest — that is the
-  player's choice to make, but one flag driving both would force it, which is why there are two.
+- **Each colour has its OWN color-mode dropdown.** Set **Control color mode** to **Class color**: the
+  strip goes to your class colour at rest and the **hover colour is unchanged**. Set **Control hover
+  color mode** to Class color instead: the resting colour is unchanged and the control under the
+  pointer takes your class. Both set to Class color is legal and makes hover indistinguishable from
+  rest — that is the player's choice to make, but one dropdown driving both would force it, which is
+  why there are two. (These were booleans, `controlClassColor` / `controlHoverClassColor`, migrated
+  to `controlColorMode` / `controlHoverColorMode` at schemaVersion 12 → 13.)
 - **`Reveal controls on hover` OFF keeps every control at full alpha** — and the hover **colour**
   must still say which one the pointer is on, because it is the only channel left.
 - **Minimise collapses to the title bar** and the plus/minus flips. The column headers, the rows,
@@ -141,13 +152,14 @@ Confirm the addon is enabled in the character-select AddOns list as **Ka0s Multi
 - Standing solo in the open world the window is **shown**: every context ships on and every hide
   rule ships off.
 - `/mm` prints the help index. Every row carries the cyan `[MM]` banner; verb names are yellow.
-- Settings → AddOns shows a **Ka0s Multi Meters** parent with **twelve** subcategories in this
+- Settings → AddOns shows a **Ka0s Multi Meters** parent with **nine** subcategories in this
   order: General · Windows · Frame · Header · Bars · Tooltip · Visibility · Columns · Profiles. **General is first**, and the six between Windows and Profiles read as
-  `    - Frame` — four spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
+  `  - Frame` — two spaces, a hyphen, a space — while General, Windows and Profiles sit flush.
   Two failure modes to watch for: a **hollow box** in front of a page name means a non-ASCII glyph
   has crept back in and the player's font does not have it, and a **flat list of hyphens** with no
-  indent means the client has started trimming leading whitespace — they are the pages the Windows picker retargets. General and Profiles
-  do not carry it, and no page's own heading does.
+  indent means the client has started trimming leading whitespace — they are the pages the banner
+  retargets. General and Profiles do not carry it, and no page's own canvas heading does — the
+  indent is tree-label-only.
 - **No `schema error:` line and no "schema path does not resolve" line appears at any point.**
   `NS.ValidateSchema` runs from the options descriptor at panel creation; a line here means a schema
   row's path does not resolve against `defaults/Profile.lua`, or its default disagrees with the tree.
@@ -167,20 +179,24 @@ without errors — `NS:OnEnable` seeds `NS.State.restricted` from `Secrets.IsRes
 assuming "inactive", because `ADDON_RESTRICTION_STATE_CHANGED` has already fired and there is no
 second edge to catch.
 
-### 3. Lock, drag, resize, preview
+### 3. Lock, drag, resize, Test mode
 
 **Steps.**
 - `/mm lock off` (or uncheck **Frame → Lock window**).
 - Drag the window by its body. Drag the bottom-right grip.
 - `/mm lock on`. Try to drag again.
-- `/mm preview` on and off.
+- `/mm test` on and off (or **General → General → Test mode**).
 
 **Pass.**
-- Unlocking **fills the window with placeholder rows** — ten Ka0s-named members with plausible,
+- **Locking and Test mode are independent — not coupled.** `WindowManager:SetLocked` used to also
+  switch Test mode on, on the theory that someone positioning a window wants a full grid to aim at;
+  that coupling is gone. `/mm lock off` no longer fills the window with placeholder rows on its own,
+  and unchecking Test mode while a window is unlocked now actually clears the placeholder rows rather
+  than being a no-op. Confirm both halves: lock off with Test mode off shows a real (possibly empty)
+  grid, and Test mode on with the window locked still shows placeholders.
+- **Test mode fills the window with placeholder rows** — ten Ka0s-named members with plausible,
   **non-jittering** numbers. The numbers are deterministic; a preview that changes every refresh is
   unusable for judging column widths, which is the job it exists for.
-- Unlocking implies preview: the two are coupled in `WindowManager:SetLocked`, and the General page's
-  Preview mode checkbox agrees with the lock state.
 - Dragging moves the window; the position persists across `/reload`.
 - The resize grip is visible only while unlocked, and resizing persists. That is the **only** thing
   that governs it — there is no "Show resize grip" setting any more, and there must not be: the one
@@ -196,9 +212,19 @@ second edge to catch.
 (checkbox, slider, dropdown, color, edit box) and watch the window.
 
 **Pass.**
+- **The banner, and switching windows.** Frame, Header, Bars, Tooltip, Visibility, Columns and
+  Windows each draw a banner naming the active window at the top of the page. Change the window from
+  the dropdown on any one of the seven and every other one of the seven reflects it the next time you
+  visit — the controls on that page now show the newly-picked window's values, not the old one's.
+  **The active tab survives the switch**: land on Bars → **Border**, change windows from the
+  banner, and you are still looking at *Border*, now for the new window — the active tab is
+  per-page UI state, not tied to which window is selected, and must not snap back to the first tab.
 - Every page draws on **first show** with correctly sized widgets — nothing squashed into a
-  zero-width column, and every widget carries the same skin as the rest of your AceGUI addons. (Both
-  symptoms are the lazy-build rules failing; see
+  zero-width column, and every widget carries the same skin as the rest of your AceGUI addons. With a
+  skinning addon (ElvUI / AddOnSkins) loaded, this reaches the banner's window dropdown and the tab
+  strip too, not only the row controls — both are built lazily on first `OnShow`, like the Defaults
+  button, and a skin that reaches everything else but not one of these three is the lazy-build rule
+  failing for that one piece. (Both symptoms are the lazy-build rules failing; see
   [settings-panel.md](settings-panel.md#eager-category-lazy-body-lazy-defaults-button).)
 - Every change applies **immediately** to the window, without a `/reload`.
 - **The tooltip.** *Tooltip behavior* now holds the **scale** slider and the **Targets** pair (they
@@ -215,31 +241,31 @@ second edge to catch.
   column where the spell lines put theirs. The **player's name is class-coloured** on every tooltip
   that names one. **Text color mode reaches the spell name as well as the numbers** — all the text on
   a bar, not two thirds of it. The **fill and the backdrop** each have their own colour, mode and
-  opacity. And **Bar border draws something**: it is on the bar rather than under it now, so a style
+  opacity. And **Border draws something**: it is on the bar rather than under it now, so a style
   and a thickness are visible at last.
-- **The five text controls, on all four surfaces.** Bars → Cell text, Header → Frame header, Header →
-  Column headers, and Tooltip each carry a **font** picker, a **font outline** dropdown, a **text
+- **The five text controls, on all four surfaces.** Bars → Text style, Header → Title text, Columns →
+  Header text, and Tooltip → Text each carry a **font** picker, a **font outline** dropdown, a **text
   shadow** checkbox, a **text colour** picker and a **Text color mode** dropdown of Class /
   Per-statistic / Custom. **Per-statistic means a different statistic on each**: the cell takes its
   own column's colour, the title bar takes the **sort column's** (change the sort and watch it follow), the tooltip
   takes **the column you hovered** — a Healing tooltip is Healing-coloured whatever the grid is
   sorted by, and each **column label takes its own column's** — that last one is the check
-  that catches the strip being resolved once and painted uniformly. The **Column headers** strip also carries a
-  **Background color mode** over the same three, where Per-statistic paints one rectangle behind each
-  label rather than one across the strip. The **Frame header's** background is a plain colour picker
-  with no mode: it is one strip over the whole window, so per-statistic could only ever paint it the
-  sort column's colour. **The configured opacity survives
+  that catches the strip being resolved once and painted uniformly. Columns → **Header background**
+  also carries a **Background color mode** over the same three, where Per-statistic paints one
+  rectangle behind each label rather than one across the strip. The **Title bar's** own background
+  (Header → Title bar) is a plain colour picker with no mode: it is one strip over the whole window,
+  so per-statistic could only ever paint it the sort column's colour. **The configured opacity survives
   every mode** — a class or statistic background must arrive as a tint, not a slab. Walk all four on each page and watch the
   right thing change: the cells, the title bar and session line, the "Player | Damage | Healing"
   strip, and a hovered tooltip. A control that moves the wrong surface means two groups are sharing a
   key that is supposed to be their own.
-- **"Use class color" means the right class on each surface.** On **Text** the cells take **each
-  row's** class, so a grid of mixed classes goes multi-coloured — not all one colour. On **Tooltip**
-  the text takes the class of the player you are **hovering**; hover two different players and the
-  colour follows. On **Header** and **Column headers** it takes **your own** class, because those
-  strips are about the window rather than any row. Also set **Text opacity** to 50% with Use class
-  color on: the text must stay half-transparent — a class colour that resets it is one setting
-  cancelling another.
+- **"Text color mode" set to Class means the right class on each surface.** On Bars → **Text style** the cells take
+  **each row's** class, so a grid of mixed classes goes multi-coloured — not all one colour. On
+  Tooltip → **Text** the text takes the class of the player you are **hovering**; hover two different
+  players and the colour follows. On Header → **Title text** and Columns → **Header text** it takes
+  **your own** class, because those strips are about the window rather than any row. Also set **Text
+  opacity** to 50% with the colour mode set to Class: the text must stay half-transparent — a class
+  colour that resets it is one setting cancelling another.
 - **Reset all settings starts the profile over.** With **two or more** windows open, change something
   visible on each (font size, width, a column added or removed), rename them, select **one** in the
   window picker, then General → **Reset all settings**. You must come back with exactly **one** window
@@ -250,40 +276,85 @@ second edge to catch.
 - **A reset leaves your other profiles alone.** Make a second profile on the Profiles page, switch
   back, then reset. The profile list must be unchanged and you must still be on the profile you were
   on — a reset empties one profile, it never deletes any.
-- **The four meta rows.** Frame → Frame behavior carries **Color mode**, **Bar texture**, **Font**
-  and **Font outline**, each marked *(all surfaces)*. Each sets every surface that has a setting of
+- **The four meta rows.** Frame → **General** carries **Color mode**, **Bar texture**, **Font**
+  and **Font outline**, each marked *(all surfaces)*, below the lock and keep-on-screen toggles. Each sets every surface that has a setting of
   its kind — the bar texture reaches the grid and the tooltip, the font and its outline reach the
   cells, both header strips and the tooltip. The check below is written for the colour mode and is
   the same for all four.
-- **The meta colour mode.** Frame → Frame behavior → **Color mode (all surfaces)**. Set it to
-  Per-statistic and check all nine of the individual dropdowns followed — Bars (bar and background),
-  Bars → Cell text, Header → Frame header (text), Header → Column headers (text and background),
+- **The meta colour mode.** Frame → **General** → **Color mode (all surfaces)**. Set it to
+  Per-statistic and check all ten of the individual dropdowns followed — Bars → Bar (bar and
+  background), Bars → Text style, Header → Title text, Columns → Header text and Header background,
   Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
   only that one changes, and the meta is not fought. Finally press the Frame page's **Defaults**
-  button and confirm the ten are **untouched** — a page's reset must not reach other pages.
-- **The Frame page's shape.** Three groups, in order: *Size and position* — which now ends with
-  **Background color**, the fill inside the window; it sat under *Border style*, which is the edge
-  around it — then *Border style*, then *Frame behavior* (**not** "Row behavior" — that heading belongs to the Bars page). Each heading appears
-  **once**; a heading printed twice means a row is filed under a group the page has already left.
-  There is **no** *Header controls* group here any more — the whole group is on **Header** — and
-  **no** "Reset position" button, which is on **General**. There is also **no** "Show resize grip"
-  checkbox and **no** "Minimised" checkbox: the lock governs the grip, and the header's own minimise
-  button governs the collapse.
-- **The Bars page's shape.** Seven groups, outside in: *Row layout*, *Row behavior*, *Bar
-  appearance*, *Bar background color*, *Bar border*, *Cell text*, *Row icons*. The Rows, Text and
-  Icons pages all folded in here, and their paths did not move with them — `/mm get
-  window.rows.height` and `/mm get window.text.size` both still answer.
-- **The Header page's shape.** Three groups, top to bottom in the order the strips are drawn:
-  *Frame header* — everything about the title bar, its text, alignment, height and background, in one
-  group because they are one strip — then *Header controls*, the group that moved off Frame, then
-  *Column headers* for the strip below. **Show close** sits in the controls group. Those rows are
-  still **stored** at `window.frame.*` (`/mm get window.frame.showClose` answers), which is
-  deliberate: a row's page is where it is edited, its path is where it is stored.
-- **The header background stops at the title bar.** Header → Frame header → **Header background** to
-  something loud, and Column headers → **Background color** to something else: two distinct bands,
-  the second starting exactly where the first ends. One colour covering both rows is the old
-  behaviour, in which the column strip's own setting was invisible underneath and a colour picked for
-  the title bar restyled the grid's labels too.
+  button and confirm the rest are **untouched** — a page's reset must not reach other pages, and this
+  page's own Defaults resets the **whole page**, every tab, not just the visible one.
+- **The Frame page's shape.** Four tabs, in order: *General* (lock, keep on screen, and the four
+  meta rows above), *Size and position* (width, height, scale, opacity, strata, padding),
+  *Background and border* (border style and thickness, then the window's own fill colour and its
+  edge colour), and *Row* (max rows, row height, spacing, growth direction, then always-show-self,
+  highlight-self, mouseover highlight and the alternating background). The page **opens on
+  General**, and *Font outline (all surfaces)* there shows **None** on a fresh profile. Each tab label appears **once**; a heading printed twice means a row is
+  filed under a tab the page has already left. There is **no** *Header controls* tab here — those
+  rows are on **Header** — and **no** "Reset position" button, which is on **General**'s General
+  tab. There is also **no** "Show resize grip" checkbox and **no** "Minimised" checkbox: the lock
+  governs the grip, and the header's own minimise button governs the collapse. Whether the title bar
+  draws at all (`window.header.show`) is a **Header** page setting now, on its **Title bar** tab, not
+  a Frame row.
+- **The Bars page's shape.** Six tabs, outside in: *Bar*, *Background*, *Border*, *Text content*,
+  *Text style*, *Icons* — every tab here is about the bar, so the two that used to say so in their
+  names no longer do. The Text and Icons pages folded in here, and their paths did not move with
+  them — `/mm get window.text.size` still answers; `window.rows.*` is on the **Frame** page's *Row*
+  tab now, not on Bars.
+- **The Header page's shape.** Four tabs, top to bottom in the order the strips are drawn: *Title
+  bar* — the strip's own shape: whether it draws, its background, alignment, height, and the divider
+  under it (on/off, thickness and colour) — then *Title text* — the face drawn on it, and the
+  window's own name — then *Controls*, and *Button style* (the reveal beside the size, then rest and
+  hover paired down three lines: mode, colour, opacity). `showClose` and the rest are still **stored** at
+  `window.frame.*` (`/mm get window.frame.showClose` answers), which is deliberate: a row's page is
+  where it is edited, its path is where it is stored. There is **no** *Column headers* tab here any
+  more — that strip's rows moved to the **Columns** page, which is the page that labels it.
+- **The Controls tab reads like the header strip.** Every checkbox draws **the control's own icon**
+  between the tick box and the words, and the rows run in the order the strip runs **left to right**:
+  the segment line first (no icon — it is text, not a glyph), then export, reset, segment picker,
+  settings, lock, minimise, close. Check each icon against the one in the header above it; a missing
+  icon means `NS.Icon` answered nil for that art name, which is a media-payload problem rather than a
+  settings one, and the label falls back to its plain words.
+- **The Visibility page's shape.** Three tabs: *Where to show this window* (the seven context
+  checkboxes), *When to hide this window* (the mount/skyriding/housing/pet-battle/death/combat
+  rules) and *Combat* (hide in/out of combat). Those first two are by a wide margin the longest tab
+  labels in the whole panel, and the likeliest strip to wrap.
+- **The divider under the title bar.** Header → *Title bar* → **Show divider** ships **on**. Turn it
+  off and the hairline between the title strip and the column labels goes, and **nothing else moves**
+  — the window title, the session line and the control strip stay exactly where they were, because
+  the title row is centred against a constant rather than measured off the line. **Divider
+  thickness** grows it downward, into the gap above the column labels. **Divider color mode** ships
+  as **Ka0s skin**, which means the line is left exactly as the shared skin painted it — check that
+  first, then switch to **Class color** and confirm it takes yours, and to **Custom color** and
+  confirm it takes the swatch. Set the swatch's opacity to something low and switch between Custom
+  and Class: the opacity must **not** change with the mode. There is deliberately no per-statistic
+  mode — one line across the whole window could only ever mean the sort column.
+- **The two control opacities.** Header → *Button style* → **Control opacity** (25%) and **Control
+  hover opacity** (100%) are the two ends of the reveal and ship at what used to be hardcoded, so
+  check first that an untouched window looks exactly as it did. Then move each on its own and confirm
+  it moves only its end. Finally set **Control opacity** near zero and turn **Reveal controls on
+  hover** OFF: the strip must come back to the *hover* value, not vanish — with fading off there is
+  no faded state, so the rest slider is not read at all.
+- **The lock icon is the same weight as its neighbours in both states.** Unlock a window and compare
+  the padlock against the six controls beside it — same brightness, same colour; only the glyph
+  changes, from a closed padlock to an open one. It used to be drawn at 45% while unlocked, which is
+  the state a fresh window ships in, so the strip read as having one half-broken icon in it.
+- **The tab strips all fit one row at default UI scale.** Frame's four tabs, Bars' six, Tooltip's
+  six, Header's four and Visibility's three — note any that wrap onto a second row; a wrapped strip is a layout bug in
+  `placeTabs`' coordinate arithmetic, not a copy problem.
+- **Tab art — open question.** The strip is currently a flat backing with the active tab drawn
+  darker. Whether that reads as tabs, or wants Blizzard's tab atlas instead, is a deliberately open
+  call the plan left for the client: look at it and decide. Changing it is a
+  `LibKa0s/OptionsWidgets.lua` edit plus a minor version bump, not a MultiMeters change.
+- **The header background stops at the title bar.** Header → Title bar → **Header background** to
+  something loud, and Columns → Header background → **Background color** to something else: two
+  distinct bands, the second starting exactly where the first ends. One colour covering both rows is
+  the old behaviour, in which the column strip's own setting was invisible underneath and a colour
+  picked for the title bar restyled the grid's labels too.
 - **Scale scales the whole window.** Frame → Scale to 0.5, then 2.0. The window's **outline** grows
   and shrinks with its contents. A box that stays exactly the size it was while the grid inside it
   shrinks into one corner means the scale reached the visible frame but not its anchor.
@@ -292,21 +363,62 @@ second edge to catch.
   child frame that is not part of the backdrop the border settings rewrite. Check **None** at a
   non-zero thickness too — it must also draw nothing, rather than falling back to the Ka0s edge. The
   addon has **two** LSM border settings and the rule is the same on both; the other is Tooltip → Bar
-  border style, checked in §23.
-- Six pages carry a **Defaults** button in the header; **Windows, Columns and Profiles do not.**
-- **The General page's shape and its three buttons.** It is the **first** page in the tree, above
-  Windows. It carries **Merge pets into their owner** and **Refresh interval**, both addon-wide:
-  change either and **every** window follows, not just the selected one. Its three buttons are
-  **Reset all settings** and **Reset position** — there is deliberately **no** Reset meter data
-  button here, or on any page; the header's own reset control is the one way to it. Reset position
-  is the one
-  control on the page that is **not** addon-wide — it moves the window selected on the Windows page
-  and nothing else, which its tooltip says.
-- **The window name takes the header's colour.** Header → Frame header → **Text color**: the title in
+  border style, checked in §24.
+- Six pages carry a **Defaults** button in the header (Frame, Header, Bars, Tooltip, Visibility,
+  Columns); **Windows and Profiles do not.** Columns' button resets its block editor to the shipped
+  catalog, ticked and ordered — it is **not** absent the way it used to be.
+- **The Defaults blast radius stays page-wide on every tabbed page** (`options-ui-§13`): the button
+  MUST NOT narrow to the tab on screen. On each of the six Defaults pages, change a value on a tab
+  that is **not** the one showing, switch to a different tab, press **Defaults**, then switch back
+  and confirm the value you changed is gone too. Columns is the sharpest version of this check —
+  ticking/reordering a block lives on its *Columns* tab, but the header text and background rows the
+  same button also restores live on the other two — so leave the page on the block-editor tab, change
+  a value on *Header text* or *Header background* without visiting it, and confirm Defaults still
+  reaches it.
+- **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows.
+  Two tabs. Its **General** tab carries the master enable and minimap toggle, then **Merge pets into
+  their owner** and **Refresh interval** — both addon-wide: change either and **every** window
+  follows, not just the selected one — then Test mode and the debug console toggle, then the page's
+  two buttons, **Reset all settings** and **Reset position**. The retired **Data** and
+  **Maintenance** tabs are where those middle four used to live. There is deliberately **no** Reset
+  meter data button here, or on any page; the header's own reset control is the one way to it. Reset
+  position is the one control on the page that is **not** addon-wide — it moves the window the
+  banner is pointed at and nothing else, which its tooltip says.
+- **The statistic palette is editable, and every surface follows it.** General → **Statistic
+  colors** carries one swatch per statistic, shipped in the catalog's own colours, and a note under
+  the grid saying where they are worn — read it and check it is true, because it is the only thing on
+  that tab explaining why setting a colour can appear to do nothing. Change
+  **Damage**'s to something unmistakable, then check all four surfaces that wear the palette move
+  together: a Bars → *Bar* → Bar color mode of **Per-statistic**, a Bars → *Text style* → Text color
+  mode of **Per-statistic**, the Columns → *Header text* / *Header background* modes, and — with no
+  mode set anywhere — the **Damage** line of a name tooltip, which wears the palette always. Then
+  press the General page's **Defaults** and confirm the shipped colours come back.
+- **The two death-line switches.** Hover a **Deaths** cell for somebody who has died: each line
+  should read *Death 3 | <who> | <what>*. Turn Tooltip → *Contents* → **Name the killer** off and the
+  caster half goes with no separator left behind; turn **Name the killing blow** off instead and the
+  spell half goes the same way. A fall or a fire has no caster to name and a melee swing reads
+  **Melee** — neither is a bug, and neither may take the numbered line down with it. **Check this
+  mid-pull too**: a restricted client can hand either name back secret, and the correct behaviour is
+  the same as "not available" — the half is simply absent.
+- **The number formats.** Bars → *Text content* → **Number format** offers four: *Abbreviated
+  (12.4M)*, *Abbreviated, no decimals (12M)*, *Abbreviated, two decimals (12.40M)* and *Full
+  (12400000)*. Walk all four on a column holding a large number and confirm each renders what its
+  name says. **The two-decimal rung is the one to look hardest at** — the ladder is probed against
+  `47.50K` and a client that renders it any other way falls back to the client's own defaults, which
+  would show as the setting quietly doing nothing.
+- **The two smart values.** Bars → *Text content* → **Left text**. *Smart value (Per Second or
+  Absolute)* picks one figure per column — the rate on Damage and Healing, the total on Interrupts
+  and the rest. *Smart value (Absolute | Per Second)* shows both with a bar between them on the
+  columns that have both, and the absolute **alone** on a counting column: an Interrupts cell reading
+  `9 | 3` is the failure to look for. Check both **mid-pull**, when every figure is secret.
+- **The window name takes the header's colour.** Header → *Title text* → **Text color**: the title in
   the window's title bar follows it, along with the font, size, outline and shadow it already
-  followed. Tick **Use class color** and the title takes your class colour, exactly as the session
-  line beside it does — the two are one header and must never differ.
-  The Settings window's own footer Defaults control works on the same ten.
+  followed. Set **Text color mode** to **Class color** and the title takes your class colour, exactly
+  as the session line beside it does — the two are one header and must never differ. Drop the
+  swatch's opacity and switch between the two modes: the opacity must **not** change with the mode.
+  There is deliberately no per-statistic option — one strip over the whole window could only ever
+  mean the sort column.
+  The Settings window's own footer Defaults control works on the same tab.
 - **Panel ↔ CLI parity.** With a page open, run `/mm set window.frame.width 640`. The Frame page's
   Width slider moves to 640 **without being reopened** (`RefreshScalars`). Conversely, move a slider
   and `/mm get window.frame.width` reports the new value.
@@ -314,6 +426,13 @@ second edge to catch.
   `window.frame.minimised`, which the **panel does not draw** — that row is `hidden`, because it is
   state the header's own minimise button writes rather than a preference. `/mm set
   window.frame.minimised true` must still collapse the window.
+- **A tab click works in combat.** With a tabbed page already open, enter combat (a dummy is fine)
+  and click a different tab. It redraws normally with **no** refusal — the strip is deliberately not
+  combat-guarded (`options-ui-§13`): redrawing widgets inside an already-open panel is not a
+  protected action. What **is** refused is *reaching* the panel mid-combat in the first place, which
+  is the next bullet — a tab click that refuses is the defect here, not one that works.
+- **Clicking the tab you are already on does nothing at all** — no flicker, no repaint, no refusal
+  message.
 - **Combat refusal.** Enter combat (a dummy is fine here). `/mm config` **refuses** and prints one
   gray notice. It must **not** queue the request and open the panel when combat ends.
 - **Profiles page mid-combat.** With the Settings window closed, enter combat, then open Settings →
@@ -471,7 +590,7 @@ die · pull a target dummy.
 - After every one of these, `/mm debug diag` names the rule that decided in its `ShouldShow` line.
 - **Master enable off** (`/mm set enabled false`, or General → Enable Multi Meters) hides every
   window immediately and stops the addon reading the meter at all.
-- **Preview mode overrides context**: with preview on, the window shows wherever you are standing.
+- **Test mode overrides context**: with Test mode on, the window shows wherever you are standing.
 
 ### 8. Mythic+ pull — the secret-value path
 
@@ -519,14 +638,16 @@ of a pull, where nobody can see it until BugSack fills up.
   StatusBar alpha and is fading every child of it. **Bar opacity** (Settings → Bars) is the one that
   dims everything, and setting both to 50% must leave the text at 25% — a child's alpha rides on top
   of its parent's.
-- **The text slots are literal — walk all five.** On the Text page set **Left text** and **Right
-  text** in turn and confirm each does exactly what it says, with no substitution anywhere:
+- **The text slots are literal — walk all six.** On Bars → *Text content* set **Left text** and
+  **Right text** in turn and confirm each does exactly what it says, with no substitution anywhere:
   **None** on both leaves the cells with a bar and no text at all (this is the check that matters —
-  it used to fall back to the total and the setting appeared to do nothing); **Smart value** shows
-  the rate on Damage and Healing and the absolute figure on Interrupts, Dispels, Avoidable and
-  Deaths; **Absolute value** shows the total on every column including the rate ones; **Per second
-  value** shows a figure on Damage and Healing and leaves Interrupts, Dispels, Avoidable and Deaths
-  **empty** rather than substituting their totals; **Percent** behaves as below. Left None with Right
+  it used to fall back to the total and the setting appeared to do nothing); **Smart value (Per
+  Second or Absolute)** shows the rate on Damage and Healing and the absolute figure on Interrupts,
+  Dispels, Avoidable and Deaths; **Smart value (Absolute | Per Second)** shows both on Damage and
+  Healing and the absolute alone on the other four; **Absolute value** shows the total on every
+  column including the rate ones; **Per second value** shows a figure on Damage and Healing and
+  leaves Interrupts, Dispels, Avoidable and Deaths **empty** rather than substituting their totals;
+  **Percent** behaves as below. Left None with Right
   set to anything must leave the figure on the RIGHT — it must not slide over into the empty left
   slot.
 - **Percent slots, if you configured any, go empty in combat.** That is correct and by design: a
@@ -610,8 +731,8 @@ a raider most wants to know what killed them is the moment they are still fighti
 - Hovering an **Avoidable Damage** cell draws **one line per spell and nothing else** — no
   "Avoidable" / "Avoidable, Deadly" sub-line beneath a bar, and no Overkill line. Every spell in that
   breakdown is avoidable by definition, so the tag restated the column once per row. Check this in
-  **test mode** (`/mm test`) especially: the preview detail sets both flags on alternating spells,
-  which is where the tags were most visible.
+  **Test mode** (`/mm test`) especially: its placeholder data sets both flags on alternating
+  spells, which is where the tags were most visible.
 - **Name tooltip** lists **every** tracked statistic for that player, including the ones this window
   is not showing. Each line wears **its own statistic's color, label and amount alike** — the same
   palette a bar takes under `bars.colorMode == "stat"`, and it wears it whatever that setting is
@@ -826,7 +947,7 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 /mm list                     /mm version
 /mm get window.frame.width   /mm set window.frame.width 520
 /mm reset window.frame.width /mm resetall
-/mm lock            /mm lock off        /mm preview        /mm preview on
+/mm lock            /mm lock off        /mm test            /mm test on
 /mm toggle          /mm toggle Meter
 /mm window list     /mm window new Raid /mm window copy Meter Raid
 /mm window delete Raid
@@ -852,7 +973,9 @@ is why the popup exists. Every open drill-down closes and this module's caches a
 - `/mm toggle` with no name flips every window; with a name it flips one, and the name keeps its case
   and spacing.
 - `/mm lock` with no argument **toggles**; `/mm lock off` sets. Unlocking prints "unlocked — drag
-  them into place" and turns preview on.
+  them into place" and does **not** touch Test mode — the two used to be coupled
+  (`WindowManager:SetLocked` also flipped it on) and are not any more; ask for placeholder rows
+  with `/mm test` explicitly.
 - `/mm debug` toggles the console **window**; `/mm debug on|off` sets the logging **flag**. They are
   separate on purpose: logging runs with the console closed so a bug can be reproduced first and the
   log read afterwards.
@@ -918,7 +1041,7 @@ switch back to Default → copy from Test → reset.
   libs/LibKa0s)"* — followed by what is unavailable.
 - `/mm config` says the settings panel is unavailable. `/mm list|get|set|reset|resetall` each name the
   missing library. `/mm perf` says performance measurement is unavailable.
-- **The host verbs still work**: `/mm lock`, `/mm preview`, `/mm toggle`, `/mm window list`,
+- **The host verbs still work**: `/mm lock`, `/mm test`, `/mm toggle`, `/mm window list`,
   `/mm reset-positions`. They never went to the library.
 - **`/mm resetall` still works.** The user whose panel will not open is exactly the user who needs
   "reset everything", and the schema loaded fine.
@@ -1032,7 +1155,29 @@ Needs a profile written by v0.1.0, so do this before wiping SavedVariables.
 
 ---
 
-### 23. Tooltip appearance, anchor and offsets
+### 23. v12 → v13 title bar and control-colour migration
+
+Needs a profile written before this branch (`schemaVersion` 12 or earlier), so do this before wiping
+SavedVariables — same constraint as §22.
+
+1. Log in with an existing `MultiMeters.lua` SavedVariables file from before this branch, on a window
+   that had its title bar **turned off** and at least one of *Control class colour* / *Control hover
+   class colour* **ticked**.
+2. The window opens with its title bar **still off** and its control colours **exactly as they were**
+   — the migration carries the stored value across; it does not re-default it. A title bar that comes
+   back ON, or control colours that reset to Custom, is the migration writing a default instead of
+   carrying the stored value.
+3. Header → **Title bar** shows the toggle unticked, matching what §2 showed on the window itself; the
+   old Frame → *Frame behavior* location is gone.
+4. Frame → **General** (or wherever the control colour dropdowns now live) shows **Class** for
+   whichever of the two flags was ticked before, not Custom.
+5. `/reload` and confirm nothing moves again: the step is idempotent and `schemaVersion` is now 13.
+6. Check a **second profile** you had not activated this session; its title bar and control colours
+   are carried across too.
+
+---
+
+### 24. Tooltip appearance, anchor and offsets
 
 Everything here is cosmetic except the last item, which is the one that can damage another addon.
 
@@ -1071,7 +1216,7 @@ Everything here is cosmetic except the last item, which is the one that can dama
   addon has restyled the shared `GameTooltip` and left it that way, which persists until a reload
   and is invisible until somebody else's tooltip looks wrong.
 
-### 24. The Targets section, and its absence mid-pull
+### 25. The Targets section, and its absence mid-pull
 
 The one place in this addon where the restriction costs *information* rather than decoration. Read
 [data-flow.md §9](data-flow.md) before judging a failure here — "the section is missing mid-pull" is
@@ -1105,7 +1250,7 @@ the **correct** behavior, not the bug.
   activity at all**. The section costs one provider call per enemy, and an off switch that still
   pays for the walk is a bug.
 
-### 25. The export modal, the CSV and the chat dump
+### 26. The export modal, the CSV and the chat dump
 
 Two frames, two destinations and one hard refusal. Most of this is checkable at a target dummy —
 **except the last block, which needs a real pull**, because the refusal keys off the `Combat` addon

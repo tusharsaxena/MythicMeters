@@ -424,6 +424,33 @@ local BARBG_VALUES = {
 }
 local BARBG_SORT = { "class", "stat", "custom", "none" }
 
+-- TWO modes, not the three every text surface offers. "Per-statistic" cannot say anything true
+-- about a header BUTTON: a close box does not belong to a statistic, so the option could only
+-- ever paint it the sort column's colour -- which is a fact already on screen in that column's
+-- own header and in its arrow.
+local CONTROLCOLOR_VALUES = {
+    class  = L["Class color"],
+    custom = L["Custom color"],
+}
+local CONTROLCOLOR_SORT = { "class", "custom" }
+
+-- The divider's three, and the extra one is the point. `skin` is not "a colour
+-- that happens to match the skin" -- it is *don't touch the texture*, so whatever
+-- LibKa0s-Core-1.0's ApplySkin just wrote stands. That is what keeps a re-skin
+-- landing on this window along with the debug console and the perf panel
+-- (standalone-windows): the shared value is never copied into this repo, never
+-- stored in a profile, and never has to be migrated when it changes.
+--
+-- NO `stat` MODE, for the reason the header's other surfaces do not have one: the
+-- divider is one line across the whole window, so "per statistic" could only ever
+-- paint it the sort column's colour -- a fact already on screen twice over.
+local DIVIDERCOLOR_VALUES = {
+    skin   = L["Ka0s skin"],
+    class  = L["Class color"],
+    custom = L["Custom color"],
+}
+local DIVIDERCOLOR_SORT = { "skin", "class", "custom" }
+
 -- ONE set for both slots, and EVERY VALUE IS LITERAL — modules/Row.lua renders
 -- exactly what is asked for and never falls back to another figure. `none` in
 -- particular means nothing at all, which it did not always: both slots set to
@@ -434,17 +461,38 @@ local BARBG_SORT = { "class", "stat", "custom", "none" }
 -- what the left slot ships as. A counting stat still renders nothing for `rate`,
 -- because "0.42 interrupts per second" is not a thing a meter should say; that is
 -- a property of the STAT, not of the slot.
+-- The two smart values are named for what they DO rather than being "smart" and
+-- "smarter". Both branch on whether the column has a per-second figure at all --
+-- that is what makes them smart -- and they differ in what they do with the
+-- answer: one PICKS (the rate where there is one, the total otherwise) and the
+-- other SHOWS BOTH, falling back to the total alone on a counting stat where
+-- "0.42 interrupts per second" is not a thing a meter should say.
 local SLOT_VALUES = {
-    none    = L["None"],
-    smart   = L["Smart value"],
-    total   = L["Absolute value"],
-    rate    = L["Per second value"],
-    percent = L["Percent"],
+    none     = L["None"],
+    smart    = L["Smart value (Per Second or Absolute)"],
+    combined = L["Smart value (Absolute | Per Second)"],
+    total    = L["Absolute value"],
+    rate     = L["Per second value"],
+    percent  = L["Percent"],
 }
-local SLOT_SORT   = { "none", "smart", "total", "rate", "percent" }
+local SLOT_SORT   = { "none", "smart", "combined", "total", "rate", "percent" }
 
-local NUMFMT_VALUES  = { abbreviated = L["Abbreviated"], full = L["Full"] }
-local NUMFMT_SORT    = { "abbreviated", "full" }
+-- HOW MANY DECIMALS, plus the un-abbreviated form. The three abbreviating entries
+-- are ONE ladder at three fraction divisors (modules/Format.lua's scaledLadder);
+-- `full` is the other formatter entirely.
+--
+-- NO THOUSANDS-SEPARATOR ENTRY, and there cannot be one. Grouping a number means
+-- reading its digits, and every figure in this grid is a SECRET value for the
+-- whole of a pull -- BreakUpLargeNumbers takes a plain number and raises on a
+-- handle (design §4). What "Full" renders is every digit, unseparated, which is
+-- what the client's own formatter can produce without inspecting anything.
+local NUMFMT_VALUES  = {
+    abbreviated      = L["Abbreviated (12.4M)"],
+    abbreviatedWhole = L["Abbreviated, no decimals (12M)"],
+    abbreviatedTwo   = L["Abbreviated, two decimals (12.40M)"],
+    full             = L["Full (12400000)"],
+}
+local NUMFMT_SORT    = { "abbreviated", "abbreviatedWhole", "abbreviatedTwo", "full" }
 
 -- How a death is labelled. A third value, "time into the fight", was built and
 -- removed: nothing on the client can date a past death against the run it
@@ -498,6 +546,36 @@ for i, channel in ipairs(Const.EXPORT_CHANNELS) do
     CHANNEL_SORT[i] = channel.key
 end
 
+--- One header-control label with that control's own icon in front of it.
+---
+--- THE STRIP IS THE INDEX INTO THIS TAB. Eight checkboxes named "Show close",
+--- "Show lock", "Show segment picker" ask a player to translate a word back into
+--- the glyph they were actually looking at, and the two that draw a padlock and a
+--- gear were the two hardest to name. Putting the icon in the label removes the
+--- translation: the tick, the picture, the words.
+---
+--- BAKED INTO `label` because that is the only string the library draws --
+--- LibKa0s' makeCheckbox reads `row.label` and nothing else, so an `icon` field
+--- beside it would be a field with no renderer. The texture escape is a PREFIX,
+--- never a replacement: tests/test_schema.lua's localization case strips it and
+--- checks the rest is still a locale key, so a row cannot lose its translation by
+--- gaining a picture.
+---
+--- NIL IS A REAL ANSWER from NS.Icon -- a degraded install has no art payload at
+--- all (core/MediaSetup.lua) -- and it degrades to the plain label, which is what
+--- this tab drew before. The size is the shipped `controlSize` default rather
+--- than the player's, because a schema row is declared once at load and a label
+--- that tracked the setting would need re-declaring every time it changed.
+---
+--- @param art string   an entry of the library's ICONS catalog
+--- @param text string   the localized label
+--- @return string
+local function controlLabel(art, text)
+    local path = NS.Icon and NS.Icon(art)
+    if not path then return text end
+    return string.format("|T%s:14:14:0:0|t %s", path, text)
+end
+
 --- A DEFERRED LibSharedMedia list, pulled at render and at parse time.
 ---
 --- Deferred is load-bearing twice over here. First for the usual reason — the
@@ -546,23 +624,120 @@ end
 -- prove nothing.
 
 NS.Schema = {
-
-    -- ── Windows ──────────────────────────────────────────────────────────────
+    -- ── Windows ───────────────────────────────────────────────────────
     -- The picker, the create/duplicate/delete buttons and the copy-settings-from
     -- control are BESPOKE (settings/Windows.lua): they act on the registry, not on
-    -- a leaf, so they have no path. The window's NAME is a leaf and is here.
+    -- a leaf, so they have no path. The window's NAME is a leaf and is here, in the
+    -- one-row "Window" tab it shares with those bespoke buttons.
     {
         path = "window.name", type = "string", default = "Multi Meters",
         dialogControl = "EditBox", maxLetters = 32,
-        page = "windows", group = L["Active window"],
+        page = "windows", group = L["Window"],
         label = L["Window name"], desc = L["Name shown in this picker and, optionally, in the window's own header."],
         validate = function(v) return type(v) == "string" and v ~= "" end,
     },
 
-    -- ── Frame ────────────────────────────────────────────────────────────────
+    -- ── Frame ──────────────────────────────────────────────
     -- The chrome itself is LibKa0s-Core-1.0's shared SKIN, which tints the title
     -- and the divider on its own, so the edge colors are not settings. What the
     -- player owns is geometry, the backdrop and the LSM border.
+    --
+    -- FOUR TABS: the window-wide answers a player reaches for first (general --
+    -- the two frame-level toggles and the four "set every surface at once" meta
+    -- rows), then what the window IS (size and position), what is drawn behind
+    -- and around it (background and border), and last the grid it draws (row).
+    -- The title bar itself moved to the Header page, first in its own "Title
+    -- bar" tab -- it is what the header strip draws, not what the frame is.
+
+    -- ── General ──────────────────────────────────────────────
+    -- FIRST, because it is where a player who has just opened this page wants to
+    -- land: the two window-wide toggles, and the four meta rows that set every
+    -- surface in the window at once. The meta rows arrived here when the "All
+    -- surfaces" tab was retired -- a tab of four shortcuts sat at the far end of
+    -- the strip, which is the last place someone reaching for "make it all one
+    -- font" would look.
+    --
+    -- Locking implies preview mode: a player positioning a window at a target
+    -- dummy needs a full grid to aim at, which is why the two are one control here
+    -- and why modules/WindowManager.lua owns the coupling rather than this row.
+    --
+    -- NO `resizeGrip` ROW, and no setting behind it. The grip is drawn whenever
+    -- the window is UNLOCKED and hidden whenever it is locked, which is the same
+    -- question the lock already answers. Locking a window is how you put the
+    -- grip away.
+    --
+    -- `frame.position` is deliberately NOT a row either. It is written by a drag,
+    -- it is four values with one meaning, and -- rule R3 -- it is never read back
+    -- off the live frame. A global reset reaches it the way it reaches everything
+    -- else: "Reset all settings" is a PROFILE reset, and a position lives in the
+    -- profile. `/mm reset-positions` is the targeted verb, and it goes to
+    -- modules/WindowManager.lua, which owns re-anchoring a live frame.
+    {
+        path = "window.frame.locked", type = "bool", default = false,
+        page = "frame", group = L["General"],
+        label = L["Lock window"],
+        desc = L["When unlocked you can drag the window to reposition it and drag its corner to resize. Nothing else changes \226\128\148 for placeholder rows use Test mode on the General page."],
+    },
+    {
+        path = "window.frame.clampToScreen", type = "bool", default = true,
+        page = "frame", group = L["General"],
+        label = L["Keep on screen"], desc = L["Prevent the window from being dragged off the edge of the screen."],
+    },
+    -- THE FOUR META ROWS. Each sets several other rows at once rather than being
+    -- read by anything itself (see the comment on the color-mode row below for
+    -- the full argument, which applies to all four). `closeButton` and the rest
+    -- of the header's own controls, and the column-header strip, are edited on
+    -- the Header and Columns pages now -- every one of them is still
+    -- `window.frame.*` or `window.columnHeader.*` under the hood, unrenamed.
+    {
+        -- A META ROW: it sets seven others rather than being read by anything.
+        -- Every surface in a window carries its own colour mode -- the bar and its
+        -- background, both header strips and both of their backgrounds, and both
+        -- of the tooltip's bars -- which is right when a player wants one of them
+        -- different and tedious when they want them all the same, which is the
+        -- usual case.
+        --
+        -- IT SKIPS THE TWO TEXT SURFACES, and COLOR_MODE_PATHS says why at
+        -- length: text is drawn on top of a surface this row broadcasts to, so
+        -- making it agree is what makes it unreadable.
+        --
+        -- IT STORES WHAT WAS LAST BROADCAST AND NOTHING READS IT BACK. A player
+        -- who then changes one surface individually has changed one surface; the
+        -- meta does not fight them for it and does not claim to describe them
+        -- afterwards. Deriving it instead -- showing "mixed" when the seven
+        -- disagree -- would make a control that cannot be set to the value it is
+        -- displaying, which is worse than a shortcut that goes stale.
+        path = "window.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "frame", group = L["General"],
+        label = L["Color mode (all surfaces)"],
+        desc = L["Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."],
+        onChange = broadcastColorMode,
+    },
+    {
+        path = "window.barTexture", type = "string", default = "Blizzard Raid Bar",
+        values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
+        page = "frame", group = L["General"],
+        label = L["Bar texture (all surfaces)"],
+        desc = L["Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastBarTexture,
+    },
+    {
+        path = "window.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "frame", group = L["General"],
+        label = L["Font (all surfaces)"],
+        desc = L["Set the font for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastFont,
+    },
+    {
+        path = "window.fontOutline", type = "string", default = "NONE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "frame", group = L["General"],
+        label = L["Font outline (all surfaces)"],
+        desc = L["Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
+        onChange = broadcastOutline,
+    },
     {
         path = "window.frame.width", type = "number", default = 694,
         min = 160, max = 1400, step = 10, fmt = "%d px",
@@ -601,132 +776,116 @@ NS.Schema = {
         page = "frame", group = L["Size and position"],
         label = L["Padding"], desc = L["Gap in pixels between the window edge and the rows inside it."],
     },
-    {
-        -- IN Size and position, NOT under Border style. It is the fill inside the
-        -- window rather than the edge around it -- the two happened to be
-        -- adjacent, which is not the same as belonging together, and a player
-        -- looking for "what colour is my window" was looking under a heading that
-        -- said border.
-        path = "window.frame.backdropColor", type = "color",
-        default = { r = 0, g = 0, b = 0, a = 0.75 },
-        page = "frame", group = L["Size and position"],
-        label = L["Background color"], desc = L["Color drawn behind the rows."],
-    },
+    -- ── Background and border ────────────────────────────────────────
+    -- Both the fill inside the window and the edge around it, together: they used
+    -- to be split across "Size and position" and "Border style" for no reason
+    -- beyond having been declared that way, and a player looking for "what color
+    -- is my window" was looking under a heading that said border.
     {
         path = "window.frame.borderStyle", type = "string", default = "Blizzard Tooltip",
         values = lsmValues("border"), dialogControl = "LSM30_Border",
-        page = "frame", group = L["Border style"],
+        page = "frame", group = L["Background and border"],
         label = L["Border style"], desc = L["LibSharedMedia border texture drawn around the window."],
     },
     {
         path = "window.frame.borderSize", type = "number", default = 2,
         min = 0, max = 32, step = 1, fmt = "%d px",
-        page = "frame", group = L["Border style"],
+        page = "frame", group = L["Background and border"],
         label = L["Border thickness"], desc = L["Border edge size in pixels."],
+    },
+    {
+        -- THE FILL INSIDE THE WINDOW, under a heading that names both. It spent
+        -- a release under "Size and position" and another under "Border style",
+        -- and a player looking for "what colour is my window" found it under
+        -- neither.
+        path = "window.frame.backdropColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 0.75 },
+        page = "frame", group = L["Background and border"],
+        label = L["Background color"], desc = L["Color drawn behind the rows."],
     },
     {
         path = "window.frame.borderColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 1 },
-        page = "frame", group = L["Border style"],
+        page = "frame", group = L["Background and border"],
         label = L["Border color"], desc = L["Color of the window border."],
     },
-    -- Locking implies preview mode: a player positioning a window at a target
-    -- dummy needs a full grid to aim at, which is why the two are one control here
-    -- and why modules/WindowManager.lua owns the coupling rather than this row.
-    {
-        path = "window.frame.locked", type = "bool", default = false,
-        page = "frame", group = L["Frame behavior"],
-        label = L["Lock window"],
-        desc = L["When unlocked you can drag the window to reposition it and drag its corner to resize. Nothing else changes \226\128\148 for placeholder rows use Test mode on the General page."],
-    },
-    {
-        path = "window.frame.clampToScreen", type = "bool", default = true,
-        page = "frame", group = L["Frame behavior"],
-        label = L["Keep on screen"], desc = L["Prevent the window from being dragged off the edge of the screen."],
-    },
-    {
-        path = "window.frame.titleBar", type = "bool", default = true,
-        page = "frame", group = L["Frame behavior"],
-        label = L["Show title bar"], desc = L["Draw the title strip along the top of the window."],
-    },
-    -- NO `resizeGrip` ROW, and no setting behind it. The grip is drawn whenever
-    -- the window is UNLOCKED and hidden whenever it is locked, which is the same
-    -- question the lock already answers -- a second control for it was one that
-    -- could disagree with the lock, and did: modules/Window.lua consulted it only
-    -- while BUILDING the frame, so unticking it changed nothing until a reload.
-    -- Locking a window is how you put the grip away.
+    -- ── Row ──────────────────────────────────────────
+    -- FROM THE BARS PAGE. What the first four decide -- how tall a row is, how
+    -- many there are and which way they grow -- shapes every bar the window
+    -- draws, so they sit with the rest of the frame's own geometry rather than
+    -- with the bar's appearance. The four under them are how a row BEHAVES: who
+    -- is pinned, who is highlighted, and the stripe behind every other one.
     --
-    -- `closeButton` moved to Header controls, where it belongs: it draws a
-    -- control in the header strip, which is what every row of that group is
-    -- about. It keeps its stored NAME among the show* keys -- it predates them,
-    -- and renaming it to `showClose` for symmetry would migrate every stored
-    -- profile in exchange for a consistency nobody can see.
+    -- ONE TAB, not the two it was. "Rows" and "Row behavior" were four controls
+    -- each and one subject between them, and a player deciding how their grid
+    -- reads was clicking between the two to do it.
     --
-    -- THE WHOLE Header controls GROUP has since followed it to the HEADER PAGE,
-    -- paths and all. Every row of it is still `window.frame.*` and every one of
-    -- them is edited under Header.
-
-    -- `frame.position` is deliberately NOT a row. It is written by a drag, it is
-    -- four values with one meaning, and — rule R3 — it is never read back off the
-    -- live frame. A global reset reaches it the way it reaches everything else:
-    -- "Reset all settings" is a PROFILE reset, and a position lives in the
-    -- profile. `/mm reset-positions` is the targeted verb, and it goes to
-    -- modules/WindowManager.lua, which owns re-anchoring a live frame.
-
+    -- The PATHS stay `window.rows.*`; a row's page is where it is edited, its
+    -- path is where it is stored.
     {
-        -- A META ROW: it sets seven others rather than being read by anything.
-        -- Every surface in a window carries its own colour mode -- the bar and its
-        -- background, both header strips and both of their backgrounds, and both
-        -- of the tooltip's bars -- which is right when a player wants one of them
-        -- different and tedious when they want them all the same, which is the
-        -- usual case.
-        --
-        -- IT SKIPS THE TWO TEXT SURFACES, and COLOR_MODE_PATHS says why at
-        -- length: text is drawn on top of a surface this row broadcasts to, so
-        -- making it agree is what makes it unreadable.
-        --
-        -- IT STORES WHAT WAS LAST BROADCAST AND NOTHING READS IT BACK. A player
-        -- who then changes one surface individually has changed one surface; the
-        -- meta does not fight them for it and does not claim to describe them
-        -- afterwards. Deriving it instead -- showing "mixed" when the seven
-        -- disagree -- would make a control that cannot be set to the value it is
-        -- displaying, which is worse than a shortcut that goes stale.
-        path = "window.colorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "frame", group = L["Frame behavior"],
-        label = L["Color mode (all surfaces)"],
-        desc = L["Set the color mode of every bar and header in this window at once. Text colors are left alone — they sit on top of these surfaces and have to contrast with them. Each surface is still its own setting, so you can change one afterwards without changing the rest."],
-        onChange = broadcastColorMode,
+        path = "window.rows.maxRows", type = "number", default = 0,
+        min = 0, max = Const.MAX_ROWS, step = 1,
+        page = "frame", group = L["Row"],
+        label = L["Maximum rows"],
+        desc = L["Largest number of rows to draw. Set to 0 to draw as many as the window has room for."],
+        validate = isNumberIn(0, Const.MAX_ROWS),
     },
     {
-        path = "window.barTexture", type = "string", default = "Blizzard Raid Bar",
-        values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
-        page = "frame", group = L["Frame behavior"],
-        label = L["Bar texture (all surfaces)"],
-        desc = L["Set the bar texture for the grid and the tooltip at once. Each of them is still its own setting."],
-        onChange = broadcastBarTexture,
+        path = "window.rows.height", type = "number", default = 16,
+        min = 8, max = 40, step = 1, fmt = "%d px",
+        page = "frame", group = L["Row"],
+        label = L["Row height"], desc = L["Height of one row in pixels."],
     },
     {
-        path = "window.font", type = "string", default = "Friz Quadrata TT",
-        values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "frame", group = L["Frame behavior"],
-        label = L["Font (all surfaces)"],
-        desc = L["Set the font for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
-        onChange = broadcastFont,
+        path = "window.rows.spacing", type = "number", default = 1,
+        min = 0, max = 10, step = 1, fmt = "%d px",
+        page = "frame", group = L["Row"],
+        label = L["Row spacing"], desc = L["Gap in pixels between adjacent rows."],
     },
     {
-        path = "window.fontOutline", type = "string", default = "OUTLINE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "frame", group = L["Frame behavior"],
-        label = L["Font outline (all surfaces)"],
-        desc = L["Set the font outline for the cell text, both header strips and the tooltip at once. Each of them is still its own setting."],
-        onChange = broadcastOutline,
+        path = "window.rows.growthDirection", type = "string", default = "DOWN",
+        values = GROWTH_VALUES, sorting = GROWTH_SORT,
+        page = "frame", group = L["Row"],
+        label = L["Growth direction"], desc = L["Whether rows stack downward from the header or upward from the bottom."],
+    },
+    -- `rows.alternatingBackground` joined these from Bars' "Bar background color"
+    -- group. `rows.classBackground` and `rows.classBackgroundAlpha` are gone
+    -- entirely, and were doing nothing before they went: the row tint is painted
+    -- per CELL from `bars.bgColorMode` and `bars.bgAlpha` (modules/Row.lua's
+    -- cellBackground) -- it moved there when tinting the row itself turned out to
+    -- lose the separators between columns -- and these two were left behind
+    -- pointing at keys nothing reads.
+    {
+        path = "window.rows.alwaysShowSelf", type = "bool", default = true,
+        page = "frame", group = L["Row"],
+        label = L["Always show yourself"],
+        desc = L["Keep your own row visible even when it would fall outside the maximum row count."],
+    },
+    {
+        path = "window.rows.highlightSelf", type = "bool", default = true,
+        page = "frame", group = L["Row"],
+        label = L["Highlight yourself"], desc = L["Mark your own row so it stands out at a glance."],
+    },
+    {
+        path = "window.rows.mouseoverHighlight", type = "bool", default = true,
+        page = "frame", group = L["Row"],
+        label = L["Highlight on mouseover"], desc = L["Brighten the row under the cursor."],
+    },
+    {
+        -- FROM THE ROWS PAGE, into the group that owns the other thing drawn
+        -- behind a row. It is a ROW-level fact (modules/Row.lua's RowProto:Update
+        -- draws it, not the cells), and its PATH says so -- but a player choosing
+        -- between a class tint and a stripe was reading two pages to do it.
+        path = "window.rows.alternatingBackground", type = "bool", default = true,
+        page = "frame", group = L["Row"],
+        label = L["Alternating background"],
+        desc = L["Shade every other row slightly so the grid is easier to read across. Sits behind the bar background above, so a strong tint will hide it."],
     },
 
-    -- ── Header ───────────────────────────────────────────────────────────────
+    -- ── Header ────────────────────────────────────────────────────
     --
-    -- FOUR ROWS LIVED AT THE TOP OF THIS GROUP and all four are gone, because
-    -- each of them said something that was already on screen.
+    -- FOUR ROWS LIVED AT THE TOP OF THIS PAGE and all four are gone, because each
+    -- of them said something that was already on screen.
     --
     --   `title`            a second name for a window that already has one. The
     --                      header draws `window.name` now, always, so renaming a
@@ -742,74 +901,147 @@ NS.Schema = {
     -- What the right-hand header line still says is in modules/Window.lua's
     -- UpdateHeaderText, and it is state rather than preference: the drill-down
     -- title and the restricted notice.
-    {
-        path = "window.header.font", type = "string", default = "Friz Quadrata TT",
-        values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "header", group = L["Frame header"],
-        label = L["Font"], desc = L["Font used for every number in the grid. A monospace font such as JetBrains Mono keeps columns from shifting as the numbers change; the default matches the window header."],
-    },
-    {
-        path = "window.header.size", type = "number", default = 12,
-        min = 6, max = 32, step = 1, fmt = "%d px",
-        page = "header", group = L["Frame header"],
-        label = L["Font size"], desc = L["Text size in pixels."],
-    },
-    {
-        path = "window.header.outline", type = "string", default = "OUTLINE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "header", group = L["Frame header"],
-        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
-    },
-    {
-        path = "window.header.shadow", type = "bool", default = false,
-        page = "header", group = L["Frame header"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the header text so it stays readable over a bright backdrop."],
-    },
-    {
-        path = "window.header.color", type = "color",
-        default = { r = 1, g = 0.82, b = 0, a = 1 },
-        page = "header", group = L["Frame header"],
-        label = L["Text color"], desc = L["Color of the header's own lines."],
-    },
-    -- NO `header.colorMode` ROW, and no setting behind it. The title bar is ONE
-    -- strip over the whole window, so neither of the two modes it offered could
-    -- say anything true about it. Per-statistic could only ever paint it the SORT
-    -- column's colour -- a fact already on screen twice, in that column's own
-    -- header and in its arrow -- and class could only be the local player's,
-    -- which the title bar is not about either: it names the window.
     --
-    -- This is the same argument that took the mode off the title bar's BACKGROUND
-    -- one change earlier, arriving at the text a step later. The colour picker
-    -- above is what the setting was before a mode was added to it.
+    -- FOUR TABS: the title bar's own shape (Title bar), the face drawn on it
+    -- (Title text), then every toggle for the icon strip it carries (Controls),
+    -- and how every one of those controls is drawn (Button style). The
+    -- column-header strip that used to sit here as a third group moved to the
+    -- Columns page it labels -- see the note there.
+
+    -- ── Title bar ────────────────────────────────────────────────
+    -- Whether it draws, and its shape: alignment, height and background. This
+    -- toggle is the header page's master switch, so its path moved with it:
+    -- `window.header.show`, not `window.frame.titleBar` -- a path naming `frame`
+    -- for a row on the Header page misleads the next reader and reads wrong in
+    -- `/mm set`.
+    {
+        path = "window.header.show", type = "bool", default = true,
+        page = "header", group = L["Title bar"],
+        label = L["Show title bar"], desc = L["Draw the title strip along the top of the window."],
+    },
+    {
+        path = "window.header.bgColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 0.5 },
+        page = "header", group = L["Title bar"],
+        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, on the Columns page."],
+    },
     {
         path = "window.header.align", type = "string", default = "LEFT",
         values = ALIGN_VALUES, sorting = ALIGN_SORT,
-        page = "header", group = L["Frame header"],
+        page = "header", group = L["Title bar"],
         label = L["Alignment"], desc = L["Where the header text sits horizontally."],
     },
     {
         path = "window.header.height", type = "number", default = 18,
         min = 8, max = 48, step = 1, fmt = "%d px",
-        page = "header", group = L["Frame header"],
+        page = "header", group = L["Title bar"],
         label = L["Header height"], desc = L["Height of the header strip in pixels."],
     },
-    -- NO `bgColorMode` HERE, and the column strip below keeps one. The two look
-    -- like a matched pair and are not: the column strip labels the COLUMNS, so
-    -- "per statistic" tints each label with its own column's colour and means
-    -- something. The title bar is one strip over the whole window, so the same
-    -- mode could only paint it one colour -- the sort column's -- which is a
-    -- fact already on screen twice over. What is left is the colour picker,
-    -- which is what the setting was.
-    {
-        path = "window.header.bgColor", type = "color",
-        default = { r = 0, g = 0, b = 0, a = 0.5 },
-        page = "header", group = L["Frame header"],
-        label = L["Header background"], desc = L["Color drawn behind the title bar. The column-header strip has its own, under Column headers."],
-    },
-
-    -- ── The header's controls (issue #6) ─────────────────────────────────────
+    -- THE HAIRLINE BETWEEN THE TITLE BAR AND THE COLUMN LABELS, and the one piece
+    -- of the window's chrome that is a setting. It earns its keep when both
+    -- strips are drawn plainly and is a line across the window for nothing once
+    -- the title bar's own background is doing the separating -- which is a look,
+    -- so it is the player's call rather than a rule.
     --
+    -- ON by default: it is what the window has always drawn, and a chrome
+    -- element that disappears on upgrade is a bug report.
+    --
+    -- THREE ROWS, NOT ONE, and the colour mode below is where the interesting
+    -- part is. `NS.ApplySkin` tints `frame.divider` from LibKa0s-Core-1.0's shared
+    -- SKIN; the mode's shipped value, `skin`, does not read that table and write
+    -- it -- it writes NOTHING, leaving the library's tint standing. That is what
+    -- keeps standalone-windows intact through a per-window picker: the rule is
+    -- "never restate SKIN's values", and nothing here restates them.
+    {
+        path = "window.header.divider", type = "bool", default = true,
+        page = "header", group = L["Title bar"],
+        label = L["Show divider"],
+        desc = L["Draw the hairline between the title bar and the column labels."],
+    },
+    {
+        path = "window.header.dividerThickness", type = "number", default = 1,
+        min = 1, max = 8, step = 1, fmt = "%d px",
+        page = "header", group = L["Title bar"],
+        label = L["Divider thickness"],
+        desc = L["How thick the hairline under the title bar is, in pixels. It grows downward, into the gap above the column labels."],
+        validate = isNumberIn(1, 8),
+    },
+    {
+        path = "window.header.dividerColorMode", type = "string", default = "skin",
+        values = DIVIDERCOLOR_VALUES, sorting = DIVIDERCOLOR_SORT,
+        page = "header", group = L["Title bar"],
+        label = L["Divider color mode"],
+        desc = L["What colors the hairline. Ka0s skin leaves it to the shared collection skin, so a re-skin reaches this window along with the debug console and the perf panel; Class color is your own class."],
+    },
+    {
+        -- A MID GREY, and deliberately not the skin's own values. Seeding this
+        -- with SKIN.divider would be the copy standalone-windows forbids -- the
+        -- one that drifts a hex digit at a time and then has to be migrated -- and
+        -- it would also be a lie about what the row is: this is the colour the
+        -- player CHOSE, and it is read only under `custom`, where the skin has
+        -- already been declined.
+        path = "window.header.dividerColor", type = "color",
+        default = { r = 0.5, g = 0.5, b = 0.5, a = 0.85 },
+        page = "header", group = L["Title bar"],
+        label = L["Divider color"],
+        desc = L["Color of the hairline under the title bar, used when the mode above is Custom color."],
+    },
+    -- ── Title text ──────────────────────────────────────────────
+    -- TWO MODES, NOT THREE, and the half that is missing is the interesting half.
+    --
+    -- NO `stat`. Per-statistic could only ever paint this the SORT column's
+    -- colour -- a fact already on screen twice, in that column's own header and
+    -- in its arrow -- and the title bar is ONE strip over the whole window rather
+    -- than a thing belonging to a column. That is the same argument that took the
+    -- mode off the title bar's BACKGROUND, and it still holds, which is why this
+    -- row takes the CONTROLS' pair rather than the three every cell surface answers.
+    --
+    -- CLASS DID NOT SURVIVE THE SAME ARGUMENT, and this note used to say it had:
+    -- "class could only be the local player's, which the title bar is not about --
+    -- it names the window". What settled it the other way is the rest of the
+    -- strip. The controls wear a class colour and so does the divider under them;
+    -- a title that alone could not was the odd one out rather than the principled
+    -- one, and "this header is mine" is a perfectly good thing for a player to
+    -- want a window to say. It is still the LOCAL player's class, because that is
+    -- the only class a window-wide strip can mean.
+    {
+        path = "window.header.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "header", group = L["Title text"],
+        label = L["Font"], desc = L["Font used for every number in the grid. A monospace font such as JetBrains Mono keeps columns from shifting as the numbers change; the default matches the window header."],
+    },
+    {
+        path = "window.header.size", type = "number", default = 12,
+        min = 6, max = 32, step = 1, fmt = "%d px",
+        page = "header", group = L["Title text"],
+        label = L["Font size"], desc = L["Text size in pixels."],
+    },
+    {
+        path = "window.header.colorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
+        page = "header", group = L["Title text"],
+        label = L["Text color mode"],
+        desc = L["What colors the window's title and the session line beside it. Class color is your own -- a window-wide strip has no other class it could mean."],
+    },
+    {
+        path = "window.header.color", type = "color",
+        default = { r = 1, g = 0.82, b = 0, a = 1 },
+        page = "header", group = L["Title text"],
+        label = L["Text color"], desc = L["Color of the header's own lines."],
+    },
+    {
+        path = "window.header.outline", type = "string", default = "OUTLINE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "header", group = L["Title text"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
+    },
+    {
+        path = "window.header.shadow", type = "bool", default = false,
+        page = "header", group = L["Title text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the header text so it stays readable over a bright backdrop."],
+    },
+    -- ── The meter's controls (issue #6) ────────────────────────────────────
     -- ON THE HEADER PAGE, which is where a player looks for them. They were on
     -- Frame for as long as `frame.closeButton` was the only one of them, and the
     -- stored PATHS are still `window.frame.*` -- every one of these draws into the
@@ -817,35 +1049,26 @@ NS.Schema = {
     -- would migrate every stored profile in exchange for a tidiness nobody can
     -- see. A row's page is where it is EDITED; its path is where it is STORED.
     --
-    -- Kept CONTIGUOUS, and placed between the title bar's own group and the
-    -- column strip's, which is the order the three are drawn in. Group headings are emitted
-    -- when `group` CHANGES between consecutive rows, so interleaving one of these
-    -- among the rows above would print a second "Header controls" heading further
-    -- down the page.
+    -- ONE GROUP, not the two it was. They were split by what they act on --
+    -- "Window buttons" for close, minimise, lock and settings; "Meter buttons"
+    -- for the segment text, the segment picker, reset and export -- which is a
+    -- true distinction and a useless one to click through: they are eight
+    -- toggles for eight icons in one strip, and a player turning that strip down
+    -- to the four they use was reading two tabs to find them. Kept CONTIGUOUS,
+    -- because a group heading is emitted only when `group` CHANGES between
+    -- consecutive rows.
     --
     -- Every default here is stated a SECOND time in defaults/Profile.lua, and
     -- both statements are checked against each other -- see the note above on
     -- why the two are deliberately not factored into one shared constant.
-    {
-        path = "window.frame.closeButton", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show close"], desc = L["Draw a close button in the title bar."],
-    },
-    {
-        path = "window.frame.showMinimise", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show minimise"], desc = L["Collapse the window to its title bar and back."],
-    },
-    {
-        path = "window.frame.showLock", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show lock"], desc = L["Lock or unlock the window for dragging."],
-    },
-    {
-        path = "window.frame.showSettings", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show settings"], desc = L["Open this addon's settings at the window you clicked."],
-    },
+    --
+    -- DECLARED IN THE ORDER THE STRIP READS, left to right: the segment line,
+    -- then export, reset, the segment picker, settings, lock, minimise and
+    -- close. modules/HeaderControls.lua's CONTROLS table is the same set written
+    -- RIGHT to left -- index 0 sits against the frame's right edge -- so the two
+    -- lists are deliberately mirror images and neither is the other's source.
+    -- What matters is that a player ticking a box here can find the icon it
+    -- governs by counting from the same end.
     {
         -- THE TEXT, not the button below it, and they are deliberately two rows.
         -- The picker is a click target in the icon strip; this is the line that
@@ -853,222 +1076,167 @@ NS.Schema = {
         -- and still wants to know what the window is showing needs to be able to
         -- turn one off without the other.
         path = "window.frame.showSegmentText", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
+        page = "header", group = L["Controls"],
         label = L["Show segment"],
         desc = L["Name the fight this window is showing, in the header to the left of the controls."],
     },
     {
-        path = "window.frame.showSegment", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show segment picker"], desc = L["Choose which fight this window shows. The session line stays clickable either way."],
+        path = "window.frame.showExport", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("export", L["Show export"]), desc = L["Export this window's segment to CSV or to chat."],
     },
     {
         path = "window.frame.showReset", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show reset"], desc = L["Clear every recorded combat session. Asks first -- it wipes the game's own meter data too, not just this addon's."],
+        page = "header", group = L["Controls"],
+        label = controlLabel("reset", L["Show reset"]), desc = L["Clear every recorded combat session. Asks first -- it wipes the game's own meter data too, not just this addon's."],
     },
     {
-        path = "window.frame.showExport", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
-        label = L["Show export"], desc = L["Export this window's segment to CSV or to chat."],
+        path = "window.frame.showSegment", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("segment", L["Show segment picker"]), desc = L["Choose which fight this window shows. The session line stays clickable either way."],
     },
+    {
+        path = "window.frame.showSettings", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("settings", L["Show settings"]), desc = L["Open this addon's settings at the window you clicked."],
+    },
+    {
+        path = "window.frame.showLock", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("lock", L["Show lock"]), desc = L["Lock or unlock the window for dragging."],
+    },
+    {
+        path = "window.frame.showMinimise", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("minimise", L["Show minimise"]), desc = L["Collapse the window to its title bar and back."],
+    },
+    {
+        path = "window.frame.closeButton", type = "bool", default = true,
+        page = "header", group = L["Controls"],
+        label = controlLabel("close", L["Show close"]), desc = L["Draw a close button in the title bar."],
+    },
+    -- `frame.minimised` is a HIDDEN row: it exists so the path is writable and
+    -- listable, and it draws no control on the panel. It is STATE, not a
+    -- preference -- the header's minimise control writes it, and a window left
+    -- collapsed comes back collapsed. As a checkbox it duplicated that control on
+    -- a page you have to open to reach, and read as a setting when it is a
+    -- record of what you last did. `showMinimise` -- whether the control is
+    -- drawn at all -- is the preference, and it stays a checkbox above. It cannot
+    -- simply be DELETED the way `frame.position` is absent, and that is the
+    -- whole reason `hidden` exists: NS.SetByPath refuses a path with no row, and
+    -- the minimise control writes through that seam rather than poking the
+    -- config table, because SetByPath is what publishes CONFIG_CHANGED. Filed
+    -- with the other controls, contiguous with them, because that is the group
+    -- it would draw in if it drew at all.
+    {
+        path = "window.frame.minimised", type = "bool", default = false, hidden = true,
+        page = "header", group = L["Controls"],
+        label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
+    },
+    -- ── Button style ──────────────────────────────────────────────
+    -- How every one of the eight controls above is drawn, not what any one of
+    -- them does. FOUR PAIRS, and the pairing is the layout: the reveal beside the
+    -- size, then rest and hover side by side down three lines -- mode, colour,
+    -- opacity. Reading down a column is reading one state; reading across a line
+    -- is comparing the two, which is the question a player setting a hover
+    -- actually has.
     {
         path = "window.frame.hoverReveal", type = "bool", default = true,
-        page = "header", group = L["Header controls"],
+        page = "header", group = L["Button style"],
         label = L["Reveal controls on hover"], desc = L["Fade every control except the one under the pointer. Off keeps them all visible."],
-    },
-    {
-        path = "window.frame.controlColor", type = "color",
-        default = { r = 1, g = 1, b = 1, a = 1 },
-        page = "header", group = L["Header controls"],
-        label = L["Control color"], desc = L["Color the header controls are drawn in."],
-    },
-    -- Two class-colour flags rather than one, because they are two independent
-    -- answers: a player who wants their class colour under the pointer has not
-    -- asked for the whole strip in it at rest, and a shared flag would make hover
-    -- and rest the same colour for anyone who ticked it -- the one thing a hover
-    -- colour must never be.
-    {
-        path = "window.frame.controlClassColor", type = "bool", default = false,
-        page = "header", group = L["Header controls"],
-        label = L["Use class color"],
-        desc = L["Draw the header controls in your own class color. Your configured color is kept where the class cannot be read."],
-    },
-    {
-        path = "window.frame.controlHoverColor", type = "color",
-        default = { r = 1, g = 0.82, b = 0, a = 1 },
-        page = "header", group = L["Header controls"],
-        label = L["Control hover color"],
-        desc = L["Color the control under the pointer is drawn in."],
-    },
-    {
-        path = "window.frame.controlHoverClassColor", type = "bool", default = false,
-        page = "header", group = L["Header controls"],
-        label = L["Use class color"],
-        desc = L["Draw the control under the pointer in your own class color. Your configured color is kept where the class cannot be read."],
     },
     {
         path = "window.frame.controlSize", type = "number", default = 16,
         min = 10, max = 32, step = 1,
-        page = "header", group = L["Header controls"],
+        page = "header", group = L["Button style"],
         label = L["Control size"], desc = L["How large each header control is drawn, in pixels."],
     },
-    -- `frame.minimised` is a HIDDEN row: it exists so the path is writable and
-    -- listable, and it draws no control on the panel.
-    --
-    -- It is STATE, not a preference. The header's minimise control writes it, and
-    -- a window left collapsed comes back collapsed. As a checkbox it duplicated
-    -- that control on a page you have to open to reach, and read as a setting
-    -- when it is a record of what you last did. `showMinimise` -- whether the
-    -- control is drawn at all -- is the preference, and it stays a checkbox.
-    --
-    -- It cannot simply be DELETED the way `frame.position` is absent, and that is
-    -- the whole reason `hidden` exists: NS.SetByPath refuses a path with no row,
-    -- and the minimise control writes through that seam rather than poking the
-    -- config table, because SetByPath is what publishes CONFIG_CHANGED.
+    -- Two modes rather than one, because rest and hover are two independent answers: a player who
+    -- wants their class colour under the pointer has not asked for the whole strip in it at rest,
+    -- and a shared mode would make hover and rest the same colour for anyone who chose class --
+    -- the one thing a hover colour must never be.
     {
-        path = "window.frame.minimised", type = "bool", default = false, hidden = true,
-        page = "header", group = L["Header controls"],
-        label = L["Minimised"], desc = L["Collapsed to the title bar. The window's stored height is untouched, so expanding restores it exactly."],
-    },
-
-    -- ── Column headers ───────────────────────────────────────────────────────
-    -- A group of their own, on the Header page beside the title strip. They used
-    -- to borrow the font and size from `text` and the outline and colour from
-    -- `header`, which meant changing the cell font silently restyled them and
-    -- nothing could make them differ from the numbers beneath. Every default here
-    -- is the value that arrangement already produced.
-    {
-        path = "window.columnHeader.font", type = "string", default = "Friz Quadrata TT",
-        values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "header", group = L["Column headers"],
-        label = L["Font"], desc = L["Font used for the column header strip above the rows."],
+        path = "window.frame.controlColorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
+        page = "header", group = L["Button style"],
+        label = L["Control color mode"],
+        desc = L["What colors the header controls at rest."],
     },
     {
-        path = "window.columnHeader.size", type = "number", default = 11,
-        min = 6, max = 32, step = 1, fmt = "%d px",
-        page = "header", group = L["Column headers"],
-        label = L["Font size"], desc = L["Column header text size in pixels."],
-        validate = isNumberIn(6, 32),
+        path = "window.frame.controlHoverColorMode", type = "string", default = "custom",
+        values = CONTROLCOLOR_VALUES, sorting = CONTROLCOLOR_SORT,
+        page = "header", group = L["Button style"],
+        label = L["Control hover color mode"],
+        desc = L["What colors a header control while the pointer is over it."],
     },
     {
-        path = "window.columnHeader.outline", type = "string", default = "OUTLINE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "header", group = L["Column headers"],
-        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the column headers."],
+        path = "window.frame.controlColor", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "header", group = L["Button style"],
+        label = L["Control color"], desc = L["Color the header controls are drawn in."],
     },
     {
-        path = "window.columnHeader.shadow", type = "bool", default = false,
-        page = "header", group = L["Column headers"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the column labels so they stay readable over a bright backdrop."],
-    },
-    {
-        path = "window.columnHeader.color", type = "color",
+        path = "window.frame.controlHoverColor", type = "color",
         default = { r = 1, g = 0.82, b = 0, a = 1 },
-        page = "header", group = L["Column headers"],
-        label = L["Text color"], desc = L["Color of the column header labels."],
+        page = "header", group = L["Button style"],
+        label = L["Control hover color"],
+        desc = L["Color the control under the pointer is drawn in."],
+    },
+    -- THE TWO ENDS OF THE REVEAL, and they were a hardcoded 0.25 and 1 until now.
+    -- Both defaults are those two numbers, so a window that never touches either
+    -- slider is drawn exactly as it was.
+    --
+    -- `controlAlpha` IS READ ONLY WHILE THE REVEAL IS ON -- with fading off there
+    -- is no faded state to have an opacity -- and it is deliberately NOT disabled
+    -- on the panel when it is off, which is the same bargain `bars.customColor`
+    -- gets under a non-custom colour mode: setting the faded level before
+    -- switching fading on is the normal order of operations, and a greyed-out
+    -- slider makes that a two-visit job. See modules/HeaderControls.lua's
+    -- stripAlphas.
+    {
+        path = "window.frame.controlAlpha", type = "number", default = 0.25,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "header", group = L["Button style"],
+        label = L["Control opacity"],
+        desc = L["How faint a control NOT under the pointer is drawn, while Reveal controls on hover is on. With the reveal off there is nothing faded and this is not read."],
+        validate = isNumberIn(0, 1),
     },
     {
-        path = "window.columnHeader.colorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "header", group = L["Column headers"],
-        label = L["Text color mode"],
-        desc = L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."],
-    },
-    {
-        path = "window.columnHeader.bgColorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "header", group = L["Column headers"],
-        label = L["Background color mode"],
-        desc = L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."],
-    },
-    {
-        path = "window.columnHeader.bgColor", type = "color",
-        default = { r = 0, g = 0, b = 0, a = 0 },
-        page = "header", group = L["Column headers"],
-        label = L["Background color"],
-        desc = L["Color drawn behind the column header strip. Transparent by default \226\128\148 the strip has never had a backdrop."],
+        path = "window.frame.controlHoverAlpha", type = "number", default = 1.0,
+        min = 0, max = 1, step = 0.01, isPercent = true,
+        page = "header", group = L["Button style"],
+        label = L["Control hover opacity"],
+        desc = L["How opaque the control under the pointer is drawn. With Reveal controls on hover off, every control sits at this."],
+        validate = isNumberIn(0, 1),
     },
 
-    -- ── Rows ─────────────────────────────────────────────────────────────────
-    --
-    -- ON THE BARS PAGE, AT THE TOP OF IT, and the Rows page is gone. Two groups
-    -- did not fill a page, and what they describe is the grid a bar is drawn in:
-    -- how tall a row is, how many there are and which way they grow decide the
-    -- shape of every bar on the page below them. The order is back to front and
-    -- then outside in -- the row, then the bar, then its background, its border,
-    -- its text and its icon.
-    --
-    -- The PATHS stay `window.rows.*`. A row's page is where it is edited; its
-    -- path is where it is stored.
-    {
-        path = "window.rows.maxRows", type = "number", default = 0,
-        min = 0, max = Const.MAX_ROWS, step = 1,
-        page = "bars", group = L["Row layout"],
-        label = L["Maximum rows"],
-        desc = L["Largest number of rows to draw. Set to 0 to draw as many as the window has room for."],
-        validate = isNumberIn(0, Const.MAX_ROWS),
-    },
-    {
-        path = "window.rows.height", type = "number", default = 16,
-        min = 8, max = 40, step = 1, fmt = "%d px",
-        page = "bars", group = L["Row layout"],
-        label = L["Row height"], desc = L["Height of one row in pixels."],
-    },
-    {
-        path = "window.rows.spacing", type = "number", default = 1,
-        min = 0, max = 10, step = 1, fmt = "%d px",
-        page = "bars", group = L["Row layout"],
-        label = L["Row spacing"], desc = L["Gap in pixels between adjacent rows."],
-    },
-    {
-        path = "window.rows.growthDirection", type = "string", default = "DOWN",
-        values = GROWTH_VALUES, sorting = GROWTH_SORT,
-        page = "bars", group = L["Row layout"],
-        label = L["Growth direction"], desc = L["Whether rows stack downward from the header or upward from the bottom."],
-    },
-    {
-        path = "window.rows.alwaysShowSelf", type = "bool", default = true,
-        page = "bars", group = L["Row behavior"],
-        label = L["Always show yourself"],
-        desc = L["Keep your own row visible even when it would fall outside the maximum row count."],
-    },
-    {
-        path = "window.rows.highlightSelf", type = "bool", default = true,
-        page = "bars", group = L["Row behavior"],
-        label = L["Highlight yourself"], desc = L["Mark your own row so it stands out at a glance."],
-    },
-    -- `rows.classBackground` AND `rows.classBackgroundAlpha` ARE GONE, and they
-    -- were doing nothing before they went. The row tint is painted per CELL from
-    -- `bars.bgColorMode` and `bars.bgAlpha` (modules/Row.lua's cellBackground) --
-    -- it moved there when tinting the row itself turned out to tint the seams
-    -- between the columns and lose the separators the grid is read by -- and
-    -- these two rows were left behind pointing at keys nothing reads.
-    --
-    -- `rows.alternatingBackground` moved to the Bars page, into the same group as
-    -- the tint it competes with: both decide what colour sits behind a row, and
-    -- choosing between them meant reading two pages.
-    {
-        path = "window.rows.mouseoverHighlight", type = "bool", default = true,
-        page = "bars", group = L["Row behavior"],
-        label = L["Highlight on mouseover"], desc = L["Brighten the row under the cursor."],
-    },
-
-    -- ── Bars ─────────────────────────────────────────────────────────────────
+    -- ── Bars ────────────────────────────────────────────────────
     -- `class` is the default because classFilename is NeverSecret: a class-colored
     -- bar is still correct at the height of a pull, when every number on the row is
     -- an opaque handle.
+    --
+    -- SIX TABS: the bar's own fill (Bar), what sits behind it (Background), its
+    -- edge (Border), what the cell says (Text content, then Text style), and the
+    -- row icon (Icons). "Background" and "Border" say bar without spelling it --
+    -- every tab on this page is about the bar, so the word carried nothing. Row
+    -- layout and row behaviour moved to the Frame page -- they shape the grid
+    -- every bar here is drawn in, not the bar itself.
     {
         path = "window.bars.texture", type = "string", default = "Blizzard Raid Bar",
         values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
-        page = "bars", group = L["Bar appearance"],
+        page = "bars", group = L["Bar"],
         label = L["Bar texture"], desc = L["LibSharedMedia statusbar texture used for every cell's bar."],
+    },
+    {
+        path = "window.bars.fillDirection", type = "string", default = "LEFT",
+        values = SIDE_VALUES, sorting = SIDE_SORT,
+        page = "bars", group = L["Bar"],
+        label = L["Fill direction"], desc = L["Which edge of the cell each bar grows from."],
     },
     {
         path = "window.bars.colorMode", type = "string", default = "class",
         values = BARCOLOR_VALUES, sorting = BARCOLOR_SORT,
-        page = "bars", group = L["Bar appearance"],
+        page = "bars", group = L["Bar"],
         label = L["Bar color mode"],
         desc = L["Color bars by the player's class, by which statistic the column shows, or with one color everywhere."],
     },
@@ -1079,57 +1247,47 @@ NS.Schema = {
     {
         path = "window.bars.customColor", type = "color",
         default = { r = 0.35, g = 0.55, b = 0.85, a = 1 },
-        page = "bars", group = L["Bar appearance"],
+        page = "bars", group = L["Bar"],
         label = L["Bar color"], desc = L["Fill color used when the color mode is set to Custom color."],
     },
     {
         path = "window.bars.alpha", type = "number", default = 1.0,
         min = 0, max = 1, step = 0.01, isPercent = true,
-        page = "bars", group = L["Bar appearance"],
+        page = "bars", group = L["Bar"],
         label = L["Bar opacity"], desc = L["Opacity of the filled part of each bar."],
         validate = isNumberIn(0, 1),
     },
-    {
-        path = "window.bars.fillDirection", type = "string", default = "LEFT",
-        values = SIDE_VALUES, sorting = SIDE_SORT,
-        page = "bars", group = L["Bar appearance"],
-        label = L["Fill direction"], desc = L["Which edge of the cell each bar grows from."],
-    },
+    -- ── Background ──────────────────────────────────────────────────
     {
         path = "window.bars.bgColorMode", type = "string", default = "class",
         values = BARBG_VALUES, sorting = BARBG_SORT,
-        page = "bars", group = L["Bar background color"],
+        page = "bars", group = L["Background"],
         label = L["Bar background color mode"],
         desc = L["What colors the tint behind each bar. Class is the default and keeps working mid-fight, because a class is never hidden the way a number is."],
     },
     {
         path = "window.bars.bgColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 1 },
-        page = "bars", group = L["Bar background color"],
+        page = "bars", group = L["Background"],
         label = L["Bar background color"], desc = L["Color drawn behind the unfilled part of each bar."],
     },
     {
         path = "window.bars.bgAlpha", type = "number", default = 0.1,
         min = 0, max = 1, step = 0.01, isPercent = true,
-        page = "bars", group = L["Bar background color"],
+        page = "bars", group = L["Background"],
         label = L["Bar background opacity"], desc = L["Opacity of the unfilled part of each bar."],
         validate = isNumberIn(0, 1),
     },
-    {
-        -- FROM THE ROWS PAGE, into the group that owns the other thing drawn
-        -- behind a row. It is a ROW-level fact (modules/Row.lua's RowProto:Update
-        -- draws it, not the cells), and its PATH says so -- but a player choosing
-        -- between a class tint and a stripe was reading two pages to do it.
-        path = "window.rows.alternatingBackground", type = "bool", default = true,
-        page = "bars", group = L["Bar background color"],
-        label = L["Alternating background"],
-        desc = L["Shade every other row slightly so the grid is easier to read across. Sits behind the bar background above, so a strong tint will hide it."],
-    },
+    -- ── Border ────────────────────────────────────────────────────
     {
         path = "window.bars.border", type = "bool", default = false,
-        page = "bars", group = L["Bar border"],
+        page = "bars", group = L["Border"],
         label = L["Bar border"], desc = L["Draw an outline around each bar."],
     },
+    -- "None" IS A CHOICE, NOT A MISSING VALUE, and modules/Row.lua's
+    -- borderEdge treats it as one -- it is what keeps the cheap four-texture
+    -- outline as the default and puts a backdrop on a cell only for a player
+    -- who has actually asked for edge art.
     {
         -- "None" IS A CHOICE, NOT A MISSING VALUE, and modules/Row.lua's
         -- borderEdge treats it as one -- it is what keeps the cheap four-texture
@@ -1137,14 +1295,14 @@ NS.Schema = {
         -- who has actually asked for edge art.
         path = "window.bars.borderStyle", type = "string", default = "None",
         values = lsmValues("border"), dialogControl = "LSM30_Border",
-        page = "bars", group = L["Bar border"],
+        page = "bars", group = L["Border"],
         label = L["Border style"],
         desc = L["Edge art drawn around each bar. None is a flat outline in the color below, which is what this setting has always drawn."],
     },
     {
         path = "window.bars.borderThickness", type = "number", default = 1,
         min = 1, max = 8, step = 1, fmt = "%d px",
-        page = "bars", group = L["Bar border"],
+        page = "bars", group = L["Border"],
         label = L["Border thickness"],
         desc = L["How thick the outline around each bar is, in pixels."],
         validate = isNumberIn(1, 8),
@@ -1152,126 +1310,140 @@ NS.Schema = {
     {
         path = "window.bars.borderColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 1 },
-        page = "bars", group = L["Bar border"],
+        page = "bars", group = L["Border"],
         label = L["Border color"],
         desc = L["Color of the outline around each bar. It used to be the skin's own edge color, which no setting could reach."],
     },
-
-    -- ── Text ─────────────────────────────────────────────────────────────────
+    -- ── Text content ──────────────────────────────────────────────
     -- Two slots per cell. Nothing here divides anything: `numberFormat` picks WHICH
     -- NumericRuleFormatter instance modules/Format.lua hands the value to, and the
-    -- formatter does the division natively — the only legal way to render "12.4M"
-    -- from a secret (design §4).
+    -- formatter does the division natively -- the only legal way to render "12.4M"
+    -- from a secret (design section 4).
+    --
+    -- WHAT the cell says, split from HOW it is drawn below: content here, style
+    -- in the next tab.
     {
         path = "window.text.leftSlot", type = "string", default = "smart",
         values = SLOT_VALUES, sorting = SLOT_SORT,
-        page = "bars", group = L["Cell text"],
-        label = L["Left text"], desc = L["What to show on the left of each cell. Smart value is the per-second figure on Damage and Healing and the absolute figure everywhere else. None means none: the cell is left empty."],
+        page = "bars", group = L["Text content"],
+        label = L["Left text"], desc = L["What to show on the left of each cell. The two smart values both follow the column: one shows the per-second figure where there is one and the absolute figure everywhere else, the other shows both side by side and falls back to the absolute alone. None means none: the cell is left empty."],
     },
     {
         path = "window.text.rightSlot", type = "string", default = "none",
         values = SLOT_VALUES, sorting = SLOT_SORT,
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text content"],
         label = L["Right text"],
         desc = L["What to show on the right of each cell, beside the left figure. Per-second figures exist only for Damage and Healing; a column without one renders nothing rather than substituting its total."],
     },
     {
         path = "window.text.numberFormat", type = "string", default = "abbreviated",
         values = NUMFMT_VALUES, sorting = NUMFMT_SORT,
-        page = "bars", group = L["Cell text"],
-        label = L["Number format"], desc = L["Abbreviate large numbers (12.4M) or show them in full (12,400,000)."],
+        page = "bars", group = L["Text content"],
+        label = L["Number format"],
+        desc = L["How large numbers are written. The three abbreviated forms differ only in how many decimal places they keep; Full writes every digit. There is no thousands-separated form -- separating digits means reading them, and a meter value cannot be read while a pull is running."],
     },
     {
         path = "window.text.deathTimeFormat", type = "string", default = "clock",
         values = DEATHTIME_VALUES, sorting = DEATHTIME_SORT,
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text content"],
         label = L["Death timestamps"],
         desc = L["How a death is labelled in the Deaths tooltip and the death list."],
     },
     {
-        -- 20 rather than WoW's 12-character player-name limit: a group meter also
+        -- 15 rather than WoW's 12-character player-name limit: a group meter also
         -- shows NPC names — follower-dungeon companions, and the enemy rows the
-        -- damage-taken columns are made of — and those are not bound by it.
+        -- damage-taken columns are made of — and those are not bound by it. It
+        -- shipped at 20, which is wider than any name in a full group of players
+        -- and spent that width on the columns beside it.
         -- 0 is the explicit off switch.
-        path = "window.text.maxNameLength", type = "number", default = 20,
+        path = "window.text.maxNameLength", type = "number", default = 15,
         min = 0, max = 40, step = 1, fmt = "%d",
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text content"],
         label = L["Max name length"],
         desc = L["Truncate a name past this many characters. 0 shows the whole name. The realm is always stripped."],
     },
+    -- ── Text style ──────────────────────────────────────────────
     {
         path = "window.text.font", type = "string", default = "Friz Quadrata TT",
         values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text style"],
         label = L["Font"],
         desc = L["Font used for every number in the grid. A monospace font such as JetBrains Mono keeps columns from shifting as the numbers change; the default matches the window header."],
     },
     {
         path = "window.text.size", type = "number", default = 11,
         min = 6, max = 32, step = 1, fmt = "%d px",
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text style"],
         label = L["Font size"], desc = L["Text size in pixels."],
-    },
-    {
-        path = "window.text.outline", type = "string", default = "NONE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "bars", group = L["Cell text"],
-        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
-    },
-    {
-        path = "window.text.shadow", type = "bool", default = true,
-        page = "bars", group = L["Cell text"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the text so it stays readable over a bright bar."],
-    },
-    {
-        path = "window.text.color", type = "color",
-        default = { r = 1, g = 1, b = 1, a = 1 },
-        page = "bars", group = L["Cell text"],
-        label = L["Text color"], desc = L["Color of the numbers and names."],
     },
     {
         path = "window.text.colorMode", type = "string", default = "custom",
         values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text style"],
         label = L["Text color mode"],
         desc = L["What colors the numbers and names. Class is the class of the row being drawn; Per-statistic is the color of the column each cell sits in."],
     },
     {
+        path = "window.text.color", type = "color",
+        default = { r = 1, g = 1, b = 1, a = 1 },
+        page = "bars", group = L["Text style"],
+        label = L["Text color"], desc = L["Color of the numbers and names."],
+    },
+    {
+        path = "window.text.outline", type = "string", default = "NONE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "bars", group = L["Text style"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the text."],
+    },
+    {
+        path = "window.text.shadow", type = "bool", default = true,
+        page = "bars", group = L["Text style"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the text so it stays readable over a bright bar."],
+    },
+    {
         path = "window.text.alpha", type = "number", default = 1.0,
         min = 0, max = 1, step = 0.01, isPercent = true,
-        page = "bars", group = L["Cell text"],
+        page = "bars", group = L["Text style"],
         label = L["Text opacity"], desc = L["Opacity of the numbers and names."],
         validate = isNumberIn(0, 1),
     },
-
-    -- ── Icons ────────────────────────────────────────────────────────────────
+    -- ── Icons ────────────────────────────────────────────────────
     -- classFilename and specIconID are NeverSecret, so these render correctly even
     -- mid-pull when every number beside them is opaque.
     {
         path = "window.icons.showIcon", type = "bool", default = true,
-        page = "bars", group = L["Row icons"],
+        page = "bars", group = L["Icons"],
         label = L["Show icon"],
         desc = L["Show one icon beside each player's name: their specialization where it is known, and their class where it is not."],
     },
     {
-        path = "window.icons.size", type = "number", default = 14,
-        min = 8, max = 32, step = 1, fmt = "%d px",
-        page = "bars", group = L["Row icons"],
-        label = L["Icon size"], desc = L["Size of the row icons in pixels."],
-    },
-    {
         path = "window.icons.position", type = "string", default = "LEFT",
         values = SIDE_VALUES, sorting = SIDE_SORT,
-        page = "bars", group = L["Row icons"],
+        page = "bars", group = L["Icons"],
         label = L["Icon position"], desc = L["Which side of the player's name the icons sit on."],
     },
+    {
+        path = "window.icons.size", type = "number", default = 14,
+        min = 8, max = 32, step = 1, fmt = "%d px",
+        page = "bars", group = L["Icons"],
+        label = L["Icon size"], desc = L["Size of the row icons in pixels."],
+    },
 
-    -- ── Tooltip ──────────────────────────────────────────────────────────────
+    -- ── Tooltip ────────────────────────────────────────────────────
+    -- SIX TABS: where it goes and how big it is (General), the spell bar's own
+    -- fill, background and border, the face it is drawn in (Text), and last what
+    -- it lists (Contents). The two tabs a player sets once and leaves are at the
+    -- END -- the three bar tabs are the ones they come back to, and they now sit
+    -- together in the middle rather than with a text tab wedged in front of them.
+    -- No "At cursor" anchor: over a grid it lands wherever the pointer
+    -- happens to be inside a cell, so the same hover puts the tooltip somewhere
+    -- different every time. TOP is the deliberate version of the same thing --
+    -- above the cell, in one place -- and is the default now.
     {
         path = "window.tooltip.anchor", type = "string", default = "TOP",
         values = ANCHOR_VALUES, sorting = ANCHOR_SORT,
-        page = "tooltip", group = L["Tooltip behavior"],
+        page = "tooltip", group = L["General"],
         label = L["Tooltip anchor"], desc = L["Where the tooltip appears relative to the cursor or the window."],
     },
     {
@@ -1281,7 +1453,7 @@ NS.Schema = {
         -- the tooltip stops fitting beside the window it came from.
         path = "window.tooltip.scale", type = "number", default = 1.0,
         min = 0.5, max = 2.0, step = 0.05, fmt = "%.2fx",
-        page = "tooltip", group = L["Tooltip behavior"],
+        page = "tooltip", group = L["General"],
         label = L["Tooltip scale"],
         desc = L["How large the tooltip is drawn. It is put back to normal when the tooltip closes, so nothing else in the interface inherits it."],
         validate = isNumberIn(0.5, 2.0),
@@ -1289,7 +1461,7 @@ NS.Schema = {
     {
         path = "window.tooltip.offsetX", type = "number", default = 0,
         min = -400, max = 400, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Tooltip behavior"],
+        page = "tooltip", group = L["General"],
         label = L["Horizontal offset"],
         desc = L["Nudge the tooltip sideways from wherever the anchor puts it. Positive moves it right."],
         validate = isNumberIn(-400, 400),
@@ -1297,89 +1469,39 @@ NS.Schema = {
     {
         path = "window.tooltip.offsetY", type = "number", default = 0,
         min = -400, max = 400, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Tooltip behavior"],
+        page = "tooltip", group = L["General"],
         label = L["Vertical offset"],
         desc = L["Nudge the tooltip up or down from wherever the anchor puts it. Positive moves it up."],
         validate = isNumberIn(-400, 400),
     },
-    {
-        path = "window.tooltip.showSpells", type = "bool", default = true,
-        page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Show spell breakdown"], desc = L["List the individual spells behind a cell's number when you hover it."],
-    },
-    -- 0 is the explicit "no cap" value, the same spelling `rows.maxRows` and
-    -- `text.maxNameLength` already use. It is honest rather than infinite: the
-    -- collector stops at 64 rows however this is set, and the "and N more" line
-    -- says so.
-    {
-        path = "window.tooltip.maxSpells", type = "number", default = 10,
-        min = 0, max = 30, step = 1,
-        page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Maximum spells"],
-        desc = L["How many spells to list in the breakdown before stopping. 0 lists every spell the breakdown found."],
-        validate = isNumberIn(0, 30),
-    },
-    {
-        path = "window.tooltip.showAllStatsOnName", type = "bool", default = true,
-        page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Summarize on the name"],
-        desc = L["Hovering a player's name shows every enabled statistic for that player at once."],
-    },
-    -- Off by default. Nothing about a tooltip is unsafe in combat — its numbers go
-    -- through the formatter like every other — but a tooltip under the cursor
+    -- Off by default. Nothing about a tooltip is unsafe in combat -- its numbers go
+    -- through the formatter like every other -- but a tooltip under the cursor
     -- during a pull is in the way, so this is a preference rather than a guard.
     {
         path = "window.tooltip.hideInCombat", type = "bool", default = false,
-        page = "tooltip", group = L["Tooltip behavior"],
+        page = "tooltip", group = L["General"],
         label = L["Hide tooltips in combat"],
         desc = L["Suppress tooltips while you are in combat so nothing sits under your cursor mid-pull."],
     },
-
+    -- ── Bar ────────────────────────────────────────────────────
     -- Tooltip bars are configured SEPARATELY from the grid's, rather than
     -- inherited from `window.bars`. They are a different surface at a different
-    -- size — a 14px spell line against a 90px cell — and a texture that reads
-    -- well across one often does not across the other.
-    -- IN Tooltip behavior RATHER THAN A GROUP OF THEIR OWN. Two rows do not earn
-    -- a heading, and what they decide -- whether a section of the tooltip exists
-    -- at all, and how long it is -- is the same kind of question as the spell cap
-    -- three rows above them, not a kind of styling.
-    --
-    -- OFF by default, and for two reasons that are worth stating separately.
-    -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
-    -- built once per session), and it is a SUMMATION — so it is absent for a pull
-    -- rather than approximated. A player who wants it gets it; nobody pays for it
-    -- without asking.
-    {
-        path = "window.tooltip.showTargets", type = "bool", default = false,
-        page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Show targets"],
-        desc = L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."],
-    },
-    {
-        path = "window.tooltip.maxTargets", type = "number", default = 3,
-        min = 1, max = 10, step = 1,
-        page = "tooltip", group = L["Tooltip behavior"],
-        label = L["Maximum targets"], desc = L["How many enemies to list before stopping."],
-        validate = isNumberIn(1, 10),
-    },
-
+    -- size -- a 14px spell line against a 90px cell -- and a texture that reads
+    -- well across one often does not across the other. The fill and the backdrop
+    -- each answer the same three modes every text surface answers.
     {
         path = "window.tooltip.barTexture", type = "string", default = "Blizzard Raid Bar",
         values = lsmValues("statusbar"), dialogControl = "LSM30_Statusbar",
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar"],
         label = L["Bar texture"], desc = L["LibSharedMedia statusbar texture drawn behind each spell line."],
     },
     {
         path = "window.tooltip.barSpacing", type = "number", default = 1,
         min = 0, max = 12, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar"],
         label = L["Bar spacing"], desc = L["Gap in pixels between one tooltip line and the next."],
         validate = isNumberIn(0, 12),
     },
-    -- Defaults to None, and that is not timidity. Most LibSharedMedia border art
-    -- carries an 8-16px corner inset, and a spell bar is 14px tall — so on a
-    -- majority of the list the corners eat the whole edge. The option is here
-    -- because it was asked for; the default is the one that always looks right.
     {
         -- THE FILL AND THE BACKDROP EACH ANSWER THE SAME THREE MODES, the same
         -- three every text surface answers. The fill used to be the hovered
@@ -1390,113 +1512,190 @@ NS.Schema = {
         -- on top of it read as a smear rather than as an unfilled bar.
         path = "window.tooltip.barColorMode", type = "string", default = "class",
         values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar"],
         label = L["Bar color mode"],
         desc = L["What colors the filled part of each tooltip bar. Class is the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
     },
     {
         path = "window.tooltip.barColor", type = "color",
         default = { r = 0.6, g = 0.6, b = 0.6, a = 1 },
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar"],
         label = L["Bar color"], desc = L["Color of the filled part, when the mode above is Custom."],
     },
     {
         path = "window.tooltip.barAlpha", type = "number", default = 0.85,
         min = 0, max = 1, step = 0.01, isPercent = true,
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar"],
         label = L["Bar opacity"], desc = L["Opacity of the filled part of each tooltip bar."],
         validate = isNumberIn(0, 1),
     },
+    -- ── Bar background ──────────────────────────────────────────────
+    -- The backdrop used to be a hard-coded black at 0.35 that no setting reached.
+    -- It ships at 0.1 now: the tooltip's bars sit on the tooltip's own backdrop,
+    -- which is already dark, so a third of a screen of black on top of it read as
+    -- a smear rather than as an unfilled bar.
     {
         path = "window.tooltip.barBgColorMode", type = "string", default = "custom",
         values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar background"],
         label = L["Bar background color mode"],
         desc = L["What colors the unfilled part of each tooltip bar."],
     },
     {
         path = "window.tooltip.barBgColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 1 },
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar background"],
         label = L["Bar background color"],
         desc = L["Color of the unfilled part, when the mode above is Custom."],
     },
     {
         path = "window.tooltip.barBgAlpha", type = "number", default = 0.1,
         min = 0, max = 1, step = 0.01, isPercent = true,
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar background"],
         label = L["Bar background opacity"],
         desc = L["Opacity of the unfilled part of each tooltip bar."],
         validate = isNumberIn(0, 1),
     },
+    -- ── Bar border ─────────────────────────────────────────────────
+    -- Defaults to None, and that is not timidity. Most LibSharedMedia border art
+    -- carries an 8-16px corner inset, and a spell bar is 14px tall -- so on a
+    -- majority of the list the corners eat the whole edge. The option is here
+    -- because it was asked for; the default is the one that always looks right.
     {
         path = "window.tooltip.barBorderStyle", type = "string", default = "None",
         values = lsmValues("border"), dialogControl = "LSM30_Border",
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar border"],
         label = L["Bar border style"],
         desc = L["LibSharedMedia border drawn around each spell bar. Most border art is cut for a window rather than a 14px line, so it may look heavy here."],
     },
     {
         path = "window.tooltip.barBorderSize", type = "number", default = 1,
         min = 0, max = 16, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar border"],
         label = L["Bar border thickness"], desc = L["Border edge size in pixels."],
         validate = isNumberIn(0, 16),
     },
     {
         path = "window.tooltip.barBorderColor", type = "color",
         default = { r = 0, g = 0, b = 0, a = 1 },
-        page = "tooltip", group = L["Tooltip bars"],
+        page = "tooltip", group = L["Bar border"],
         label = L["Bar border color"], desc = L["Color of the border around each spell bar."],
     },
-
+    -- ── Text ────────────────────────────────────────────────────
     -- The font reaches GameTooltip's own line FontStrings, which are SHARED with
-    -- every other addon — so modules/Tooltip.lua restores every line it touched
+    -- every other addon -- so modules/Tooltip.lua restores every line it touched
     -- when the tooltip hides. See that file's `releaseLines`.
     {
         path = "window.tooltip.font", type = "string", default = "Friz Quadrata TT",
         values = lsmValues("font"), dialogControl = "LSM30_Font",
-        page = "tooltip", group = L["Tooltip text"],
+        page = "tooltip", group = L["Text"],
         label = L["Font"], desc = L["Font used for the tooltip's spell names and numbers."],
     },
     {
         path = "window.tooltip.fontSize", type = "number", default = 12,
         min = 6, max = 32, step = 1, fmt = "%d px",
-        page = "tooltip", group = L["Tooltip text"],
+        page = "tooltip", group = L["Text"],
         label = L["Font size"], desc = L["Tooltip text size in pixels."],
         validate = isNumberIn(6, 32),
     },
     {
-        path = "window.tooltip.fontOutline", type = "string", default = "NONE",
-        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
-        page = "tooltip", group = L["Tooltip text"],
-        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
-    },
-    {
-        path = "window.tooltip.fontShadow", type = "bool", default = false,
-        page = "tooltip", group = L["Tooltip text"],
-        label = L["Text shadow"],
-        desc = L["Draw a drop shadow behind the tooltip text so it stays readable over a bright bar."],
+        path = "window.tooltip.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "tooltip", group = L["Text"],
+        label = L["Text color mode"],
+        desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
     },
     {
         path = "window.tooltip.textColor", type = "color",
         default = { r = 1, g = 1, b = 1, a = 1 },
-        page = "tooltip", group = L["Tooltip text"],
+        page = "tooltip", group = L["Text"],
         label = L["Text color"], desc = L["Color of the amount and percentage on each tooltip line."],
     },
     {
-        path = "window.tooltip.colorMode", type = "string", default = "custom",
-        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
-        page = "tooltip", group = L["Tooltip text"],
-        label = L["Text color mode"],
-        desc = L["What colors the tooltip's text. Class is the class of the player you are hovering; Per-statistic is the color of the column the grid is sorted by."],
+        path = "window.tooltip.fontOutline", type = "string", default = "NONE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "tooltip", group = L["Text"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the tooltip text."],
+    },
+    {
+        path = "window.tooltip.fontShadow", type = "bool", default = false,
+        page = "tooltip", group = L["Text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the tooltip text so it stays readable over a bright bar."],
+    },
+    -- ── Contents ──────────────────────────────────────────────
+    {
+        path = "window.tooltip.showSpells", type = "bool", default = true,
+        page = "tooltip", group = L["Contents"],
+        label = L["Show spell breakdown"], desc = L["List the individual spells behind a cell's number when you hover it."],
+    },
+    -- 0 is the explicit "no cap" value, the same spelling `rows.maxRows` and
+    -- `text.maxNameLength` already use. It is honest rather than infinite: the
+    -- collector stops at 64 rows however this is set, and the "and N more" line
+    -- says so.
+    {
+        path = "window.tooltip.maxSpells", type = "number", default = 10,
+        min = 0, max = 30, step = 1,
+        page = "tooltip", group = L["Contents"],
+        label = L["Maximum spells"],
+        desc = L["How many spells to list in the breakdown before stopping. 0 lists every spell the breakdown found."],
+        validate = isNumberIn(0, 30),
+    },
+    -- OFF by default, and for two reasons that are worth stating separately.
+    -- It costs one provider call per enemy on a hover (modules/Targets.lua keeps
+    -- built once per session), and it is a SUMMATION -- so it is absent for a pull
+    -- rather than approximated. A player who wants it gets it; nobody pays for it
+    -- without asking.
+    {
+        path = "window.tooltip.showTargets", type = "bool", default = false,
+        page = "tooltip", group = L["Contents"],
+        label = L["Show targets"],
+        desc = L["On a Damage cell, list which enemies this player hit. Cross-referenced from the enemy damage taken column, so it is unavailable while a pull is in progress."],
+    },
+    {
+        path = "window.tooltip.maxTargets", type = "number", default = 3,
+        min = 1, max = 10, step = 1,
+        page = "tooltip", group = L["Contents"],
+        label = L["Maximum targets"], desc = L["How many enemies to list before stopping."],
+        validate = isNumberIn(1, 10),
+    },
+    -- WHAT ENDED EACH DEATH, on the death list's own line: "Death 3 | Ragnaros |
+    -- Sulfuras Smash". Two switches rather than one, because the two answer
+    -- different questions -- who killed me is a positioning question and what
+    -- killed me is a cooldown question -- and a player who wants one of them
+    -- should not have to take the other with it.
+    --
+    -- BOTH ON, because the line without them says nothing a reader did not
+    -- already know: the count is in the cell they hovered to get here.
+    --
+    -- Either half goes quiet on its own terms and neither is a failure: an
+    -- environmental death has no caster, a melee swing has no spell name, and a
+    -- restricted pull can withhold either -- see modules/Tooltip.lua's
+    -- killingBlowOf, which draws what it can read plainly and nothing else.
+    {
+        path = "window.tooltip.showDeathCaster", type = "bool", default = true,
+        page = "tooltip", group = L["Contents"],
+        label = L["Name the killer"],
+        desc = L["Add whoever landed the killing blow to each line of the Deaths list. Left off a death with no caster to name, such as a fall or a fire."],
+    },
+    {
+        path = "window.tooltip.showDeathSpell", type = "bool", default = true,
+        page = "tooltip", group = L["Contents"],
+        label = L["Name the killing blow"],
+        desc = L["Add the spell that landed the killing blow to each line of the Deaths list. A melee swing is named Melee; a spell the client cannot name is left off."],
+    },
+    {
+        path = "window.tooltip.showAllStatsOnName", type = "bool", default = true,
+        page = "tooltip", group = L["Contents"],
+        label = L["Summarize on the name"],
+        desc = L["Hovering a player's name shows every enabled statistic for that player at once."],
     },
 
-    -- ── Visibility ───────────────────────────────────────────────────────────
-    -- Refused AT THE SOURCE (performance-§6): a hidden window does not merely skip
-    -- its draw, it stops asking the provider for data. That is why every row here
-    -- carries an onChange — the effect is a window appearing or disappearing, which
-    -- is the show ladder's decision and not a redraw.
+    -- ── Visibility ─────────────────────────────────────────────────
+    -- Refused AT THE SOURCE (performance section 6): a hidden window does not
+    -- merely skip its draw, it stops asking the provider for data. That is why
+    -- every row here carries an onChange -- the effect is a window appearing or
+    -- disappearing, which is the show ladder's decision and not a redraw.
     {
         path = "window.visibility.dungeon", type = "bool", default = true,
         page = "visibility", group = L["Where to show this window"],
@@ -1540,7 +1739,6 @@ NS.Schema = {
         label = L["Open world"], desc = L["Show this window outside instances."],
         onChange = refreshVisibility,
     },
-
     -- Every rule below is HIDE-shaped, and deliberately so: a key missing from a
     -- stored window must read as "nothing objects". See modules/Visibility.lua.
     {
@@ -1611,51 +1809,99 @@ NS.Schema = {
         onChange = refreshVisibility,
     },
 
-    -- ── Columns ──────────────────────────────────────────────────────────────
-    -- No rows. See "WHY THE COLUMNS ARE NOT ROWS" at the top of this file; the page
-    -- exists in the panel and in `/mm list`, and its contents are the array.
+    -- ── Columns ──────────────────────────────────────────────
+    -- The array itself has NO ROWS. See "WHY THE COLUMNS ARE NOT ROWS" at the top
+    -- of this file; the page exists in the panel and in `/mm list`, and its
+    -- contents are the array, drawn by a bespoke block picker rather than by any
+    -- row below.
+    --
+    -- The column-header STRIP that labels those columns is styled here, though,
+    -- and used to sit on the Header page as a third group beside the title
+    -- strip -- three clicks from the page where the columns it labels are chosen.
+    -- It used to borrow the font and size from `text` and the outline and colour
+    -- from `header`, which meant changing the cell font silently restyled it too;
+    -- every default here is the value that arrangement already produced. The
+    -- PATHS stay `window.columnHeader.*` -- a row's page is where it is edited,
+    -- its path is where it is stored.
+    {
+        path = "window.columnHeader.font", type = "string", default = "Friz Quadrata TT",
+        values = lsmValues("font"), dialogControl = "LSM30_Font",
+        page = "columns", group = L["Header text"],
+        label = L["Font"], desc = L["Font used for the column header strip above the rows."],
+    },
+    {
+        path = "window.columnHeader.size", type = "number", default = 11,
+        min = 6, max = 32, step = 1, fmt = "%d px",
+        page = "columns", group = L["Header text"],
+        label = L["Font size"], desc = L["Column header text size in pixels."],
+        validate = isNumberIn(6, 32),
+    },
+    {
+        path = "window.columnHeader.colorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "columns", group = L["Header text"],
+        label = L["Text color mode"],
+        desc = L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."],
+    },
+    {
+        path = "window.columnHeader.color", type = "color",
+        default = { r = 1, g = 0.82, b = 0, a = 1 },
+        page = "columns", group = L["Header text"],
+        label = L["Text color"], desc = L["Color of the column header labels."],
+    },
+    {
+        path = "window.columnHeader.outline", type = "string", default = "OUTLINE",
+        values = OUTLINE_VALUES, sorting = OUTLINE_SORT,
+        page = "columns", group = L["Header text"],
+        label = L["Font outline"], desc = L["Outline and monochrome flags applied to the column headers."],
+    },
+    {
+        path = "window.columnHeader.shadow", type = "bool", default = false,
+        page = "columns", group = L["Header text"],
+        label = L["Text shadow"],
+        desc = L["Draw a drop shadow behind the column labels so they stay readable over a bright backdrop."],
+    },
+    -- NO `bgColorMode` on the title bar's own background, but this strip keeps
+    -- one: it labels the COLUMNS, so "per statistic" tints each label with its
+    -- own column's colour and means something, where the same mode on the title
+    -- bar -- one strip over the whole window -- could only ever mean the sort
+    -- column's colour.
+    {
+        path = "window.columnHeader.bgColorMode", type = "string", default = "custom",
+        values = TEXTCOLOR_VALUES, sorting = TEXTCOLOR_SORT,
+        page = "columns", group = L["Header background"],
+        label = L["Background color mode"],
+        desc = L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."],
+    },
+    {
+        path = "window.columnHeader.bgColor", type = "color",
+        default = { r = 0, g = 0, b = 0, a = 0 },
+        page = "columns", group = L["Header background"],
+        label = L["Background color"],
+        desc = L["Color drawn behind the column header strip. Transparent by default \226\128\148 the strip has never had a backdrop."],
+    },
 
-    -- ── Data ─────────────────────────────────────────────────────────────────
-    --
-    -- THERE IS NO DATA PAGE ANY MORE, and four rows went with it. Session, sort
-    -- mode, sort column and sort ascending were all reachable from the window
-    -- itself long before they were rows here: the header's segment picker writes
-    -- `sessionType`, and one click on a column header writes all three sort
-    -- fields (modules/Window.lua's SortByColumn). A settings page that restates a
-    -- control the player already has, three inches from where they are looking,
-    -- is a second place for the same answer to live.
-    --
-    -- They are DELETED rather than `hidden`, so `/mm set window.data.sortColumn`
-    -- is gone too. That is the deliberate half: the click path writes those
-    -- fields directly rather than through NS.SetByPath, so a CLI that could also
-    -- write them was a second seam onto state the window owns.
-    --
-    -- The two that survived are addon-wide now and live on General, below.
-
-    -- ── General ──────────────────────────────────────────────────────────────
+    -- ── General ──────────────────────────────────────────────
     -- The only genuinely addon-wide settings. Everything else is per-window.
-    -- `data.mergePets` and `data.throttle` were `window.data.*` and are not
-    -- per-window questions: one says what a pet's damage IS, the other is a
-    -- refresh rate, and two windows disagreeing about either is two answers to
-    -- one question. core/Database.lua's v4 -> v5 step lifts a stored pair off the
-    -- first window in each profile.
-    {
-        path = "data.mergePets", type = "bool", default = false,
-        page = "general", group = L["Data"],
-        label = L["Merge pets into their owner"],
-        desc = L["Add a pet's numbers to its owner's row instead of giving it its own. Blizzard's combat restriction forbids the addition while you are fighting, so a merged pet's numbers are missing until the pull ends."],
-    },
-    {
-        path = "data.throttle", type = "number", default = 0.25,
-        min = Const.THROTTLE_MIN, max = Const.THROTTLE_MAX, step = 0.05, fmt = "%.2fs",
-        page = "general", group = L["Data"],
-        label = L["Refresh interval"],
-        desc = L["Seconds between refreshes. Lower is more responsive and costs more; the display updates at most this often no matter how fast the game reports numbers."],
-        validate = isNumberIn(Const.THROTTLE_MIN, Const.THROTTLE_MAX),
-    },
+    --
+    -- ONE VISIBLE TAB: the master switch, the two addon-wide data settings, the
+    -- two session-only toggles, and the page's two bespoke reset buttons, all on
+    -- General.
+    --
+    -- TWO TABS BECAME NONE, ONE AT A TIME. "Maintenance" was one visible row --
+    -- the debug console -- carrying a tab of its own next to the two reset
+    -- buttons keyed to it: a click to reach three controls that were never a
+    -- subject. "Data" was two rows, and the same argument retired it. Neither
+    -- move changed what any of those controls DOES; the buttons hang off
+    -- General's afterGroup hook (settings/General.lua) rather than
+    -- Maintenance's, and that is the whole of it.
+    --
+    -- The three hidden export choices stay last so the tabs above them stay
+    -- CONTIGUOUS: a group heading is emitted only when `group` CHANGES, so a
+    -- block wedged between two "General" rows would print that heading twice.
     {
         path = "enabled", type = "bool", default = true,
-        page = "general", group = L["Master controls"],
+        page = "general", group = L["General"],
         label = L["Enable Multi Meters"],
         desc = L["Master switch for the addon. When off, no window is drawn and no data is read."],
         onChange = refreshVisibility,
@@ -1664,19 +1910,44 @@ NS.Schema = {
     -- a checkbox the user reads has to be phrased positively. See "Inversion".
     {
         path = "minimap.hide", type = "bool", default = false, invert = true,
-        page = "general", group = L["Master controls"],
+        page = "general", group = L["General"],
         label = L["Show minimap button"], desc = L["Show the minimap button for opening these settings."],
         onChange = refreshMinimap,
+    },
+    -- `data.mergePets` and `data.throttle` were `window.data.*` and are not
+    -- per-window questions: one says what a pet's damage IS, the other is a
+    -- refresh rate, and two windows disagreeing about either is two answers to
+    -- one question. core/Database.lua's v4 -> v5 step lifts a stored pair off the
+    -- first window in each profile. There is no Data PAGE any more -- the sort
+    -- and session rows that used to share it with these two were deleted rather
+    -- than moved, because the window's own controls already write them directly
+    -- (modules/Window.lua's SortByColumn and the header's segment picker), and a
+    -- settings page restating a control the player already has, three inches
+    -- from where they are looking, was a second place for the same answer to
+    -- live.
+    {
+        path = "data.mergePets", type = "bool", default = false,
+        page = "general", group = L["General"],
+        label = L["Merge pets into their owner"],
+        desc = L["Add a pet's numbers to its owner's row instead of giving it its own. Blizzard's combat restriction forbids the addition while you are fighting, so a merged pet's numbers are missing until the pull ends."],
+    },
+    {
+        path = "data.throttle", type = "number", default = 0.25,
+        min = Const.THROTTLE_MIN, max = Const.THROTTLE_MAX, step = 0.05, fmt = "%.2fs",
+        page = "general", group = L["General"],
+        label = L["Refresh interval"],
+        desc = L["Seconds between refreshes. Lower is more responsive and costs more; the display updates at most this often no matter how fast the game reports numbers."],
+        validate = isNumberIn(Const.THROTTLE_MIN, Const.THROTTLE_MAX),
     },
     -- ── Session-only rows ──
     --
     -- Never persisted, so they have no home in the defaults tree and are exempt
     -- from ValidateSchema's resolution check. They are rows anyway because they
-    -- belong on the page and in `/mm list` beside the settings they sit next to —
+    -- belong on the page and in `/mm list` beside the settings they sit next to --
     -- a toggle that exists only in the panel is a toggle the CLI cannot reach.
     {
         path = "state.testMode", type = "bool", default = false, sessionOnly = true,
-        page = "general", group = L["Master controls"],
+        page = "general", group = L["General"],
         label = L["Test mode"],
         desc = L["Fill every window with placeholder data so you can lay out columns without being in combat."],
         get = function() return NS.State and NS.State.testMode or false end,
@@ -1700,10 +1971,10 @@ NS.Schema = {
     -- The console WINDOW's visibility, NOT the logging flag: logging runs with the
     -- console closed so a bug can be reproduced first and the log read afterwards,
     -- and the flag itself is session-only state that `/mm debug on|off` owns
-    -- (debug-logging-§5).
+    -- (debug-logging section 5).
     {
         path = "state.debugConsole", type = "bool", default = false, sessionOnly = true,
-        page = "general", group = L["Debug"],
+        page = "general", group = L["General"],
         label = L["Debug console"],
         desc = L["Show or hide the on-screen debug console. Session only; it does not turn debug logging on."],
         get = function() return NS.DebugLog ~= nil and NS.DebugLog:IsShown() end,
@@ -1714,26 +1985,22 @@ NS.Schema = {
         end,
     },
 
-    -- ── Export ───────────────────────────────────────────────────────────────
+    -- ── Export ──────────────────────────────────────────────
     --
-    -- Addon-wide rather than per-window, and last on the page so the three
-    -- groups stay contiguous: a group heading is emitted only when the group
-    -- CHANGES, so a block wedged between two "Master controls" rows would print
-    -- that heading twice.
-    --
-    -- ALL THREE ARE `hidden`. They are the choices the EXPORT MODAL remembers --
-    -- its own three controls are the ones a player uses, sitting in the dialog
-    -- they are exporting from -- so a second copy on the General page restated a
-    -- control the player only ever meets in the other place, and gave the two a
-    -- chance to disagree about what is selected.
+    -- Addon-wide rather than per-window, and last on the page so the tabs above
+    -- stay contiguous. ALL THREE ARE `hidden`. They are the choices the EXPORT
+    -- MODAL remembers -- its own three controls are the ones a player uses,
+    -- sitting in the dialog they are exporting from -- so a second copy on the
+    -- General page restated a control the player only ever meets in the other
+    -- place, and gave the two a chance to disagree about what is selected.
     --
     -- HIDDEN RATHER THAN DELETED, unlike the sort and session rows that went with
-    -- the Data page, and the difference is which seam does the writing. Those
-    -- were written directly by the window's own controls; these are written by
-    -- the modal through NS.SetByPath -- which REFUSES a path with no row.
-    -- Deleting them would drop every export choice onto writeExport's degraded
-    -- fallback, losing the validation, the debug line and CONFIG_CHANGED, and
-    -- would take `/mm set export.channel WHISPER` with it.
+    -- the old Data page, and the difference is which seam does the writing.
+    -- Those were written directly by the window's own controls; these are
+    -- written by the modal through NS.SetByPath -- which REFUSES a path with no
+    -- row. Deleting them would drop every export choice onto writeExport's
+    -- degraded fallback, losing the validation, the debug line and
+    -- CONFIG_CHANGED, and would take `/mm set export.channel WHISPER` with it.
     --
     -- THE METRIC IS NOT AMONG THEM, and its absence is deliberate. It used to be,
     -- with a "Match the window" entry the sort column had no use for. Export.Open
@@ -1775,12 +2042,49 @@ NS.Schema = {
         validate = isNumberIn(1, Const.MAX_ROWS),
     },
 
-    -- ── Profiles ─────────────────────────────────────────────────────────────
+    -- ── Profiles ──────────────────────────────────────────────
     -- No rows, and that is enforced twice: AceDBOptions supplies the controls, and
     -- `page == "profiles"` is the reset-all veto in settings/OptionsSetup.lua,
     -- because resetting a profile row deletes user data rather than restoring a
-    -- default (options-ui-§3).
+    -- default (options-ui section 3).
 }
+
+-- ---------------------------------------------------------------------------
+-- The statistic palette (General -> Statistic colors)
+-- ---------------------------------------------------------------------------
+--
+-- THE ONE GENERATED BLOCK IN THIS FILE, and the reason is that the rows are not
+-- a design decision -- they are one swatch per entry of core/Constants.lua's
+-- palette, and writing them out by hand would be a second copy of that table
+-- that goes stale the day a statistic is added. The catalog decides what exists;
+-- this decides how it is edited.
+--
+-- IN CATALOG ORDER, not `pairs` order, so the tab reads in the same left-to-right
+-- order as a window's columns and two players comparing screenshots see the same
+-- list. A stat with no palette entry gets no row rather than a black swatch --
+-- see the note in defaults/Profile.lua's statColorDefaults.
+--
+-- ADDON-WIDE (`statColors.*`, no `window.` prefix) for the reason that file
+-- states: the palette's job is telling one column from another at a glance, and
+-- per-window would let two windows disagree about what green means.
+--
+-- Appended AFTER the literal above rather than woven into it, which puts the
+-- group after the hidden Export block. That is fine and deliberate: Export draws
+-- no tab, so the general page's visible strip is General then Statistic colors,
+-- and each group is still CONTIGUOUS, which is the property the heading logic
+-- actually needs.
+for _, stat in ipairs(Const.STATS) do
+    local c = Const.STAT_COLORS[stat.key]
+    if c then
+        NS.Schema[#NS.Schema + 1] = {
+            path = "statColors." .. stat.key, type = "color",
+            default = { r = c[1], g = c[2], b = c[3], a = 1 },
+            page = "general", group = L["Statistic colors"],
+            label = L[stat.label],
+            desc = L["Color for this statistic wherever it identifies a column: bars set to Per-statistic, the column header, and the tooltip's all-statistics list."],
+        }
+    end
+end
 
 -- ---------------------------------------------------------------------------
 -- The index

@@ -184,8 +184,9 @@ end
 --- @param window table
 --- @return number
 function HeaderControls.WidthUsed(window)
-    local frameCfg = (window.config or {}).frame or {}
-    if frameCfg.titleBar == false then return 0 end
+    local cfg = window.config or {}
+    local frameCfg = cfg.frame or {}
+    if (cfg.header or {}).show == false then return 0 end
 
     -- COUNTED, NOT ASSUMED BUILT. Every control in the strip is now ours and
     -- every one is `controlSize` wide, so the reservation is one multiplication
@@ -214,7 +215,18 @@ end
 --- @param control table   its CONTROLS row
 --- @param art string      which art name to use (a stateful control picks)
 --- @param style table     { path, size, flags, r, g, b }
---- @param dimmed boolean  the "off" half of a two-state icon
+--- BRIGHTNESS IS NOT A STATE SIGNAL, and it used to be. The "off" half of a
+--- two-state control was drawn at 0.45 alpha on every rung, which made the lock
+--- visibly fainter than its six neighbours for the whole of the time a window was
+--- unlocked -- and a window ships unlocked, so the strip read as having one
+--- half-broken icon in it by default. The state is carried by the GLYPH on the
+--- two rungs that have two glyphs (our art draws `lock` against `unlock`, the
+--- ASCII rung draws `#` against `-`), and by DESATURATION on the atlas rung,
+--- which has only one texture and no other way to say it. So `dimmed` still
+--- reaches rung two, and no rung dims.
+---
+--- @param dimmed boolean  the "off" half of a two-state icon: desaturates the
+---   atlas rung, which is the one rung with no second glyph to switch to
 local function drawIcon(button, control, art, style, dimmed, ascii)
     local Compat = NS.Compat
 
@@ -227,7 +239,7 @@ local function drawIcon(button, control, art, style, dimmed, ascii)
             -- multiply lands on whatever the header's text colour is, and the
             -- icons obey the same setting the rest of the header does.
             button.tex:SetVertexColor(style.r, style.g, style.b)
-            button.tex:SetAlpha(dimmed and 0.45 or 1)
+            button.tex:SetAlpha(1)
             button.tex:Show()
             button.glyph:Hide()
             return "art"
@@ -242,7 +254,7 @@ local function drawIcon(button, control, art, style, dimmed, ascii)
             button.tex:SetDesaturated(dimmed and true or false)
         end
         button.tex:SetVertexColor(1, 1, 1)
-        button.tex:SetAlpha(dimmed and 0.45 or 1)
+        button.tex:SetAlpha(1)
         button.tex:Show()
         button.glyph:Hide()
         return "atlas"
@@ -252,7 +264,7 @@ local function drawIcon(button, control, art, style, dimmed, ascii)
     button.glyph:SetFont(style.path, style.size, style.flags)
     button.glyph:SetTextColor(style.r, style.g, style.b)
     button.glyph:SetText(ascii or control.ascii)
-    button.glyph:SetAlpha(dimmed and 0.45 or 1)
+    button.glyph:SetAlpha(1)
     button.glyph:Show()
     button.tex:Hide()
     return "ascii"
@@ -336,12 +348,12 @@ local function onClick(frame)
     elseif control == "segment" then
         if window.OpenSegmentMenu then window:OpenSegmentMenu() end
     elseif control == "reset" then
-        -- THE DIALOG ALREADY EXISTS, in settings/Data.lua, and it carries the
+        -- THE DIALOG ALREADY EXISTS, in settings/General.lua, and it carries the
         -- warning that actually matters: this reset reaches OUTSIDE the addon
         -- and wipes what Blizzard's own meter is showing, not just ours. A
         -- second copy of that sentence is a second place for it to go stale,
         -- and the more dangerous the warning the worse that is.
-        -- Through settings/Data.lua, which owns the dialog and centres it on
+        -- Through settings/General.lua, which owns the dialog and centres it on
         -- the screen. Resolved at call time because settings/ loads ahead of
         -- modules/; the bare StaticPopup_Show behind it is the degraded path,
         -- where an uncentred confirmation still beats no confirmation.
@@ -405,7 +417,7 @@ function HeaderControls:Apply(window)
     local frameCfg = cfg.frame or {}
     local layout   = window.layout
     local size     = controlSize(frameCfg)
-    local visible  = (frameCfg.titleBar ~= false)
+    local visible  = ((cfg.header or {}).show ~= false)
 
     local style = HeaderControls.Style(window)
 
@@ -471,11 +483,11 @@ end
 
 --- One control's colour, at rest or under the pointer.
 ---
---- TWO COLOURS AND TWO CLASS-COLOUR FLAGS, because they are two independent
---- answers: a player who wants their class colour under the pointer does not
---- necessarily want the whole strip in it at rest, and one shared flag would make
---- hover and rest the same colour for anyone who ticked it -- which is the one
---- thing a hover colour must never be.
+--- TWO COLOURS AND TWO COLOUR MODES, because they are two independent answers: a
+--- player who wants their class colour under the pointer does not necessarily
+--- want the whole strip in it at rest, and one shared mode would make hover and
+--- rest the same colour for anyone who chose class -- which is the one thing a
+--- hover colour must never be.
 ---
 --- The LOCAL player's class, like every other header surface: the strip is about
 --- the window rather than about any row in it, so yours is the only class it can
@@ -494,18 +506,17 @@ local function controlColor(frameCfg, hovered)
         r, g, b = color(frameCfg.controlColor, 1, 1, 1)
     end
 
-    -- Spelled out rather than `hovered and A or B`: that idiom answers B whenever
-    -- A is false, so a window with the RESTING flag on and the hover flag off
-    -- would take the resting flag's answer while hovered — the two flags
-    -- collapsing back into the one this exists not to be.
-    local classed
+    -- Spelled out rather than `hovered and A or B`, and the reason survived the type change: a
+    -- mode string is never falsy, so the idiom would now answer the HOVER mode always instead of
+    -- the resting one always. Same trap, opposite direction, still worth the four lines.
+    local mode
     if hovered then
-        classed = frameCfg.controlHoverClassColor
+        mode = frameCfg.controlHoverColorMode
     else
-        classed = frameCfg.controlClassColor
+        mode = frameCfg.controlColorMode
     end
 
-    if classed and NS.PlayerClassRGB then
+    if mode == "class" and NS.PlayerClassRGB then
         local cr, cg, cb = NS.PlayerClassRGB()
         if cr then r, g, b = cr, cg, cb end
     end
@@ -555,11 +566,42 @@ end
 -- the bar and leaving the header entirely are different events and only the
 -- second one clears the hover.
 
---- What alpha a control that is NOT under the pointer sits at.
-local function restAlpha(window)
+--- A configured opacity, clamped, or its default.
+---
+--- Clamped rather than trusted: these arrive from a SavedVariables file a player
+--- can hand-edit, and an alpha above 1 or below 0 is not a Lua error -- it is a
+--- control the widget silently draws at the nearest legal value, which looks like
+--- the setting not working.
+local function alphaOf(value, fallback)
+    if type(value) ~= "number" then return fallback end
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+
+--- The two opacities the strip is drawn at.
+---
+--- THE REVEAL DECIDES WHETHER THERE ARE TWO. With it on, a control not under the
+--- pointer sits at `controlAlpha` and the one under it comes up to
+--- `controlHoverAlpha` -- which is what the reveal IS, now that both ends of it
+--- are the player's numbers rather than a hardcoded 0.25 and 1. With it off there
+--- is nothing to fade, so every control sits at the hover value: that is the
+--- setting that means "full strength" to a player who has just turned fading off,
+--- and it keeps the shipped look identical to what it was before either slider
+--- existed.
+---
+--- `controlAlpha` IS THEREFORE READ ONLY WHILE THE REVEAL IS ON, and it is
+--- deliberately not disabled on the panel when it is off -- the same bargain
+--- `bars.customColor` gets under a non-custom colour mode. A player setting the
+--- faded level before switching fading on is the normal order of operations, and
+--- a greyed-out slider makes that a two-visit job.
+---
+--- @return number rest, number hover
+local function stripAlphas(window)
     local frameCfg = (window.config or {}).frame or {}
-    if frameCfg.hoverReveal == false then return 1 end
-    return 0.25
+    local hover = alphaOf(frameCfg.controlHoverAlpha, 1)
+    if frameCfg.hoverReveal == false then return hover, hover end
+    return alphaOf(frameCfg.controlAlpha, 0.25), hover
 end
 
 --- Colour one control for its current hover state.
@@ -572,19 +614,23 @@ end
 --- work nobody asked for.
 local function applyTint(button, control, window, frameCfg)
     local hovered = (window.hoveredControl == control.key)
-    local _, dimmed = artFor(control, frameCfg)
-
     local r, g, b = controlColor(frameCfg, hovered)
 
-    -- The "off" half of a two-state icon stays dimmed against its own state,
-    -- and the pointer still lifts it clear so a click target is never faint.
-    local alpha = (hovered or not dimmed) and 1 or 0.45
+    -- FULL BRIGHTNESS IN EITHER STATE. This used to re-dim the "off" half of a
+    -- two-state icon to 0.45 on every hover pass, which is the other half of the
+    -- change drawIcon records: a control says which state it is in by which
+    -- GLYPH it draws, not by how bright it is, and an unlocked padlock has to sit
+    -- at the same weight as the six controls beside it.
+    --
+    -- The REVEAL still fades the strip -- that is `button:SetAlpha` in
+    -- ApplyHoverAlpha, on the button rather than on the region, and it is
+    -- untouched by this.
     if button.mmRung == "ascii" then
         button.glyph:SetTextColor(r, g, b)
-        button.glyph:SetAlpha(alpha)
+        button.glyph:SetAlpha(1)
     else
         button.tex:SetVertexColor(r, g, b)
-        button.tex:SetAlpha(alpha)
+        button.tex:SetAlpha(1)
     end
 end
 
@@ -595,13 +641,13 @@ end
 function HeaderControls.ApplyHoverAlpha(window)
     local controls = window.controls
     if not controls then return end
-    local rest     = restAlpha(window)
+    local rest, hover = stripAlphas(window)
     local frameCfg = (window.config or {}).frame or {}
     for i = 1, #CONTROLS do
         local control = CONTROLS[i]
         local button = controls[control.key]
         if button then
-            button:SetAlpha((window.hoveredControl == control.key) and 1 or rest)
+            button:SetAlpha((window.hoveredControl == control.key) and hover or rest)
             if button.mmRung then applyTint(button, control, window, frameCfg) end
         end
     end

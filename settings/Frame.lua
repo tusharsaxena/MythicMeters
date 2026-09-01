@@ -59,7 +59,8 @@ local function Build(mainCategory)
         -- after the picker moved would stack a second copy of the page under
         -- the first.
         H.ClearScroll(c)
-        H.RenderSchema(c, PAGE)
+        H.WindowBanner(c)
+        H.RenderTabbedSchema(c, PAGE)
     end)
 
     return Settings.RegisterCanvasLayoutSubcategory(mainCategory, ctx.panel, NS.SubPageLabel(L["Frame"]))

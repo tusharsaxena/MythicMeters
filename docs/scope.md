@@ -45,14 +45,14 @@ Retail only · English only.
 - **Cell drill-down** into a player's per-spell breakdown, rendered through the same row path as the
   grid, plus a hand-off to Blizzard's own death recap from the Deaths column.
 - **Pet folding** into owners, best-effort — see the caveat below.
-- **A nine-page settings panel** driven by one 138-row schema, with full `/mm` CLI parity for every
+- **A nine-page settings panel** driven by one 137-row schema, with full `/mm` CLI parity for every
   schema-shaped operation.
 - **Visibility rules** per window — **show everywhere, hide nowhere** out of the box. Seven contexts
   (dungeon, raid, arena, battleground, delve, scenario, open world), all on by default; ten hide
   rules (solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in
   combat, out of combat), all off by default.
 - **AceDB profiles**, all characters starting on the shared `"Default"` profile.
-- **Preview mode** and an unlock/drag cycle, so a window can be laid out at a target dummy.
+- **Test mode** and an unlock/drag cycle, so a window can be laid out at a target dummy.
 - **A minimap button** and LDB launcher (left-click toggles the windows, right-click opens settings).
 - **A perf harness** (`/mm perf`) and an on-screen debug console (`/mm debug`), both LibKa0s's.
 

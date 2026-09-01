@@ -70,16 +70,27 @@ local WINDOW_TEMPLATE = {
     -- is read by nothing.
     barTexture  = "Blizzard Raid Bar",
     font        = "Friz Quadrata TT",
-    fontOutline = "OUTLINE",
+    -- NONE, matching the two text surfaces that ship without one (`text.outline`
+    -- and `tooltip.fontOutline`). An outline is a legibility tool for text over a
+    -- bright bar, not a default look, and broadcasting one to every surface at
+    -- once was the meta row's most visible effect on a fresh profile.
+    fontOutline = "NONE",
 
     -- -----------------------------------------------------------------------
     -- frame — the standalone window itself
     -- -----------------------------------------------------------------------
     --
     -- The chrome is LibKa0s-Core-1.0's shared SKIN and ApplySkin (never a
-    -- private lookalike), so the edge colors are NOT settings here: the library
-    -- tints frame.title and frame.divider itself. What IS configurable is the
-    -- geometry, the backdrop, and the border the player picks from LSM.
+    -- private lookalike), so the window's EDGE colors are not settings here: the
+    -- library owns the backdrop and its border. What IS configurable is the
+    -- geometry, the backdrop fill, and the border the player picks from LSM.
+    --
+    -- The two SKIN ACCENTS are a different case and both are configurable, under
+    -- `header` below: `frame.title` takes the header text colour, and
+    -- `frame.divider` takes `header.dividerColorMode`, whose shipped value leaves
+    -- the library's tint alone entirely. The rule they honour is "never RESTATE
+    -- SKIN's values" -- not "never let a player choose" -- and neither of them
+    -- copies a value out of that table.
     frame = {
         -- Derived from the grid rather than chosen: the name column, six default
         -- stat columns at Const.COLUMN_WIDTH, the seams between them and the
@@ -101,14 +112,13 @@ local WINDOW_TEMPLATE = {
         -- player positioning a window at a target dummy still sees a full grid.
         locked         = false,
         clampToScreen  = true,
-        titleBar       = true,
         -- ── The header's controls (issue #6) ──
         --
         -- Seven keys, one per control that this addon builds. `closeButton` is
         -- the odd one out and deliberately keeps its old name: renaming it to
         -- `showClose` for symmetry would migrate every stored profile in exchange
         -- for a consistency nobody can see. It sits here rather than up beside
-        -- `titleBar` because what it draws is a header control.
+        -- `header.show` because what it draws is a header control.
         closeButton     = true,
         showMinimise    = true,
         showLock        = true,
@@ -136,17 +146,24 @@ local WINDOW_TEMPLATE = {
         -- uses. Both are pickers rather than a "match the header" switch: the
         -- strip is the only part of the window whose two states a player sees
         -- constantly, and one of them being unconfigurable was the complaint.
-        controlColor      = { r = 1, g = 1, b = 1, a = 1 },
-        controlHoverColor = { r = 1, g = 0.82, b = 0, a = 1 },
-        -- One class-colour flag EACH, and both ship off so no window changes
+        -- One colour MODE each, and both ship "custom" so no window changes
         -- appearance. Two rather than one because hover and rest are two
-        -- independent answers: sharing a flag would make the pointer's colour
-        -- identical to the resting one for anybody who ticked it, which is the
+        -- independent answers: sharing a mode would make the pointer's colour
+        -- identical to the resting one for anybody who chose class, which is the
         -- one thing a hover colour must never be. The LOCAL player's class, like
         -- every other header surface — the strip is about the window, not about
         -- any row in it.
-        controlClassColor      = false,
-        controlHoverClassColor = false,
+        controlColorMode       = "custom",
+        controlColor           = { r = 1, g = 1, b = 1, a = 1 },
+        controlHoverColorMode  = "custom",
+        controlHoverColor      = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- THE TWO ENDS OF THE REVEAL, which were a hardcoded 0.25 and 1 before
+        -- they were settings -- so these two numbers are why a window that never
+        -- touches either slider is drawn exactly as it was. `controlAlpha` is the
+        -- faded level and is read only while `hoverReveal` is on: with the reveal
+        -- off there is no faded state, and every control sits at the hover value.
+        controlAlpha           = 0.25,
+        controlHoverAlpha      = 1.0,
         -- The SLOT a control occupies -- its click target and the strip's layout
         -- pitch. The art is drawn centred inside it at 72% of it, so 16 puts an
         -- 11px icon on the same line as a 12px title and the strip stops
@@ -174,6 +191,7 @@ local WINDOW_TEMPLATE = {
     -- holding the same figure per player. The header draws `window.name` now, so
     -- renaming a window renames its header.
     header = {
+        show            = true,
         font            = "Friz Quadrata TT",
         size            = 12,
         outline         = "OUTLINE",   -- NONE | OUTLINE | THICKOUTLINE | MONOCHROME
@@ -182,15 +200,33 @@ local WINDOW_TEMPLATE = {
         -- an outlined face is heavier than either alone, and a class-colored
         -- header is a taste rather than an improvement.
         shadow          = false,
-        -- The ONE thing that colours the header text, and there is deliberately no
-        -- mode beside it. The title bar is one strip over the whole window, so
-        -- "per statistic" could only ever paint it the sort column's colour -- a
-        -- fact already on screen twice over -- and "class" could only be the local
-        -- player's, which the title bar is not about either: it names the window.
+        -- CUSTOM, so a window that never opens the dropdown is drawn from the
+        -- picker below exactly as it was before there was a dropdown. `class` is
+        -- the only other answer: see the note in settings/Schema.lua for why
+        -- there is no `stat` here and why `class` arrived late.
+        colorMode       = "custom",    -- class | custom
         color           = { r = 1, g = 0.82, b = 0, a = 1 },  -- Blizzard gold
         align           = "LEFT",      -- LEFT | CENTER | RIGHT
         height          = 18,
         bgColor         = { r = 0, g = 0, b = 0, a = 0.5 },
+        -- The hairline between the title bar and the column labels. ON, because
+        -- it is what the window has always drawn and a chrome element that
+        -- vanishes on upgrade is a bug report.
+        --
+        divider          = true,
+        dividerThickness = 1,
+        -- SKIN, not a colour. `skin` means *leave the texture alone*, so whatever
+        -- LibKa0s-Core-1.0's ApplySkin wrote stands -- which is how a re-skin
+        -- still reaches this window along with the debug console and the perf
+        -- panel (standalone-windows). The shared value is never copied here,
+        -- never stored in a profile, and never needs migrating when it changes.
+        dividerColorMode = "skin",       -- skin | class | custom
+        -- A MID GREY, and deliberately NOT SKIN.divider's values: seeding it from
+        -- there would be exactly the copy the rule above exists to prevent. It is
+        -- read only under `custom`, where the skin has already been declined, so
+        -- it is a starting point for a picker rather than a claim about the
+        -- collection's look.
+        dividerColor     = { r = 0.5, g = 0.5, b = 0.5, a = 0.85 },
     },
 
     -- -----------------------------------------------------------------------
@@ -291,13 +327,17 @@ local WINDOW_TEMPLATE = {
     -- -----------------------------------------------------------------------
     --
     -- Two slots per cell, each rendering exactly what it is set to and nothing
-    -- else — none | smart | total | rate | percent, the same five in either
-    -- position. `rate` is empty on a stat that has no per-second figure
-    -- (Constants.STATS[].isRate), and `smart` is what reads that flag for you.
+    -- else — none | smart | combined | total | rate | percent, the same six in
+    -- either position. `rate` is empty on a stat that has no per-second figure
+    -- (Constants.STATS[].isRate), and `smart` and `combined` are what read that
+    -- flag for you: one PICKS between the two figures, the other SHOWS BOTH and
+    -- falls back to the absolute alone where there is no rate.
     --
     -- `numberFormat` picks which NumericRuleFormatter instance modules/Format.lua
     -- hands the value to. NOTHING here divides: abbreviating is arithmetic and
-    -- arithmetic on a secret raises (design §4).
+    -- arithmetic on a secret raises (design §4). The three abbreviated forms are
+    -- one ladder at three fraction divisors, and there is no thousands-separated
+    -- form because separating digits means reading them.
     text = {
         -- ONE FIGURE, AND IT IS THE ONE THE COLUMN IS ABOUT. `smart` is the
         -- per-second figure on a stat that has one — "who is doing the most
@@ -309,16 +349,19 @@ local WINDOW_TEMPLATE = {
         -- EVERY VALUE IS LITERAL. There is no fallback anywhere in modules/Row.lua:
         -- `none` renders nothing, `rate` on a counting stat renders nothing, and
         -- a cell whose slots both come back empty stays empty. Both slots take all
-        -- five values in either position.
-        leftSlot     = "smart",   -- none | smart | total | rate | percent
-        rightSlot    = "none",    -- none | smart | total | rate | percent
-        numberFormat = "abbreviated",  -- abbreviated | full
+        -- six values in either position.
+        leftSlot     = "smart",   -- none | smart | combined | total | rate | percent
+        rightSlot    = "none",    -- none | smart | combined | total | rate | percent
+        -- abbreviated | abbreviatedWhole | abbreviatedTwo | full
+        numberFormat = "abbreviated",
         -- How a death is labelled in the Deaths tooltip and the death list.
         deathTimeFormat = "clock",     -- clock | ago
         -- Characters, not bytes, and 0 means "no cap". Above WoW's 12-character
         -- player-name limit because a meter also lists NPCs, which are not bound
-        -- by it. The realm is stripped regardless of this number.
-        maxNameLength = 20,
+        -- by it -- but not far above it: 20 left the name column wider than the
+        -- names in it for a full group of players. The realm is stripped
+        -- regardless of this number.
+        maxNameLength = 15,
         -- THE HEADER'S FACE, not the monospace one.
         --
         -- A monospace grid keeps columns of digits from jittering as they tick,
@@ -440,6 +483,20 @@ local WINDOW_TEMPLATE = {
         -- absent for the whole of a pull (see that file's header).
         showTargets        = false,
         maxTargets         = 3,
+
+        -- WHAT ENDED EACH DEATH, on the death list's own line: "Death 3 |
+        -- Ragnaros | Sulfuras Smash". Both ON, because the line without them
+        -- says nothing the reader did not already know -- the count is in the
+        -- cell they hovered to get here.
+        --
+        -- Two switches rather than one: who killed me is a positioning question
+        -- and what killed me is a cooldown question, and a player who wants one
+        -- should not have to take the other. Either half goes quiet on its own
+        -- terms and neither is a failure -- an environmental death has no caster,
+        -- a melee swing has no spell name, and a restricted pull can withhold
+        -- either (modules/Tooltip.lua's killingBlowOf).
+        showDeathCaster    = true,
+        showDeathSpell     = true,
     },
 
     -- -----------------------------------------------------------------------
@@ -586,6 +643,21 @@ function NS.DataSetting(key)
     return NS.defaults.profile.data[key]
 end
 
+--- The shipped statistic palette, in the keyed color shape every stored color
+--- in this addon uses.
+---
+--- BUILT FROM THE CATALOG rather than restated: a stat added to core/Constants.lua
+--- with a palette entry gets a stored colour and a settings row without this file
+--- being touched, and one added WITHOUT a palette entry gets neither, which is
+--- the honest outcome -- settings/Schema.lua's generator walks the same table.
+local function statColorDefaults()
+    local out = {}
+    for key, c in pairs(Const.STAT_COLORS) do
+        out[key] = { r = c[1], g = c[2], b = c[3], a = 1 }
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------------------
 -- The profile
 -- ---------------------------------------------------------------------------
@@ -633,6 +705,20 @@ NS.defaults = {
             -- rebuild per event. Clamped to Constants.THROTTLE_MIN/MAX.
             throttle  = 0.25,
         },
+
+        -- ONE COLOR PER STATISTIC, addon-wide, and the palette every surface that
+        -- wears one reads through NS.StatColor. Per-window would be the wrong
+        -- shape twice over: the palette's whole job is telling one column from
+        -- another AT A GLANCE, and two windows disagreeing about what green means
+        -- is the one thing that breaks; and the tooltip's "All statistics" block
+        -- lists every stat whether the hovered window has a column for it or not,
+        -- so there is no window to read the colour off in the first place.
+        --
+        -- SEEDED FROM core/Constants.lua's STAT_COLORS, which stays the shipped
+        -- palette and the fallback for a key the profile has never stored. The
+        -- constant is not retired: it is what "Defaults" restores to and what a
+        -- degraded install with no database still draws.
+        statColors   = statColorDefaults(),
 
         -- What the export surface remembers between uses. ADDON-WIDE rather
         -- than per-window, and that is the one deliberate exception to the rule

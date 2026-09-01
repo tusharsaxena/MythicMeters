@@ -182,10 +182,48 @@ local BREAKPOINTS = {
     { breakpoint = 1000000000, abbreviation = "B", significandDivisor = 1e8, fractionDivisor = 10, abbreviationIsGlobal = false },
 }
 
+-- THE SAME LADDER AT TWO OTHER DECIMAL COUNTS. One shape, three settings: the
+-- rungs and their abbreviations are identical and only the split between the
+-- significand and its fraction moves, which is the whole of what "how many
+-- decimals" means to a NumericRuleFormatter.
+--
+--   WHOLE  divide by the breakpoint itself and keep no fraction -> "47K"
+--   TWO    divide by a hundredth of it and keep two             -> "47.50K"
+--
+-- BUILT rather than written out, so a rung added to BREAKPOINTS above reaches all
+-- three and cannot be forgotten in two of them. The floor entry is copied
+-- verbatim: below 1 there is nothing to abbreviate and no decimals to choose.
+local function scaledLadder(fraction)
+    local out = { BREAKPOINTS[1] }
+    for i = 2, #BREAKPOINTS do
+        local rung = BREAKPOINTS[i]
+        out[#out + 1] = {
+            breakpoint           = rung.breakpoint,
+            abbreviation         = rung.abbreviation,
+            significandDivisor   = rung.breakpoint / fraction,
+            fractionDivisor      = fraction,
+            abbreviationIsGlobal = false,
+        }
+    end
+    return out
+end
+
+local BREAKPOINTS_WHOLE = scaledLadder(1)
+local BREAKPOINTS_TWO   = scaledLadder(100)
+
 -- A value whose formatting PROVES the ladder took: 47500 must render as "47.5K"
--- under the ladder above, and as "47K" under Blizzard's defaults.
+-- under the shipped ladder, and as "47K" under Blizzard's defaults.
+--
+-- ONE PROBE VALUE, THREE EXPECTATIONS, one per decimal count. Each ladder is
+-- measured against its OWN string for the reason the shipped one is: the client
+-- can accept SetBreakpoints and still keep its own rules, so a call that does not
+-- raise is not proof of anything. A variant whose probe fails degrades exactly
+-- the way the shipped ladder does -- down to the client's own defaults -- rather
+-- than rendering something this addon did not ask for.
 local PROBE_VALUE    = 47500
 local PROBE_EXPECTED = "47.5K"
+local PROBE_WHOLE    = "47K"
+local PROBE_TWO      = "47.50K"
 
 -- The second probe, for the rung that claims a sub-one floor. 0.5 must render as
 -- a whole "0" rather than as its own digits; a ladder that answers "0.5" here has
@@ -203,7 +241,7 @@ local PROBE_SMALL_EXPECTED = "0"
 ---
 --- @param f table
 --- @return boolean
-local function ladderTook(f, alsoSmall)
+local function ladderTook(f, alsoSmall, expected)
     local ok, out = pcall(f.FormatNumber, f, PROBE_VALUE)
     if not ok or type(out) ~= "string" then return false end
     -- THE EXACT STRING, not "does it contain a decimal point".
@@ -211,7 +249,7 @@ local function ladderTook(f, alsoSmall)
     -- The looser check is what let a wrong ladder through: under the previous
     -- divisors 47500 rendered "4.7K", which has a point, so the probe said yes to
     -- an answer that was off by two orders of magnitude.
-    if out ~= PROBE_EXPECTED then return false end
+    if out ~= (expected or PROBE_EXPECTED) then return false end
 
     if alsoSmall then
         local okSmall, small = pcall(f.FormatNumber, f, PROBE_SMALL)
@@ -233,13 +271,17 @@ end
 --- Both halves matter and neither is enough alone: SetBreakpoints can refuse the
 --- array (the pcall), and it can accept the call while keeping its own rules
 --- (the probe). One rung, one question.
-local function tryLadder(f, list, probeSmall)
+local function tryLadder(f, list, probeSmall, expected)
     if not pcall(f.SetBreakpoints, f, list) then return false end
-    return ladderTook(f, probeSmall)
+    return ladderTook(f, probeSmall, expected)
 end
 
+--- @param f table
+--- @param ladder table|nil    which of the three decimal counts to ask for
+--- @param expected string|nil the string that ladder must render PROBE_VALUE as
 --- @return boolean  whether ANY rung actually took
-local function applyBreakpoints(f)
+local function applyBreakpoints(f, ladder, expected)
+    ladder = ladder or BREAKPOINTS
     if type(f.SetBreakpoints) ~= "function" then
         if State.debug then
             NS.Debug("Format", "formatter has no SetBreakpoints — numbers will not abbreviate")
@@ -251,27 +293,34 @@ local function applyBreakpoints(f)
     -- refuses a fractional breakpoint the way this one refuses a zero. Sub-one
     -- values render their digits under it — which is the old behavior, and the
     -- point is that it is the SECOND choice rather than the only one.
+    --
+    -- Derived from whichever ladder was asked for, so the decimal count survives
+    -- the fallback: a client that refuses the sub-one floor should still get the
+    -- number of decimals the player chose.
     local integerFloor = { { breakpoint = 1, abbreviation = "", significandDivisor = 1,
                              fractionDivisor = 1, abbreviationIsGlobal = false } }
     local withoutFloor = {}
-    for i = 2, #BREAKPOINTS do
-        integerFloor[#integerFloor + 1] = BREAKPOINTS[i]
-        withoutFloor[#withoutFloor + 1] = BREAKPOINTS[i]
+    for i = 2, #ladder do
+        integerFloor[#integerFloor + 1] = ladder[i]
+        withoutFloor[#withoutFloor + 1] = ladder[i]
     end
 
     -- The first rung is probed for the SUB-ONE case as well, because that is the
     -- only thing distinguishing it from the second.
-    if tryLadder(f, BREAKPOINTS, true) then return true end
+    if tryLadder(f, ladder, true, expected) then return true end
 
     local rungs = {
-        { integerFloor, "sub-one floor rejected; values below 1 will show their digits" },
-        { withoutFloor, "breakpoint floor rejected; using the ladder without it" },
+        { integerFloor, "sub-one floor rejected; values below 1 will show their digits", expected },
+        { withoutFloor, "breakpoint floor rejected; using the ladder without it", expected },
+        -- The LAST rung drops the decimal count with everything else: these are
+        -- the client's own rules, so it is probed against the client's own string
+        -- rather than against what was asked for.
         { Compat.GetDefaultAbbreviationBreakpoints(),
-          "custom breakpoints refused; using the client's defaults" },
+          "custom breakpoints refused; using the client's defaults", PROBE_WHOLE },
     }
 
     for _, rung in ipairs(rungs) do
-        if rung[1] and tryLadder(f, rung[1]) then
+        if rung[1] and tryLadder(f, rung[1], false, rung[3]) then
             if State.debug then NS.Debug("Format", rung[2]) end
             return true
         end
@@ -283,16 +332,36 @@ local function applyBreakpoints(f)
     return false
 end
 
---- The session's ABBREVIATING formatter, or nil where C_StringUtil is absent.
+--- Which ladder and which probe string each abbreviating mode wants, keyed by
+--- the value `text.numberFormat` stores.
+---
+--- ONE TABLE, so adding a fourth decimal count is a row here and a row in
+--- settings/Schema.lua's NUMFMT_VALUES and nothing else. `full` is deliberately
+--- absent: it is not an abbreviation at any decimal count, it is the OTHER
+--- formatter, and `plain()` below owns it.
+local ABBREVIATIONS = {
+    abbreviated      = { slot = "numeric",      ladder = BREAKPOINTS,       probe = PROBE_EXPECTED },
+    abbreviatedWhole = { slot = "numericWhole", ladder = BREAKPOINTS_WHOLE, probe = PROBE_WHOLE },
+    abbreviatedTwo   = { slot = "numericTwo",   ladder = BREAKPOINTS_TWO,   probe = PROBE_TWO },
+}
+
+--- The session's ABBREVIATING formatter for one decimal count, or nil where
+--- C_StringUtil is absent.
 ---
 --- Cached as `false` rather than nil on failure so a client without the API
 --- does not pay a fresh (failing) API call per cell per refresh — with seven
 --- columns and forty rows that is 280 calls a frame, which is exactly the shape
 --- of cost the perf contract exists to catch.
 ---
+--- ONE CACHE SLOT PER MODE, for the reason `plain` states below: two windows on
+--- two decimal counts are two formatter objects with two breakpoint arrays, and
+--- one slot between them would have them rebuilding each other every refresh.
+---
+--- @param mode string|nil  a key of ABBREVIATIONS; unknown falls back to the default
 --- @return table|nil  object answering :FormatNumber(n)
-local function numeric()
-    local f = cache.numeric
+local function numeric(mode)
+    local spec = ABBREVIATIONS[mode or ""] or ABBREVIATIONS.abbreviated
+    local f = cache[spec.slot]
     if f == false then return nil end
     if f ~= nil then return f end
 
@@ -308,12 +377,12 @@ local function numeric()
     -- which always abbreviates and accepts secrets. It is cached rather than
     -- retried per cell for the reason below: seven columns times forty rows is
     -- 280 failing API calls a frame. Format.Invalidate is what tries again.
-    if not (fresh and applyBreakpoints(fresh)) then
-        cache.numeric = false
+    if not (fresh and applyBreakpoints(fresh, spec.ladder, spec.probe)) then
+        cache[spec.slot] = false
         return nil
     end
 
-    cache.numeric = fresh
+    cache[spec.slot] = fresh
     return fresh
 end
 
@@ -370,7 +439,8 @@ end
 --- A meter value as display text.
 ---
 --- @param v any     an opaque meter value (possibly secret), or nil
---- @param mode string|nil  "abbreviated" (default) or "full"
+--- @param mode string|nil  "abbreviated" (default), "abbreviatedWhole",
+---   "abbreviatedTwo" or "full"
 --- @return any  a string, or a handle FontString:SetText accepts
 function Format.Number(v, mode)
     -- Nil-ness is the ONE boolean-shaped test permitted on a non-boolean secret
@@ -395,7 +465,7 @@ function Format.Number(v, mode)
         return passthrough(v)
     end
 
-    local f = numeric()
+    local f = numeric(mode)
     if f then
         local ok, out = pcall(f.FormatNumber, f, v)
         if ok then return out end

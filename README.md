@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1376%2F1376_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1418%2F1418_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -25,7 +25,7 @@ sits beside the total with no `/s` cluttering it — the column header already s
 
 That is the **paired** layout, one setting away: out of the box each cell carries a single figure —
 the per-second one on Damage and Healing, the absolute one on every column that has no rate. Set
-**Right text** to **Absolute value** on the Text page for the two-figure grid above.
+**Right text** to **Absolute value** on Bars → Text content for the two-figure grid above.
 
 ## What's new in 0.1.0
 
@@ -33,9 +33,9 @@ The first release.
 
 - **One window, every statistic.** Damage, Healing, Interrupts, Dispels, Avoidable Damage and Deaths
   as columns of a single grid, each cell with its own bar and text. Each cell has a left and a right
-  text slot, and each takes the same five values — None, Smart value, Absolute value, Per second
-  value, Percent — so "the rate alone", "the total and the rate", "a bar with no text at all" and
-  "share of the column" are all one dropdown away.
+  text slot, and each takes the same six values — None, the two smart values, Absolute value, Per
+  second value, Percent — so "the rate alone", "the total and the rate", "a bar with no text at all"
+  and "share of the column" are all one dropdown away.
 - **Current or overall.** Switch between the pull you are in and the whole run.
 - **As many windows as you want.** Each one configured separately, with "copy settings from" so you
   do not have to set up the second one by hand.
@@ -44,13 +44,15 @@ The first release.
 - **Hover for the detail.** A cell tells you which spells made up that number; a name tells you
   everything tracked for that player. A Damage cell can also list **which enemies that player hit**.
   Click a cell to drill into it, or a Deaths cell to open the death recap.
-- **The tooltip is yours too.** Its own bar texture, spacing and border, its own font, nine anchor
+- **The tooltip is yours too.** Its own bar texture, spacing and border, its own font, eight anchor
   positions with an x/y nudge, and a spell cap you can set to zero for "show me all of them".
 - **Take the numbers with you.** The export button in the title bar hands you the whole fight as CSV
   to paste into a spreadsheet, or prints a ranked top-N to chat — to yourself by default, so a
   misclick cannot reach your raid.
-- **Stays out of the way.** Shows in dungeons, raids, arenas and battlegrounds; hidden in the open
-  world and when you are alone, unless you say otherwise.
+- **Where you want it, when you want it.** Every window ships visible everywhere and hiding
+  nowhere — then, per window, turn off the contexts you do not want it in (dungeon, raid, arena,
+  battleground, delve, scenario, open world) and turn on the rules that should hide it (solo,
+  vehicle, mounted, skyriding, flight path, housing, pet battle, dead, in or out of combat).
 
 ## Screenshots
 
@@ -88,21 +90,28 @@ are currently looking at, not all of them.
 
 ### Settings panel
 
-`/mm config`, or the Options → AddOns list. Thirteen pages:
+`/mm config`, or the Options → AddOns list. Nine pages, and within a page the settings are grouped
+into **tabs** — click one to switch, and it never asks you to leave combat to do it; only opening or
+switching between pages in the list on the left does that (see [I cannot open the settings while
+fighting](#troubleshooting) above). Every page below Windows opens with a **banner** naming which
+window it is editing, and that one dropdown is the only window picker in the whole panel.
 
 The six pages between Windows and Profiles are **indented under it**, because they all configure
-*the window Windows has selected* — the two that are not indented configure the addon.
+*whichever window the banner is pointed at* — the same reason Windows itself draws the banner, though
+Windows is not indented under itself and sits flush with General and Profiles in the tree. Those two,
+General and Profiles, are the only pages that configure the addon rather than a window, and draw no
+banner at all.
 
 | Page | What you set there |
 |---|---|
-| General | The addon master switch, the minimap button, Test mode, the debug console, whether pets are merged into their owner, and how often the display refreshes. Also two resets: all settings, and the selected window's position |
+| General | The addon master switch, the minimap button, whether pets are merged into their owner and how often the display refreshes, Test mode, the debug console, and two resets — all settings, and the selected window's position. A second tab sets the colour of each statistic, worn by every surface that colours by column |
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
-| `  - `Frame | Size, scale, opacity, background, border, lock, title bar |
-| `  - `Header | Title, session name, duration, totals, font, alignment, background — and the header controls: which of the seven buttons the title strip draws, in what color and at what size |
-| `  - `Bars | The grid and everything drawn in it — row height, count, spacing and growth direction, and then, per cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
-| `  - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, and whether to list the enemies a player hit |
+| `  - `Frame | Lock, keep-on-screen and the four "all surfaces" shortcuts; size, scale, opacity, strata and padding; the window's own background and border; and the rows — height, count, spacing, growth direction and which of them are highlighted |
+| `  - `Header | The title bar's own text (font, alignment, background) and the header controls — which of the seven buttons the title strip draws, in what color and at what size |
+| `  - `Bars | Everything drawn inside a cell: the bar's texture, colour mode, opacity and fill direction; the tint behind it and the alternating row stripe; its border, thickness and colour; the two text slots, number format, max name length, font, size, outline, shadow and colour; and the row icon, its size and which side of the name it sits on |
+| `  - `Tooltip | What appears on hover, where it anchors and by how much, how many spells to list (0 for all), its own bar texture, spacing, border and font, whether to list the enemies a player hit, and whether a death line names who and what killed you |
 | `  - `Visibility | Show everywhere, hide nowhere by default. Seven contexts — dungeon, raid, arena, battleground, delve, scenario, open world. Ten opt-in hide rules — solo, vehicle, mounted, skyriding, flight path, player housing, pet battle, dead, in combat, out of combat |
-| `  - `Columns | One block per statistic — tick the ones you want, drag them by the handle into the order they appear. All eight are catalogued and listed; six are on by default, with Absorbs and Damage Taken there to be switched on |
+| `  - `Columns | One block per statistic — tick the ones you want, drag them by the handle into the order they appear — plus the column-header strip's own font and background, which label the columns this page builds |
 | Profiles | Share a setup between characters |
 
 ## How it works
@@ -164,18 +173,19 @@ past fight, from the window header's segment dropdown to see something other tha
 There is no settings page for it: the header already has the control.
 
 **The window only shows placeholder rows.**
-The window is unlocked, and an unlocked window fills with placeholder data so you can position it
-against a real-looking grid. Lock it — `/mm lock on`, or the Lock window box on the Frame page — and
-the real numbers appear. Turning off Test mode on the General page is not enough on its own while the
-window is unlocked.
+Test mode is on. Turn it off on the General page, or with `/mm test`. Unlocking a window has nothing
+to do with it — it used to switch preview on as a side effect, which made unchecking Test mode look
+broken, and the lock governs dragging and nothing else now.
 
 **I cannot open the settings while fighting.**
 That is deliberate. Blizzard protects the settings machinery during combat, so the panel refuses to
 open rather than risk breaking your action bars. It opens the moment you leave combat.
 
-**A pet is missing from the meter.**
-Pet damage folds into its owner's row. While you are in combat the game will not let addons add the
-two together, so pet damage is left out until the fight ends rather than shown as a separate row.
+**A pet has its own row, and I wanted it folded into its owner.**
+That is the shipped default: a pet is its own row, which is exact in and out of combat. Turn on
+**Merge pets into their owner** on the General page to fold it in — but note the trade, which is why
+it is not the default: merging is addition, and the game will not let addons add two combat numbers
+together mid-fight, so a merged pet's damage goes missing until the pull ends.
 
 **I cannot find the window.**
 `/mm reset-positions` brings every window back to the middle of the screen.

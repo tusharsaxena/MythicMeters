@@ -204,6 +204,45 @@ local function afterRegistryChange()
     if NS.RefreshOptionsPanel then NS.RefreshOptionsPanel() end
 end
 
+--- The page banner: which window this page is editing, and the picker for it.
+---
+--- Decorated onto the instance rather than kept file-local because SEVEN pages draw it, and a
+--- second copy is how two of them end up disagreeing about what the list contains. It stays
+--- host-side rather than going upstream because the library's O.PageBanner is the generic half
+--- -- the label, the anchoring and the band -- and this is the part that knows what a window is.
+---
+--- The onSelect RETARGETS the active window -- through NS.State.SetActiveWindow, never by
+--- assigning the pointer here -- and then forces a STRUCTURAL refresh, because the other pages
+--- did not change VALUE, they changed SUBJECT. That sweep is also what re-renders every other
+--- banner, which is why there is no propagation code here: one writer, one read at render time.
+H.WindowBanner = function(ctx)
+    if not (H.PageBanner and ctx) then return nil end
+
+    local list, order = windowList()
+    local active = activeWindow()
+    local dd = H.PageBanner(ctx, {
+        label   = L["Active window"],
+        tooltip = L["Which window the settings on every other page apply to. Each window is configured independently."],
+        list    = list,
+        order   = order,
+        value   = active and active.id,
+        onSelect = function(id)
+            if not id or (NS.State and id == NS.State.activeWindowId) then return end
+            -- The SAME two calls the dropdown this replaces made, in the same order. Assigning
+            -- NS.State.activeWindowId here instead would be a second writer of the pointer that
+            -- skips whatever State.SetActiveWindow grows next, and afterRegistryChange is the
+            -- file's one name for "every panel is now looking at a different window".
+            if NS.State then NS.State.SetActiveWindow(id) end
+            afterRegistryChange()
+        end,
+    })
+    -- Parked on the ctx so a suite can drive the selection the way a click would; the library
+    -- keeps its own widgets private and a test that cannot reach this one cannot prove the
+    -- retarget happens at all.
+    ctx.__bannerWidget = dd
+    return dd
+end
+
 --- Point the panel at the last window in the registry.
 ---
 --- Create and duplicate append, and both need the panel to follow what they
@@ -305,22 +344,6 @@ StaticPopupDialogs["MULTIMETERS_DELETE_WINDOW"] = {
 -- The body
 -- ---------------------------------------------------------------------------
 
-local function renderPicker(_, parent, relativeWidth)
-    local w = activeWindow()
-    local list, order = windowList()
-    return H.ActionDropdown(parent, relativeWidth, {
-        label   = L["Active window"],
-        tooltip = L["Which window the settings on every other page apply to. Each window is configured independently."],
-        list    = list,
-        order   = order,
-        value   = w and w.id,
-        onSelect = function(id)
-            if NS.State then NS.State.SetActiveWindow(id) end
-            afterRegistryChange()
-        end,
-    })
-end
-
 local function renderNameBox(_, parent, relativeWidth)
     local AceGUI = NS.AceGUI
     if not (AceGUI and parent) then return nil end
@@ -377,12 +400,9 @@ local function renderCopyGroup(_, parent, relativeWidth)
     })
 end
 
-local function render(ctx)
-    H.ClearScroll(ctx)
-
-    H.Section(ctx, L["Windows"])
+--- The Window tab: the name row and the three registry buttons.
+local function renderWindowTab(ctx)
     H.RenderGrid(ctx, {
-        { make = renderPicker },
         { make = renderNameBox },
     })
     H.InlineButtonPair(ctx,
@@ -406,8 +426,10 @@ local function render(ctx)
             StaticPopup_Show("MULTIMETERS_DELETE_WINDOW", w.name or "")
         end,
     }, nil)
+end
 
-    H.Section(ctx, L["Copy settings from"])
+--- The Copy from tab: the source picker, the group filter and the Copy button.
+local function renderCopyTab(ctx)
     H.RenderGrid(ctx, {
         { make = renderCopySource },
         { make = renderCopyGroup },
@@ -417,6 +439,39 @@ local function render(ctx)
         tooltip = L["Copy another window's settings onto this one. Choose which group of settings to copy below."],
         onClick = doCopy,
     }, nil)
+end
+
+-- The page's content is bespoke rather than schema rows -- a name box, three registry buttons,
+-- a source picker, a group filter and a Copy button -- so H.RenderTabbedSchema, which partitions
+-- SCHEMA ROWS by `group`, has nothing here to drive. The strip is drawn directly with
+-- H.TabStrip and the page branches on ctx.activeTab itself, same as it always resolved which
+-- half of the page to draw, only now the split is a click instead of a scroll.
+local function render(ctx)
+    H.ClearScroll(ctx)
+
+    H.WindowBanner(ctx)
+    H.TabStrip(ctx, {
+        tabs = {
+            { key = L["Window"],    label = L["Window"] },
+            { key = L["Copy from"], label = L["Copy from"] },
+        },
+        value = ctx.activeTab or L["Window"],
+        onSelect = function(key)
+            if key == ctx.activeTab then return end
+            ctx.activeTab = key
+            -- No H.ClearScroll here: RefreshPanel(ctx, true) re-enters render(), which already
+            -- clears the scroll itself. Matches Columns.lua's tab onSelect, the one page where the
+            -- ordering is load-bearing (a live reorder controller); this page reads the same way.
+            H.RefreshPanel(ctx, true)
+        end,
+    })
+    ctx.activeTab = ctx.activeTab or L["Window"]
+
+    if ctx.activeTab == L["Window"] then
+        renderWindowTab(ctx)
+    else
+        renderCopyTab(ctx)
+    end
 
     H.Relayout(ctx)
 end

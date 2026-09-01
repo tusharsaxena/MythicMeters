@@ -199,12 +199,15 @@ cli = SlashLib:New({
     -- end up sharing one table.
     applyDefault = function(row) if NS.ApplyDefault then NS.ApplyDefault(row) end end,
 
-    -- Written out rather than omitted. It names the same key the library's own
-    -- default reads, and it is here because `page` is a real contract in this
-    -- addon — it is what groups `/mm list` and what feeds `rowsForPage` in
-    -- settings/OptionsSetup.lua, so the CLI listing and the panel's pages cannot
-    -- disagree about which page a row belongs to.
-    groupKey = function(row) return row.page or "?" end,
+    -- Written out rather than omitted, and it names BOTH halves of where a setting lives. `page`
+    -- was the whole answer while a page was one scroll; a page is now a strip of tabs
+    -- (options-ui-§13), and a listing that named only the page would send someone to a screen
+    -- with no word on which of its six tabs to click. The separator is a byte escape for the
+    -- same reason every other non-ASCII string in this addon is: a literal depends on the file's
+    -- encoding surviving every editor between here and a client.
+    groupKey = function(row)
+        return (row.page or "?") .. " \226\128\186 " .. (row.group or "?")
+    end,
 })
 
 -- ---------------------------------------------------------------------

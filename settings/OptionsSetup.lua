@@ -308,6 +308,7 @@ if not lib then
         "RenderField", "RenderRows", "RenderSchema", "RenderGrid", "SessionCheckbox",
         "SetRenderer", "RefreshAllPanels", "RefreshScalars", "RefreshPanel", "RestoreDefaults",
         "PatchAlwaysShowScrollbar", "RegisterOptionsPage", "CreateOptionsPanel",
+        "SetChromeHeight", "TabStrip", "PageBanner", "RenderTabbedSchema",
     }) do
         Helpers[name] = function() end
     end

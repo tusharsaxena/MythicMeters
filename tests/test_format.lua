@@ -385,6 +385,48 @@ test("Format.Number and Format.Rate contain no division at all", function()
     end
 end)
 
+test("The three abbreviated modes are one ladder at three decimal counts", function()
+    -- The rungs and their letters are identical across all three; only the split
+    -- between the significand and its fraction moves. That is what "how many
+    -- decimals" means to a NumericRuleFormatter, and it is why scaledLadder
+    -- derives the variants rather than restating the array twice.
+    -- red under: a variant that abbreviates at a different breakpoint, or one
+    -- that silently renders the shipped decimal count.
+    local inst = T.load()
+    local F = inst.NS.Format
+
+    assertEqual(F.Number(47500, "abbreviated"), "47.5K")
+    assertEqual(F.Number(47500, "abbreviatedWhole"), "47K")
+    assertEqual(F.Number(47500, "abbreviatedTwo"), "47.50K")
+end)
+
+test("Each abbreviated mode caches its own formatter, so two windows cannot fight", function()
+    -- Three modes are three objects with three breakpoint arrays. One cache slot
+    -- between them would have a window on `abbreviated` rebuilding the object a
+    -- window on `abbreviatedWhole` just built, every refresh, forever -- which is
+    -- the same argument that gave `full` its own slot.
+    -- red under: a single `cache.numeric` shared across the modes.
+    local inst = T.load()
+    local F = inst.NS.Format
+
+    -- Interleaved on purpose: a shared slot passes when each mode is asked for in
+    -- turn and fails the moment they alternate.
+    assertEqual(F.Number(47500, "abbreviated"), "47.5K")
+    assertEqual(F.Number(47500, "abbreviatedWhole"), "47K")
+    assertEqual(F.Number(47500, "abbreviated"), "47.5K")
+    assertEqual(F.Number(47500, "abbreviatedWhole"), "47K")
+end)
+
+test("An unknown number format renders as the shipped one rather than raising", function()
+    -- A profile written against a build with a fourth mode, read by one without
+    -- it. The stored string is not a thing this addon can validate at read time,
+    -- so the render path answers with the default instead of erroring on a
+    -- coalesced refresh ticker.
+    -- red under: indexing ABBREVIATIONS without the fallback.
+    local inst = T.load()
+    assertEqual(inst.NS.Format.Number(47500, "abbreviatedFourteen"), "47.5K")
+end)
+
 test("A ladder the client silently refuses is DETECTED, not assumed", function()
     -- SetBreakpoints returning without error is not proof that it took. The live
     -- client rendered "47K" where the ladder says "47.5K", which means it had

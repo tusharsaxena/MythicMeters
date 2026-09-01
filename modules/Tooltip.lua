@@ -295,6 +295,8 @@ local function tooltipConfig(window)
                               and window.data.sortColumn) or "DamageDone",
         showTargets        = field("showTargets", false),
         maxTargets         = field("maxTargets", 3),
+        showDeathCaster    = field("showDeathCaster", true),
+        showDeathSpell     = field("showDeathSpell", true),
     }
 end
 
@@ -784,6 +786,11 @@ local MELEE_ICON = 135274
 -- they all wear the same icon — its job is to hold the column where every other
 -- tooltip in the addon puts a spell icon, not to tell one row from another.
 local DEATH_ICON = 237275
+
+-- What separates "Death 3" from the caster and the spell that ended it. A bar
+-- rather than a dash or a comma: both of the parts after it are NAMES, and both
+-- can contain a dash or a comma of their own.
+local DEATH_DETAIL_SEP = " | "
 
 -- The widest a wall clock reads. The other two styles are shorter.
 local DEATH_CLOCK_WIDEST = "00:00:00"
@@ -1390,8 +1397,13 @@ local function modeColor(mode, statKey, classColor, r, g, b)
     if mode == "class" then
         if classColor then return classColor.r, classColor.g, classColor.b end
     elseif mode == "stat" then
-        local c = Const.STAT_COLORS[statKey or ""]
-        if c then return c[1], c[2], c[3] end
+        -- Resolved to a local first: `f and f(x)` truncates to one value and this
+        -- reader answers three.
+        local StatColor = NS.StatColor
+        if StatColor then
+            local sr, sg, sb = StatColor(statKey)
+            if sr then return sr, sg, sb end
+        end
     end
     return r, g, b
 end
@@ -1698,6 +1710,83 @@ local function deathClockOf(recap, style)
     local F = NS.Numbers or NS.Format
     if not (F and F.DeathTime) then return nil end
     return F.DeathTime(newest.timestamp, style)
+end
+
+--- Who and what landed the killing blow, as PLAIN strings or nil.
+---
+--- THE RECAP'S NEWEST EVENT IS THE KILLING BLOW. The array arrives newest first
+--- (core/Compat.lua's GetRecapEvents), which is the same fact deathClockOf above
+--- leans on for the moment of death -- element one, both times.
+---
+--- PLAIN OR ABSENT, and that is the whole design of this function. `sourceName`
+--- and `spellName` are resolved off ids the client may hand back SECRET, and the
+--- caller joins these into one label with `..` -- which is the operator this
+--- addon has been bitten by once already (modules/Tooltip.lua's eventColumns
+--- refuses to join a spell name to a caster name for exactly this reason). So
+--- everything leaves here through `plainWord`, and a name that cannot be read
+--- comes back nil and is simply not drawn. "Not available" and "secret right
+--- now" are the same thing to a reader, and the line still says which death it is.
+---
+--- @param recap table|nil  a Provider.GetRecap result
+--- @return string|nil caster, string|nil spell
+local function killingBlowOf(recap)
+    local events = recap and recap.events
+    if type(events) ~= "table" then return nil, nil end
+
+    local Secrets = NS.Secrets
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(events) then
+        return nil, nil
+    end
+
+    local newest = events[1]
+    if type(newest) ~= "table" then return nil, nil end
+    if Secrets and Secrets.CanAccessTable and not Secrets.CanAccessTable(newest) then
+        return nil, nil
+    end
+
+    -- `hideCaster` may be a secret boolean, so it goes through plainTruth -- the
+    -- same gate eventColumns applies to the same field. An environmental death
+    -- (a fall, a fire) has no caster to name and says so by setting it.
+    local caster = plainWord(newest.sourceName)
+    if plainTruth(newest.hideCaster) then caster = nil end
+
+    -- A MELEE SWING HAS NO SPELL AT ALL -- no id, no name -- and is named the way
+    -- Blizzard's own recap names it rather than left blank. Unlike eventColumns
+    -- there is no "#12345" fallback here: an id is not a thing to put in a
+    -- one-line summary, and this line is a summary.
+    local spell = plainWord(newest.spellName)
+    if spell == nil and plainWord(newest.event) == "SWING_DAMAGE" then
+        spell = L["Melee"] or "Melee"
+    end
+
+    return caster, spell
+end
+
+--- One death list line's text: the ordinal, and whatever of the killing blow is
+--- both readable and switched on.
+---
+--- SPLIT OUT OF addDeathList rather than inlined there, because that function is
+--- already a loop over a memoized provider read with two degradation paths in it
+--- and this is a third concern -- the label's own grammar. Keeping them apart is
+--- what keeps either one readable, and lizard agrees.
+---
+--- `..` IS SAFE ON EVERY PIECE HERE and nowhere near a meter value: the ordinal is
+--- this addon's own count, and killingBlowOf answers plain strings or nothing.
+---
+--- @param ordinal number      1 for the run's FIRST death
+--- @param caster string|nil
+--- @param spell string|nil
+--- @param config table|nil     nil means "draw both", for a caller with no config
+--- @return string
+local function deathLineLabel(ordinal, caster, spell, config)
+    local label = string.format(L["Death %d"] or "Death %d", ordinal)
+    if caster and (config == nil or config.showDeathCaster) then
+        label = label .. DEATH_DETAIL_SEP .. caster
+    end
+    if spell and (config == nil or config.showDeathSpell) then
+        label = label .. DEATH_DETAIL_SEP .. spell
+    end
+    return label
 end
 
 -- ---------------------------------------------------------------------------
@@ -2027,11 +2116,19 @@ end
 --- this tooltip is the INDEX into that list, so hovering and then clicking
 --- shows the same deaths in the same order.
 ---
+--- THE LINE NAMES THE KILLING BLOW where the client will say: "Death 3 | Ragnaros
+--- | Sulfuras Smash". Both halves are optional and independently switchable
+--- (Tooltip -> Contents), and both go missing on their own terms -- an
+--- environmental death has no caster, a melee swing has no spell name, and a
+--- restricted pull can withhold either. See killingBlowOf: what cannot be read
+--- plainly is not drawn, and what remains is still a numbered death.
+---
 --- @param row table       an aggregated row (needs .deaths)
 --- @param style table
 --- @param timeStyle string|nil  the window's timestamp style
+--- @param config table|nil      the tooltip config, for the two content switches
 --- @return number  lines drawn
-local function addDeathList(row, style, timeStyle)
+local function addDeathList(row, style, timeStyle, config)
     local deaths = row.deaths
     if type(deaths) ~= "table" or #deaths == 0 then return 0 end
 
@@ -2045,20 +2142,28 @@ local function addDeathList(row, style, timeStyle)
     local drawn = 0
     for i = 1, total do
         local id = deaths[i]
-        local clock
+        local clock, caster, spell
         if id ~= false and id ~= nil then
+            -- ONE GetRecap FOR BOTH READS. It is memoized per id in
+            -- modules/Provider.lua, so a second call would be free -- but the two
+            -- facts come off the same event and asking twice invites them to
+            -- disagree the day the memo is invalidated between the calls.
+            --
             -- The offset falls back to the Current session for the reason
             -- modules/DrillDown.lua's copy records: Overall reports -1 for every
             -- death it holds, and Overall is what a window shows by default.
-            clock = deathClockOf(P.GetRecap(id), timeStyle)
+            local recap = P.GetRecap(id)
+            clock = deathClockOf(recap, timeStyle)
+            caster, spell = killingBlowOf(recap)
         end
 
         -- Numbered chronologically and listed newest first, exactly as
         -- modules/DrillDown.lua builds the rows this indexes. A reader who hovers
         -- and then clicks must see the same list twice.
+        --
         GameTooltip:AddLine(string.format("|T%d:%d:%d:0:0|t %s", DEATH_ICON,
             TOOLTIP_ICON_SIZE, TOOLTIP_ICON_SIZE,
-            string.format(L["Death %d"] or "Death %d", total - i + 1)), 1, 1, 1)
+            deathLineLabel(total - i + 1, caster, spell, config)), 1, 1, 1)
         -- The time goes in the AMOUNT slot rather than the line, so the times
         -- line up in a column instead of ragging against names of two lengths.
         --
@@ -2244,7 +2349,7 @@ function Tooltip:CellTooltip(row, statKey, anchorFrame, window)
     local shown = 0
     if statKey == "Deaths" then
         shown = addDeathList(row, style, config.deathTimeFormat
-            or (window and window.text and window.text.deathTimeFormat))
+            or (window and window.text and window.text.deathTimeFormat), config)
     else
         local source = config.showSpells and sourceDetailFor(window, statKey, row)
         if source then
@@ -2294,14 +2399,17 @@ end
 --- @param shown boolean|nil  is this statistic a column in the hovered window
 --- @return number, number, number
 local function statColor(statKey, shown)
-    local c = Const.STAT_COLORS and Const.STAT_COLORS[statKey or ""]
-    if not c then
+    -- Resolved to a local first: `f and f(x)` truncates to one value.
+    local reader = NS.StatColor
+    local cr, cg, cb
+    if reader then cr, cg, cb = reader(statKey) end
+    if not cr then
         if shown then return 1, 1, 1 end
         return 0.62, 0.62, 0.62
     end
-    if shown then return c[1], c[2], c[3] end
+    if shown then return cr, cg, cb end
     local dim = Const.STAT_DIM or 0.6
-    return c[1] * dim, c[2] * dim, c[3] * dim
+    return cr * dim, cg * dim, cb * dim
 end
 
 --- Which stats the hovered window has on screen, as a lookup.
@@ -2324,7 +2432,7 @@ end
 --- column, and the count of lines drawn.
 ---
 --- EVERY LINE WEARS ITS OWN STATISTIC'S COLOR, label and amount alike — the
---- catalog's palette (`Const.STAT_COLORS`), the same eight colors a bar takes
+--- configured palette (`NS.StatColor`), the same eight colors a bar takes
 --- under `bars.colorMode == "stat"`, and it wears them WHATEVER that setting says.
 --- This is the one place all eight statistics are on screen at once, so the color
 --- is doing work here that it is only optionally doing on a bar: it is what ties

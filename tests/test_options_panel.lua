@@ -324,6 +324,30 @@ test("Options: the Columns page's Defaults button restores the SHIPPED column li
     end
 end)
 
+test("Options: the Columns page's Defaults button ALSO restores the window.columnHeader.* schema rows",
+function()
+    -- This branch moved eight window.columnHeader.* schema rows onto the Columns page's "Header
+    -- text" and "Header background" tabs. options-ui-§13 makes the Defaults button page-wide, not
+    -- tab-wide, so a click on the block-editor tab must still put those rows back even though they
+    -- are not the tab on screen. red under: defaultsOnClick pointed only at restoreShippedColumns.
+    local inst = T.load()
+    local NS = inst.NS
+    local ctx = showPage(inst, "columns")
+
+    assertTrue(ctx.panel.defaultsOnClick ~= nil, "the Columns page must wire a Defaults handler")
+
+    assertTrue(NS.SetByPath("window.columnHeader.font", "Skurri"))
+    assertTrue(NS.SetByPath("window.columnHeader.outline", "THICKOUTLINE"))
+
+    ctx.panel.defaultsOnClick()
+
+    local w = NS.Database.GetWindows()[1]
+    assertEqual(w.columnHeader.font, "Friz Quadrata TT",
+        "the header font must be back to shipped after the page-wide Defaults click")
+    assertEqual(w.columnHeader.outline, "OUTLINE",
+        "the header outline must be back to shipped after the page-wide Defaults click")
+end)
+
 test("Options: the canvas footer's Defaults control reaches the same handler as the header button",
 function()
     local inst = T.load()
@@ -402,9 +426,14 @@ end)
 test("Options: a widget's set() routes through NS.SetByPath", function()
     local inst = T.load()
     local ctx = panelFor(inst, "frame")
-    local before = #aceGUI(inst).__created
     ctx.panel:Hide()
     ctx.panel:Show()
+
+    -- Width is on Size and position, the page's SECOND tab, so the tab is clicked and the
+    -- widgets counted after it: the strip re-renders on select, and anything created before
+    -- the click belongs to the tab we left.
+    local before = #aceGUI(inst).__created
+    ctx.__tabKids[2]:__fire("OnClick")
 
     local slider = findWidget(widgetsSince(inst, before), "Slider", inst.NS.L["Width"])
     assertTrue(slider ~= nil, "the Frame page's Width slider was not rendered")
@@ -426,7 +455,13 @@ end)
 
 test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     local inst = T.load()
-    local ctx = panelFor(inst, "frame")
+    -- The HEADER page, whose first tab opens on a checkbox -- so this needs no tab click and is
+    -- not coupled to tab order. (Frame's checkboxes live on its "General" tab, and reaching them
+    -- by index would break silently the day the tabs are reordered.) This is the same control the
+    -- case used before the settings redesign moved it off Frame, now at its new path -- matching
+    -- the file's own idiom above (panelFor, capture `before`, THEN render) rather than showPage,
+    -- which renders before `before` is captured and would leave nothing in widgetsSince.
+    local ctx = panelFor(inst, "header")
     local before = #aceGUI(inst).__created
     ctx.panel:Hide()
     ctx.panel:Show()
@@ -444,8 +479,8 @@ test("Options: a checkbox's set() routes through NS.SetByPath too", function()
     inst.NS.SetByPath = real
 
     assertEqual(#seen, 1)
-    assertEqual(seen[1], "window.frame.titleBar")
-    assertEqual(inst.NS.GetSetting("window.frame.titleBar"), false)
+    assertEqual(seen[1], "window.header.show")
+    assertFalse(inst.NS.GetSetting("window.header.show"))
 end)
 
 test("Options: applyDefault routes through NS.SetByPath, not around it", function()
@@ -569,4 +604,157 @@ test("Options: AceGUI is resolved once and published for the page builders", fun
     assertTrue(inst.NS.AceGUI ~= nil,
         "library-stack-§4: resolve once and hand it over, rather than per page")
     assertEqual(inst.NS.AceGUI, inst.mocks.__libs["AceGUI-3.0"])
+end)
+
+-- ---------------------------------------------------------------------------
+-- Tabs
+-- ---------------------------------------------------------------------------
+
+-- Every page that draws a strip, and the tab it opens on. Profiles is absent because its widget
+-- tree is AceConfigDialog's; Windows and Columns are here because they are tabbed too, through
+-- their own bespoke builders rather than through RenderTabbedSchema.
+local TABBED = {
+    general    = "General",
+    windows    = "Window",
+    frame      = "General",
+    header     = "Title bar",
+    bars       = "Bar",
+    tooltip    = "General",
+    visibility = "Where to show this window",
+    columns    = "Columns",
+}
+
+test("Panel: every tabbed page opens on its first tab and draws a strip", function()
+    -- red under: a page left on RenderSchema, or one whose renderer draws the strip after the
+    -- rows so the band is reserved too late.
+    local inst = T.load()
+    local L = inst.NS.L
+    for page, firstTab in pairs(TABBED) do
+        local ctx = showPage(inst, page)
+        assertEqual(ctx.activeTab, L[firstTab], page .. ": opens on its first tab")
+        assertTrue(#(ctx.__tabKids or {}) >= 2, page .. ": drew a strip")
+    end
+end)
+
+test("Panel: Profiles draws no strip", function()
+    -- Its widget tree belongs to AceConfigDialog, which reuses it and re-reads the profile on
+    -- every Open. A strip over that would be tabs this addon cannot fill.
+    -- red under: adding profiles to the tabbed set for consistency's sake.
+    local inst = T.load()
+    local ctx = showPage(inst, "profiles")
+    assertEqual(#(ctx.__tabKids or {}), 0)
+end)
+
+test("Panel: switching tabs re-renders without leaving the previous tab's widgets behind",
+function()
+    -- The Frame page's second tab is Size and position. Asserting on the TAB rather than on a child count is
+    -- deliberate: a renderer that appended instead of clearing would still change the count, so
+    -- a count assertion passes for the wrong reason. What proves the clear is that a widget from
+    -- the tab we LEFT is gone.
+    -- red under: rendering the new group without ClearScroll, which appends it under the old.
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "frame")
+
+    local function labelled(name)
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            for _, child in ipairs(w.children or {}) do
+                if child.labelText == name then return true end
+            end
+        end
+        return false
+    end
+
+    assertTrue(labelled(L["Lock window"]), "the Frame page did not open on General")
+    ctx.__tabKids[2]:__fire("OnClick")
+    assertEqual(ctx.activeTab, L["Size and position"])
+    assertTrue(labelled(L["Width"]), "the Size and position tab did not render")
+    assertFalse(labelled(L["Lock window"]), "the previous tab's widgets were left behind")
+end)
+
+test("Panel: the Statistic colors tab says where its colours are actually worn", function()
+    -- A grid of eight swatches with no sentence over it reads as "the colour of
+    -- this statistic", full stop -- and a player who sets Damage to green, looks
+    -- at a class-coloured grid and sees nothing change has been misled by the
+    -- page rather than by the setting. The note is drawn through the same
+    -- afterGroup hook the General tab's two buttons use.
+    -- red under: dropping the note, or keying it to the wrong tab, which would
+    -- put it under the master enable instead.
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "general")
+
+    -- `SetLabel` and `SetText` are two different setters on an AceGUI widget and
+    -- land in two different fields: every schema row uses the first, and TextRow
+    -- -- which is a Label, not a labelled control -- uses the second. Reading only
+    -- one of them is how this case passes for the wrong reason.
+    local function textOnPage()
+        local out = {}
+        local function take(w)
+            if w.labelText then out[#out + 1] = w.labelText end
+            if w.text then out[#out + 1] = w.text end
+        end
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            take(w)
+            for _, child in ipairs(w.children or {}) do take(child) end
+        end
+        return table.concat(out, "\n")
+    end
+
+    local note = L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."]
+    assertTrue(textOnPage():find(note, 1, true) == nil,
+        "the note is on the General tab, which is not the tab it describes")
+
+    ctx.__tabKids[2]:__fire("OnClick")
+    assertEqual(ctx.activeTab, L["Statistic colors"])
+    assertTrue(textOnPage():find(note, 1, true) ~= nil,
+        "the Statistic colors tab drew no note saying where its colours are worn")
+end)
+
+test("Panel: every window sub-page banners the active window, and Windows has no second picker",
+function()
+    -- The banner is the ONLY picker (options-ui-§14). A page that kept its own would be a
+    -- second writer of one piece of session state -- a synchronisation problem invented by the
+    -- design, which would then have to be solved forever.
+    -- red under: leaving the Active window dropdown on the Windows page, or bannering only some
+    -- of the sub-pages.
+    local inst = T.load()
+    local SUBPAGES = { "windows", "frame", "header", "bars", "tooltip", "visibility", "columns" }
+    for _, page in ipairs(SUBPAGES) do
+        local ctx = showPage(inst, page)
+        assertTrue(ctx.__bannerHeight ~= nil and ctx.__bannerHeight > 0,
+            page .. ": drew no banner")
+    end
+
+    -- The banner's own dropdown is parented into the chrome band, NOT added to the scroll, so
+    -- anything still carrying this label INSIDE the scroll is the old picker surviving.
+    local dropdowns = 0
+    local ctx = showPage(inst, "windows")
+    for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+        for _, child in ipairs(w.children or {}) do
+            if child.type == "Dropdown" and child.labelText == inst.NS.L["Active window"] then
+                dropdowns = dropdowns + 1
+            end
+        end
+    end
+    assertEqual(dropdowns, 0, "the Windows page kept its own picker")
+end)
+
+test("Panel: choosing a window in the banner retargets every page and keeps the tab", function()
+    -- Comparing one surface across two windows is the reason to switch from a sub-page at all,
+    -- so the tab is a property of the page and not of the window (options-ui-§14).
+    -- red under: resetting activeTab on a structural refresh.
+    local inst = T.load()
+    assertTrue(inst.NS.WindowManager:Create("Second"))
+    local list = inst.NS.Database.GetWindows()
+
+    local ctx = showPage(inst, "bars")
+    ctx.__tabKids[3]:__fire("OnClick")
+    assertEqual(ctx.activeTab, inst.NS.L["Border"])
+
+    local banner = ctx.__bannerWidget
+    banner:__fire("OnValueChanged", list[2].id)
+
+    assertEqual(inst.NS.State.activeWindowId, list[2].id)
+    assertEqual(ctx.activeTab, inst.NS.L["Border"], "the tab survived the retarget")
 end)

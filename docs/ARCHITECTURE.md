@@ -100,9 +100,12 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **138 rows across 7 page keys**,
-each one wiring automatically into its panel widget, its `/mm get|set|list|reset` coverage, and the
-per-page and global defaults reset. Adding a setting is one row and never a parallel mutator.
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **154 rows across 8 page keys**
+(windows, frame, header, bars, tooltip, visibility, columns, general), each one wiring automatically
+into its panel widget — one tab per distinct `group`, via `LibKa0s-Options-1.0`'s `RenderTabbedSchema`
+— its `/mm get|set|list|reset` coverage, and the per-page and global defaults reset. A ninth
+registered page, Profiles, hosts no schema rows at all. Adding a setting is one row and never a
+parallel mutator; adding a tab is a `group` no existing row on that page uses, and nothing else.
 
 The write seam is `NS.SetByPath`; the reader is `NS.GetSetting`. Both the panel and the CLI point at
 them, so `/mm set window.frame.width 300` takes exactly the path a slider takes — same validation,
@@ -113,18 +116,22 @@ setting is per-window, and a window is an instance created at runtime — so an 
 have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpressible in the flat
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
-settings panel's window picker (`settings/Windows.lua`, its only writer) moves. The other seven rows
-keep absolute paths and resolve against `db.profile`: `enabled`, `minimap.hide`, the three `export.*`
-preferences, and the two `sessionOnly` rows `state.testMode` and `state.debugConsole`, whose own
-`get`/`set` are the whole of their storage. Moving one integer of session state retargets a hundred
-and seventeen rows.
+settings panel's window picker — `H.WindowBanner`, decorated by `settings/Windows.lua` and drawn on
+all seven window pages — moves. The other **seventeen** rows keep absolute paths and resolve against
+`db.profile`: `enabled`, `minimap.hide`, `data.mergePets`, `data.throttle` (addon-wide since
+schemaVersion 5), the three `export.*` preferences, the eight `statColors.*` swatches (generated one
+per `Constants.STAT_COLORS` entry — see [settings-panel.md](settings-panel.md#the-statistic-palette)),
+and the two `sessionOnly` rows `state.testMode` and `state.debugConsole`, whose own `get`/`set` are
+the whole of their storage. Moving one integer of session state retargets **137** rows.
 
-Two pages carry **zero** schema rows, both by necessity. `settings/Columns.lua` edits an ordered
-array whose length is the user's, which a path model has no vocabulary for — so `window.columns` is a
-documented carve-out: reads walk it like any node, and a write is accepted **whole-array**, validated
-and rebuilt entry by entry by the same seam. `settings/Profiles.lua` hosts AceDBOptions' own tree and
-is the one place `AceConfigDialog` is permitted, because the options table is not ours to re-express.
-It is also the one page vetoed from reset-all — resetting it deletes user data.
+One page carries **zero** schema rows: `settings/Profiles.lua` hosts AceDBOptions' own tree and is
+the one place `AceConfigDialog` is permitted, because the options table is not ours to re-express. It
+is also the one page vetoed from reset-all — resetting it deletes user data. `settings/Columns.lua`
+carries **eight** — the `window.columnHeader.*` text and background rows, moved here from Header
+because this is the page that labels the strip they style — alongside its bespoke block editor, which
+still edits an ordered array whose length is the user's, a shape a path model has no vocabulary for:
+`window.columns` is a documented carve-out, read like any node and accepted **whole-array** on write,
+validated and rebuilt entry by entry by the same seam.
 
 `NS.ValidateSchema()` proves every row's `default` equals `defaults/Profile.lua`'s. The two are
 restated independently rather than sharing a reference precisely so the check can prove something.

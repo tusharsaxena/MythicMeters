@@ -259,10 +259,15 @@ test("Defaults: the profile itself is nearly empty — almost everything is per-
     -- `data` earns it the same way: `mergePets` says what a pet's damage IS and
     -- `throttle` is a refresh rate, so two windows disagreeing about either is
     -- two answers to one question. Both were per-window until v5.
+    --
+    -- `statColors` is the third and last: the palette's whole job is telling one
+    -- column from another AT A GLANCE, and two windows disagreeing about what
+    -- green means is exactly the thing that breaks it.
     local keys = {}
     for key in pairs(NS.defaults.profile) do keys[#keys + 1] = key end
     table.sort(keys)
-    assertEqual(table.concat(keys, ","), "data,enabled,export,minimap,nextWindowId,windows")
+    assertEqual(table.concat(keys, ","),
+        "data,enabled,export,minimap,nextWindowId,statColors,windows")
 end)
 
 test("Defaults: the shipped registry is empty and the id counter starts at 1", function()

@@ -212,20 +212,19 @@ test("HeaderControls: both colours come from config", function()
     assertEqual(r .. "," .. g .. "," .. b, "0,1,0")
 end)
 
-test("HeaderControls: each colour has its OWN class-colour flag", function()
-    -- Two flags rather than one, because hover and rest are two independent
-    -- answers. A shared flag would make the pointer's colour identical to the
-    -- resting one for anybody who ticked it, which is the one thing a hover
-    -- colour must never be.
-    -- red under: a single `classColor` key driving both.
+test("HeaderControls: each colour has its OWN colour mode", function()
+    -- Two modes rather than one, because hover and rest are two independent answers. A shared
+    -- mode would make the pointer's colour identical to the resting one for anybody who chose
+    -- class, which is the one thing a hover colour must never be.
+    -- red under: a single `controlColorMode` key driving both, or reading the retired boolean.
     local inst, window = scene(function(cfg)
-        cfg.frame.controlColor      = { r = 0, g = 0, b = 1, a = 1 }
-        cfg.frame.controlHoverColor = { r = 0, g = 1, b = 0, a = 1 }
-        cfg.frame.controlClassColor = true
+        cfg.frame.controlColor          = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor     = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlColorMode      = "class"
+        cfg.frame.controlHoverColorMode = "custom"
     end)
-    -- Compared against the reader itself rather than against a literal: whose
-    -- class it is, is the subject of the case above this one, and hard-coding a
-    -- hue here would only re-test the mock.
+    -- Compared against the reader itself rather than against a literal: whose class it is, is
+    -- the subject of another case, and hard-coding a hue here would only re-test the mock.
     local cr, cg, cb = inst.NS.PlayerClassRGB()
     assertTrue(cr ~= nil, "the scene has no readable class to colour with")
 
@@ -233,28 +232,34 @@ test("HeaderControls: each colour has its OWN class-colour flag", function()
     assertEqual(r .. "," .. g .. "," .. b, cr .. "," .. cg .. "," .. cb,
         "the resting colour is not classed")
 
-    -- The hover colour is untouched by the resting flag.
     window.controls.settings:_run("OnEnter")
     local hr, hg, hb = tintOf(window.controls.settings)
     assertEqual(hr .. "," .. hg .. "," .. hb, "0,1,0",
-        "the resting flag classed the hover colour too")
+        "the resting mode classed the hover colour too")
 end)
 
-test("HeaderControls: the hover flag classes the hover colour and nothing else", function()
+test("HeaderControls: the hover mode classes the hover colour and nothing else", function()
+    -- The other direction, and the one the type change put at risk: `hovered and A or B` used
+    -- to answer B whenever A was false, and a mode STRING is never falsy -- so the same idiom
+    -- would now answer the hover mode always instead of the resting one always. Same trap,
+    -- opposite direction.
+    -- red under: collapsing the resting/hover branch back to that idiom.
     local inst, window = scene(function(cfg)
-        cfg.frame.controlColor           = { r = 0, g = 0, b = 1, a = 1 }
-        cfg.frame.controlHoverColor      = { r = 0, g = 1, b = 0, a = 1 }
-        cfg.frame.controlHoverClassColor = true
+        cfg.frame.controlColor          = { r = 0, g = 0, b = 1, a = 1 }
+        cfg.frame.controlHoverColor     = { r = 0, g = 1, b = 0, a = 1 }
+        cfg.frame.controlColorMode      = "custom"
+        cfg.frame.controlHoverColorMode = "class"
     end)
     local cr, cg, cb = inst.NS.PlayerClassRGB()
     assertTrue(cr ~= nil, "the scene has no readable class to colour with")
 
     local r, g, b = tintOf(window.controls.settings)
-    assertEqual(r .. "," .. g .. "," .. b, "0,0,1", "the hover flag classed the resting colour")
+    assertEqual(r .. "," .. g .. "," .. b, "0,0,1", "the hover mode classed the resting colour")
 
     window.controls.settings:_run("OnEnter")
     local hr, hg, hb = tintOf(window.controls.settings)
-    assertEqual(hr .. "," .. hg .. "," .. hb, cr .. "," .. cg .. "," .. cb)
+    assertEqual(hr .. "," .. hg .. "," .. hb, cr .. "," .. cg .. "," .. cb,
+        "the hover mode did not class the hover colour")
 end)
 
 test("HeaderControls: both flags off is the shipped look, unchanged", function()
@@ -296,7 +301,7 @@ test("HeaderControls: the width reserved equals the width occupied", function()
 end)
 
 test("HeaderControls: no title bar means no strip and no reservation", function()
-    local inst, window = scene(function(cfg) cfg.frame.titleBar = false end)
+    local inst, window = scene(function(cfg) cfg.header.show = false end)
     assertEqual(inst.NS.HeaderControls.WidthUsed(window), 0)
     assertEqual(window.controls.settings:IsShown(), false)
 end)
@@ -328,6 +333,35 @@ test("HeaderControls: an atlas beats the ASCII rung", function()
 
     assertTrue(window.controls.settings.tex:IsShown(), "the atlas wins where it exists")
     assertFalse(window.controls.settings.glyph:IsShown())
+end)
+
+test("HeaderControls: an unlocked padlock is drawn at the same weight as its neighbours", function()
+    -- A window ships UNLOCKED, so the dimmed "off" half was the state the strip
+    -- was in by default: one control at 0.45 beside six at full strength, which
+    -- reads as a half-broken icon rather than as a state. The state is carried by
+    -- the glyph (our art has both halves) and, on the atlas rung, by desaturation.
+    -- red under: restoring the 0.45 alpha on any rung, in drawIcon or applyTint.
+    local inst, window, cfg = scene()
+
+    local function alphas()
+        local out = {}
+        for _, key in ipairs({ "close", "minimise", "lock", "settings", "segment", "reset", "export" }) do
+            local b = window.controls[key]
+            out[key] = b.tex:IsShown() and b.tex:GetAlpha() or b.glyph:GetAlpha()
+        end
+        return out
+    end
+
+    for _, locked in ipairs({ true, false }) do
+        cfg.frame.locked = locked
+        inst.NS.HeaderControls:Apply(window)
+        local a = alphas()
+        for key, value in pairs(a) do
+            assertEqual(value, a.close,
+                ("%s is drawn at a different weight to close, locked=%s"):format(key, tostring(locked)))
+        end
+        assertEqual(a.lock, 1, "the padlock is not at full strength, locked=" .. tostring(locked))
+    end
 end)
 
 test("HeaderControls: the padlock's two states do not draw the same", function()
@@ -500,6 +534,68 @@ test("HeaderControls: with the reveal off, hover is colour alone", function()
     assertEqual(window.controls.lock:GetAlpha(), 1, "a control faded with the reveal off")
     local c = window.controls.export.tex.__vertexColor
     assertEqual(c[1] .. "," .. c[2] .. "," .. c[3], "1,0.82,0")
+end)
+
+test("HeaderControls: both ends of the reveal are settings, and default to what was hardcoded", function()
+    -- 0.25 at rest and 1 under the pointer were literals in restAlpha until they
+    -- became these two rows, so the shipped values ARE the old behaviour -- a
+    -- window that never touches either slider must be drawn exactly as it was.
+    -- red under: a default that is not the number it replaced.
+    local _, window = scene()
+    window.controls.export:_run("OnEnter")
+
+    assertEqual(window.controls.export:GetAlpha(), 1, "the hovered control is not at the hover value")
+    assertEqual(window.controls.lock:GetAlpha(), 0.25, "a resting control is not at the rest value")
+end)
+
+test("HeaderControls: the two opacity sliders each move their own end", function()
+    -- Two settings because they are two questions, exactly as the two colour
+    -- modes beside them are: how faint the strip sits, and how far the pointer
+    -- lifts one control clear of it.
+    -- red under: one slider driving both, or the hover value leaking into rest.
+    local _, window = scene(function(cfg)
+        cfg.frame.controlAlpha      = 0.6
+        cfg.frame.controlHoverAlpha = 0.8
+    end)
+
+    assertEqual(window.controls.lock:GetAlpha(), 0.6)
+    window.controls.lock:_run("OnEnter")
+    assertEqual(window.controls.lock:GetAlpha(), 0.8)
+    assertEqual(window.controls.export:GetAlpha(), 0.6, "a resting control took the hover value")
+end)
+
+test("HeaderControls: with the reveal off every control sits at the HOVER opacity", function()
+    -- With fading off there is no faded state to have an opacity, so `controlAlpha`
+    -- is not read at all -- and the value the strip sits at is the one a player
+    -- who has just turned fading off means by "how visible are these", which is
+    -- the hover end. Setting the rest slider to something absurd must not dim a
+    -- strip that has opted out of dimming.
+    -- red under: reveal-off falling through to controlAlpha, which would hide the
+    -- whole strip for anyone who had set a low faded level and then switched off.
+    local _, window = scene(function(cfg)
+        cfg.frame.hoverReveal       = false
+        cfg.frame.controlAlpha      = 0.05
+        cfg.frame.controlHoverAlpha = 0.7
+    end)
+
+    for _, key in ipairs({ "close", "lock", "settings", "export" }) do
+        assertEqual(window.controls[key]:GetAlpha(), 0.7, key .. " ignored the reveal-off rule")
+    end
+end)
+
+test("HeaderControls: an out-of-range opacity is clamped, not passed through", function()
+    -- These arrive from a SavedVariables file a player can hand-edit, and an alpha
+    -- outside 0..1 is not an error -- the widget silently draws the nearest legal
+    -- value, which reads as the setting not working.
+    -- red under: handing frameCfg straight to SetAlpha.
+    local _, window = scene(function(cfg)
+        cfg.frame.controlAlpha      = -3
+        cfg.frame.controlHoverAlpha = 42
+    end)
+
+    assertEqual(window.controls.lock:GetAlpha(), 0)
+    window.controls.lock:_run("OnEnter")
+    assertEqual(window.controls.lock:GetAlpha(), 1)
 end)
 
 test("HeaderControls: hover reveal off means always visible", function()

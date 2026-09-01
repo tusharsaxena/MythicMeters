@@ -533,7 +533,7 @@ test("Schema: a `hidden` row is writable and listable but draws no control", fun
     assertTrue(found ~= nil, "the path must still resolve, or minimise cannot write")
     assertEqual(found.hidden, true)
 
-    for _, row in ipairs(NS.SchemaForPage("frame")) do
+    for _, row in ipairs(NS.SchemaForPage("header")) do
         assertTrue(row.path ~= "window.frame.minimised",
             "a state row was rendered as a setting")
     end
@@ -684,63 +684,270 @@ test("The Frame page's Defaults button does NOT broadcast", function()
         "the meta itself must still be restored")
 end)
 
-test("Schema: the Header page's three groups are named and ordered for the strip they describe",
-function()
-    -- Two strips, three groups, top to bottom in the order they are drawn:
-    -- everything about the TITLE BAR first (its text, its alignment, its height
-    -- and its background — one group, because they are one strip), then the
-    -- controls that sit in that bar, then the column-label strip below it.
-    --
-    -- "Header text" and "Header background" used to be two groups, which put the
-    -- height and the alignment of the TEXT under a heading that said background.
-    -- red under: splitting Frame header back up, or filing the controls below the
-    -- column labels.
-    local inst = T.load()
-    local L = inst.NS.L
+-- ---------------------------------------------------------------------------
+-- The page/tab partition
+-- ---------------------------------------------------------------------------
 
-    local order, seen = {}, {}
-    for _, row in ipairs(inst.NS.SchemaForPage("header")) do
-        local g = row.group
-        if g and not seen[g] then
-            seen[g] = true
-            order[#order + 1] = g
+--- Every page's tabs, in the order the strip draws them, and how many controls each holds.
+--- Stated here rather than derived from the schema the assertion reads, so a row that drifts
+--- into another tab is a NAMED failure rather than a shorter list that still agrees with
+--- itself.
+---
+--- VISIBLE rows only, because NS.SchemaForPage filters `hidden` and this table describes what
+--- the panel DRAWS. So General has no Export tab -- its three export rows are hidden -- and
+--- the Header page's Controls counts eight, not the nine rows filed under it. The case below
+--- this one is what keeps those hidden rows honest.
+local PARTITION = {
+    general    = { { "General", 6 }, { "Statistic colors", 8 } },
+    windows    = { { "Window", 1 } },
+    frame      = { { "General", 6 }, { "Size and position", 6 },
+                   { "Background and border", 4 }, { "Row", 8 } },
+    header     = { { "Title bar", 8 }, { "Title text", 6 }, { "Controls", 8 },
+                   { "Button style", 8 } },
+    bars       = { { "Bar", 5 }, { "Background", 3 }, { "Border", 4 },
+                   { "Text content", 5 }, { "Text style", 7 }, { "Icons", 3 } },
+    tooltip    = { { "General", 5 }, { "Bar", 5 }, { "Bar background", 3 },
+                   { "Bar border", 3 }, { "Text", 6 }, { "Contents", 7 } },
+    visibility = { { "Where to show this window", 7 }, { "When to hide this window", 8 },
+                   { "Combat", 2 } },
+    columns    = { { "Header text", 6 }, { "Header background", 2 } },
+}
+
+test("Schema: every page's tabs are the designed ones, in order, at the designed size",
+function()
+    -- red under: moving a row to another tab, reordering a group, or letting a tab drift
+    -- above six controls without the design saying so.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    for page, expected in pairs(PARTITION) do
+        local order, counts, seen = {}, {}, {}
+        for _, row in ipairs(NS.SchemaForPage(page)) do
+            local g = row.group or "?"
+            if not seen[g] then
+                seen[g] = true
+                order[#order + 1] = g
+            end
+            counts[g] = (counts[g] or 0) + 1
+        end
+
+        local wantNames = {}
+        for i, pair in ipairs(expected) do wantNames[i] = L[pair[1]] end
+        assertEqual(table.concat(order, " | "), table.concat(wantNames, " | "),
+            page .. ": tab order")
+
+        for _, pair in ipairs(expected) do
+            assertEqual(counts[L[pair[1]]], pair[2],
+                page .. " / " .. pair[1] .. ": control count")
         end
     end
-
-    assertEqual(table.concat(order, " | "),
-        table.concat({ L["Frame header"], L["Header controls"], L["Column headers"] }, " | "))
 end)
 
-test("Schema: the header controls are EDITED on Header and STORED under frame", function()
-    -- A row's page is where it is edited; its path is where it is stored, and the
-    -- two are allowed to disagree. Every one of these draws a control into the
-    -- title bar, so a player looks for them under Header — but they are stored at
-    -- `window.frame.*`, and renaming the keys for symmetry would migrate every
-    -- saved profile in exchange for a tidiness nobody can see.
-    -- red under: moving the group back to Frame, or renaming the paths.
+test("Schema: no tab holds fewer than two controls", function()
+    -- A tab over one control is a click that reveals a single checkbox. Windows' Window is the
+    -- one exemption and it is exempted BY NAME: a single stored row sharing its tab with
+    -- BESPOKE commands that have no stored value and cannot be rows and cannot be counted here
+    -- -- the picker and the create/duplicate/delete buttons. General's Maintenance was the
+    -- second, and it is gone: one checkbox and two reset buttons were not a subject worth a
+    -- tab, and all three sit on General now.
+    -- red under: a tab losing rows until one is left, or a new one-row section.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+    local EXEMPT = { [L["Window"]] = true }
+
+    local counts, pageOf = {}, {}
+    for _, row in ipairs(NS.Schema) do
+        if row.page and row.group then
+            counts[row.group] = (counts[row.group] or 0) + 1
+            pageOf[row.group] = row.page
+        end
+    end
+    for group, n in pairs(counts) do
+        if not EXEMPT[group] then
+            assertTrue(n >= 2, pageOf[group] .. " / " .. group .. " holds only " .. n)
+        end
+    end
+end)
+
+test("Schema: a hidden row is filed under a tab that exists, and draws nothing", function()
+    -- A hidden row still carries a page and a group -- that is what keeps it writable through
+    -- NS.SetByPath, listable in `/mm list` and comparable by the schema-vs-defaults validator
+    -- while missing the panel. It cannot produce a phantom tab, because SchemaForPage filters
+    -- it before the strip is built; what it CAN do is lose its page and quietly drop out of
+    -- `/mm list`, which is the half worth pinning.
+    -- red under: dropping page or group from a hidden row "since it never draws".
     local inst = T.load()
     local NS = inst.NS
 
-    local closeGroup, onHeader = nil, 0
+    local hidden, drawn = 0, {}
+    for _, row in ipairs(NS.Schema) do
+        if row.hidden then
+            hidden = hidden + 1
+            assertTrue(row.page ~= nil and row.group ~= nil,
+                row.path .. " is hidden but carries no page or group")
+        end
+    end
+    assertEqual(hidden, 4, "four rows are hidden: frame.minimised and the three export choices")
+
+    -- And the other half: no tab the strip actually draws is empty.
+    for _, page in ipairs({ "general", "windows", "frame", "header", "bars", "tooltip",
+                            "visibility", "columns" }) do
+        for _, row in ipairs(NS.SchemaForPage(page)) do
+            drawn[row.group or "?"] = (drawn[row.group or "?"] or 0) + 1
+        end
+    end
+    for group, n in pairs(drawn) do
+        assertTrue(n >= 1, group .. " is a drawn tab with nothing in it")
+    end
+end)
+
+test("Schema: every tab name and row label is a localized string, not a bare literal", function()
+    -- A tab label is now the most visible string on a page -- it is the heading AND the control
+    -- you click -- and a group declared as a raw literal is a page that cannot be translated
+    -- past its own headings. `L` answers its own key when a translation is missing, so the test
+    -- is that the key EXISTS in the locale table rather than that the answer differs.
+    --
+    -- LABELS ARE WALKED TOO, and that is what this case is really for: a regroup moves `group`
+    -- and `label` in two different fields, and a retirement checked only the first can retire a
+    -- key still carrying the second -- exactly what happened to "Bar background color", which
+    -- retired as a group name while still labelling window.bars.bgColor and
+    -- window.tooltip.barBgColor. NOT `desc`: several desc strings were already missing their key
+    -- before this case existed, and asserting on them here would fail this suite on a pre-existing
+    -- gap this case is not the one to fix.
+    -- red under: adding a group as "Bar border" instead of L["Bar border"], or retiring a locale
+    -- key that is still a row's label.
+    local inst = T.load()
+    local NS = inst.NS
+    local missing = {}
+
+    --- A label with its texture escape taken back off.
+    ---
+    --- The Header page's Controls rows carry their own icon in front of the words
+    --- (settings/Schema.lua's controlLabel), which is a PREFIX and not a
+    --- replacement -- so the check is that what remains is still a locale key. A
+    --- row that lost its translation while gaining a picture fails here exactly as
+    --- a bare literal does.
+    local function words(label)
+        return (label:gsub("^|T[^|]*|t ", ""))
+    end
+
+    for _, row in ipairs(NS.Schema) do
+        if row.group and rawget(NS.L, row.group) == nil then
+            missing[#missing + 1] = "group: " .. row.group
+        end
+        if row.label and rawget(NS.L, words(row.label)) == nil then
+            missing[#missing + 1] = row.path .. " label: " .. row.label
+        end
+    end
+    table.sort(missing)
+    assertEqual(table.concat(missing, ", "), "",
+        "these strings are not in locales/enUS.lua")
+end)
+
+test("Schema: every Controls row carries its own icon in front of its words", function()
+    -- The strip is the index into that tab: eight checkboxes named "Show close",
+    -- "Show lock", "Show segment picker" ask a reader to translate a word back
+    -- into the glyph they were looking at. The icon removes the translation.
+    -- red under: a row added to Controls without one, which is the row a player
+    -- then cannot match to anything in the header.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    -- The one exemption, and it is not a control: `showSegmentText` governs the
+    -- session LINE -- the words "Overall" at the left of the header -- which is
+    -- text the title face draws and has no glyph in the strip. Giving it one of
+    -- the seven would put the same picture beside two different checkboxes,
+    -- which is worse than the row sitting a few pixels left of its neighbours.
+    local NO_GLYPH = { ["window.frame.showSegmentText"] = true }
+
+    local bare = {}
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and row.group == L["Controls"]
+           and not row.hidden and not NO_GLYPH[row.path] then
+            if not row.label:find("^|T") then bare[#bare + 1] = row.path end
+        end
+    end
+    assertEqual(table.concat(bare, ", "), "",
+        "these Controls rows draw no icon beside their checkbox")
+end)
+
+test("Schema: a control label degrades to its words when there is no art", function()
+    -- NS.Icon answers nil on a degraded install -- the art is inside the LibKa0s
+    -- payload that is missing (core/MediaSetup.lua) -- and a label built out of
+    -- that answer must be the plain sentence rather than a broken escape.
+    -- red under: string.format-ing a nil path into the label.
+    local inst = T.load{ libFiles = {} }
+    local NS, L = inst.NS, inst.NS.L
+
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and row.group == L["Controls"] then
+            assertFalse(row.label:find("|T") ~= nil,
+                row.path .. " drew a texture escape with no texture behind it")
+        end
+    end
+end)
+
+test("Schema: the active tab is session state and has no home in the schema", function()
+    -- options-ui-§13: a stored tab is UI position masquerading as a setting. It would make one
+    -- page look different to two characters on one account for a reason nobody asked for, and
+    -- it turns a cosmetic default into a migration the day the sections are renamed.
+    -- red under: adding an activeTab row "so /mm can reach it", which is the argument that
+    -- correctly justifies the sessionOnly rows and does not justify this one.
+    local inst = T.load()
+    for _, row in ipairs(inst.NS.Schema) do
+        assertFalse(row.path:find("activeTab") and true or false,
+            "the active tab reached the schema: " .. row.path)
+    end
+end)
+
+test("Schema: the column header strip is styled on the page where columns are chosen",
+function()
+    -- It LABELS the columns, and it spent three releases as the third group of a 31-control
+    -- Header page. The paths stay under window.columnHeader.* -- a row's page is where it is
+    -- edited and its path is where it is stored, and the two are allowed to disagree.
+    -- red under: moving the group back to header, or renaming the paths to match the page.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local onColumns = 0
+    for _, row in ipairs(NS.SchemaForPage("columns")) do
+        onColumns = onColumns + 1
+        assertTrue(row.path:find("^window%.columnHeader%."),
+            row.path .. " is on the Columns page but is not a column-header setting")
+    end
+    assertEqual(onColumns, 8, "all eight moved, not some of them")
+
     for _, row in ipairs(NS.SchemaForPage("header")) do
-        if row.group == NS.L["Header controls"] then
-            onHeader = onHeader + 1
-            assertTrue(row.path:find("^window%.frame%."),
+        assertFalse(row.path:find("^window%.columnHeader%.") and true or false,
+            "the Header page kept a column-header row: " .. row.path)
+    end
+end)
+
+
+test("Schema: the header controls are EDITED on Header and STORED under frame", function()
+    -- A row's page is where it is edited; its path is where it is stored, and the two are
+    -- allowed to disagree. Every one of these draws a control into the title bar, so a player
+    -- looks for them under Header -- but they are stored at `window.frame.*`, and renaming the
+    -- keys for symmetry would migrate every saved profile for a tidiness nobody can see.
+    -- red under: moving the group back to Frame, or renaming the paths to match the page.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+    local TABS = { [L["Controls"]] = true, [L["Button style"]] = true }
+
+    local n = 0
+    for _, row in ipairs(NS.Schema) do
+        if row.page == "header" and TABS[row.group] then
+            n = n + 1
+            assertTrue(row.path:find("^window%.frame%.") ~= nil,
                 row.path .. " is a header control and must still be stored under frame")
         end
-        if row.path == "window.frame.closeButton" then closeGroup = row.group end
     end
-    assertEqual(closeGroup, NS.L["Header controls"])
-    assertTrue(onHeader >= 10, "the whole group moved, not one row of it")
-
-    local groups = {}
-    for _, row in ipairs(NS.SchemaForPage("frame")) do groups[row.group or ""] = true end
-    assertFalse(groups[NS.L["Header controls"]] or false,
-        "the Frame page kept a header control")
-    assertTrue(groups[NS.L["Frame behavior"]], "the Frame page lost its behavior group")
-    assertFalse(groups[NS.L["Row behavior"]] or false,
-        "\"Row behavior\" is the Rows page's heading, not this one's")
+    -- Exactly 17: Controls (close/showMinimise/showLock/showSettings, the hidden
+    -- `window.frame.minimised`, and the four meter buttons) + Button style (8). Walked over
+    -- NS.Schema, not SchemaForPage, so the hidden row counts.
+    assertEqual(n, 17, "the whole set moved, not one row of it")
 end)
+
 
 test("Schema: every group on every page is CONTIGUOUS, or a heading prints twice", function()
     -- Group headings are emitted when `group` CHANGES between consecutive rows,

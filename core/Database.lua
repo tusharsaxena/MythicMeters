@@ -43,7 +43,11 @@ NS.Database = Database
 -- v8 prunes the four header keys that said what was already on screen.
 -- v9 takes the colour mode off the title bar's background.
 -- v10 retires the "At cursor" tooltip anchor.
-local CURRENT_DB_VERSION = 12
+-- v11 takes the colour mode off the title bar's text.
+-- v12 turns the column array from a chosen subset into the full catalog, ticked.
+-- v13 moves the title-bar toggle onto the header and turns the two control
+--     class-colour flags into modes.
+local CURRENT_DB_VERSION = 13
 
 -- The ONE Ka0s_MultiMeters_PROFILE_CHANGED emitter (architecture-§4: one sender
 -- per message). Every path that makes the active profile a different thing — a
@@ -545,15 +549,26 @@ migrations[9] = function(db)
     db.global.schemaVersion = 10
 end
 
---- v10 -> v11: THE TITLE BAR'S TEXT LOSES ITS COLOUR MODE.
+--- v10 -> v11: THE TITLE BAR'S TEXT LOSES ITS THREE-MODE COLOUR SETTING.
 ---
---- Same argument that took the mode off the title bar's BACKGROUND at v8,
---- arriving at its TEXT a release later. The title bar is ONE strip over the
---- whole window, so neither mode it offered could say anything true about it:
---- "per statistic" could only ever paint it the sort column's colour -- already
---- on screen in that column's own header and in its arrow -- and "class" could
---- only be the local player's, which the title bar is not about either. It names
---- the window. The colour picker is the whole setting now.
+--- WHAT THIS STEP CLEARED, AND WHY IT STILL RUNS. At the time it removed the row
+--- outright: the title bar is ONE strip over the whole window, and neither mode
+--- it offered was thought to say anything true about it.
+---
+--- `window.header.colorMode` EXISTS AGAIN, and half of that argument was later
+--- overturned -- `class` is back, because the controls and the divider on the same
+--- strip both wear one and a title that alone could not was the odd one out. See
+--- settings/Schema.lua's Title text note. The other half stands: there is still no
+--- `stat`, for the reason above.
+---
+--- SO THIS STEP IS NOT A HISTORICAL NO-OP, and it must not be retired into one. A
+--- profile below v11 can be holding `colorMode = "stat"`, which the two-mode row
+--- does not accept and no reader would resolve; clearing it lets the shipped
+--- default (`custom`) fill in, which is the same answer that profile has been
+--- rendering since v10 anyway. A profile holding `"class"` loses it and reverts to
+--- the picker -- deliberate, and not worth a guess: the key was genuinely dead for
+--- the releases in between, and re-deriving intent from a value nothing read is
+--- how a migration invents a preference nobody expressed.
 ---
 --- Pruned rather than left, for the reason every step here gives: AceDB merges
 --- defaults in and never removes what they stopped naming, so a field nobody
@@ -617,6 +632,55 @@ migrations[11] = function(db)
     end
 
     db.global.schemaVersion = 12
+end
+
+--- v12 -> v13: THE TITLE-BAR TOGGLE MOVES ONTO THE HEADER, AND THE HEADER CONTROLS' TWO
+--- CLASS-COLOUR FLAGS BECOME MODES.
+---
+--- `Show title bar` was on the Frame page, under "Frame behavior", switching a surface the
+--- Header page owns -- so it sat three clicks from every control that styles the thing it turns
+--- off. The control moved with the settings redesign; the PATH moved with it, because a row on
+--- the Header page whose path says `frame` misleads the next reader of the schema and reads
+--- wrong in `/mm set window.frame.titleBar`.
+---
+--- Carried across rather than defaulted: a player who turned their title bar off must not log
+--- in to it back on. An ABSENT key is left absent, because absent means "never changed from the
+--- default" -- writing one here would freeze today's default into every stored profile and the
+--- default could never move again.
+---
+--- The two `controlClassColor` / `controlHoverClassColor` booleans get the same redesign every
+--- other colourable surface already has: a mode dropdown. A stored `true` becomes "class"; a
+--- stored `false` becomes "custom", which is what it already meant -- mapping it to nil instead
+--- would leave the row reading the schema default, which happens to be the same value today but
+--- need not be tomorrow.
+---
+--- Pruned rather than left, for the reason every step here gives: AceDB merges defaults in and
+--- never removes what they stopped naming, so a field nobody prunes outlives its reader.
+migrations[12] = function(db)
+    for _, profile in ipairs(allProfiles(db)) do
+        for _, w in ipairs(type(profile.windows) == "table" and profile.windows or {}) do
+            local frame = type(w) == "table" and w.frame
+            if type(frame) == "table" and frame.titleBar ~= nil then
+                if type(w.header) ~= "table" then w.header = {} end
+                w.header.show = frame.titleBar
+                frame.titleBar = nil
+            end
+
+            if type(frame) == "table" then
+                if frame.controlClassColor ~= nil then
+                    frame.controlColorMode = frame.controlClassColor and "class" or "custom"
+                    frame.controlClassColor = nil
+                end
+                if frame.controlHoverClassColor ~= nil then
+                    frame.controlHoverColorMode =
+                        frame.controlHoverClassColor and "class" or "custom"
+                    frame.controlHoverClassColor = nil
+                end
+            end
+        end
+    end
+
+    db.global.schemaVersion = 13
 end
 
 --- Walk the account forward to CURRENT_DB_VERSION. Runs on Init and on every
