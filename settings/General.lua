@@ -182,7 +182,7 @@ local function Build(mainCategory)
     local function afterGeneral(c)
         H.InlineButtonPair(c, {
             text    = L["Reset all settings"],
-            tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."],
+            tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles > Reset Profile does. Your other profiles are left alone."],
             onClick = function() StaticPopup_Show("MULTIMETERS_RESET_ALL") end,
         }, {
             text    = L["Reset position"],

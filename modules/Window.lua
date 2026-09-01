@@ -1768,8 +1768,12 @@ end
 --- The order matters. Availability is asked FIRST, because a client with the
 --- meter switched off has nothing for any of the rest of this to do; then a
 --- drill-down replaces the grid entirely if one is open; then the data comes
---- from the aggregator, in preview form when the window is unlocked or preview
---- mode is on; then the rows are drawn.
+--- from the aggregator, in preview form when TEST MODE is on; then the rows are
+--- drawn.
+---
+--- Test mode is the ONE door to preview data -- see IsTest above. An unlocked
+--- window used to imply it, and this line still said so a release after the
+--- coupling was removed.
 function WindowProto:Refresh()
     if not (self.frame and self.frame:IsShown()) then return end
     -- A COLLAPSED WINDOW HAS NOWHERE TO DRAW. ShouldPoll's clause covers the

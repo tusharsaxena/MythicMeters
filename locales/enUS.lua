@@ -670,8 +670,8 @@ L["Debug console"] = "Debug console"
 L["Show or hide the on-screen debug console. Session only; it does not turn debug logging on."] =
     "Show or hide the on-screen debug console. Session only; it does not turn debug logging on."
 L["Reset all settings"] = "Reset all settings"
-L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."] =
-    "Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles \226\134\146 Reset Profile does. Your other profiles are left alone."
+L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles > Reset Profile does. Your other profiles are left alone."] =
+    "Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles > Reset Profile does. Your other profiles are left alone."
 L["Reset this profile to the addon defaults? Every setting goes back to its shipped value and your extra windows are DELETED \226\128\148 you come back with one fresh window, exactly as if you had made a new profile. Your other profiles are not affected."] =
     "Reset this profile to the addon defaults? Every setting goes back to its shipped value and your extra windows are DELETED \226\128\148 you come back with one fresh window, exactly as if you had made a new profile. Your other profiles are not affected."
 L["Defaults"] = "Defaults"

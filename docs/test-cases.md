@@ -874,7 +874,7 @@ badge and any count quoted in the docs must agree with it.
 - A cell with BOTH slots off shows NOTHING — none means none
 - A counting stat set to Per second renders nothing, not its total
 - A lone RIGHT-slot figure stays on the right
-- Both slots take the same five values, in either position
+- Both slots take the same six values, in either position
 - Cell figures are read out of EITHER row shape the addon produces
 - Class color comes from classFilename, which keeps working while restricted
 - Every color mode falls back to one neutral, never to a fourth palette

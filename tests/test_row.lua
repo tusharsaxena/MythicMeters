@@ -346,7 +346,7 @@ test("A lone RIGHT-slot figure stays on the right", function()
     assertEqual(row.cells.DamageDone.right:GetText(), "100")
 end)
 
-test("Both slots take the same five values, in either position", function()
+test("Both slots take the same six values, in either position", function()
     -- They used to take different three-value sets overlapping on two, which
     -- made "the total on the right" unexpressible for no reason anyone could
     -- state.
