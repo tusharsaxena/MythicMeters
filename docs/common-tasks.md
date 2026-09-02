@@ -164,7 +164,11 @@ What comes out is **the whole segment and every stat in the catalog**, not the i
 column set, sort or row cap: what is on screen is a display choice, and "export this" means the data.
 The one thing that *is* inherited is the **segment** — exporting from a window pinned to a stored
 fight exports that fight, not the live pull. The four choices are remembered addon-wide at `export.*`
-in the profile, and the General settings page edits the same four rows.
+in the profile. **The settings panel draws none of them**: `export.metric` has no schema row at all
+(`Export.Open` reseeds it from the invoking window), and `export.channel`, `export.whisperTo` and
+`export.lines` are `hidden` rows filed on page `general`, so `/mm list` and the defaults validator
+see them and no tab ever does. The modal writes all four back through `NS.SetByPath`, which is what
+keeps them one preference rather than two.
 
 **In code**, the entry points are all on `NS.Export` (`modules/Export.lua`), a plain table on `NS`
 like `NS.Slash` rather than an AceAddon module:
@@ -373,8 +377,8 @@ hand-writing one is anti-pattern #73. In practice:
 
 ## Split an over-full tab
 
-Worth doing once a tab is long enough to scroll past comfortably — Frame and Bars already sit at six
-tabs each, so a seventh on either is the point to ask whether it should be its own tab instead of
+Worth doing once a tab is long enough to scroll past comfortably — Bars and Tooltip already sit at
+six tabs each, so a seventh on either is the point to ask whether it should be its own tab instead of
 added to one of the six.
 
 **1. `settings/Schema.lua`** — pick the rows moving to the new tab and give them a `group` no other
@@ -443,8 +447,9 @@ order (General registers first and is declared last in the schema file; see
 
 **3. `settings/Schema.lua`** — the rows, with `page = "<pagekey>"` and a `group` for each: one
 distinct `group` value on the page is one tab, drawn by `RenderTabbedSchema` in the order each
-group's first row appears. A page with only one visible group falls back to a strip-less
-`RenderSchema` automatically — nothing to opt into or out of.
+group's first row appears. A page with only one visible group draws a **one-tab strip** — the
+`#groups < 2` fallback to a strip-less `RenderSchema` is gone as of LibKa0s v1.24.0
+(`options-ui-§13`), so there is nothing to opt into or out of and no page can render strip-less.
 
 **4. `defaults/Profile.lua`** — a new config group if the page owns one. If it is per-window, add it
 to `WINDOW_TEMPLATE` **and** to `COPY_GROUPS` in `modules/WindowManager.lua` and `COPY_GROUPS` in
@@ -538,11 +543,11 @@ fires.
 
 | Message | Sole sender |
 |---|---|
-| `METER_UPDATED` `METER_SESSION` `METER_RESET` `ROSTER_CHANGED` `ZONE_CHANGED` `ENTERING_WORLD` `RESTRICTION_CHANGED` | `core/MultiMeters.lua` (the addon's only game-event listener) |
+| `METER_UPDATED` `METER_SESSION` `METER_RESET` `ROSTER_CHANGED` `ZONE_CHANGED` `ENTERING_WORLD` `RESTRICTION_CHANGED` `COMBAT_CHANGED` `PLAYER_STATE_CHANGED` | `core/MultiMeters.lua` (the addon's only game-event listener) |
 | `PROFILE_CHANGED` | `core/Database.lua` |
 | `CONFIG_CHANGED` | `settings/Schema.lua` (`NS.SetByPath`'s tail) |
 | `WINDOWS_CHANGED` | `modules/WindowManager.lua` |
-| `PREVIEW_CHANGED` | `core/State.lua` |
+| `TEST_MODE_CHANGED` | `core/State.lua` |
 | `DRILLDOWN_CHANGED` | `modules/DrillDown.lua` |
 
 `METER_RESET` is the documented near-exception: `Provider.Reset()` announces it *and*

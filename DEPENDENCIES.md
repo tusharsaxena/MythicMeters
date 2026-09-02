@@ -34,7 +34,7 @@ such rather than listed as a requirement.
 | `luacheck` | any recent | `luacheck .`, the other half of the green gate | `.luacheckrc` at the repo root |
 | `lizard` | any recent | the `complexity` suite of `tests/_kit/run-automated-tests.sh` | `tests/_kit/run-automated-tests.sh` invokes `lizard` |
 | `git` | any recent | vendoring, `diff -r` against the LibKa0s repo, and the runner's own provenance stamp | library-stack-§7; `tests/_kit/run-automated-tests.sh` calls `git describe` / `git rev-parse` / `git status --porcelain` |
-| `bash` | **4.x or later** | `tests/_kit/run-automated-tests.sh` — the whole automated-test bundle | its shebang is `#!/usr/bin/env bash`, and line 142 declares an associative array (`declare -A ST DUR NOTE`), which `dash`/POSIX `sh` has no syntax for |
+| `bash` | **4.x or later** | `tests/_kit/run-automated-tests.sh` — the whole automated-test bundle | its shebang is `#!/usr/bin/env bash`, and line 141 declares an associative array (`declare -A ST DUR NOTE`), which `dash`/POSIX `sh` has no syntax for |
 
 **Lua 5.1 is a requirement, not a preference.** The harness sandboxes each source file with
 `setfenv`, which was removed in 5.2 — "5.2 will probably work" is false and costs an hour to
@@ -80,7 +80,10 @@ regenerating them is that repo's job and that repo's toolchain -- see
 [LibKa0s' own DEPENDENCIES.md](https://github.com/tusharsaxena/LibKa0s/blob/master/DEPENDENCIES.md).
 Nothing here reads a PNG or writes a TGA any more.
 
-The one asset still in this repo, `media/textures/Default.tga`, is committed and unused (issue #4).
+Two assets are still in this repo and neither needs a tool: `media/logos/multimeters.logo.tga` (with
+the .png and .jpg masters beside it, both excluded from the package by `.pkgmeta`), which
+`Constants.LOGO` points the settings landing page at, and `media/textures/Default.tga`, which is
+committed and unused (issue #4).
 
 ## Am I set up correctly?
 

@@ -45,7 +45,7 @@ Companion docs: [schema.md](schema.md) for the row shape and the window-relative
 
 Registration order is the order they appear in the tree: `MultiMeters.toc` loads `General` before
 `Windows`, so General is the one page that is **not** where `settings/Schema.lua` declares it —
-Schema.lua's own row order runs Windows, Frame, Header, Bars, Tooltip, Visibility, Columns, General,
+Schema.lua's own row order runs Windows, Frame, Header, Bars, Tooltip, Visibility, Columns, then
 General last. The two orders exist for different readers: the tree is what a player clicks through,
 the schema file is grouped so a row's neighbors on the page are its neighbors in the file. See
 [locales/enUS.lua](../locales/enUS.lua)'s header comment for the same reconciliation on the locale
@@ -128,13 +128,13 @@ Four things about how this addon calls them are worth knowing before editing a b
   that costs nothing a player can reach, because a degraded install has neither a settings panel nor
   a schema CLI.
 - **Two `LSM30_*` pickers survive outside a composer call, and they are not a group.**
-  `grep -rn 'LSM30_Font\|LSM30_Border\|LSM30_Statusbar' settings/` returns `settings/Schema.lua:1554`
-  (`window.barTexture`) and `:1562` (`window.font`), and neither is composer-able. They are two of the
+  `grep -rn 'LSM30_Font\|LSM30_Border\|LSM30_Statusbar' settings/` returns `settings/Schema.lua:1553`
+  (`window.barTexture`) and `:1561` (`window.font`), and neither is composer-able. They are two of the
   four **broadcast meta rows** on Frame → General, under the *All surfaces* heading: each one *writes*
   a value into every surface that has a setting of that kind and is then read by nothing, which is
   what the note above them at `settings/Schema.lua:1512-1522` says at length. `options-ui-§16` fixes
   the shape of a **group** — a contiguous font block, a border block, a bar block, each over one
-  surface, each with a colour row and a companion. A single write-only setter over seven surfaces has
+  surface, each with a colour row and a companion. A single write-only setter over six surfaces has
   none of that shape: there is no size, no colour, no flags and no second surface to be contiguous
   with, and a composer asked to emit one would have to emit five rows this addon must not store. The
   headings are the guard — a reader who sees *All surfaces* over them cannot mistake them for the font

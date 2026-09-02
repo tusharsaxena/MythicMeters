@@ -3,8 +3,8 @@
 Where each responsibility lives, what each file publishes, and what it consumes. `MultiMeters.toc`
 is the source of truth for load order — check this map against it before editing.
 
-Forty-eight non-vendored source files: 1 locale, 15 `core/`, 1 `defaults/`, 15 `modules/`,
-16 `settings/`.
+Forty-five non-vendored source files: 1 locale, 15 `core/`, 1 `defaults/`, 15 `modules/`,
+13 `settings/`.
 
 Two rules govern almost every entry below, and they are worth having in mind while reading it:
 
@@ -40,7 +40,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         the one class-color reader (NS.ClassRGB /
 │                         NS.PlayerClassRGB) and NS.NewBusTarget(), the
 │                         private-bus-target factory
-│   ├── State.lua       — session-only flags (debug, restricted, preview,
+│   ├── State.lua       — session-only flags (debug, restricted, testMode,
 │                         activeWindowId) and the shared per-module cache with its
 │                         one wipe seam. Nothing here is ever persisted
 │   ├── Secrets.lua     — THE ONLY VALUE INSPECTOR (R1). Restriction state,
@@ -67,9 +67,9 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         widget's 42×42 preview tile. It registered the shipped font
 │                         too until the face moved into the LibKa0s payload
 │   ├── MultiMeters.lua — AceAddon bootstrap, the AceConsole printer reclaim, THE
-│                         SINGLE GAME-EVENT LISTENER (21 events, all but one
-│                         fanned onto the bus), and NS.ShouldShow — the one show
-│                         ladder
+│                         SINGLE GAME-EVENT LISTENER (22 events, the last of them
+│                         PROBED, all but two fanned onto the bus), and
+│                         NS.ShouldShow — the one show ladder
 │   ├── Database.lua    — the AceDB instance, window-shape key-fill, the id counter,
 │                         SeedWindows, the migration runner, and the ONE
 │                         PROFILE_CHANGED emitter
@@ -98,7 +98,7 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
 │                         sort modes, identity mode, the row cap, and the
 │                         only two divisions in the addon
 │   ├── WindowManager.lua — the window REGISTRY: create / delete / rename /
-│                         duplicate / copy-from, lock, preview, toggle. The ONE
+│                         duplicate / copy-from, lock, test mode, toggle. The ONE
 │                         WINDOWS_CHANGED emitter
 │   ├── Window.lua      — one window instance: the anchor/visible frame pair, the
 │                         layout computation (R3), the coalesced refresh loop, the
@@ -133,6 +133,9 @@ MultiMeters (AceAddon; the private NS table is promoted in place — no _G.Multi
     │                     schema adapters, and the six host verbs
     ├── OptionsSetup.lua — LibKa0s-Options-1.0 seam: NS.Helpers IS the library
     │                     instance, plus the panel registry and the reset-all veto
+    ├── ColumnBlocks.lua — the ROW CONTENTS of the Columns page's reorderable
+    │                     list. The gesture and the chrome are LibKa0s-Widgets-1.0's
+    │                     ReorderList; loads BEFORE Columns.lua
     └── General · Windows · Frame · Header · Bars · Tooltip ·
         Visibility · Columns · Profiles
                           — the 9 panel pages, in panel order. General is FIRST;
@@ -169,13 +172,14 @@ own strings entirely.
 | `DebugLogSetup.lua` | The console descriptor (including `addonName`, which is what makes the console's own close/copy/clear draw the collection's art), the debug sink, and the steady-state sink a timer-driven pass logs through | `NS.DebugLog`, `NS.Debug`, `NS.DebugSteady`, `NS.DebugSteadyReset` | `NS.Constants.FONT_MONO`, `NS.State.debug`, `NS.Print`, `NS.SafeToString` |
 | `PoolSetup.lua` | The LibKa0s-Pool seam: the free/active halves of the window row pool. What stays in `modules/Window.lua` is what the library holds no opinion about — `pool.all` (every row ever built, so a **parked** row is re-laid-out too) and batch growth, folded into the `Acquire` factory closure. The degraded fallback is the same three members locally, parking **backward** exactly as `LibKa0s-Pool-1.0` minor 3 does; a forward-parked degraded install is the rank flicker back | `NS.Pool` | `LibKa0s-Pool-1.0`. Owns no state and registers no event |
 | `LSMPatch.lua` | The `LSM30_Border` widget fixup, and nothing else since the shipped font moved into the LibKa0s payload | nothing — side effects only | LibSharedMedia, AceGUI |
-| `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 21 game-event registrations, the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
+| `MultiMeters.lua` | AceAddon promotion, the printer reclaim, all 22 game-event registrations (21 outright plus `PLAYER_IS_GLIDING_CHANGED`, probed), the fan-out onto the bus, and `NS.ShouldShow` | `NS.addon`, `NS.ShouldShow`, `NS:OnInitialize` / `OnEnable` | `NS.Constants.MSG`, `NS.State`, `NS.Secrets`, `NS.Minimap`, `NS.CreateOptionsPanel`, `NS.Slash` |
 | `Database.lua` | The AceDB instance, window shape key-fill, the monotonic id counter, seeding, migrations, and the AceDB profile callbacks | `NS.Database` (`GetWindows`, `FindWindow`, `NextWindowId`, `SeedWindows`, `EnsureWindowShape`), `NS.db`, `NS:InitDB`, `NS:RunMigrations` | `NS.defaults`, `NS.WINDOW_TEMPLATE`, `NS.DefaultWindow`, `NS.Constants.MSG` |
 | `Diagnostics.lua` | The `/mm debug diag` report: atlas probes, the formatter ladder, visibility, header, name column, cells, tooltip font and width, the Targets cross-reference, and the provider-order probe. Plus two verbs of their own — the death-recap probe (#1) and the identity-correlation capture (#22). Every section is `pcall`-wrapped, and nothing here inspects a meter value | `NS.Diagnostics` (`Report`, `ReportDeathRecap`, `ReportIdentity`) | `NS.DebugLog`, `NS.Print`, `NS.Provider`, `NS.Constants.STATS`, `NS.Database`, `NS.Secrets`, `NS.WindowManager` |
 
 **Sends:** `MultiMeters.lua` sends `ENTERING_WORLD`, `ROSTER_CHANGED`, `ZONE_CHANGED`,
-`RESTRICTION_CHANGED`, `METER_UPDATED`, `METER_SESSION`, `METER_RESET`. `State.lua` sends
-`PREVIEW_CHANGED`. `Database.lua` sends `PROFILE_CHANGED`.
+`RESTRICTION_CHANGED`, `METER_UPDATED`, `METER_SESSION`, `METER_RESET`, `COMBAT_CHANGED` and
+`PLAYER_STATE_CHANGED`. `State.lua` sends `TEST_MODE_CHANGED`. `Database.lua` sends
+`PROFILE_CHANGED`.
 
 ### `defaults/`
 
@@ -195,7 +199,7 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 | `Roster.lua` | AceAddon | The group array, the GUID index, the pet→owner map, roles. Rebuilt lazily on first read after an invalidation | `NS.Roster` — `GetGroup`, `Get`, `IsGroupMember`, `OwnerOf`, `RoleOf`, `Refresh` | the unit API through `_G` at call time, `NS.State.Cache("Roster")`. Subscribes `ROSTER_CHANGED`, `ENTERING_WORLD`, `PROFILE_CHANGED` |
 | `Feign.lua` | AceAddon | The set of GUIDs believed to be feigning rather than dead. `C_DamageMeter` hands a Feign Death a valid `deathRecapID`, so the Deaths column counts it. **Cannot run while restricted**: it joins a plain GUID against `sourceGUID`, which is secret for the whole of a pull | `NS.Feign` — `Note`, `IsFeigned`, `Prune`, `Clear` | the unit API through `_G` at call time, `NS.Roster.GetGroup`, `NS.Secrets`. Subscribes `METER_RESET`, `ENTERING_WORLD`, `ROSTER_CHANGED`. Fed by `core/MultiMeters.lua`'s `UNIT_SPELLCAST_SUCCEEDED` handler, which owns the only game event |
 | `Aggregator.lua` | AceAddon | **Two builds**: the exact GUID join (filter, pet folding, ordering) and the identity build that replaces it while `sourceGUID` is secret. Plus the row cap and `percent` | `NS.Aggregator` — `Build`, `ApplyRowLimit`, `LastIdentityStats`, `TestGroup` / `TestColumn` / `TestSourceDetail` | `NS.Provider`, `NS.Roster`, `NS.Secrets`, `NS.State.Cache("Aggregator")`. Subscribes `METER_RESET`, `PROFILE_CHANGED` |
-| `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetPreview` / `IsPreview`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
+| `WindowManager.lua` | AceAddon | The live instance registry and every mutation of the window list. Deep-copies on duplicate and copy-from | `NS.WindowManager` — `Resolve`, `Get`, `All`, `Init`, `Create`, `Delete`, `Rename`, `Duplicate`, `CopyFrom`, `RefreshAll`, `MarkAllDirty`, `ResetPosition(s)`, `SetLocked` / `IsLocked`, `SetTestMode` / `IsTest`, `Toggle`, `BuildListLines`, `Suspend` / `Resume`, `COPY_GROUPS` | `NS.Database`, `NS.Window`, `NS.State`, `NS.DefaultWindow`. Subscribes `PROFILE_CHANGED`. **The one `WINDOWS_CHANGED` sender** |
 | `Window.lua` | plain table + prototype | One instance: the anchor/visible frame pair, `BuildLayout` (R3), `ApplyConfig`, the `OnUpdate` throttle, `Render`, `UpdateHeaderText`, `ShowNotice`, the pool | `NS.Window.New(config)`, `NS.HeaderStyle(window)` (the header's font and colour, read by `modules/HeaderControls.lua`), and the `WindowProto` methods — including `TitleRowTop(h)`, the one centre line the title, the session line and the control strip are all placed against | `NS.Constants`, `NS.Row`, `NS.Provider`, `NS.Aggregator`, `NS.DrillDown`, `NS.ShouldShow`, `NS.Format`, `NS.ApplySkin`. Each instance subscribes 10 messages on **its own** private bus target |
 | `HeaderControls.lua` | plain table | The window's own control strip: which controls exist, where each sits (right-to-left, indexed, a hidden one yields its slot), what art each draws from (our TGA -> Blizzard atlas -> ASCII) and when the set fades | `NS.HeaderControls` — `Attach`, `Apply`, `HookHover`, `WidthUsed` | `NS.Compat.FirstTexture` / `FirstAtlas`, `NS.SetByPath`, `NS.HeaderStyle`, `NS.ShowResetMeterData`. Every control in the strip is built here, close included, so the strip is the same seven controls with or without LibKa0s. Owns no state and registers no event |
 | `Row.lua` | plain table + prototype | Row and cell widgets, the cell descriptor, bar colors, icon placement, the mouse hand-off | `NS.Row.New(window)`, `NS.Row.OffsetFor(layout, index)` | `NS.Constants`, `NS.RGBA`, `NS.Format` / `NS.NumberFormat`, and `NS.Tooltip` / `NS.DrillDown` resolved at call time |
@@ -210,18 +214,18 @@ restated: Damage · Healing · Interrupts · Dispels · Avoidable Damage · Deat
 
 | File | Owns | Publishes | Consumes |
 |---|---|---|---|
-| `Schema.lua` | The 137-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
+| `Schema.lua` | The 162-row schema, the window-relative path model, path memoization, the `columns` whole-array carve-out, and every validator and `onChange` | `NS.Schema`, `NS.GetSetting`, `NS.SetByPath`, `NS.FindSchemaRow`, `NS.RegisterSchemaRows`, `NS.ApplyDefault`, `NS.SchemaForPage`, `NS.ValidateSchema` | `NS.db`, `NS.State.activeWindowId`, `NS.Constants`, `NS.Helpers` and `NS.Visibility` at call time. **The one `CONFIG_CHANGED` sender** |
 | `Slash.lua` | `NS.COMMANDS`, the five schema adapters pointed at the seam above, the six host verbs, and the library-absent stub | `NS.Slash` — `Register`, `OnSlash`, `PrintHelp`, `HelpRows`, `LandingRows`, `Version` | LibKa0s-Slash-1.0, `NS.WindowManager`, `NS.DebugLog`, `NS.Perf`, `NS.Export`, the schema seam |
 | `OptionsSetup.lua` | The options descriptor, the page registry, the reset-all veto (`page == "profiles"`), and the library-absent stub | `NS.Helpers` (the library instance itself), `NS.CreateOptionsPanel`, `NS.OpenOptionsPanel`, `NS.RefreshOptionsPanel` | LibKa0s-Options-1.0, `NS.Schema`, `NS.Slash:LandingRows` |
 | `Windows.lua` | The window picker — `H.WindowBanner`, **the only writer of `NS.State.activeWindowId`**, decorated onto the library instance and drawn by all seven window pages — and the five registry buttons plus the copy-from group filter, behind a bespoke two-tab strip (Window, Copy from) | a page registration | `NS.WindowManager`, `NS.State.SetActiveWindow`, `NS.RefreshOptionsPanel` |
-| `Frame.lua` | The Frame page (24 rows across four tabs: General, Size and position, Background and border, Row). Pure schema — the header controls moved to Header and "Reset position" to General | a page registration | `NS.Helpers` |
+| `Frame.lua` | The Frame page (26 rows across four tabs: General, Size and position, Background and border, Row). Pure schema — the header controls moved to Header and "Reset position" to General | a page registration | `NS.Helpers` |
 | `Header.lua` | The Header page (31 rows across four tabs): the title bar's own text, every toggle for the icon strip it carries (Controls) and how those controls are drawn (Button style). The column-header strip moved to the Columns page it labels. Rows are stored at `window.frame.*` / `window.header.*`. Pure schema | a page registration | `NS.Helpers` |
-| `Bars.lua` | The Bars page (27 rows across six tabs: Bar, Background, Border, Text content, Text style, Icons): the bar, its background, its border, the cell's two text slots and the row icon. The Text and Icons pages folded in here; their PATHS did not move with them. Pure schema | a page registration | `NS.Helpers` |
-| `Tooltip.lua` | The Tooltip page (29 rows across six tabs: General, Bar, Bar background, Bar border, Text, Contents). Pure schema | a page registration | `NS.Helpers` |
+| `Bars.lua` | The Bars page (28 rows across six tabs: Bar, Background, Border, Text content, Text style, Icons): the bar, its background, its border, the cell's two text slots and the row icon. The Text and Icons pages folded in here; their PATHS did not move with them. Pure schema | a page registration | `NS.Helpers` |
+| `Tooltip.lua` | The Tooltip page (30 rows across six tabs: General, Bar, Bar background, Bar border, Text, Contents). Pure schema | a page registration | `NS.Helpers` |
 | `Visibility.lua` | The Visibility page (17 rows across three tabs — where, extra rules, combat). Pure schema | a page registration | `NS.Helpers` |
 | `ColumnBlocks.lua` | The ROW CONTENTS of a reorderable list — state glyph, label, and the rule where the enabled ones stop — plus the wiring that hands the list to LibKa0s. The **gesture and the chrome** are `LibKa0s-Widgets-1.0`'s `ReorderList` (minor 9): the handle, its 30px gutter, the **bounded box behind every row**, the carried copy, the insertion line and the clamp. The host's own row background was deleted in the same change as the re-vendor, or the two fills would stack. Loads **before** `Columns.lua` | `NS.ReorderableBlocks(ctx, spec)`, `NS.BLOCK_HEIGHT`, `NS.BLOCK_STRIDE` | `LibKa0s-Widgets-1.0`, `NS.Helpers.EnsureScroll`, `NS.AceGUI`, `NS.Icon` |
 | `Columns.lua` | The Columns page (8 schema rows — the `window.columnHeader.*` text and background rows moved here from Header — across two of its three tabs), plus the block editor: one block per statistic, ticked or not, dragged into order, on the tab that carries **no** schema rows. Every write to the array hands the seam a freshly built whole array, and every mutation re-checks combat | a page registration | `NS.ReorderableBlocks`, `NS.SetByPath("window.columns", …)`, `NS.Constants.STATS` |
-| `General.lua` | The General page (21 rows across three tabs — **Master controls**, General, Statistic colours — plus the three hidden export preferences): `options-ui-§15`'s canonical set, the minimap toggle, the two addon-wide data settings, test mode, and the eight generated statistic-colour swatches. The reset **button pair** is drawn by the hook `H.MasterControls` hands back, not here; what this file still supplies is the reset-everything confirmation popup and one sentence under each of two tabs. Also hosts the **reset-meter-data dialog**, which has no button on any page: the header's own reset control is the one way to open it, and it routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration, `NS.ShowResetMeterData` | `NS.Helpers`, `NS.MasterControlsAfterGroup`, `NS.Provider.Reset` |
+| `General.lua` | The General page (21 rows in all: three drawn tabs — **Master controls**, General, Statistic colours — plus a fourth group, Export, whose three rows are `hidden` and therefore never become a tab): `options-ui-§15`'s canonical set, the minimap toggle, the two addon-wide data settings, test mode, and the eight generated statistic-colour swatches. The reset **button pair** is drawn by the hook `H.MasterControls` hands back, not here; what this file still supplies is the reset-everything confirmation popup and one sentence under each of two tabs. Also hosts the **reset-meter-data dialog**, which has no button on any page: the header's own reset control is the one way to open it, and it routes to `NS.Provider.Reset` rather than to the Compat shim | a page registration, `NS.ShowResetMeterData` | `NS.Helpers`, `NS.MasterControlsAfterGroup`, `NS.Provider.Reset` |
 | `Profiles.lua` | The AceDBOptions profile tree, hosted in this addon's canvas. **The one place `AceConfigDialog` is permitted**, and the one page vetoed from reset-all | a page registration | AceDBOptions-3.0, AceConfigDialog-3.0 |
 
 Schema rows total 162 across 8 page keys — windows 1, frame 26, header 31, bars 28, tooltip 30,
@@ -247,7 +251,7 @@ for the same "a flat path model has no vocabulary for this shape" reason.
    3. `Constants.lua` — before everything that reads `NS.Constants.*` without an existence check.
       Must stay free of logic.
    4. `Namespace.lua` — resolves `NS.version` at load; everything after may read it.
-   5. `State.lua` — after `Constants` (the preview toggle names a message from the catalog).
+   5. `State.lua` — after `Constants` (the test-mode toggle names a message from the catalog).
    6. `Secrets.lua` — before any consumer. Deliberately carries **no** perf bracket.
    7. `CoreSetup.lua` — after `Constants` (for the prefix), before `MultiMeters.lua` (whose
       AceConsole reclaim reads `NS.Util.print`), and **first of the LibKa0s seams that report a

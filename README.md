@@ -39,8 +39,9 @@ The first release.
 - **Current or overall.** Switch between the pull you are in and the whole run.
 - **As many windows as you want.** Each one configured separately, with "copy settings from" so you
   do not have to set up the second one by hand.
-- **Deep configuration** — frame, header, rows, bars, text, icons, tooltips, visibility, columns and
-  data, all per window.
+- **Deep configuration** — frame, header, rows, bars, text, icons, tooltips, visibility and
+  columns, all per window; the handful of settings that cannot sensibly differ between windows sit on
+  the General page instead.
 - **Hover for the detail.** A cell tells you which spells made up that number; a name tells you
   everything tracked for that player. A Damage cell can also list **which enemies that player hit**.
   Click a cell to drill into it, or a Deaths cell to open the death recap.
@@ -93,8 +94,9 @@ are currently looking at, not all of them.
 `/mm config`, or the Options → AddOns list. Nine pages, and within a page the settings are grouped
 into **tabs** — click one to switch, and it never asks you to leave combat to do it; only opening or
 switching between pages in the list on the left does that (see [I cannot open the settings while
-fighting](#troubleshooting) above). Every page below Windows opens with a **banner** naming which
-window it is editing, and that one dropdown is the only window picker in the whole panel.
+fighting](#troubleshooting) above). Windows, and the six pages indented under it, each open with a
+**banner** naming which window they are editing, and that one dropdown is the only window picker in
+the whole panel.
 
 The six pages between Windows and Profiles are **indented under it**, because they all configure
 *whichever window the banner is pointed at* — the same reason Windows itself draws the banner, though
@@ -104,7 +106,7 @@ banner at all.
 
 | Page | What you set there |
 |---|---|
-| General | The addon master switch, the minimap button, whether pets are merged into their owner and how often the display refreshes, Test mode, the debug console, and two resets — all settings, and the selected window's position. A second tab sets the colour of each statistic, worn by every surface that colours by column |
+| General | Three tabs. **Master controls** is the set every Ka0s addon opens on: the addon master switch, general visibility, master scale and opacity, lock every frame, the debug console, and two resets — all settings, and the selected window's position. **General** is the minimap button, whether pets are merged into their owner, how often the display refreshes, and Test mode. **Statistic colors** sets the colour of each statistic, worn by every surface that colours by column |
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
 | `  - `Frame | Lock, keep-on-screen and the four "all surfaces" shortcuts; size, scale, opacity, strata and padding; the window's own background and border; and the rows — height, count, spacing, growth direction and which of them are highlighted |
 | `  - `Header | The title bar's own text (font, alignment, background) and the header controls — which of the seven buttons the title strip draws, in what color and at what size |

@@ -23,7 +23,7 @@ Everything below is about `MultiMetersDB`.
 
 ```lua
 db.global = {
-    schemaVersion = 1,     -- CURRENT_DB_VERSION in core/Database.lua
+    schemaVersion = 13,    -- CURRENT_DB_VERSION in core/Database.lua
 }
 ```
 
@@ -32,13 +32,30 @@ once per account instead of once per profile. `NS:RunMigrations()` walks it forw
 time out of the `migrations` table in `core/Database.lua`, and is called from `NS:InitDB()` and
 again from every AceDB profile callback (changed / copied / reset).
 
-At v1 the `migrations` table is empty by design: the shipped shape **is** v1. The runner exists
-anyway so that the next non-additive change ships beside its migrator rather than having one wired
-up under deadline pressure. Adding a v2 is two edits and no bootstrap change:
+**Twelve steps are wired today**, `migrations[1]` through `migrations[12]`, walking an account from
+the shipped v1 shape to v13. Each is one line of the header block at the top of
+`core/Database.lua`, and each is named where the key it moved is documented below:
+
+| Step | What it does |
+|---|---|
+| v1 → v2 | every column becomes one uniform width |
+| v2 → v3 | the three row-icon toggles collapse into one |
+| v3 → v4 | the export channel `AUTO` is retired |
+| v4 → v5 | `mergePets` and `throttle` lift from per-window to addon-wide |
+| v5 → v6 | the two row-background keys nothing ever read are pruned |
+| v6 → v7 | four class-colour booleans become three-way colour modes |
+| v7 → v8 | the four header keys that restated what was on screen are pruned |
+| v8 → v9 | the colour mode comes off the title bar's background |
+| v9 → v10 | the `CURSOR` tooltip anchor is retired |
+| v10 → v11 | the colour mode comes off the title bar's text |
+| v11 → v12 | the column array stops being a chosen subset and becomes the full catalog, ticked |
+| v12 → v13 | the title-bar toggle moves onto the header, and the two control colour booleans become modes |
+
+Adding a v14 is two edits and no bootstrap change:
 
 ```lua
-migrations[1] = function(db) ... ; db.global.schemaVersion = 2 end
-local CURRENT_DB_VERSION = 2
+migrations[13] = function(db) ... end       -- the runner stamps the version
+local CURRENT_DB_VERSION = 14
 ```
 
 **Bump the version only for a non-additive change** — a rename, a restructure, a type change.
@@ -231,7 +248,7 @@ that drift.
 
 ### What is deliberately *not* in the profile
 
-The session-only flags in `core/State.lua`: `debug`, `restricted`, `preview`, `activeWindowId`, and
+The session-only flags in `core/State.lua`: `debug`, `restricted`, `testMode`, `activeWindowId`, and
 `State.cache`. A flag that survives a `/reload` is a setting; these are not. Persisting
 `activeWindowId` in particular would make a deleted window's id outlive the window.
 
@@ -262,34 +279,41 @@ Those ten group names are also `modules/WindowManager.lua`'s `COPY_GROUPS` and t
 
 `window.colorMode`, `window.barTexture`, `window.font` and `window.fontOutline` (which ships as
 `NONE`, matching the two text surfaces that ship without an outline) are rows on the
-**Frame** page that set the others rather than being read by anything. Each fans out to every surface
-that has a setting of its kind: the colour mode to nine, the bar texture to two (the grid and the
+**Frame** page that set the others rather than being read by anything. Each fans out to the surfaces
+that have a setting of its kind: the colour mode to six, the bar texture to two (the grid and the
 tooltip), and the font and its outline to four each (the cells, both header strips and the tooltip).
 The tooltip's keys carry a `font` prefix of their own — `fontOutline`, not `outline` — which is why
 each fan-out is a list of **paths** rather than a group list and a suffix assumed to be shared.
 
-`window.colorMode` sets the other ten rather than being read by
-anything. Ten surfaces each carry a mode of their own — `bars.colorMode`, `bars.bgColorMode`,
-`text.colorMode`, `header.colorMode`, `columnHeader.colorMode`, `columnHeader.bgColorMode`,
-`tooltip.colorMode`, `tooltip.barColorMode`, `tooltip.barBgColorMode` —
-which is right when a player wants one of them different and tedious when they want all nine the same.
+`window.colorMode` sets six others rather than being read by anything: `bars.colorMode`,
+`bars.bgColorMode`, `columnHeader.colorMode`, `columnHeader.bgColorMode`, `tooltip.barColorMode`
+and `tooltip.barBgColorMode` — `COLOR_MODE_PATHS` in `settings/Schema.lua`. Sixteen surface modes
+exist in the window altogether; the broadcast reaches these six because they are the **fills**, and
+one control for all of them is right when a player wants them to agree, which is the usual case.
+
+**The two text surfaces are deliberately left out** — `text.colorMode`, the numbers in the grid, and
+`tooltip.colorMode`, the tooltip's own text. Both are drawn *on top of* a surface this list does
+broadcast to, so sending "per statistic" everywhere painted the Damage number in the Damage colour
+over a Damage-coloured bar. Foreground text has to contrast with the broadcast, not match it, so it
+stays an explicit choice. `header.colorMode` is out for its own reason — the title bar is one strip
+spanning the whole window, so per-statistic there could only ever mean the sort column's colour.
 
 All four behave the same way, so what follows about the colour mode is true of every one of them.
 
 **It stores what was last broadcast and nothing reads it back.** A player who then changes one
 surface individually has changed one surface; the meta does not fight them for it and does not claim
-to describe them afterwards. Deriving it instead — showing "mixed" when the ten disagree — would make
+to describe them afterwards. Deriving it instead — showing "mixed" when the six disagree — would make
 a control that cannot be set to the value it is displaying, which is worse than a shortcut that goes
 stale.
 
 The fan-out writes **through `NS.SetByPath`, one at a time**, so each target gets its own validation,
 its own debug line and its own `CONFIG_CHANGED`: a broadcast is indistinguishable from the player
-having set all nine by hand. Writing the config tree directly would be a second write seam, and the
+having set all six by hand. Writing the config tree directly would be a second write seam, and the
 windows would not repaint.
 
 **It does not fire during a reset.** `NS.ApplyDefault` raises `NS.__restoring` around its write,
 because the Frame page's Defaults button walks every row of that page — and a meta row that
-broadcast from there would make that button silently reset ten settings on three other pages, which
+broadcast from there would make that button silently reset six settings on three other pages, which
 is the one thing a per-page reset must not do.
 
 ### The four text controls
