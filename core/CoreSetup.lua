@@ -161,6 +161,18 @@ if not lib then
     NS.SKIN            = {}
     NS.ApplySkin       = function() end
     NS.MakeCloseButton = function() return nil end
+    -- The class-colour lookup degrades the same way RGBA does and for the same
+    -- reason: it is not chrome, it is how a class-coloured bar, header or border
+    -- gets its colour at all, and a degraded install still draws rows. The
+    -- fallback goes through core/Namespace.lua's own classFilename reader rather
+    -- than restating RAID_CLASS_COLORS a second time here.
+    NS.ClassColor      = function(unit)
+        local f = _G.UnitClass
+        if not f then return nil end
+        local ok, _, token = pcall(f, unit or "player")
+        if not ok then return nil end
+        return NS.ClassRGB(token)
+    end
     -- Unlike SKIN, the color reader does NOT degrade to nothing: it is not chrome
     -- the user can live without, it is how every bar and every label gets its
     -- color out of the profile at all, and a degraded install still renders rows.
@@ -181,6 +193,25 @@ NS.SafeToString = lib.SafeToString
 -- NS.RGBA and never LibStub for themselves: one lookup, one degradation decision,
 -- in the file that owns both.
 NS.RGBA = lib.RGBA or fallbackRGBA
+
+-- ONE CLASS-COLOUR RESOLVER FOR THE COLLECTION (options-ui-§17). `lib.ClassColor`
+-- arrived at Core minor 7 and reads RAID_CLASS_COLORS -- the table every other UI
+-- on the player's screen is already reading -- memoizes the PLAYER's answer on
+-- success and caches no other unit. This addon had its own two-line copy of that
+-- lookup and now consumes the library's instead, so a bar in this window and a
+-- unit frame beside it cannot disagree about what a warlock looks like.
+--
+-- IT TAKES A UNIT TOKEN, which is why core/Namespace.lua's `ClassRGB` -- keyed on
+-- the classFilename the meter hands over -- is NOT retired: half a raid's rows have
+-- no unit token to name. `ClassRGB` is the roster reader; this is the surface
+-- reader, and NS.PlayerClassRGB is what routes the one surface question here.
+NS.ClassColor = lib.ClassColor or function(unit)
+    local f = _G.UnitClass
+    if not f then return nil end
+    local ok, _, token = pcall(f, unit or "player")
+    if not ok then return nil end
+    return NS.ClassRGB(token)
+end
 
 -- The shared Ka0s window edge (standalone-windows). modules/Window.lua reaches
 -- the edge through these three names — never through a private lookalike and

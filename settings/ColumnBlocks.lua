@@ -7,13 +7,22 @@
 -- WHAT THIS FILE STILL DOES, NOW THAT LibKa0s OWNS THE DRAG
 -- ---------------------------------------------------------------------------
 --
--- The gesture is `LibKa0s-Widgets-1.0`'s `ReorderList` (minor 8): the handle,
--- the copy carried under the cursor, the insertion line, the index arithmetic
--- and the clamp at the rule. This file kept none of it.
+-- The gesture is `LibKa0s-Widgets-1.0`'s `ReorderList` (minor 9): the handle, its
+-- 30px gutter at the row's far left, the BOUNDED BOX behind every row, the copy
+-- carried under the cursor, the insertion line, the index arithmetic and the clamp
+-- at the rule. This file kept none of it.
 --
--- What is left is the ROW, which the library deliberately owns none of: the
--- tick-or-cross glyph and what clicking it means, the statistic's name, the
--- dimming that says a column is not shown, and the rule drawn under the last
+-- THE BOX WAS OURS AND IS NOT ANY MORE. This file drew a `block.bg` texture at
+-- `1,1,1, enabled and 0.06 or 0.03` -- the exact values options-ui-§8 now pins and
+-- minor 9 draws for every list in the collection -- so keeping it would have
+-- painted two fills over each other, the darker one twice. It went in the same
+-- change as the re-vendor, which is the only way that does not ship a release with
+-- double chrome. What is left of the dimming is one word: `dimmed` on the row's
+-- spec, which picks the library's muted pair.
+--
+-- What is left is the ROW's CONTENTS, which the library deliberately owns none of:
+-- the tick-or-cross glyph and what clicking it means, the statistic's name, the
+-- grey it goes when a column is not shown, and the rule drawn under the last
 -- enabled block. That split is the whole reason the library member exists in the
 -- shape it does -- ConsumableMaster's priority list draws a completely different
 -- row and shares the identical gesture.
@@ -122,9 +131,6 @@ local function acquireBlock(parent)
     block:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
     block:SetHeight(NS.BLOCK_HEIGHT)
 
-    block.bg = block:CreateTexture(nil, "BACKGROUND")
-    block.bg:SetAllPoints(block)
-
     local glyph = CreateFrame("Button", nil, block)
     glyph:SetSize(18, 18)
     glyph:SetPoint("LEFT", block, "LEFT", 42, 0)
@@ -164,10 +170,6 @@ local function applyBlock(block, index, item, spec)
     -- Read by the glyph's tooltip at HOVER time, so a re-pointed block never offers
     -- last render's promise.
     block.mmEnabled = item.enabled and true or false
-
-    -- A disabled block is dimmer but still a block: it cannot be dragged, but it
-    -- is what you click to bring the column back.
-    block.bg:SetColorTexture(1, 1, 1, item.enabled and 0.06 or 0.03)
 
     block.mmGlyphTexture = item.enabled and ENABLED_TEX or DISABLED_TEX
     block.mmGlyph:SetNormalTexture(block.mmGlyphTexture)
@@ -232,7 +234,10 @@ function NS.ReorderableBlocks(ctx, spec)
         -- column off -- a state change from a gesture that means "move".
         boundary   = boundary,
         handleIcon = NS.Icon and NS.Icon(HANDLE_ICON) or nil,
-        handleSize = 30,
+        -- NO handleSize. The gutter is `Widgets.ROW_BOX.HANDLE_W` -- 30 -- and it
+        -- is the library's default, so restating it here would be a host copy of a
+        -- pinned constant that goes stale the day the collection retunes it
+        -- (options-ui-§8).
         handleTooltip = NS.L and NS.L["Drag to reorder"] or nil,
         onMove     = spec.onMove,
         debug      = (NS.State and NS.State.debug and NS.Debug)
@@ -271,6 +276,11 @@ function NS.ReorderableBlocks(ctx, spec)
             -- row's top edge.
             block.mmHandle = list:AddRow(block, {
                 draggable      = item.enabled and true or false,
+                -- A disabled block is DIMMER but still a block: it cannot be
+                -- dragged, and it is what you click to bring the column back. The
+                -- muted fill and edge are the library's `ROW_BOX.*_DIM` pair, so
+                -- every list in the collection dims the same way.
+                dimmed         = not item.enabled,
                 ghostText      = item.label,
                 ghostIcon      = block.mmGlyphTexture,
                 ghostTextColor = item.enabled and { 1, 0.82, 0 } or { 0.5, 0.5, 0.5 },

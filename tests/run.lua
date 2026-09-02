@@ -61,7 +61,12 @@ local LIB_FILES = Loader.xmlFiles(root .. "/libs/LibKa0s/LibKa0s.xml")
 do
     local EXPECTED = {
         "Core.lua", "DebugLog.lua", "Slash.lua", "Options.lua",
-        "OptionsWidgets.lua", "OptionsScroll.lua", "Perf.lua", "PerfPanel.lua",
+        -- OptionsCompose.lua is not optional decoration: settings/Schema.lua
+        -- COMPOSES the master controls tab and every font, border and bar group
+        -- out of it (options-ui-§15, §16), so a re-vendor that dropped it would
+        -- take 50-odd schema rows with it rather than merely losing a widget.
+        "OptionsWidgets.lua", "OptionsCompose.lua", "OptionsScroll.lua",
+        "Perf.lua", "PerfPanel.lua",
     }
     local present = {}
     for _, path in ipairs(LIB_FILES) do

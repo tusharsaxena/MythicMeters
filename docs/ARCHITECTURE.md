@@ -100,12 +100,20 @@ touching the data path.
 
 ## Settings schema
 
-`NS.Schema` in `settings/Schema.lua` is the single source of truth: **154 rows across 8 page keys**
-(windows, frame, header, bars, tooltip, visibility, columns, general), each one wiring automatically
-into its panel widget — one tab per distinct `group`, via `LibKa0s-Options-1.0`'s `RenderTabbedSchema`
-— its `/mm get|set|list|reset` coverage, and the per-page and global defaults reset. A ninth
-registered page, Profiles, hosts no schema rows at all. Adding a setting is one row and never a
-parallel mutator; adding a tab is a `group` no existing row on that page uses, and nothing else.
+`NS.Schema` in `settings/Schema.lua` is the single source of truth: **162 rows across 8 page keys**
+(windows 1, frame 26, header 31, bars 28, tooltip 30, visibility 17, columns 8, general 21), each one
+wiring automatically into its panel widget — one tab per distinct `group`, via
+`LibKa0s-Options-1.0`'s `RenderTabbedSchema` — its `/mm get|set|list|reset` coverage, and the
+per-page and global defaults reset. A ninth registered page, Profiles, hosts no schema rows at all.
+Adding a setting is one row and never a parallel mutator; adding a tab is a `group` no existing row
+on that page uses, and nothing else.
+
+**Roughly a third of those rows are COMPOSED rather than written out.** `options-ui-§15`, `§16` and
+`§17` fix the master-controls set and the font, border and bar blocks across the whole collection,
+and `LibKa0s-Options-1.0`'s composers emit each from one declaration — a hand-written copy is
+anti-pattern #73. What comes out is an array of ordinary rows, so nothing downstream changed. See
+[settings-panel.md](settings-panel.md#the-composed-blocks) for which block is used where, and the
+[deviation register](#documented-deviations) for what a load without LibKa0s does to them.
 
 The write seam is `NS.SetByPath`; the reader is `NS.GetSetting`. Both the panel and the CLI point at
 them, so `/mm set window.frame.width 300` takes exactly the path a slider takes — same validation,
@@ -117,12 +125,14 @@ have to be `windows.<id>.frame.width`: dynamic, unknowable at load, and inexpres
 path model the CLI and the panel both read. Resolution: a window row's path is **relative** and
 spelled `window.frame.width`, resolved by the seam against `NS.State.activeWindowId`, which the
 settings panel's window picker — `H.WindowBanner`, decorated by `settings/Windows.lua` and drawn on
-all seven window pages — moves. The other **seventeen** rows keep absolute paths and resolve against
-`db.profile`: `enabled`, `minimap.hide`, `data.mergePets`, `data.throttle` (addon-wide since
-schemaVersion 5), the three `export.*` preferences, the eight `statColors.*` swatches (generated one
-per `Constants.STAT_COLORS` entry — see [settings-panel.md](settings-panel.md#the-statistic-palette)),
+all seven window pages — moves. The other **twenty-one** rows keep absolute paths and resolve against
+`db.profile`: `enabled`, `minimap.hide`, the four `master.*` controls (`options-ui-§15`'s addon-wide
+visibility, scale, alpha and lock — distinct from the per-window `frame.*` three, and composed with
+them rather than replacing them), `data.mergePets`, `data.throttle` (addon-wide since schemaVersion
+5), the three `export.*` preferences, the eight `statColors.*` swatches (generated one per
+`Constants.STAT_COLORS` entry — see [settings-panel.md](settings-panel.md#the-statistic-palette)),
 and the two `sessionOnly` rows `state.testMode` and `state.debugConsole`, whose own `get`/`set` are
-the whole of their storage. Moving one integer of session state retargets **137** rows.
+the whole of their storage. Moving one integer of session state retargets **141** rows.
 
 One page carries **zero** schema rows: `settings/Profiles.lua` hosts AceDBOptions' own tree and is
 the one place `AceConfigDialog` is permitted, because the options table is not ours to re-express. It
@@ -691,6 +701,9 @@ Rows are shaped `| Rule | What differs | Why | Decided | Re-check trigger |`.
 | Rule | What differs | Why | Decided | Re-check trigger |
 |---|---|---|---|---|
 | debug-logging §8 — each recompute logged "as a single summary line" | A refresh pass whose summary line is **unchanged** from the previous pass is not logged. The line is emitted on every *change*, plus a heartbeat at most every 10s carrying `(xN)` for the passes it stood for. | `throttle = 0.25` is four passes a second, each emitting an `[Aggregator]` and a `[Render]` line (three while restricted) into a buffer capped at 500 lines (§1) — **the console holds 40 seconds**. (Measured 2026-08-21 against the cap of the day; LibKa0s v1.15.0 raised it to 1500, which buys two minutes rather than forty seconds and evicts the console just the same.) A live capture showed one identity line repeating byte-identically for 41 seconds: ~160 passes, ~480 lines, one string, evicting every other line in the buffer. That is the harm §9 names ("it **evicts** it") arriving by a route §9 does not cover: §9 bounds *per-item* emission and says nothing about a pass repeating unchanged on a timer. A change is never delayed and never dropped, so nothing a reader wants is what goes missing. Implementation and reasoning: `core/DebugLogSetup.lua` → the steady-state sink. | 2026-08-21 | debug-logging gains a rule for repeating timer-driven passes — the gap is general to any Ka0s addon with a refresh timer, so the standard is the right long-term home and this row retires the day it lands. |
+| options-ui §17 — every colour picker carries a "use class colour" companion | `window.header.bgColor` — the title bar's own background — ships with **no** companion. Every other non-palette swatch in the addon has one. | Neither answer a companion could give is true of this surface. The title bar is **one strip spanning the whole window**, so "per statistic" could only ever mean the sort column's colour — a fact already on screen twice, in that column's own header and in its arrow — and that is the same argument that took the mode off the title bar's *text* background and off the divider's `stat` option. The strip beside it, the column-header background, **does** keep a mode, and the difference is the point: that one labels the columns, so per-statistic tints each label with its own column's colour and means something (`settings/Schema.lua`, the note above `window.columnHeader.bgColorMode`). A companion added here would be a control wired to a colour nobody chose. | 2026-09-02 | The title bar grows a surface that belongs to one column or to one player — a per-row header, a sort-column tint on the strip itself — at which point "which class" and "which statistic" both have an answer and the row retires. |
+| options-ui §17 — "one resolver": the class-colour lookup is the library's | `NS.ClassRGB(classFilename)` (`core/Namespace.lua`) stays as a **second** reader of `RAID_CLASS_COLORS`, beside the library's `NS.ClassColor(unit)`. | The two answer different questions. `LibKa0s-Core-1.0`'s `ClassColor` takes a **unit token**; a meter row is a GUID and a `classFilename` out of `C_DamageMeter`, and most rows have no token at all — a player who left the group, an NPC in a damage-taken column, a follower-dungeon companion. Retiring `ClassRGB` in favour of the unit-keyed lookup would silently uncolour every one of them. The **surface** question — the window's chrome, its header, its backdrop and its border — does go through the library, via `NS.PlayerClassRGB`, which is the case the standard's clause is about; what stays private is the roster reader. Neither has a fallback the other lacks: the degraded reader in `core/CoreSetup.lua` calls `ClassRGB` too, so there is still exactly one table lookup in the addon. | 2026-09-02 | `LibKa0s-Core-1.0` grows a class-**filename** overload of `ClassColor` (or a sibling reader), at which point `ClassRGB` becomes the private copy the clause forbids and is deleted. |
+| options-ui §15, §16 — the canonical blocks are composed by the library | With `libs/LibKa0s` **absent**, the composed rows are absent from `NS.Schema` too: the Master controls tab and every font, border and bar group simply are not declared. A degraded install's schema is the hand-written half. | The alternative is a hand-written copy of each block standing behind the composer, which is precisely anti-pattern #73 and precisely the drift the composers were extracted to end — and it would be a copy nobody exercises, so it would go stale first. The cost is **nothing a player can reach**: a degraded install has no settings panel (`settings/OptionsSetup.lua` stubs it) and no schema CLI (`settings/Slash.lua` refuses `get`/`set`/`list`/`reset`/`resetall` by name), so those rows have no reader left; every stored setting still merges from `defaults/Profile.lua` and every window still draws with the player's values. `settings/Schema.lua` stamps each composed row `composed`, and `tests/test_degraded.lua` asserts the difference is exactly that set and nothing else — so a page file that raised at load is still a named failure. | 2026-09-02 | The composers move somewhere a host can reach without the library, or LibKa0s stops being an optional dependency (`DEPENDENCIES.md`), at which point the degradation branch and this row both go. |
 
 **One row is ratified.** The register also carried a row for the drag-to-reorder block list living
 in `settings/ColumnBlocks.lua` rather than in LibKa0s, adopted because a library widget re-vendors

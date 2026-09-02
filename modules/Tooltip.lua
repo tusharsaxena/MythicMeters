@@ -276,6 +276,7 @@ local function tooltipConfig(window)
         barBorderStyle     = field("barBorderStyle", "None"),
         barBorderSize      = field("barBorderSize", 1),
         barBorderColor     = field("barBorderColor", nil),
+        barBorderColorMode = field("barBorderColorMode", "custom"),
         font               = field("font", "Friz Quadrata TT"),
         fontSize           = field("fontSize", 12),
         fontOutline        = field("fontOutline", "NONE"),
@@ -1450,6 +1451,9 @@ local function lineStyle(config, color)
     local br, bg_, bb = rgba(config.barBgColor, 0, 0, 0, 1)
     br, bg_, bb = modeColor(config.barBgColorMode, config.statKey, color, br, bg_, bb)
 
+    local ebr, ebg, ebb, eba = rgba(config.barBorderColor, 0, 0, 0, 1)
+    ebr, ebg, ebb = modeColor(config.barBorderColorMode, config.statKey, color, ebr, ebg, ebb)
+
     local shadowX, shadowY = 0, 0
     if config.fontShadow then shadowX, shadowY = 1, -1 end
 
@@ -1467,7 +1471,16 @@ local function lineStyle(config, color)
         -- the same about the window's own border).
         border     = (borderSize > 0) and mediaPath("border", config.barBorderStyle) or nil,
         borderSize = borderSize,
-        borderColor = config.barBorderColor,
+        -- THE OUTLINE ANSWERS A MODE TOO (options-ui-§17), and its `class` is the
+        -- HOVERED player's -- the same class the fill it surrounds takes, and the
+        -- one a tooltip is about. Two values, not three: an outline around one
+        -- spell line has no statistic of its own to be coloured by. Resolved to
+        -- three numbers plus the swatch's own alpha, which survives the mode
+        -- exactly as it does for the fill and the backdrop above.
+        -- KEYED, because that is the shape this file's own `rgba` reads and the
+        -- shape the stored swatch this replaces already had. The two bar colours
+        -- above are positional because their consumer unpacks them.
+        borderColor = { r = ebr, g = ebg, b = ebb, a = eba },
         fontPath   = path,
         fontSize   = size,
         fontFlags  = flags,

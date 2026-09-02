@@ -276,6 +276,58 @@ test("Blocks: a list with nothing disabled drags end to end", function()
     assertEqual(log.moved[1][2], 5, "with no rule to clamp against, every index is reachable")
 end)
 
+-- ---------------------------------------------------------------------------
+-- The row box belongs to the library (options-ui-§18)
+-- ---------------------------------------------------------------------------
+
+test("Blocks: this file draws NO row background of its own", function()
+    -- It used to. `block.bg` was a texture at 1,1,1 / 0.06 -- the exact fill
+    -- options-ui-§8 now pins and LibKa0s-Widgets-1.0 minor 9 draws for every
+    -- draggable list in the collection -- so keeping it would paint two fills over
+    -- each other and make every row a shade darker than the standard says.
+    -- red under: re-adding the texture "so the list looks right without the
+    -- library", which is exactly the drift the shared widget exists to end.
+    local inst = T.load()
+    local blocks = render(inst)
+    for i, block in ipairs(blocks) do
+        assertTrue(block.bg == nil, "block " .. i .. " still carries a host-drawn background")
+    end
+end)
+
+test("Blocks: the library's box is behind every row, muted for a hidden column", function()
+    -- The box is the widget's and the values are options-ui-§8's; what this file
+    -- still decides is WHICH rows are dimmed, and it says so with one word on the
+    -- row's spec rather than by painting anything.
+    -- red under: dropping `dimmed`, which would draw a hidden column at full
+    -- strength and lose the only thing telling it from a shown one at a glance.
+    local inst = T.load()
+    local W = inst.mocks.LibStub("LibKa0s-Widgets-1.0", true)
+    assertTrue(W ~= nil, "the fixture needs the vendored widget library")
+
+    local _, _, ctx = render(inst)
+    local rows = ctx.mmReorder and ctx.mmReorder.rows
+    assertTrue(rows ~= nil and #rows == #ITEMS, "the controller registered every row")
+
+    for i, item in ipairs(ITEMS) do
+        local box = rows[i].box
+        assertTrue(box ~= nil, "row " .. i .. " got no box")
+        local want = item.enabled and W.ROW_BOX.FILL or W.ROW_BOX.FILL_DIM
+        local got = box.fill.__colorTexture
+        assertEqual(got[4], want[4],
+            "row " .. i .. " (" .. item.label .. ") is painted at the wrong strength")
+    end
+end)
+
+test("Blocks: the handle's gutter is the library's, never restated here", function()
+    -- options-ui-§8 pins it at 30 and `Widgets.ROW_BOX.HANDLE_W` is where it lives;
+    -- a host copy is the copy that goes stale the day the collection retunes it.
+    -- red under: passing `handleSize` again, with any number in it.
+    local inst = T.load()
+    local W = inst.mocks.LibStub("LibKa0s-Widgets-1.0", true)
+    local blocks = render(inst)
+    assertEqual(blocks[1].mmHandle:GetWidth(), W.ROW_BOX.HANDLE_W)
+end)
+
 test("Blocks: the rule is drawn once, under the last enabled block", function()
     -- It marks where the shown columns stop. A list with nothing disabled has no
     -- boundary to mark, and drawing one would claim a group that is not there.

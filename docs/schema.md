@@ -67,6 +67,12 @@ db.profile = {
     windows      = { },       -- an ARRAY of window config tables, in picker order
     nextWindowId = 1,         -- monotonic id source; ids are never reused
     minimap      = { hide = false },   -- LibDBIcon-1.0 owns this table's shape
+    master       = {                   -- options-ui-§15's Master controls tab
+        visibility = "always",         -- always | inCombat | outOfCombat | never
+        scale      = 1.0,              -- MULTIPLIED into every window's own scale
+        alpha      = 1.0,              -- MULTIPLIED into every window's own alpha
+        locked     = false,            -- ORed with every window's own lock
+    },
     data         = {                   -- how the meter is read, addon-wide
         mergePets = false,             -- a pet's own row, or added to its owner's
         throttle  = 0.25,              -- seconds between refreshes
@@ -81,7 +87,7 @@ db.profile = {
 }
 ```
 
-Six keys, and that is the design working rather than the profile being thin. A window is an
+Seven keys, and that is the design working rather than the profile being thin. A window is an
 **instance, not a singleton** (design §6): there are no global display settings, so `frame`,
 `header`, `rows`, `bars`, `text`, `icons`, `tooltip`, `visibility`, `columns` and `data` all live
 inside one window's config. What is left at profile level is the handful of things that cannot
@@ -113,6 +119,32 @@ losing a configured window is worse than renumbering it.
 treats it as its own — it reads `hide` and **writes** `minimapPos` (and a lock / free-position pair
 if the player drags the button off the minimap). The addon must never enumerate the table or
 normalize keys out of it, or a dragged button snaps back on the next login.
+
+### `master` — the addon-wide master controls
+
+| Path | Type | Default | Control |
+|---|---|---|---|
+| `master.visibility` | string | `"always"` | dropdown on `general` → Master controls |
+| `master.scale` | number | `1.0` | slider, 0.5 .. 2.0 |
+| `master.alpha` | number | `1.0` | slider, 0 .. 1 |
+| `master.locked` | bool | `false` | checkbox |
+
+`options-ui-§15` fixes this set and its order across every Ka0s addon. All four are **addon-wide**,
+and none of them is a promoted per-window row: a window here is an instance, so its own
+`frame.locked`, `frame.scale` and `frame.alpha` stay on the Frame page where the banner says which
+window they mean. `modules/Window.lua` **composes** each pair rather than choosing between them —
+the two scales and the two alphas multiply, the two locks OR — so one control can shrink or pin a
+whole layout without erasing the differences a player set between its windows. `master.visibility` is
+read by `core/MultiMeters.lua`'s show ladder, below test mode, and `never` is unforceable.
+
+`NS.MasterSetting` (`defaults/Profile.lua`) is the **one reader**, shaped exactly like
+`NS.DataSetting` below and for the same reason; `modules/Window.lua` clamps what it answers to the
+bounds of the sliders that write it, because these paths are also reachable from `/mm set` and from a
+hand-edited SavedVariables.
+
+**NEW rather than migrated.** This addon never shipped an addon-wide *show only in combat* checkbox —
+the per-window Visibility page has its own combat pair and keeps it — so there is no stored boolean to
+lift and no `schemaVersion` step. AceDB's defaults merge supplies the subtree on first login.
 
 ### `data` — how the meter is read, addon-wide
 
@@ -310,10 +342,12 @@ either alone. `text.shadow` keeps its long-standing `true`.
 | `alpha` | `1.0` | 0–1, rendered as a percentage |
 | `strata` | `"MEDIUM"` | `LOW` `MEDIUM` `HIGH` `DIALOG` |
 | `backdropColor` | `{ r=0, g=0, b=0, a=0.75 }` | |
+| `backdropColorMode` | `"custom"` | `class` \| `custom`. options-ui-§17's companion, added in the settings-revamp-v2 pass. `class` is the LOCAL player's — a window is not about any one row — and there is no `stat`, for the reason the title bar has none. |
 | `borderStyle` | `"Blizzard Tooltip"` | LSM `border` key |
 | `borderStyle` = `"None"` (or `""`, or unset) | | means **no edge**, answered by `borderPath` itself. That resolver distinguishes a CHOICE from a FAILURE: "None" is nil, while a name it cannot fetch — a media pack that is no longer installed — still falls back to the library's own edge. Conflating the two handed a player who picked "None" the Ka0s edge they had just turned off. Same rule and same order as `modules/Tooltip.lua`'s `mediaPath`, the addon's other LSM resolver |
 | `borderSize` | `2` | `0` drops `edgeFile` with it — a zero edge size with a texture still present is drawn as a hard 1px line. With no edge, the skin's 1px `frame.innerBorder` child is hidden too: it is not part of the backdrop `ApplyBorder` rewrites, so it used to be the whole visible border on a window whose border was switched off |
 | `borderColor` | `{ r=0, g=0, b=0, a=1 }` | |
+| `borderColorMode` | `"custom"` | `class` \| `custom`, the companion beside it. Same two values and same reading as `backdropColorMode`. |
 | `padding` | `6` | frame edge to rows |
 | `locked` | `false` | **not** coupled to Test mode — `WindowManager:SetLocked` used to also switch it on, which made unlocking a window fill it with placeholder rows and made unchecking Test mode a no-op while any window was unlocked. Locking is now about movement and nothing else; ask for a grid to aim at with `/mm test` |
 | `clampToScreen` | `true` | |
@@ -454,9 +488,17 @@ settings-panel controls answering a question that was already answered one page 
 ### `bars` — the StatusBar in every cell
 
 `texture = "Blizzard Raid Bar"` (LSM `statusbar`) · `colorMode = "class"` · `customColor =
-{ r=0.35, g=0.55, b=0.85, a=1 }` · `bgColor = { r=0, g=0, b=0, a=1 }` · `bgAlpha = 0.35` ·
-`border = false` · `borderThickness = 1` · `borderColor = { r=0, g=0, b=0, a=1 }` · `alpha = 1.0` ·
+{ r=0.35, g=0.55, b=0.85, a=1 }` · `bgColor = { r=0, g=0, b=0, a=1 }` · `bgColorMode = "class"` ·
+`bgAlpha = 0.35` · `border = false` · `borderThickness = 1` ·
+`borderColor = { r=0, g=0, b=0, a=1 }` · `borderColorMode = "custom"` · `alpha = 1.0` ·
 `fillDirection = "LEFT"`.
+
+`borderColorMode` is options-ui-§17's companion beside the outline's swatch, added in the
+settings-revamp-v2 pass. Two values, `class` and `custom`, and `class` is **the row's player's** —
+an outline around a cell belongs to whoever the cell belongs to, exactly as the fill inside it does,
+and not to the local player, which is what the window's own edge means one page away. It is applied
+per row by `Cell:ApplyEntryBorderColor`, for the same reason `text.colorMode`'s class mode is: the
+layout pass has no entry in hand. With the shipped `custom` it is two table reads and a return.
 
 **`alpha` fades the FILL TEXTURE, not the cell.** It used to be `bar:SetAlpha`, and the StatusBar is
 the cell — it parents the fill, the backdrop, both text slots and the name column's icon — so
@@ -661,10 +703,16 @@ cell are different surfaces, and a texture or a size that reads across one often
 other: `barTexture = "Blizzard Raid Bar"` · `barSpacing = 1` · `scale = 1.0` · `barColorMode = "class"` · `barAlpha = 0.85` · `barBgColorMode = "custom"` ·
 `barBgAlpha = 0.1` · `barBorderStyle = "None"` ·
 `barBorderSize = 1` · `barBorderColor = { r = 0, g = 0, b = 0, a = 1 }` ·
+`barBorderColorMode = "custom"` ·
 `font = "Friz Quadrata TT"` · `fontSize = 12` · `fontOutline = "NONE"` ·
 `textColor = { r = 1, g = 1, b = 1, a = 1 }`. One colour for **both** number slots: the amount used
 to be hardcoded gold and the share hardcoded white, which read as two kinds of number when they are
 one line's two figures.
+
+`barBorderColorMode` is options-ui-§17's companion beside the outline's swatch, added in the
+settings-revamp-v2 pass. Two values, `class` and `custom`, and `class` is **the hovered player's** —
+the same class the fill it surrounds takes, because a tooltip is opened over one row and is about
+that row.
 
 The Targets section: `showTargets = false` · `maxTargets = 3`.
 
@@ -955,7 +1003,28 @@ group        section heading inside the page, AND the tab label on a tabbed page
              tab. A group whose every row is `hidden` is still real for `/mm
              list` and the schema-vs-defaults check, and never becomes a tab —
              `rowsForPage` drops hidden rows before grouping runs.
-label, desc  displayed strings, localized at declaration through NS.L.
+subgroup     a heading drawn INSIDE a tab, whenever the value CHANGES within a
+             group (options-ui-§7). It names the KIND of control a mixed tab is
+             holding -- Background, Border, Divider, Layout, Icon, Color, Opacity,
+             All surfaces -- never a repeat of its own tab's name, and never a
+             second tab level. Like a group it must be CONTIGUOUS, or its heading
+             prints twice. Four tabs carry them; the rest hold one kind of control
+             and need none.
+label, desc  displayed strings, localized at declaration through NS.L. The flow
+             engine reads `row.tooltip or row.desc`, and this addon spells it
+             `desc` everywhere -- including on composed rows, where `dress()`
+             clears the composer's English `tooltip` as it writes one.
+startsLine   flush the pending line BEFORE this row, so a declared pair cannot be
+             split across two lines by an odd number of widgets above it. Carried
+             by every colour swatch, which is what makes "the mode is immediately
+             to its right" a property of the declaration rather than of parity.
+classColorSource   "player" | "unit" -- WHICH class this surface's `class` mode
+             means, DECLARED rather than inferred (options-ui-§17). The path does
+             not decide it: everything under `window.*` here is per-window, and the
+             split is by surface. A cell, its outline and the tooltip are about the
+             ROW's player (`unit`); the window's chrome, both header strips, the
+             backdrop and the border are about the window, so they are the local
+             player's (`player`).
 min/max/step/fmt/isPercent    slider shape.
 values/sorting/dialogControl  dropdown shape. A `number` row carrying `values` is
              inferred as an enum by both majors and constrained rather than clamped.
@@ -963,7 +1032,33 @@ validate     optional predicate; a false answer refuses the write.
 onChange     optional reaction for the few settings CONFIG_CHANGED cannot express.
 invert       display is the negation of storage (the one minimap row).
 sessionOnly  never persisted; the row's own get/set are the whole storage.
+composed     stamped by `expandBlocks` on every row a LibKa0s composer emitted.
+             Inert to every reader of the schema; it exists so
+             tests/test_degraded.lua can say exactly which rows a library-less
+             install is allowed to be missing rather than compare two totals.
 ```
+
+### The composed blocks
+
+Roughly a third of the rows are not written out. `options-ui-§15`, `§16` and `§17` fix the master
+controls and the font, border and bar groups across the collection, and `LibKa0s-Options-1.0`'s
+composers emit each from one declaration (`anti-patterns #73`). What that changes about the row shape
+is nothing at all — a composer returns an array of **ordinary rows**, so `rowsForPage`,
+`ApplyDefault`, `RestoreDefaults`, the CLI and the reset sweep all keep working untouched.
+
+What the calls in `settings/Schema.lua` add around them is three things:
+
+- **`keys` and `defaults`** on every call, so the composed rows land on this addon's existing paths
+  at this addon's shipped values. **The composer must not change what is stored.**
+- **`dress(rows, byPath)`** afterwards, which puts back what the composers have no override for: the
+  slider bounds, the `%d px` suffix, the validator, the stored value set behind a dropdown, and this
+  addon's own sentence in each tooltip.
+- **`withMode(rows, after, modeRow)`**, which swaps the composer's boolean `Use class color`
+  companion for this addon's colour-**mode** dropdown — the richer form `options-ui-§17` names and
+  forbids converting back — splicing it immediately after the swatch.
+
+See [settings-panel.md](settings-panel.md#the-composed-blocks) for which block is used where, and
+`docs/ARCHITECTURE.md`'s deviation register for what a load without LibKa0s does to them.
 
 ### `invert` — exactly one row
 

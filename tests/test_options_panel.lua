@@ -614,7 +614,10 @@ end)
 -- tree is AceConfigDialog's; Windows and Columns are here because they are tabbed too, through
 -- their own bespoke builders rather than through RenderTabbedSchema.
 local TABBED = {
-    general    = "General",
+    -- options-ui-§15: the General page's FIRST tab is `Master controls` in every
+    -- Ka0s addon, so that "how do I turn this off, how do I make it smaller, how
+    -- do I put it back" is one place under one name.
+    general    = "Master controls",
     windows    = "Window",
     frame      = "General",
     header     = "Title bar",
@@ -672,6 +675,39 @@ function()
     assertFalse(labelled(L["Lock window"]), "the previous tab's widgets were left behind")
 end)
 
+test("Panel: the Master controls tab closes with the composer's two reset buttons", function()
+    -- options-ui-§15 makes the two resets the tab's closing BUTTON PAIR rather than
+    -- schema rows -- they are acts, not settings -- and the pair is drawn by the
+    -- hook `H.MasterControls` HANDS BACK, so nine addons cannot end up with nine
+    -- wordings of "reset everything". settings/General.lua wires that hook and adds
+    -- the one sentence the composer cannot know: what Reset position means here.
+    -- red under: dropping NS.MasterControlsAfterGroup from afterMaster, or keying
+    -- the hook to a group name the schema does not use, which errors nowhere.
+    local inst = T.load()
+    local L = inst.NS.L
+    local ctx = showPage(inst, "general")
+    assertEqual(ctx.activeTab, L["Master controls"])
+
+    local function textOnPage()
+        local out = {}
+        local function take(w)
+            if w.labelText then out[#out + 1] = w.labelText end
+            if w.text then out[#out + 1] = w.text end
+        end
+        for _, w in ipairs(ctx.scroll and ctx.scroll.children or {}) do
+            take(w)
+            for _, child in ipairs(w.children or {}) do take(child) end
+        end
+        return table.concat(out, "\n")
+    end
+
+    local said = textOnPage()
+    assertTrue(said:find("Reset position", 1, true) ~= nil, "no Reset position button")
+    assertTrue(said:find("Reset all settings", 1, true) ~= nil, "no Reset all settings button")
+    assertTrue(said:find("selected on the Windows page", 1, true) ~= nil,
+        "the pair does not say that Reset position is per-window here")
+end)
+
 test("Panel: the Statistic colors tab says where its colours are actually worn", function()
     -- A grid of eight swatches with no sentence over it reads as "the colour of
     -- this statistic", full stop -- and a player who sets Damage to green, looks
@@ -703,9 +739,10 @@ test("Panel: the Statistic colors tab says where its colours are actually worn",
 
     local note = L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."]
     assertTrue(textOnPage():find(note, 1, true) == nil,
-        "the note is on the General tab, which is not the tab it describes")
+        "the note is on the Master controls tab, which is not the tab it describes")
 
-    ctx.__tabKids[2]:__fire("OnClick")
+    -- The THIRD tab: Master controls, General, then Statistic colors.
+    ctx.__tabKids[3]:__fire("OnClick")
     assertEqual(ctx.activeTab, L["Statistic colors"])
     assertTrue(textOnPage():find(note, 1, true) ~= nil,
         "the Statistic colors tab drew no note saying where its colours are worn")

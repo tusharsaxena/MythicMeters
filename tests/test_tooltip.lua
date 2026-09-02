@@ -826,6 +826,45 @@ test("The bar border is drawn on the BAR, where it can be seen", function()
     assertNil(b.__parent.__backdrop, "the carrier kept a backdrop nobody can see")
 end)
 
+test("The bar border answers a colour mode, and its class is the HOVERED player's", function()
+    -- options-ui-§17. A tooltip is opened over ONE row and is about that row, so
+    -- `class` here is the player being hovered -- the same class the fill it
+    -- surrounds takes, and not the local player's, which is what the window's own
+    -- edge means. The swatch's ALPHA survives the mode.
+    -- red under: resolving it through the local player's class, or reading the
+    -- swatch and ignoring the mode entirely.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barBorderStyle     = "Ka0s Edge"
+        c.tooltip.barBorderSize      = 4
+        c.tooltip.barBorderColor     = { r = 1, g = 0, b = 0, a = 0.6 }
+        c.tooltip.barBorderColorMode = "class"
+    end }
+    inst.mocks.__media.border["Ka0s Edge"] = "Interface\\Test\\Edge"
+    local want = inst.mocks.RAID_CLASS_COLORS.MAGE
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    local b = tooltipBars(inst)[1]
+    local edge = b.__backdropBorderColor
+    assertTrue(edge ~= nil, "the border was never coloured")
+    assertEqual(edge[1], want.r, "the outline did not take the hovered player's class")
+    assertEqual(edge[3], want.b)
+    assertEqual(edge[4], 0.6, "the swatch's alpha did not survive the mode")
+end)
+
+test("The bar border's shipped mode is Custom, so it still reads the swatch", function()
+    -- red under: a default of "class", which would recolour every existing
+    -- tooltip's spell-bar outline on upgrade.
+    local inst, cfg, anchor = bench{ configure = function(c)
+        c.tooltip.barBorderStyle = "Ka0s Edge"
+        c.tooltip.barBorderSize  = 4
+        c.tooltip.barBorderColor = { r = 1, g = 0, b = 0, a = 1 }
+    end }
+    inst.mocks.__media.border["Ka0s Edge"] = "Interface\\Test\\Edge"
+    inst.NS.Tooltip:CellTooltip(row(), "DamageDone", anchor, cfg)
+
+    assertEqual(tooltipBars(inst)[1].__backdropBorderColor[1], 1)
+end)
+
 test("A bar sits UNDER the tooltip's text, not over it", function()
     -- GameTooltip draws its line FontStrings in ARTWORK, and a frame at the
     -- tooltip's own level interleaves its draw layers with the tooltip's. So the

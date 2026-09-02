@@ -341,7 +341,33 @@ the write succeeds, and nothing anywhere says so) and a default that disagrees w
   is no second place that lists a page's tabs.
 - A `group` whose every row is `hidden` never becomes a tab at all — `rowsForPage` drops hidden rows
   before grouping runs, so the group is real for `/mm list` and the schema-vs-defaults check and
-  invisible in the panel (General's `Export` group is the shipped example).
+  invisible in the panel (General's `Export` group is the shipped example). That is not a
+  strip-less page and does not need arguing about.
+- **Every row carries a `group`** (`options-ui-§13`). A page whose rows declare none cannot draw a
+  strip; the library reports it and renders the page flat. `tests/test_schema.lua` asserts it in
+  three lines, which is the case that catches a forgotten one.
+
+**If what you are adding is a COLOUR, a FONT, a BORDER or a BAR, stop and read
+[settings-panel.md](settings-panel.md#the-composed-blocks) first.** Those four are fixed row-sets
+across the whole Ka0s collection (`options-ui-§16`, `§17`) and are **composed**, not written out —
+hand-writing one is anti-pattern #73. In practice:
+
+- **A colour swatch is never alone.** It needs a companion immediately after it, on the same line,
+  and in this addon that companion is a colour-**mode** dropdown rather than a checkbox. Use
+  `C.ColorPair{...}` and then `withMode(rows, "<swatch path>", <mode row>)`; the composer sets
+  `startsLine` on the swatch so the pair can never be split.
+- **Stamp `classColorSource` on both halves.** `"unit"` when the surface is about the row's player (a
+  cell, its outline, the tooltip), `"player"` when it is about the window (chrome, both header
+  strips, the backdrop, the border). The path does not decide this and an audit reads the stamp.
+- **Never `disabledIf` a colour row.** Its alpha is still read under every mode, so greying it would
+  say something untrue. The sentence that replaces it is appended to every non-palette swatch
+  automatically by the `SWATCH_NOTE` pass at the foot of `settings/Schema.lua`.
+- **A palette swatch is the one exemption** — one colour per statistic identifies a column, not a
+  player, so `statColors.*` takes no companion and no note.
+- **A group over a background is not a bar group.** A backdrop with no fill texture takes the swatch
+  and its mode and nothing else; inventing a texture picker for it is a control wired to nothing.
+- **A tab holding more than one kind of these** carries a `subgroup` per kind (`options-ui-§7`),
+  contiguous, named for the kind and never for its own tab.
 
 ---
 
