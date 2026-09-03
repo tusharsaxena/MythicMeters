@@ -26,7 +26,7 @@ fix the master-controls set and the font, border and bar blocks across the whole
 
 Almost none of the panel machinery is in this repo. The shell, the header, the lazy Defaults button,
 the five widget makers, the tab strip, the page banner, the flow engine, the landing-page builder and
-the always-shown scrollbar patch belong to `LibKa0s-Options-1.0` (`libs/LibKa0s/Options*.lua`, v1.24.0
+the always-shown scrollbar patch belong to `LibKa0s-Options-1.0` (`libs/LibKa0s/Options*.lua`, v1.25.0
 bundled), and so do the five schema composers (`OptionsCompose.lua`). What lives under `settings/` is only the part that is this addon's: **where a value lives,
 which rows belong to which page and which tab, what the window picker does, and what a reset has to
 clear that no schema row owns.**
