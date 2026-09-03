@@ -411,6 +411,75 @@ test("ShouldShow: the master enable refuses every window", function()
     assertEqual(reason, "disabled")
 end)
 
+test("ShouldShow: General visibility set to Never refuses every window", function()
+    -- options-ui-§15's dropdown, and `never` is the master switch said a quieter
+    -- way -- so it answers its own reason rather than borrowing "disabled", which
+    -- would make `/mm debug diag` name a control the player did not touch.
+    -- red under: not reading `master.visibility` at all, which is the whole rule.
+    local inst = T.load{ enable = true }
+    inst.mocks.setInstance("party")
+    inst.mocks.setGroup({ {}, {}, {}, {}, {} })
+    local window = inst.NS.Database.GetWindows()[1]
+
+    inst.NS.db.profile.master.visibility = "never"
+    local ok, reason = inst.NS.ShouldShow(window)
+    assertFalse(ok)
+    assertEqual(reason, "hidden")
+end)
+
+test("ShouldShow: General visibility's two combat answers follow the pull", function()
+    -- They are CONTEXT rules -- the addon-wide statement of the per-window
+    -- `hideInCombat` pair -- and they answer in the same words, so a player reading
+    -- `/mm debug diag` gets one vocabulary either way.
+    -- red under: inverting either comparison, or reading InCombatLockdown, which is
+    -- wrong at both edges of a pull.
+    local inst = T.load{ enable = true }
+    inst.mocks.setInstance("party")
+    inst.mocks.setGroup({ {}, {}, {}, {}, {} })
+    local window = inst.NS.Database.GetWindows()[1]
+    local profile = inst.NS.db.profile
+
+    profile.master.visibility = "inCombat"
+    inst.mocks.setInCombat(false)
+    local ok, reason = inst.NS.ShouldShow(window)
+    assertFalse(ok); assertEqual(reason, "out of combat")
+
+    inst.mocks.setInCombat(true)
+    assertTrue((inst.NS.ShouldShow(window)), "in combat, 'Only in combat' must show")
+
+    profile.master.visibility = "outOfCombat"
+    ok, reason = inst.NS.ShouldShow(window)
+    assertFalse(ok); assertEqual(reason, "in combat")
+
+    inst.mocks.setInCombat(false)
+    assertTrue((inst.NS.ShouldShow(window)), "out of combat, 'Only out of combat' must show")
+
+    -- And the shipped answer objects to nothing.
+    profile.master.visibility = "always"
+    assertTrue((inst.NS.ShouldShow(window)))
+end)
+
+test("ShouldShow: General visibility is read BELOW test mode, so a layout can still be made",
+function()
+    -- Test mode is one-way and forces a window ON, which is the documented way
+    -- every other rule is stepped past while a player lays columns out at a target
+    -- dummy. A combat answer above it would make that impossible out of combat.
+    -- red under: moving the master visibility check above step 2.
+    local inst = T.load{ enable = true }
+    inst.mocks.setInstance("party")
+    inst.mocks.setGroup({ {}, {}, {}, {}, {} })
+    inst.mocks.setInCombat(false)
+    local window = inst.NS.Database.GetWindows()[1]
+
+    inst.NS.db.profile.master.visibility = "inCombat"
+    assertFalse((inst.NS.ShouldShow(window)), "the fixture needs the rule to refuse first")
+
+    inst.NS.State.SetTestMode(true)
+    local ok, reason = inst.NS.ShouldShow(window)
+    assertTrue(ok)
+    assertEqual(reason, "test")
+end)
+
 test("ShouldShow: test mode overrides context, so a window can be positioned anywhere", function()
     -- The whole point is to lay columns out wherever the player happens to be
     -- standing — which is normally the open world, where the window ships off.

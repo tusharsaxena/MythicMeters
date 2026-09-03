@@ -302,7 +302,7 @@ badge and any count quoted in the docs must agree with it.
 - Defaults: NS.C aliases the profile defaults rather than copying them
 - Defaults: the debug flag is NOT a profile default
 
-### test_coresetup.lua (23)
+### test_coresetup.lua (26)
 
 - CoreSetup: the harness loads the vendored LibKa0s majors, so nothing measures a stub
 - CoreSetup: the runner FEEDS the derived library list, and it is not empty
@@ -322,6 +322,9 @@ badge and any count quoted in the docs must agree with it.
 - CoreSetup: channels fall back independently, so a three-element color keeps its alpha
 - CoreSetup: RGBA answers the four defaults for a non-table
 - CoreSetup: the fallback color reader stands behind the library's
+- CoreSetup: the class colour is the LIBRARY's one resolver, not a private copy
+- CoreSetup: the classFilename reader is KEPT, because the library has no equivalent
+- CoreSetup: the class colour degrades to a working reader, not to nothing
 - CoreSetup: the window edge comes from the library, never from a private lookalike
 - CoreSetup: the close button is the library's, told which addon is asking
 - CoreSetup: no addon file restates a Core.SKIN value
@@ -407,7 +410,7 @@ badge and any count quoted in the docs must agree with it.
 - EnvSetup: with no reader at all, core/Namespace.lua takes its own FALLBACK_VERSION
 - EnvSetup: the version was resolved at load, not deferred
 
-### test_lifecycle.lua (26)
+### test_lifecycle.lua (29)
 
 - Lifecycle: NS IS the AceAddon object, promoted in place
 - Lifecycle: every module registers, and the enable cascade runs them all
@@ -432,6 +435,9 @@ badge and any count quoted in the docs must agree with it.
 - ShouldShow: the ladder answers a reason that names the step that decided
 - ShouldShow: a non-table is refused before anything else is consulted
 - ShouldShow: the master enable refuses every window
+- ShouldShow: General visibility set to Never refuses every window
+- ShouldShow: General visibility's two combat answers follow the pull
+- ShouldShow: General visibility is read BELOW test mode, so a layout can still be made
 - ShouldShow: test mode overrides context, so a window can be positioned anywhere
 - ShouldShow: the context rules are Visibility's, consulted rather than reimplemented
 - ShouldShow: a missing Visibility module fails OPEN
@@ -701,7 +707,7 @@ badge and any count quoted in the docs must agree with it.
 - the build PUBLISHES which order actually took effect
 - `provider` mode honours the direction OUT of combat too
 
-### test_window.lua (136)
+### test_window.lua (141)
 
 - Window builds a bare anchor plus the visible frame, and names both
 - Closing HIDES the window; it never deletes it
@@ -838,6 +844,11 @@ badge and any count quoted in the docs must agree with it.
 - Unlocking does not resurrect the grip on a collapsed window
 - A profile written before minimise existed is not collapsed
 - pool: a layout change re-applies to FREE rows, not just active ones
+- Master scale MULTIPLIES the window's own rather than replacing it
+- Master alpha MULTIPLIES the window's own opacity
+- Master scale and alpha are CLAMPED to the sliders that write them
+- Either lock pins the window, and the master lock erases neither
+- The window's fill and its edge each answer a colour mode
 - pool: every row built lands in `all`, including the batch surplus
 
 ### test_headercontrols.lua (51)
@@ -894,7 +905,7 @@ badge and any count quoted in the docs must agree with it.
 - HeaderControls: the export button hands Export the WINDOW
 - HeaderControls: the gear opens the panel
 
-### test_row.lua (89)
+### test_row.lua (91)
 
 - Row.OffsetFor is a pure function of the index and the row config
 - Cell:ApplyLayout places every cell from the layout table
@@ -925,6 +936,8 @@ badge and any count quoted in the docs must agree with it.
 - With no class to read, cell text keeps its configured color
 - Text opacity fades the TEXT, and leaves the bar alone
 - The bar border takes the player's thickness and colour
+- The bar border answers a colour mode, and its class is the ROW'S player
+- The bar border's shipped mode is Custom, so an upgraded window looks the same
 - The bar border is drawn ABOVE the fill, not under it
 - Border style None keeps the cheap flat outline and puts no backdrop on a cell
 - Border style art moves to a backdrop and takes the flat outline down
@@ -1013,7 +1026,7 @@ badge and any count quoted in the docs must agree with it.
 - Targets: the invalidating messages are actually subscribed
 - Targets: two sessions do not share a map
 
-### test_tooltip.lua (122)
+### test_tooltip.lua (124)
 
 - CellTooltip opens on the hovered cell and heads with the player and the stat
 - CellTooltip honors the anchor setting and falls back to the default
@@ -1053,6 +1066,8 @@ badge and any count quoted in the docs must agree with it.
 - The text mode follows the hovered column too
 - Class mode paints the bar with the hovered player's class
 - The bar border is drawn on the BAR, where it can be seen
+- The bar border answers a colour mode, and its class is the HOVERED player's
+- The bar border's shipped mode is Custom, so it still reads the swatch
 - A bar sits UNDER the tooltip's text, not over it
 - Bars come down when GameTooltip closes, whoever closed it
 - A spell line carries its SHARE of the player's total beside the amount
@@ -1378,7 +1393,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (53)
+### test_schema.lua (63)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1418,6 +1433,15 @@ badge and any count quoted in the docs must agree with it.
 - A surface changed after the broadcast keeps its own answer
 - The Frame page's Defaults button does NOT broadcast
 - Schema: every page's tabs are the designed ones, in order, at the designed size
+- Schema: the General page opens on Master controls, holding exactly the canonical set
+- Schema: the master controls are ADDON-WIDE, and the per-window three are untouched
+- Schema: a moved setting is declared ONCE, not twice
+- Schema: every colour swatch has its mode beside it, on the same line
+- Schema: NO colour row is ever disabled, and every one says why in words
+- Schema: which class a colour means is DECLARED, not inferred from its path
+- Schema: every row on every page carries a group, so no page renders untabbed
+- Schema: a tab that mixes kinds of control names each kind between them
+- Schema: a subgroup is CONTIGUOUS, or its heading prints twice
 - Schema: no tab holds fewer than two controls
 - Schema: a hidden row is filed under a tab that exists, and draws nothing
 - Schema: every tab name and row label is a localized string, not a bare literal
@@ -1429,6 +1453,7 @@ badge and any count quoted in the docs must agree with it.
 - Schema: every group on every page is CONTIGUOUS, or a heading prints twice
 - Schema: every LSM border setting is one this suite knows honours "None"
 - Schema: every text surface offers face, outline, shadow and colour
+- Schema: Highlight yourself and Alternating background ship OFF
 - RestoreAllDefaults resets EVERY window, not just the selected one
 - RestoreAllDefaults is the equivalent of a NEW PROFILE
 - RestoreAllDefaults leaves the profile LIST alone
@@ -1484,7 +1509,7 @@ badge and any count quoted in the docs must agree with it.
 - Slash: Register is a no-op rather than a raise when there is no AceConsole
 - Slash: /mm list heads each block with the page AND the tab
 
-### test_options_panel.lua (33)
+### test_options_panel.lua (34)
 
 - Options: General is the FIRST page, above Windows
 - Options: every window page is marked as nested, and the two that are not are not
@@ -1516,11 +1541,12 @@ badge and any count quoted in the docs must agree with it.
 - Panel: every tabbed page opens on its first tab and draws a strip
 - Panel: Profiles draws no strip
 - Panel: switching tabs re-renders without leaving the previous tab's widgets behind
+- Panel: the Master controls tab closes with the composer's two reset buttons
 - Panel: the Statistic colors tab says where its colours are actually worn
 - Panel: every window sub-page banners the active window, and Windows has no second picker
 - Panel: choosing a window in the banner retargets every page and keeps the tab
 
-### test_columnblocks.lua (14)
+### test_columnblocks.lua (17)
 
 - Blocks: one block per item, each carrying its index and its label
 - Blocks: the glyph says enabled or disabled, and clicking it toggles
@@ -1535,6 +1561,9 @@ badge and any count quoted in the docs must agree with it.
 - Blocks: a drag that lands where it started reports nothing
 - Blocks: an enabled block cannot be dragged past the last enabled one
 - Blocks: a list with nothing disabled drags end to end
+- Blocks: this file draws NO row background of its own
+- Blocks: the library's box is behind every row, muted for a hidden column
+- Blocks: the handle's gutter is the library's, never restated here
 - Blocks: the rule is drawn once, under the last enabled block
 
 ### test_columns.lua (11)
@@ -1573,7 +1602,7 @@ badge and any count quoted in the docs must agree with it.
 - Degraded: the options stub publishes every Helpers member the page files touch
 - Degraded: LSMValues keeps its DEFERRED shape and never answers an empty list
 - Degraded: reset-everything still works, and still refuses to touch the Profiles page
-- Degraded: the schema row count is UNCHANGED versus a full load
+- Degraded: the schema row count is UNCHANGED versus a full load, bar the composed blocks
 - Degraded: the schema is the same rows, path for path and page for page
 - Degraded: every schema page is registered as an options page on both paths
 - Degraded: the namespace publishes the same seam members with and without the library
@@ -1594,12 +1623,12 @@ badge and any count quoted in the docs must agree with it.
 | test_database.lua | 56 |
 | test_diagnostics.lua | 60 |
 | test_defaults.lua | 24 |
-| test_coresetup.lua | 23 |
+| test_coresetup.lua | 26 |
 | test_perfsetup.lua | 19 |
 | test_debuglogsetup.lua | 30 |
 | test_mediasetup.lua | 7 |
 | test_envsetup.lua | 11 |
-| test_lifecycle.lua | 26 |
+| test_lifecycle.lua | 29 |
 | test_vendor_sync.lua | 2 |
 | test_format.lua | 32 |
 | test_provider.lua | 72 |
@@ -1607,21 +1636,21 @@ badge and any count quoted in the docs must agree with it.
 | test_feign.lua | 15 |
 | test_aggregator.lua | 81 |
 | test_aggregator_sort.lua | 20 |
-| test_window.lua | 136 |
+| test_window.lua | 141 |
 | test_headercontrols.lua | 51 |
-| test_row.lua | 89 |
+| test_row.lua | 91 |
 | test_targets.lua | 24 |
-| test_tooltip.lua | 122 |
+| test_tooltip.lua | 124 |
 | test_drilldown.lua | 50 |
 | test_export.lua | 91 |
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 53 |
+| test_schema.lua | 63 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 34 |
-| test_options_panel.lua | 33 |
-| test_columnblocks.lua | 14 |
+| test_options_panel.lua | 34 |
+| test_columnblocks.lua | 17 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1458** |
+| **Total** | **1487** |

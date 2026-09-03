@@ -697,17 +697,31 @@ end)
 --- the panel DRAWS. So General has no Export tab -- its three export rows are hidden -- and
 --- the Header page's Controls counts eight, not the nine rows filed under it. The case below
 --- this one is what keeps those hidden rows honest.
+---
+--- `Master controls` leads the General page and is options-ui-§15's canonical set:
+--- enable, general visibility, master scale, master alpha, lock frame and the
+--- debug console -- six rows, with the two resets drawn as a button pair rather
+--- than as rows. The four counts that grew by one are the colour MODES
+--- options-ui-§17 asked for beside the four swatches that had none (the window's
+--- fill and its edge, a cell's bar outline, a tooltip bar's outline).
 local PARTITION = {
-    general    = { { "General", 6 }, { "Statistic colors", 8 } },
+    -- TEN on Master controls, not six: the canonical six, then this addon's own
+    -- four appended after them. `General` was a tab of four rows -- a minimap
+    -- toggle, two addon-wide data settings and Test mode -- sitting next to the
+    -- tab everybody opens, and none of the four is a subject of its own. §15
+    -- forbids reordering, renaming or splitting the canonical set; it does not
+    -- forbid an addon's own rows after it, and the case below pins that the six
+    -- come FIRST and contiguous.
+    general    = { { "Master controls", 10 }, { "Statistic colors", 8 } },
     windows    = { { "Window", 1 } },
     frame      = { { "General", 6 }, { "Size and position", 6 },
-                   { "Background and border", 4 }, { "Row", 8 } },
+                   { "Background and border", 6 }, { "Row", 8 } },
     header     = { { "Title bar", 8 }, { "Title text", 6 }, { "Controls", 8 },
                    { "Button style", 8 } },
-    bars       = { { "Bar", 5 }, { "Background", 3 }, { "Border", 4 },
+    bars       = { { "Bar", 5 }, { "Background", 3 }, { "Border", 5 },
                    { "Text content", 5 }, { "Text style", 7 }, { "Icons", 3 } },
     tooltip    = { { "General", 5 }, { "Bar", 5 }, { "Bar background", 3 },
-                   { "Bar border", 3 }, { "Text", 6 }, { "Contents", 7 } },
+                   { "Bar border", 4 }, { "Text", 6 }, { "Contents", 7 } },
     visibility = { { "Where to show this window", 7 }, { "When to hide this window", 8 },
                    { "Combat", 2 } },
     columns    = { { "Header text", 6 }, { "Header background", 2 } },
@@ -739,6 +753,296 @@ function()
         for _, pair in ipairs(expected) do
             assertEqual(counts[L[pair[1]]], pair[2],
                 page .. " / " .. pair[1] .. ": control count")
+        end
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- The Master controls tab (options-ui-§15)
+-- ---------------------------------------------------------------------------
+
+--- The canonical set, in the canonical order, with the stored path this addon
+--- keeps for each. Written out here rather than derived from the schema the
+--- assertion reads: a row that drifted, was renamed or silently changed path is
+--- then a NAMED failure rather than a shorter list that still agrees with itself.
+---
+--- The two RESETS are absent because they are not rows: options-ui-§15 makes them
+--- the tab's closing button pair, drawn by the hook the composer hands back
+--- (settings/General.lua's afterMaster).
+local MASTER_ROWS = {
+    { "enabled",            "Enable Multi Meters" },
+    { "master.visibility",  "General visibility"  },
+    { "master.scale",       "Master scale"        },
+    { "master.alpha",       "Master alpha"        },
+    { "master.locked",      "Lock frame"          },
+    { "state.debugConsole", "Debug console"       },
+}
+
+test("Schema: the General page opens on Master controls, holding exactly the canonical set",
+function()
+    -- options-ui-§15. The set is canonical, not a menu: an addon includes every row
+    -- that applies to it and MUST NOT reorder them, rename them, or split them
+    -- across tabs.
+    -- The canonical rows are the tab's FIRST rows, contiguous and in order. This
+    -- addon's own four follow them -- §15 forbids reordering, renaming and
+    -- splitting the set, not appending after it -- so the assertion is on the
+    -- PREFIX rather than on the whole tab, and the extras are pinned separately
+    -- below.
+    -- red under: renaming the group, moving it below another tab, dropping a
+    -- canonical row, reordering them, or INTERLEAVING one of this addon's own
+    -- rows among them.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    local rows = NS.SchemaForPage("general")
+    assertEqual(rows[1].group, L["Master controls"], "the first tab of the General page")
+
+    local got = {}
+    for _, row in ipairs(rows) do
+        if row.group == L["Master controls"] then
+            got[#got + 1] = row.path .. " = " .. tostring(row.label)
+        end
+    end
+
+    local want = {}
+    for i, pair in ipairs(MASTER_ROWS) do want[i] = pair[1] .. " = " .. L[pair[2]] end
+    local prefix = {}
+    for i = 1, #want do prefix[i] = got[i] end
+    assertEqual(table.concat(prefix, "\n"), table.concat(want, "\n"))
+
+    -- ...and what follows them is this addon's four, in the order the retired
+    -- General tab had them.
+    local extras = {}
+    for i = #want + 1, #got do extras[#extras + 1] = got[i] end
+    assertEqual(table.concat(extras, "\n"), table.concat({
+        "minimap.hide = " .. L["Show minimap button"],
+        "data.mergePets = " .. L["Merge pets into their owner"],
+        "data.throttle = " .. L["Refresh interval"],
+        "state.testMode = " .. L["Test mode"],
+    }, "\n"), "the retired General tab's rows must follow the canonical set, in order")
+end)
+
+test("Schema: the master controls are ADDON-WIDE, and the per-window three are untouched",
+function()
+    -- options-ui-§15's per-instance clause. A window is an instance here, so its own
+    -- lock, scale and opacity stay on the Frame page and the master rows are the
+    -- addon-wide settings beside them -- never a promotion of one, which would
+    -- retarget silently every time the window banner moved.
+    -- red under: pointing `master.scale` at `window.frame.scale`, or deleting the
+    -- per-window row once the master one existed.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    local perWindow = {
+        ["window.frame.locked"] = L["Lock window"],
+        ["window.frame.scale"]  = L["Scale"],
+        ["window.frame.alpha"]  = L["Opacity"],
+    }
+    for path, label in pairs(perWindow) do
+        local row = NS.FindSchemaRow(path)
+        assertTrue(row ~= nil, path .. " left the schema")
+        assertEqual(row.page, "frame", path .. " is not on the Frame page any more")
+        assertEqual(row.label, label)
+    end
+
+    -- And no `master.` path resolves against a WINDOW: they are profile-level.
+    for _, pair in ipairs(MASTER_ROWS) do
+        local row = NS.FindSchemaRow(pair[1])
+        assertTrue(row ~= nil, pair[1] .. " is not in the schema")
+        assertTrue(row.path:sub(1, 7) ~= "window.", pair[1] .. " became window-relative")
+    end
+end)
+
+test("Schema: a moved setting is declared ONCE, not twice", function()
+    -- The failure this whole pass exists to remove: two controls over one setting.
+    -- `enabled` and `state.debugConsole` MOVED into the Master controls tab, and a
+    -- copy left behind on the old General tab would render both.
+    -- red under: re-declaring either row beside the minimap toggle.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local seen = {}
+    for _, row in ipairs(NS.Schema) do
+        assertTrue(seen[row.path] == nil,
+            row.path .. " is declared twice, on pages " ..
+            tostring(seen[row.path]) .. " and " .. tostring(row.page))
+        seen[row.path] = row.page
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- The class-colour companion (options-ui-§17)
+-- ---------------------------------------------------------------------------
+
+--- The colour swatch this addon deliberately ships with NO companion beside it,
+--- and the only one. Recorded as a documented deviation in docs/ARCHITECTURE.md;
+--- the argument is in settings/Schema.lua beside the row.
+local NO_COMPANION = { ["window.header.bgColor"] = true }
+
+test("Schema: every colour swatch has its mode beside it, on the same line", function()
+    -- options-ui-§17: a swatch on its own asks the player to hand-match a colour
+    -- the game already knows. This addon's companion is the DROPDOWN form -- the
+    -- richer one the rule names -- because `stat`, `skin` and `none` are answers a
+    -- checkbox cannot give, and converting one back would lose them.
+    --
+    -- ADJACENT AND UNSPLITTABLE: the mode is the row immediately after the swatch,
+    -- and the swatch carries `startsLine`, so an odd number of widgets above the
+    -- pair cannot push the two onto different lines.
+    -- red under: dropping a mode row, declaring it two rows away, or dropping
+    -- `startsLine` from a swatch.
+    local inst = T.load()
+    local NS = inst.NS
+
+    for i, row in ipairs(NS.Schema) do
+        if row.type == "color"
+            and row.path:sub(1, 11) ~= "statColors."   -- palette swatches are exempt
+            and not NO_COMPANION[row.path] then
+            local companion = NS.Schema[i + 1]
+            assertTrue(companion ~= nil and companion.path:find("[Cc]olorMode$") ~= nil,
+                row.path .. " has no colour mode immediately after it")
+            assertEqual(companion.group, row.group,
+                row.path .. "'s mode is filed under another tab")
+            assertEqual(companion.subgroup, row.subgroup,
+                row.path .. "'s mode is under another subsection heading")
+            assertTrue(row.startsLine == true,
+                row.path .. " can be split from its mode by an odd widget above it")
+        end
+    end
+end)
+
+test("Schema: NO colour row is ever disabled, and every one says why in words", function()
+    -- options-ui-§17 / anti-patterns #74. The swatch is still read for its ALPHA
+    -- under every mode -- no class colour and no palette entry carries one -- so
+    -- greying it out tells the player something untrue, and setting a colour before
+    -- switching the mode is the normal order of operations.
+    -- red under: adding `disabledIf` to a swatch, or dropping the sentence.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+    local note = L["Not read while the color mode beside it is anything but Custom color, except for its opacity, which always applies."]
+
+    local swatches = 0
+    for _, row in ipairs(NS.Schema) do
+        assertTrue(row.disabledIf == nil, row.path .. " carries disabledIf")
+        if row.type == "color" then
+            if row.path:sub(1, 11) == "statColors." then
+                assertTrue((row.desc or ""):find(note, 1, true) == nil,
+                    row.path .. " is a palette swatch and has no mode to warn about")
+            else
+                swatches = swatches + 1
+                assertTrue((row.desc or ""):find(note, 1, true) ~= nil,
+                    row.path .. " does not say what the mode beside it does to it")
+            end
+        end
+    end
+    assertTrue(swatches >= 15, "only " .. swatches .. " swatches were checked")
+end)
+
+test("Schema: which class a colour means is DECLARED, not inferred from its path", function()
+    -- options-ui-§17: a control stored under a per-instance prefix can still be
+    -- about the local player, so the path cannot be trusted and the intent is
+    -- stamped on the row. Here every `window.*` path is per-window and the split is
+    -- by SURFACE: a cell and a tooltip are about the row/the hovered player
+    -- (`unit`), everything the window itself draws is about you (`player`).
+    -- red under: stamping every window-relative row `unit` because of its prefix.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local WANT = {
+        ["window.frame.backdropColorMode"]      = "player",
+        ["window.frame.borderColorMode"]        = "player",
+        ["window.frame.controlColorMode"]       = "player",
+        ["window.frame.controlHoverColorMode"]  = "player",
+        ["window.header.colorMode"]             = "player",
+        ["window.header.dividerColorMode"]      = "player",
+        ["window.columnHeader.colorMode"]       = "player",
+        ["window.columnHeader.bgColorMode"]     = "player",
+        ["window.bars.colorMode"]               = "unit",
+        ["window.bars.bgColorMode"]             = "unit",
+        ["window.bars.borderColorMode"]         = "unit",
+        ["window.text.colorMode"]               = "unit",
+        ["window.tooltip.barColorMode"]         = "unit",
+        ["window.tooltip.barBgColorMode"]       = "unit",
+        ["window.tooltip.barBorderColorMode"]   = "unit",
+        ["window.tooltip.colorMode"]            = "unit",
+    }
+    for path, source in pairs(WANT) do
+        local row = NS.FindSchemaRow(path)
+        assertTrue(row ~= nil, path .. " left the schema")
+        assertEqual(row.classColorSource, source, path .. ": class-colour source")
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- Groups and subsection headings (options-ui-§7, §13)
+-- ---------------------------------------------------------------------------
+
+test("Schema: every row on every page carries a group, so no page renders untabbed", function()
+    -- options-ui-§13 / anti-patterns #69: a page whose rows declare no group cannot
+    -- draw a strip, so the library reports it and renders the page flat. Three
+    -- lines, and the one that catches it.
+    -- red under: adding a row without a `group`.
+    local inst = T.load()
+    for _, row in ipairs(inst.NS.Schema) do
+        assertTrue(type(row.group) == "string" and row.group ~= "",
+            row.path .. " carries no group")
+    end
+end)
+
+test("Schema: a tab that mixes kinds of control names each kind between them", function()
+    -- options-ui-§7. The four tabs here genuinely mix, and the merge is deliberate
+    -- in every case -- what the rule adds is the heading that says where one kind
+    -- stops and the next starts, never an un-merge.
+    -- red under: dropping a subgroup, or naming one after its own tab.
+    local inst = T.load()
+    local NS, L = inst.NS, inst.NS.L
+
+    local MIXED = {
+        { "frame",  L["General"],               { L["Window"], L["All surfaces"] } },
+        { "frame",  L["Background and border"], { L["Background"], L["Border"] } },
+        { "header", L["Title bar"],             { L["Layout"], L["Background"], L["Divider"] } },
+        { "header", L["Button style"],          { L["Icon"], L["Color"], L["Opacity"] } },
+    }
+
+    for _, case in ipairs(MIXED) do
+        local page, group, want = case[1], case[2], case[3]
+        local order, seen = {}, {}
+        for _, row in ipairs(NS.SchemaForPage(page)) do
+            if row.group == group then
+                assertTrue(row.subgroup ~= nil,
+                    page .. " / " .. group .. ": " .. row.path .. " has no subsection heading")
+                if not seen[row.subgroup] then
+                    seen[row.subgroup] = true
+                    order[#order + 1] = row.subgroup
+                end
+            end
+        end
+        assertEqual(table.concat(order, " | "), table.concat(want, " | "),
+            page .. " / " .. group .. ": subsection headings")
+        for _, name in ipairs(want) do
+            assertTrue(name ~= group, group .. ": a heading repeats its own tab's name")
+        end
+    end
+end)
+
+test("Schema: a subgroup is CONTIGUOUS, or its heading prints twice", function()
+    -- The flow engine emits a heading when `subgroup` CHANGES within a group, so an
+    -- interleaved block draws the same heading twice and reads as two sections.
+    -- red under: moving one row of a subsection above the block it belongs to.
+    local inst = T.load()
+    local NS = inst.NS
+
+    local closed = {}
+    local page, group, current
+    for _, row in ipairs(NS.Schema) do
+        if row.page ~= page or row.group ~= group then
+            page, group, current, closed = row.page, row.group, nil, {}
+        end
+        if row.subgroup ~= current then
+            local key = tostring(row.subgroup)
+            assertTrue(closed[key] == nil,
+                page .. " / " .. group .. ": the '" .. key .. "' heading is drawn twice")
+            if current ~= nil then closed[tostring(current)] = true end
+            current = row.subgroup
         end
     end
 end)
@@ -1130,6 +1434,48 @@ end)
 -- ---------------------------------------------------------------------------
 -- "Reset all settings" IS a profile reset
 -- ---------------------------------------------------------------------------
+
+-- Two row decorations ship OFF, and they are asserted in BOTH places because
+-- both are real: the window template a new window is stamped from, and the schema
+-- row the panel and `/mm set` read. NS.ValidateSchema already proves the two
+-- agree; this says WHICH value they agree on.
+--
+-- They shipped ON. A meter's job is telling rows apart by their numbers, and two
+-- decorations that shade rows for reasons unrelated to the numbers -- one marks
+-- you, one stripes every other row -- were doing that work before the player had
+-- asked for either. The other two on that tab keep their ON default: `always show
+-- yourself` changes WHICH rows are on screen rather than how they are painted,
+-- and the mouseover highlight answers the cursor rather than the data.
+--
+-- red under: flipping either default back, or changing one of the two places and
+-- not the other (which ValidateSchema catches, but not with a name).
+test("Schema: Highlight yourself and Alternating background ship OFF", function()
+    local inst = T.load()
+    local NS = inst.NS
+
+    local rows = NS.WINDOW_TEMPLATE and NS.WINDOW_TEMPLATE.rows
+    assertTrue(rows ~= nil, "the window template must carry its row block")
+    assertEqual(rows.highlightSelf, false, "a new window does not mark your row")
+    assertEqual(rows.alternatingBackground, false, "…and does not stripe its rows")
+    assertEqual(rows.alwaysShowSelf, true, "…while keeping your row on screen")
+    assertEqual(rows.mouseoverHighlight, true, "…and still answering the cursor")
+
+    local want = {
+        ["window.rows.highlightSelf"]         = false,
+        ["window.rows.alternatingBackground"] = false,
+        ["window.rows.alwaysShowSelf"]        = true,
+        ["window.rows.mouseoverHighlight"]    = true,
+    }
+    local seen = 0
+    for _, row in ipairs(NS.Schema) do
+        if want[row.path] ~= nil then
+            seen = seen + 1
+            assertEqual(row.default, want[row.path],
+                row.path .. "'s schema default")
+        end
+    end
+    assertEqual(seen, 4, "all four row-decoration rows must still be in the schema")
+end)
 
 test("RestoreAllDefaults resets EVERY window, not just the selected one", function()
     -- Every `window.` path resolves against ONE window -- whichever

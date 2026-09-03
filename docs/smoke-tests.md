@@ -282,9 +282,12 @@ second edge to catch.
   cells, both header strips and the tooltip. The check below is written for the colour mode and is
   the same for all four.
 - **The meta colour mode.** Frame → **General** → **Color mode (all surfaces)**. Set it to
-  Per-statistic and check all ten of the individual dropdowns followed — Bars → Bar (bar and
-  background), Bars → Text style, Header → Title text, Columns → Header text and Header background,
-  Tooltip (text, bar and bar background). Then change **one** of them back to Custom:
+  Per-statistic and check all **six** of the individual dropdowns followed — Bars → *Bar*, Bars →
+  *Background*, Columns → *Header text*, Columns → *Header background*, Tooltip → *Bar* and
+  Tooltip → *Bar background*. The three **text** modes must **not** move: Bars → *Text style*,
+  Tooltip → *Text* and Header → *Title text* are each an explicit choice, because text is drawn on
+  top of a surface the broadcast reaches and has to contrast with it. Then change **one** of the six
+  back to Custom:
   only that one changes, and the meta is not fought. Finally press the Frame page's **Defaults**
   button and confirm the rest are **untouched** — a page's reset must not reach other pages, and this
   page's own Defaults resets the **whole page**, every tab, not just the visible one.
@@ -295,8 +298,8 @@ second edge to catch.
   highlight-self, mouseover highlight and the alternating background). The page **opens on
   General**, and *Font outline (all surfaces)* there shows **None** on a fresh profile. Each tab label appears **once**; a heading printed twice means a row is
   filed under a tab the page has already left. There is **no** *Header controls* tab here — those
-  rows are on **Header** — and **no** "Reset position" button, which is on **General**'s General
-  tab. There is also **no** "Show resize grip" checkbox and **no** "Minimised" checkbox: the lock
+  rows are on **Header** — and **no** "Reset position" button, which is on **General**'s **Master
+  controls** tab. There is also **no** "Show resize grip" checkbox and **no** "Minimised" checkbox: the lock
   governs the grip, and the header's own minimise button governs the collapse. Whether the title bar
   draws at all (`window.header.show`) is a **Header** page setting now, on its **Title bar** tab, not
   a Frame row.
@@ -375,15 +378,27 @@ second edge to catch.
   same button also restores live on the other two — so leave the page on the block-editor tab, change
   a value on *Header text* or *Header background* without visiting it, and confirm Defaults still
   reaches it.
-- **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows.
-  Two tabs. Its **General** tab carries the master enable and minimap toggle, then **Merge pets into
-  their owner** and **Refresh interval** — both addon-wide: change either and **every** window
-  follows, not just the selected one — then Test mode and the debug console toggle, then the page's
-  two buttons, **Reset all settings** and **Reset position**. The retired **Data** and
-  **Maintenance** tabs are where those middle four used to live. There is deliberately **no** Reset
-  meter data button here, or on any page; the header's own reset control is the one way to it. Reset
-  position is the one control on the page that is **not** addon-wide — it moves the window the
-  banner is pointed at and nothing else, which its tooltip says.
+- **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows,
+  and it draws **no banner** — it is not a window page. Two tabs, in this order.
+  **Master controls** is `options-ui-§15`'s canonical set and opens the page: **Enable Multi
+  Meters**, **General visibility**, **Master scale**, **Master alpha**, **Lock frame**, **Debug
+  console**, closed by the **Reset position** / **Reset all settings** button pair and one sentence
+  under it saying what each reaches. The four `master.*` rows are addon-wide and are **not** the
+  per-window lock, scale and opacity on Frame — set Master scale to 0.5 with a window already at
+  0.8 and the window draws at 0.4, and putting the master back to 1.0 gives every window exactly the
+  size it was set to. Below the canonical six and **above** the button pair sit this addon's own four:
+  the minimap toggle, then **Merge pets into their owner** and **Refresh interval** — both
+  addon-wide: change either and **every** window follows, not just the selected one — then Test mode.
+  They were a tab called **General**; there must be no tab by that name on this page any more, and a
+  strip showing three tabs here is the fold half-done. **Statistic colors** is the palette (below).
+  The retired **Data**, **Maintenance** and **General** tabs are where those rows used to live.
+  There is deliberately
+  **no** Reset meter data button here, or on any page; the header's own reset control is the one way
+  to it. Reset position is the one control on the page that is **not** addon-wide — it moves the
+  window the banner is pointed at and nothing else, which the line under the pair says.
+  **Nothing is drawn twice**: Test mode and the debug console are `sessionOnly` schema rows, so a
+  second "Preview mode"/"Debug console" checkbox or a second *Debug* heading is the duplicate this
+  redesign removed coming back.
 - **The statistic palette is editable, and every surface follows it.** General → **Statistic
   colors** carries one swatch per statistic, shipped in the catalog's own colours, and a note under
   the grid saying where they are worn — read it and check it is true, because it is the only thing on
@@ -1018,16 +1033,17 @@ switch back to Default → copy from Test → reset.
 | General → **Reset all settings** (confirms) | every row on every page, for every window, in the active profile — **plus every window position** |
 | `/mm resetall` | identical to the above; it is the same implementation |
 | `/mm reset <path>` | that one row |
-| Frame → **Reset position** | the active window only, back to center |
+| General → **Master controls** → **Reset position** | the active window only, back to center |
 | `/mm reset-positions` | every window back to center |
 
 **Pass.**
 - **Profiles are never touched** by any reset. Create a second profile first, then run
   `/mm resetall`, then confirm the second profile still exists and is unchanged. This is enforced in
   two places on purpose.
-- "Reset all settings" **does** move every window back to center. Positions are not schema rows, so
-  they are reset by a separate hook — without it, "reset everything" would leave every window exactly
-  where it was.
+- "Reset all settings" **does** move every window back to center — but not through a position hook
+  of its own any more. It is a **profile reset** (`db:ResetProfile()`), so the extra windows are
+  **deleted** and the one that is re-seeded comes back at the shipped position with the rest of the
+  profile. `afterRestoreAll` no longer calls `ResetPositions`.
 - After `/mm resetall` the column list is back to the six shipped columns, in catalog order.
 
 ### 17. LibKa0s absent
@@ -1190,7 +1206,7 @@ Everything here is cosmetic except the last item, which is the one that can dama
 2. Hover a Damage cell.
 3. Set **Bar border style** to a real LSM border with thickness 2, hover again; then set it back to
    **None** and hover the same cell again.
-4. Walk **Tooltip anchor** through all nine values, hovering after each.
+4. Walk **Tooltip anchor** through all eight values, hovering after each.
 5. Set **Horizontal offset** to 60 and **Vertical offset** to -60, hover again.
 6. Set **Maximum spells** to 0 and hover a cell for someone with a long spell list.
 7. **Now hover a bag item, a party member's unit frame, and a quest in the tracker.**

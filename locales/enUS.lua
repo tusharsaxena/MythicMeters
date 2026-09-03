@@ -107,7 +107,26 @@ L["Visibility"] = "Visibility"
 L["Columns"] = "Columns"
 L["Data"] = "Data"
 L["General"] = "General"
+L["Master controls"] = "Master controls"
 L["Statistic colors"] = "Statistic colors"
+
+-- ---------------------------------------------------------------------------
+-- Subsection headings (options-ui-§7)
+-- ---------------------------------------------------------------------------
+--
+-- A tab that mixes control types names each kind between them. These are the KIND
+-- of control, never a repeat of the tab's own name, and they are drawn by the flow
+-- engine whenever a row's `subgroup` changes -- declared by the row, exactly as a
+-- tab is.
+--
+-- "Background" and "Border" are not repeated here: they are already declared
+-- below as Bars-page TAB names, and one key is one string whichever surface asks
+-- for it.
+L["Divider"] = "Divider"
+L["Layout"] = "Layout"
+L["Color"] = "Color"
+L["Icon"] = "Icon"
+L["All surfaces"] = "All surfaces"
 L["These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."] =
     "These colors are worn wherever an element's color mode is set to Per-statistic \226\128\148 a cell's bar and its background (Bars), the numbers on it (Bars > Text style), and the column header strip (Columns). The name tooltip's all-statistics list always uses them, whatever those modes say."
 L["Profiles"] = "Profiles"
@@ -246,6 +265,19 @@ L["Button style"] = "Button style"
 
 L["Text color mode"] = "Text color mode"
 L["Background color mode"] = "Background color mode"
+-- The three colour modes options-ui-§17 asked this addon to add beside swatches
+-- that had none. Two values each, class and custom, because a border and a window
+-- backdrop are the surfaces "per statistic" cannot say anything true about.
+L["Border color mode"] = "Border color mode"
+L["Bar border color mode"] = "Bar border color mode"
+L["What colors the fill inside the window. Class color is your own -- a window is not about any one row."] =
+    "What colors the fill inside the window. Class color is your own -- a window is not about any one row."
+L["What colors the edge around the window. Class color is your own."] =
+    "What colors the edge around the window. Class color is your own."
+L["What colors the outline around each bar. Class is the class of the row being drawn."] =
+    "What colors the outline around each bar. Class is the class of the row being drawn."
+L["What colors the border around each spell bar. Class is the player you are hovering."] =
+    "What colors the border around each spell bar. Class is the player you are hovering."
 L["What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."] =
     "What colors the column labels. Per-statistic gives each label its own column's color, which is the one surface where that is literally per column."
 L["What colors the strip behind the column labels. Per-statistic tints each label's own cell with that column's color, which is the one surface where that is literally per column."] =
@@ -655,9 +687,34 @@ L["Clear every recorded combat session?"] = "Clear every recorded combat session
 -- General page
 -- ---------------------------------------------------------------------------
 
+-- The Master controls tab (options-ui-§15). The canonical set is composed by
+-- LibKa0s-Options-1.0 and the composer's own strings are English literals; these
+-- are what this addon hands it through `labels`, plus the sentences it dresses
+-- each row's tooltip with.
 L["Enable Multi Meters"] = "Enable Multi Meters"
 L["Master switch for the addon. When off, no window is drawn and no data is read."] =
     "Master switch for the addon. When off, no window is drawn and no data is read."
+L["General visibility"] = "General visibility"
+L["When this addon's windows are shown at all, whatever one window's own Visibility page says. Never is the master switch's quieter half and is read beside it; the two combat answers are read with the per-window context rules, so Test mode still forces a window on."] =
+    "When this addon's windows are shown at all, whatever one window's own Visibility page says. Never is the master switch's quieter half and is read beside it; the two combat answers are read with the per-window context rules, so Test mode still forces a window on."
+L["Only in combat"] = "Only in combat"
+L["Only out of combat"] = "Only out of combat"
+L["Master scale"] = "Master scale"
+L["Scale multiplier for every window, multiplied into each window's own Scale on the Frame page. A window at 0.80 under a master of 0.50 draws at 0.40."] =
+    "Scale multiplier for every window, multiplied into each window's own Scale on the Frame page. A window at 0.80 under a master of 0.50 draws at 0.40."
+L["Master alpha"] = "Master alpha"
+L["Opacity multiplier for every window, multiplied into each window's own Opacity on the Frame page."] =
+    "Opacity multiplier for every window, multiplied into each window's own Opacity on the Frame page."
+L["Lock frame"] = "Lock frame"
+L["Lock every window at once. A window can be dragged only while neither this nor its own Lock window is on, so unticking this leaves the windows you locked one at a time locked."] =
+    "Lock every window at once. A window can be dragged only while neither this nor its own Lock window is on, so unticking this leaves the windows you locked one at a time locked."
+L["Reset position moves the window selected on the Windows page back to the center of the screen, and only that window. Reset all settings is addon-wide: it restores this profile and deletes every window but one, and asks first."] =
+    "Reset position moves the window selected on the Windows page back to the center of the screen, and only that window. Reset all settings is addon-wide: it restores this profile and deletes every window but one, and asks first."
+-- Said once, appended to every non-palette colour swatch's tooltip
+-- (settings/Schema.lua's SWATCH_NOTE). options-ui-§17 forbids greying a swatch
+-- out under a non-custom mode, because its ALPHA is still read.
+L["Not read while the color mode beside it is anything but Custom color, except for its opacity, which always applies."] =
+    "Not read while the color mode beside it is anything but Custom color, except for its opacity, which always applies."
 L["Show minimap button"] = "Show minimap button"
 L["Color for this statistic wherever it identifies a column: bars set to Per-statistic, the column header, and the tooltip's all-statistics list."] =
     "Color for this statistic wherever it identifies a column: bars set to Per-statistic, the column header, and the tooltip's all-statistics list."

@@ -103,9 +103,16 @@ local WINDOW_TEMPLATE = {
         alpha          = 1.0,
         strata         = "MEDIUM",     -- LOW | MEDIUM | HIGH | DIALOG
         backdropColor  = { r = 0, g = 0, b = 0, a = 0.75 },
+        -- The two colour MODES beside the two swatches (options-ui-§17). Two
+        -- values each, `class` and `custom`: a window's fill and its edge belong
+        -- to the WINDOW, so "per statistic" could only ever mean the sort
+        -- column's colour -- the same argument that keeps the mode off the title
+        -- bar. `class` is the local player's, for the same reason.
+        backdropColorMode = "custom",  -- class | custom
         borderStyle    = "Blizzard Tooltip",  -- LSM "border" key
         borderSize     = 2,
         borderColor    = { r = 0, g = 0, b = 0, a = 1 },
+        borderColorMode = "custom",    -- class | custom
         padding        = 6,            -- inset from the frame edge to the rows
         -- Locked hides the drag handle and lets the mouse through to the rows
         -- for tooltips. Unlocking implies preview mode (core/State.lua), so a
@@ -272,7 +279,11 @@ local WINDOW_TEMPLATE = {
         -- Pin the local player into view even when they fall off the bottom of
         -- a capped list. The single most-requested behavior of every meter.
         alwaysShowSelf        = true,
-        highlightSelf         = true,
+        -- OFF, unlike the row above it. `alwaysShowSelf` changes WHICH rows are on
+        -- screen; this one paints one of them, and a meter's job is telling rows
+        -- apart by their numbers. A decoration that shades a row for a reason
+        -- unrelated to the numbers is one the player should ask for.
+        highlightSelf         = false,
         -- Shade every other row so the grid is easier to read across. A ROW-level
         -- fact, which is why it lives here — but it is EDITED on the Bars page,
         -- beside the per-cell tint it competes with, because choosing between the
@@ -282,7 +293,12 @@ local WINDOW_TEMPLATE = {
         -- was briefly a row-level texture too, and tinting the row turned out to
         -- tint the two-pixel seams between the columns and lose the separators
         -- the grid is read by; painting the cells leaves them clear.
-        alternatingBackground = true,
+        -- OFF for the reason highlightSelf is: it shades rows for a reason that
+        -- is not the data, over a grid that is already separated by its columns.
+        -- The mouseover highlight below stays ON because it answers the CURSOR
+        -- rather than the numbers -- it appears where the player is pointing and
+        -- leaves with them.
+        alternatingBackground = false,
         mouseoverHighlight    = true,
     },
 
@@ -318,6 +334,10 @@ local WINDOW_TEMPLATE = {
         borderStyle     = "None",              -- LSM "border" key; None = flat
         borderThickness = 1,
         borderColor     = { r = 0, g = 0, b = 0, a = 1 },
+        -- The mode beside that swatch (options-ui-§17). `class` is the class of
+        -- the ROW being drawn, exactly as the bar's own mode above is -- a cell
+        -- outline belongs to the player whose cell it is.
+        borderColorMode = "custom",            -- class | custom
         alpha         = 1.0,
         fillDirection = "LEFT",    -- LEFT (fills rightward) | RIGHT
     },
@@ -459,6 +479,9 @@ local WINDOW_TEMPLATE = {
         barBorderStyle     = "None",               -- LSM "border" key
         barBorderSize      = 1,
         barBorderColor     = { r = 0, g = 0, b = 0, a = 1 },
+        -- The mode beside that swatch (options-ui-§17). `class` is the HOVERED
+        -- player's, like the bar's own mode two fields up.
+        barBorderColorMode = "custom",             -- class | custom
 
         -- Applied to the addon's own number slots AND to the tooltip's line
         -- FontStrings, which are SHARED with every other addon — so every line
@@ -625,6 +648,24 @@ end
 -- rebuilding a whole window.
 NS.WINDOW_TEMPLATE = WINDOW_TEMPLATE
 
+--- One addon-wide `master.*` setting, with the shipped value as the floor.
+---
+--- The four MASTER CONTROLS that are not per-window (options-ui-§15): the general
+--- visibility answer, the scale and alpha multipliers stacked on top of every
+--- window's own, and the addon-wide lock. Read exactly like `data.*` below and for
+--- the same reason -- modules/Window.lua and core/MultiMeters.lua both want them,
+--- and each reaching into NS.db for itself is two chances to disagree about what a
+--- missing db means.
+---
+--- @param key string  a leaf under `master.`
+--- @return any
+function NS.MasterSetting(key)
+    local profile = NS.db and NS.db.profile
+    local stored  = profile and profile.master and profile.master[key]
+    if stored ~= nil then return stored end
+    return NS.defaults.profile.master[key]
+end
+
 --- One addon-wide `data.*` setting, with the shipped value as the floor.
 ---
 --- The ONE reader for `profile.data`, because three modules want these two
@@ -677,6 +718,31 @@ NS.defaults = {
     profile = {
         -- Master enable. Off means no window draws and no provider read happens.
         enabled      = true,
+
+        -- THE MASTER CONTROLS, and every one of them is ADDON-WIDE (options-ui-§15).
+        -- The per-window lock, scale and opacity on the Frame page are a different
+        -- question and stay where they are: these four say what the addon as a whole
+        -- does, those say what ONE window looks like, and conflating the two is how a
+        -- control retargets silently when the window picker moves.
+        master       = {
+            -- always | inCombat | outOfCombat | never. NEW rather than migrated: this
+            -- addon never shipped a "show only in combat" checkbox at the addon-wide
+            -- level, so there is no stored boolean to lift (the per-window Visibility
+            -- page has its own combat pair and keeps it). core/MultiMeters.lua's show
+            -- ladder reads it -- `never` beside the master enable, the two combat
+            -- answers with the context rules.
+            visibility = "always",
+            -- MULTIPLIERS, not replacements. modules/Window.lua multiplies each into
+            -- the window's own `frame.scale` / `frame.alpha`, so a window set to 0.8
+            -- under a master of 0.5 draws at 0.4 and neither control has to know
+            -- about the other.
+            scale      = 1.0,
+            alpha      = 1.0,
+            -- ORs with the window's own `frame.locked`: a window is draggable only
+            -- when neither says otherwise. One tick to pin a whole layout down,
+            -- without erasing which windows the player had individually locked.
+            locked     = false,
+        },
 
         -- The window registry: an ARRAY of window config tables, in the order
         -- the picker lists them. Seeded with one window on first creation.

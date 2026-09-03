@@ -112,17 +112,25 @@ end
 
 --- The LOCAL player's class color, for a surface with no row to ask about.
 ---
---- The title bar and the column-header strip are about the window, not about any
---- one player, so "class color" there can only mean yours. Read through the same
---- reader, so the header and a row of the grid can never disagree about what a
---- warlock looks like.
+--- The window's own chrome -- the title bar, the column-header strip, the header
+--- controls, the backdrop and the border -- is about the WINDOW rather than about
+--- any one player, so "class color" there can only mean yours (options-ui-§17's
+--- "everything else takes the player's").
+---
+--- THROUGH THE LIBRARY'S ONE RESOLVER, published as NS.ClassColor by
+--- core/CoreSetup.lua: options-ui-§17 puts the lookup in LibKa0s so nine addons
+--- read the same table and cache it the same way, and this addon's own copy of it
+--- was one of the three that were merged. What stays private is ClassRGB above,
+--- which answers for a classFilename rather than for a unit token and has no
+--- library equivalent -- a meter row is a GUID and a class name, not a unit.
+---
+--- Resolved at CALL time: core/CoreSetup.lua loads after this file.
 ---
 --- @return number|nil r, number|nil g, number|nil b
 function NS.PlayerClassRGB()
-    local f = _G.UnitClass
-    if not f then return nil end
-    local _, classFilename = f("player")
-    return NS.ClassRGB(classFilename)
+    local resolve = NS.ClassColor
+    if not resolve then return nil end
+    return resolve("player")
 end
 
 -- The folder name, which is also the AceAddon name, the SavedVariables stem and

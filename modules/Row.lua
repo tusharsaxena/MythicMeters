@@ -617,6 +617,32 @@ local BORDER_SIDES = { "top", "bottom", "left", "right" }
 --- Nothing here reads anything back either way. It is still the one place this
 --- addon decorates a frame that carries meter values, which is why it is opt-in
 --- and why docs/smoke-tests.md asks for it to be checked mid-pull.
+--- The outline's colour for one cell, per the window's `bars.borderColorMode`.
+---
+--- TWO MODES, `class` and `custom`, and `class` is THIS ROW'S PLAYER -- an outline
+--- around a cell belongs to the player whose cell it is, exactly as the fill it
+--- surrounds does (barColor above). It is deliberately not the local player's:
+--- the window's own edge is a different swatch on a different page and answers
+--- that question its own way (modules/Window.lua's ApplyBorder).
+---
+--- The skin's edge is still the FALLBACK for a profile that never picked a colour,
+--- and the CONFIGURED ALPHA survives the mode, so a class-coloured outline is as
+--- opaque as the swatch beside it says.
+---
+--- @param bars table|nil   the window's `bars` config group
+--- @param entry table|nil  the aggregated row, when there is one
+--- @return number r, number g, number b, number a
+local function cellBorderColor(bars, entry)
+    local skin = NS.SKIN or {}
+    local sr, sg, sb, sa = RGBA(skin.border, 0, 0, 0, 1)
+    local r, g, b, a = RGBA(bars and bars.borderColor, sr, sg, sb, sa)
+    if (bars and bars.borderColorMode) == "class" then
+        local cr, cg, cb = ClassRGB(entry and entry.classFilename)
+        if cr then r, g, b = cr, cg, cb end
+    end
+    return r, g, b, a
+end
+
 function Cell:ApplyBorder(bars)
     local wanted = (bars and bars.border) and true or false
     local edge = wanted and borderEdge(bars and bars.borderStyle) or nil
@@ -631,10 +657,7 @@ function Cell:ApplyBorder(bars)
             if type(size) ~= "number" or size < 1 then size = 1 end
             self.frame:SetBackdrop({ edgeFile = edge, edgeSize = size })
             if self.frame.SetBackdropBorderColor then
-                local skin = NS.SKIN or {}
-                local sr, sg, sb, sa = RGBA(skin.border, 0, 0, 0, 1)
-                local r, g, b, a = RGBA(bars and bars.borderColor, sr, sg, sb, sa)
-                self.frame:SetBackdropBorderColor(r, g, b, a)
+                self.frame:SetBackdropBorderColor(cellBorderColor(bars, self.entry))
             end
             if edges then
                 for _, side in ipairs(BORDER_SIDES) do edges[side]:Hide() end
@@ -671,9 +694,7 @@ function Cell:ApplyBorder(bars)
     -- reach -- so "Bar border" was a switch with no dial and no swatch beside it.
     -- The skin's edge is still the FALLBACK, so a window that never touches
     -- either keeps exactly the border it had.
-    local skin = NS.SKIN or {}
-    local sr, sg, sb, sa = RGBA(skin.border, 0, 0, 0, 1)
-    local r, g, b, a = RGBA(bars and bars.borderColor, sr, sg, sb, sa)
+    local r, g, b, a = cellBorderColor(bars, self.entry)
     local size = (bars and bars.borderThickness) or 1
     -- Clamped rather than trusted: this comes from a slider with a floor, and a
     -- zero here is four invisible textures pretending to be a border.
@@ -860,6 +881,38 @@ function Cell:ApplyEntryTextColor(entry)
     local a = textAlpha(text)
     self.left:SetTextColor(r, g, b, a)
     self.right:SetTextColor(r, g, b, a)
+end
+
+--- Re-tint this cell's outline for the player whose row it now is.
+---
+--- SAME SHAPE AND SAME REASON AS ApplyEntryTextColor above: ApplyBorder runs on a
+--- LAYOUT and a layout has no entry, so the one mode that depends on the row has
+--- to be re-applied per row. It re-tints rather than rebuilding -- the textures and
+--- the backdrop are already there and only their colour is in question.
+---
+--- A NO-OP UNLESS THE PLAYER ASKED FOR IT: with the mode anything but `class` this
+--- is two table reads and a return, so the default costs nothing on a refresh tick,
+--- and the colour ApplyBorder painted stands. Turning the mode back off restores it
+--- the same way the text colour is restored -- a settings change re-runs the layout.
+---
+--- @param entry table|nil  the aggregated row this cell is drawing
+function Cell:ApplyEntryBorderColor(entry)
+    local bars = self.window.config.bars or {}
+    if bars.borderColorMode ~= "class" then return end
+    if not bars.border then return end
+
+    local r, g, b, a = cellBorderColor(bars, entry)
+
+    -- The ART path draws through the frame's backdrop; the flat path is four
+    -- textures. Both are re-tinted, because either can be the one on screen and
+    -- ApplyBorder chose between them from a setting this function must not re-read.
+    local edges = self.border
+    if edges then
+        for _, side in ipairs(BORDER_SIDES) do edges[side]:SetColorTexture(r, g, b, a) end
+    end
+    if self.frame.SetBackdropBorderColor then
+        self.frame:SetBackdropBorderColor(r, g, b, a)
+    end
 end
 
 function Cell:ApplyTextStyle(text)
@@ -1049,6 +1102,8 @@ function Cell:SetValue(entry)
     -- per LAYOUT, so this is the only place the entry is in hand. A no-op unless
     -- `text.colorMode` asks for one.
     self:ApplyEntryTextColor(entry)
+    -- The outline's own per-row mode, for the same reason and at the same cost.
+    self:ApplyEntryBorderColor(entry)
 end
 
 --- Blank the cell without releasing it. Used for a row that is on screen but has

@@ -2618,6 +2618,110 @@ test("pool: a layout change re-applies to FREE rows, not just active ones", func
         "every row got the new layout, including the ones nobody is drawing with")
 end)
 
+-- ---------------------------------------------------------------------------
+-- The master controls (options-ui-§15)
+-- ---------------------------------------------------------------------------
+
+test("Master scale MULTIPLIES the window's own rather than replacing it", function()
+    -- The two are different settings: `master.scale` is addon-wide and lives on the
+    -- General page's Master controls tab, `frame.scale` is this window's and lives
+    -- on the Frame page. Composing them is what lets one control shrink a whole
+    -- layout without flattening the differences a player set between its windows.
+    -- red under: reading either one alone, or `math.min` instead of a product.
+    local inst, window, cfg = scene()
+
+    cfg.frame.scale = 0.8
+    inst.NS.db.profile.master.scale = 0.5
+    window:ApplyConfig()
+    assertEqual(window.frame:GetScale(), 0.4, "the two scales did not compose")
+    assertEqual(window.anchor:GetScale(), 0.4, "the geometry frame took a different scale")
+
+    -- And back: a master of 1 gives the window exactly the size it was set to.
+    inst.NS.db.profile.master.scale = 1.0
+    window:ApplyConfig()
+    assertEqual(window.frame:GetScale(), 0.8)
+end)
+
+test("Master alpha MULTIPLIES the window's own opacity", function()
+    -- red under: reading `master.alpha` alone, which would throw away every
+    -- per-window opacity the moment the master moved off 1.
+    local inst, window, cfg = scene()
+
+    cfg.frame.alpha = 0.5
+    inst.NS.db.profile.master.alpha = 0.5
+    window:ApplyConfig()
+    assertEqual(window.frame:GetAlpha(), 0.25)
+end)
+
+test("Master scale and alpha are CLAMPED to the sliders that write them", function()
+    -- They can also arrive from `/mm set` or a hand-edited SavedVariables, and a
+    -- scale of 0 is a window nobody can find again.
+    -- red under: dropping the clamp in modules/Window.lua's masterSetting.
+    local inst, window, cfg = scene()
+
+    cfg.frame.scale, cfg.frame.alpha = 1.0, 1.0
+    inst.NS.db.profile.master.scale = 99
+    inst.NS.db.profile.master.alpha = -3
+    window:ApplyConfig()
+    assertEqual(window.frame:GetScale(), 2.0, "the scale ceiling is the slider's")
+    assertEqual(window.frame:GetAlpha(), 0, "the alpha floor is the slider's")
+end)
+
+test("Either lock pins the window, and the master lock erases neither", function()
+    -- ORed rather than overriding: unticking the addon-wide lock must leave the
+    -- windows a player locked one at a time locked, and an override would silently
+    -- unlock all of them.
+    -- red under: `self.locked = masterLocked` instead of `master or own`.
+    local inst, window, cfg = scene()
+
+    cfg.frame.locked = false
+    inst.NS.db.profile.master.locked = false
+    window:RefreshUpvalues()
+    assertFalse(window.locked, "neither lock is on")
+
+    inst.NS.db.profile.master.locked = true
+    window:RefreshUpvalues()
+    assertTrue(window.locked, "the master lock did not reach the window")
+
+    inst.NS.db.profile.master.locked = false
+    cfg.frame.locked = true
+    window:RefreshUpvalues()
+    assertTrue(window.locked, "the window's own lock stopped being read")
+end)
+
+test("The window's fill and its edge each answer a colour mode", function()
+    -- options-ui-§17: every swatch has a companion, and for this addon that
+    -- companion is a two-value mode. `class` is the LOCAL player's -- a window is
+    -- not about any one row -- and the CONFIGURED ALPHA survives it, which is what
+    -- keeps a 0.75 backdrop a tint rather than a slab.
+    -- red under: reading the swatch with RGBA and ignoring the mode, or letting the
+    -- class colour carry its own (absent) alpha.
+    local inst, window, cfg = scene()
+    local mr, mg, mb = inst.NS.PlayerClassRGB()
+    assertTrue(mr ~= nil, "the fixture needs the player's class in the palette")
+
+    cfg.frame.borderStyle = "Blizzard Tooltip"
+    cfg.frame.borderSize  = 2
+    cfg.frame.backdropColor = { r = 0, g = 0, b = 0, a = 0.75 }
+    cfg.frame.borderColor   = { r = 0, g = 0, b = 0, a = 0.5 }
+    cfg.frame.backdropColorMode = "class"
+    cfg.frame.borderColorMode   = "class"
+    window:ApplyConfig()
+
+    local fill = window.frame.__backdropColor
+    assertEqual(fill[1], mr); assertEqual(fill[2], mg); assertEqual(fill[3], mb)
+    assertEqual(fill[4], 0.75, "the swatch's alpha did not survive the mode")
+
+    local edge = window.frame.__backdropBorderColor
+    assertEqual(edge[1], mr); assertEqual(edge[2], mg); assertEqual(edge[3], mb)
+    assertEqual(edge[4], 0.5, "the border swatch's alpha did not survive the mode")
+
+    -- Custom is the shipped mode and reads the swatch, exactly as it always did.
+    cfg.frame.backdropColorMode = "custom"
+    window:ApplyConfig()
+    assertEqual(window.frame.__backdropColor[1], 0, "custom stopped reading the swatch")
+end)
+
 test("pool: every row built lands in `all`, including the batch surplus", function()
     -- Batch growth moved into the Acquire factory closure, which the library calls once per miss.
     -- A closure that registered only the row it RETURNED would leave four of every five rows out

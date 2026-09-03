@@ -225,6 +225,50 @@ end)
 
 -- ── the window chrome seam ──────────────────────────────────────────────────
 
+test("CoreSetup: the class colour is the LIBRARY's one resolver, not a private copy", function()
+    -- options-ui-§17: the lookup is LibKa0s-Core-1.0's, so a bar in this window and
+    -- the unit frame beside it read the same RAID_CLASS_COLORS and cache it the same
+    -- way. This addon had its own two-line copy and consumes the library's now.
+    -- red under: re-adding a private UnitClass + RAID_CLASS_COLORS reader in
+    -- core/Namespace.lua, which would answer correctly and drift on the first fix.
+    local inst = T.load()
+    local lib = inst.mocks.LibStub("LibKa0s-Core-1.0", true)
+    assertTrue(lib ~= nil and lib.ClassColor ~= nil, "the fixture needs Core minor 7")
+    assertTrue(inst.NS.ClassColor == lib.ClassColor,
+        "NS.ClassColor is not the library's function object")
+
+    -- And the one surface reader routes through it rather than reading the global.
+    local r, g, b = inst.NS.PlayerClassRGB()
+    local lr, lg, lb = lib.ClassColor("player")
+    assertEqual(r, lr); assertEqual(g, lg); assertEqual(b, lb)
+end)
+
+test("CoreSetup: the classFilename reader is KEPT, because the library has no equivalent",
+function()
+    -- `lib.ClassColor` takes a UNIT TOKEN. Half a meter's rows are players with no
+    -- token at all -- they are a GUID and a class name out of C_DamageMeter -- so
+    -- `NS.ClassRGB(classFilename)` is the roster reader and stays. Recorded as a
+    -- documented deviation against options-ui-§17's "one resolver" clause.
+    -- red under: deleting ClassRGB in favour of the library's unit-keyed lookup,
+    -- which would silently uncolour every row for a player who is not in the group.
+    local inst = T.load()
+    inst.mocks.RAID_CLASS_COLORS.WARLOCK = { r = 0.53, g = 0.53, b = 0.93 }
+    local r, g, b = inst.NS.ClassRGB("WARLOCK")
+    assertEqual(r, 0.53); assertEqual(g, 0.53); assertEqual(b, 0.93)
+    assertNil(inst.NS.ClassRGB("NOT_A_CLASS"), "an unknown class is nil, never a tenth colour")
+end)
+
+test("CoreSetup: the class colour degrades to a working reader, not to nothing", function()
+    -- Unlike SKIN. It is how every class-coloured bar, header and outline gets its
+    -- colour at all, and a degraded install still renders rows.
+    -- red under: `NS.ClassColor = function() end` in the fallback branch.
+    local inst = T.load{ libFiles = {} }
+    assertEqual(type(inst.NS.ClassColor), "function")
+    inst.mocks.RAID_CLASS_COLORS[inst.mocks.__context.classToken] = { r = 0.1, g = 0.2, b = 0.3 }
+    local r = inst.NS.ClassColor("player")
+    assertEqual(r, 0.1, "the degraded reader answered nothing")
+end)
+
 test("CoreSetup: the window edge comes from the library, never from a private lookalike", function()
     -- standalone-windows: agreement by VALUE is a copy, and a copy drifts one hex
     -- digit at a time. modules/Window.lua reaches the edge through these three

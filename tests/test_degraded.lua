@@ -384,7 +384,34 @@ end)
 
 -- ── the measurable one ──────────────────────────────────────────────────────
 
-test("Degraded: the schema row count is UNCHANGED versus a full load", function()
+--- The two sets a degraded schema is compared against: the paths a library-less
+--- load MUST still declare, and the paths it is allowed to be missing.
+---
+--- WHY THERE IS A SECOND SET AT ALL, and it is the one thing about this suite that
+--- changed with options-ui-§15/§16. The master controls tab and every font, border
+--- and bar group are COMPOSED by LibKa0s-Options-1.0 rather than written out in
+--- settings/Schema.lua (anti-patterns #73), so with no library there is no composer
+--- and those rows are not declared. That is not a page raising at load, it is the
+--- price of not keeping a hand-written tenth copy of the collection's font block
+--- -- and it costs nothing a player can reach, because a degraded install has no
+--- settings panel and no schema CLI (both are asserted above), so no reader of
+--- those rows is left. settings/Schema.lua stamps every composed row `composed`,
+--- which is what lets this suite name the difference instead of loosening to a
+--- count.
+local function schemaSets(schema)
+    local all, expected, composed = {}, {}, {}
+    for _, row in ipairs(schema) do
+        local path = tostring(row.path)
+        all[#all + 1] = path
+        if row.composed then composed[#composed + 1] = path
+        else expected[#expected + 1] = path end
+    end
+    table.sort(all); table.sort(expected); table.sort(composed)
+    return all, expected, composed
+end
+
+test("Degraded: the schema row count is UNCHANGED versus a full load, bar the composed blocks",
+function()
     -- THE case this suite exists for. A page file that raises at load takes its
     -- RegisterSchemaRows with it, and a third of NS.Schema simply never appears
     -- — with `/mm list`, `/mm get`, `/mm set`, `/mm reset` and every profile
@@ -393,9 +420,15 @@ test("Degraded: the schema row count is UNCHANGED versus a full load", function(
     local full     = fullInstance().NS
     local degraded = degradedInstance().NS
 
+    local _, expected, composed = schemaSets(full.Schema)
+
     assertTrue(#full.Schema > 50,
         "the full schema holds only " .. #full.Schema .. " rows — the baseline is wrong")
-    assertEqual(#degraded.Schema, #full.Schema,
+    -- A canary on the MARKER, so this case cannot go vacuous by every row losing
+    -- its `composed` stamp: the composed blocks are real and they are substantial.
+    assertTrue(#composed > 40,
+        "only " .. #composed .. " rows are marked composed — the marker stopped being set")
+    assertEqual(#degraded.Schema, #expected,
         "a settings page raised at load and took its schema rows with it")
 end)
 
@@ -406,28 +439,43 @@ test("Degraded: the schema is the same rows, path for path and page for page", f
     local full     = fullInstance().NS
     local degraded = degradedInstance().NS
 
-    local function index(schema)
-        local paths, perPage = {}, {}
-        for _, row in ipairs(schema) do
-            paths[#paths + 1] = tostring(row.path)
-            perPage[row.page or "?"] = (perPage[row.page or "?"] or 0) + 1
-        end
-        table.sort(paths)
-        return paths, perPage
+    local _, expected, composed = schemaSets(full.Schema)
+    local degPaths = select(1, schemaSets(degraded.Schema))
+
+    assertEqual(table.concat(degPaths, "\n"), table.concat(expected, "\n"),
+        "the degraded schema is not the hand-written half of the full one")
+
+    -- And the other direction: NOTHING the library composes survives a load
+    -- without it, so a row that quietly went back to being hand-written here
+    -- (anti-patterns #73) is a failure rather than a bonus.
+    local present = {}
+    for _, path in ipairs(degPaths) do present[path] = true end
+    local leaked = {}
+    for _, path in ipairs(composed) do
+        if present[path] then leaked[#leaked + 1] = path end
     end
+    assertEqual(table.concat(leaked, ", "), "",
+        "a composed row was hand-written into the schema as well")
 
-    local fullPaths, fullPages = index(full.Schema)
-    local degPaths,  degPages  = index(degraded.Schema)
-
+    -- Per-page tallies, so a failure NAMES the page rather than a path list.
+    local function perPage(schema, wanted)
+        local out = {}
+        for _, row in ipairs(schema) do
+            if wanted == nil or (row.composed and true or false) == wanted then
+                out[row.page or "?"] = (out[row.page or "?"] or 0) + 1
+            end
+        end
+        return out
+    end
+    local fullPages = perPage(full.Schema, false)
+    local degPages  = perPage(degraded.Schema, nil)
     for page, n in pairs(fullPages) do
         assertEqual(degPages[page] or 0, n,
-            "the '" .. page .. "' page lost rows on the degraded load")
+            "the '" .. page .. "' page lost hand-written rows on the degraded load")
     end
     for page in pairs(degPages) do
         assertTrue(fullPages[page] ~= nil, "the degraded load invented a page: " .. page)
     end
-    assertEqual(table.concat(degPaths, "\n"), table.concat(fullPaths, "\n"),
-        "the degraded schema is not the same set of paths")
 end)
 
 test("Degraded: every schema page is registered as an options page on both paths", function()

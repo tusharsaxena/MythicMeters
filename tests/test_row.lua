@@ -560,6 +560,46 @@ test("The bar border takes the player's thickness and colour", function()
     assertEqual(edges.top.__colorTexture[2], 0)
 end)
 
+test("The bar border answers a colour mode, and its class is the ROW'S player", function()
+    -- options-ui-§17: every swatch has a companion, and which class it means is the
+    -- class of the unit the SURFACE describes. An outline around a cell belongs to
+    -- the player whose cell it is -- the same reading the fill inside it takes --
+    -- and NOT to the local player, which is what the window's own edge means one
+    -- page away. The CONFIGURED ALPHA survives the mode, as it does everywhere.
+    -- red under: resolving it through NS.PlayerClassRGB, or dropping the alpha.
+    local inst, _, row = bench(function(cfg)
+        cfg.bars.border          = true
+        cfg.bars.borderThickness = 2
+        cfg.bars.borderColor     = { r = 1, g = 0, b = 0, a = 0.4 }
+        cfg.bars.borderColorMode = "class"
+    end)
+    inst.mocks.RAID_CLASS_COLORS.PRIEST = { r = 0.11, g = 0.22, b = 0.33 }
+
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "PRIEST" }), 1)
+
+    local top = row.cells.DamageDone.border.top.__colorTexture
+    assertEqual(top[1], 0.11, "the outline did not take the row's class")
+    assertEqual(top[2], 0.22)
+    assertEqual(top[3], 0.33)
+    assertEqual(top[4], 0.4, "the swatch's alpha did not survive the mode")
+end)
+
+test("The bar border's shipped mode is Custom, so an upgraded window looks the same", function()
+    -- red under: a default of "class", which would recolour every existing
+    -- window's cell outlines on upgrade.
+    local inst, _, row = bench(function(cfg)
+        cfg.bars.border      = true
+        cfg.bars.borderColor = { r = 1, g = 0, b = 0, a = 1 }
+    end)
+    inst.mocks.RAID_CLASS_COLORS.PRIEST = { r = 0.11, g = 0.22, b = 0.33 }
+
+    row:Update(entry({ DamageDone = { total = 100, maxAmount = 100 } },
+        { classFilename = "PRIEST" }), 1)
+    assertEqual(row.cells.DamageDone.border.top.__colorTexture[1], 1,
+        "the shipped mode stopped reading the swatch")
+end)
+
 test("The bar border is drawn ABOVE the fill, not under it", function()
     -- It was under it. The flat outline shared the OVERLAY layer with the text
     -- and with whatever the StatusBar's own fill resolved to, and "shares a

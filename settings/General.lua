@@ -3,16 +3,31 @@
 -- The General page: the settings that are genuinely addon-wide rather than
 -- per-window.
 --
--- There are only two of them — the master enable and the minimap button — and
--- that is the design working rather than the page being thin. A window is an
--- instance (design §6), so everything a player thinks of as "a setting" belongs
--- to one: width, columns, colors, visibility. What is left over is the handful
--- of things that cannot sensibly differ between windows.
+-- TWO TABS. **Master controls** is options-ui-§15's canonical set, first on this
+-- page in every Ka0s addon and COMPOSED rather than written out
+-- (settings/Schema.lua's MASTER_ROWS): enable, general visibility, master scale,
+-- master alpha, lock frame, debug console -- then this addon's own four, the
+-- minimap button, the two addon-wide data settings and Test mode, and then the
+-- two resets as a button pair. **Statistic colors** is the generated palette.
 --
--- Two more controls sit here — Test mode and the Debug console — and both are
--- SESSION state that is never written to SavedVariables. They are nonetheless
--- SCHEMA ROWS, marked `sessionOnly`, and this file renders NOTHING of its own for
--- them.
+-- THE `General` TAB IS GONE and those four rows are that tail. It was four rows
+-- with nothing in common but "addon-wide", behind a click next to the tab
+-- everybody opens -- the same argument that retired Data and Maintenance, one tab
+-- later. §15 forbids reordering, renaming or splitting the canonical set, not
+-- appending after it; the six stay first and contiguous, which is what
+-- tests/test_schema.lua pins. The page KEEPS its name: a page called General
+-- holding the addon-wide settings is right, and it was only the tab inside it
+-- that named nothing.
+--
+-- The page is thin on purpose. A window is an instance (design §6), so everything
+-- a player thinks of as "a setting" belongs to one: width, columns, colors,
+-- visibility. What is left over is the handful of things that cannot sensibly
+-- differ between windows -- and the four `master.*` rows, which are the
+-- addon-wide half of three controls the Frame page owns per window.
+--
+-- Two controls here — Test mode and the Debug console — are SESSION state that is
+-- never written to SavedVariables. They are nonetheless SCHEMA ROWS, marked
+-- `sessionOnly`, and this file renders NOTHING of its own for them.
 --
 -- THAT IS A CORRECTION, and it is worth stating because the wrong shape looked
 -- reasonable. This page used to draw both bespoke, through
@@ -164,36 +179,23 @@ local function Build(mainCategory)
     })
     ctx.panel.defaultsOnClick = function() H.RestoreDefaults(PAGE, ctx) end
 
-    -- The page's two non-setting controls, side by side because both are resets and a player
-    -- looking for one is looking for the other.
+    -- THE MASTER CONTROLS TAB'S CLOSING BUTTON PAIR (options-ui-§15), drawn by the
+    -- hook the composer HANDS BACK rather than by an InlineButtonPair written out
+    -- here: the pair's text, its order and its blast radius are the library's, so
+    -- nine addons cannot end up with nine wordings of "reset everything".
     --
-    -- RESET POSITION IS PER-WINDOW on an otherwise addon-wide page, and that is why its
-    -- tooltip names the window rather than saying "the window". It moved here from Frame
-    -- because a reset is what a player comes to General for; what it resets did not change
-    -- with the move.
-    --
-    -- Fired through RenderTabbedSchema's afterGroup hook, keyed to the General tab rather than
-    -- drawn unconditionally after the schema: with the page tabbed, "after the schema" is no
-    -- longer "at the bottom of the page" for every tab, and these buttons belong on General,
-    -- not appended under whichever group happens to be open.
-    --
-    -- THEY USED TO HANG OFF "Maintenance", which was that tab's whole reason to exist -- one
-    -- checkbox and these two buttons. The tab is retired and all four sit on General now.
-    local function afterGeneral(c)
-        H.InlineButtonPair(c, {
-            text    = L["Reset all settings"],
-            tooltip = L["Start over: reset the active profile to the addon defaults, which deletes every window but one. The same thing Profiles > Reset Profile does. Your other profiles are left alone."],
-            onClick = function() StaticPopup_Show("MULTIMETERS_RESET_ALL") end,
-        }, {
-            text    = L["Reset position"],
-            tooltip = L["Move the window selected on the Windows page back to the center of the screen. Only that window moves."],
-            onClick = function()
-                local M = NS.WindowManager
-                if M and M.ResetPosition then
-                    M:ResetPosition(NS.State and NS.State.activeWindowId)
-                end
-            end,
-        })
+    -- WHAT THIS FILE STILL SAYS is the one thing the composer cannot know. Reset
+    -- position is PER-WINDOW in this addon -- it moves the window the Windows page
+    -- has selected, and only that one -- and it is reached from the General page,
+    -- which draws no banner and so names no window. The composer's own tooltip is
+    -- the collection's ("move the frame back to where it started"), and it takes no
+    -- override, so the sentence that makes it true here goes on screen under the
+    -- pair instead. Raised upstream as a `labels`-style override for the two
+    -- buttons; until it lands this is the honest place for it.
+    local function afterMaster(c)
+        local tail = NS.MasterControlsAfterGroup
+        if tail then tail(c) end
+        H.TextRow(c, L["Reset position moves the window selected on the Windows page back to the center of the screen, and only that window. Reset all settings is addon-wide: it restores this profile and deletes every window but one, and asks first."])
         if H.Relayout then H.Relayout(c) end
     end
 
@@ -226,7 +228,7 @@ local function Build(mainCategory)
         -- renders them — drawing either one here as well is what produced the
         -- duplicate checkboxes and the duplicate "Debug" heading.
         H.RenderTabbedSchema(c, PAGE, {
-            [L["General"]]           = afterGeneral,
+            [L["Master controls"]]   = afterMaster,
             [L["Statistic colors"]]  = afterStatColors,
         })
     end)

@@ -2,20 +2,32 @@
 
 Nine pages, registered as **canvas-layout subcategories** under one parent category so they share
 the header, the breadcrumb, the scroll and the flow engine. Within a page, `settings/Schema.lua`'s
-`group` field is now a **tab**: `LibKa0s-Options-1.0`'s `RenderTabbedSchema` partitions a page's rows
+`group` field is a **tab**: `LibKa0s-Options-1.0`'s `RenderTabbedSchema` partitions a page's rows
 by `group`, in declaration order, and draws one tab per distinct group — there is no second field
-naming a tab, because one tab *is* one group. A page with fewer than two visible groups falls back to
-the library's older `RenderSchema` (no strip at all) rather than drawing a strip with one tab on it.
+naming a tab, because one tab *is* one group. **Every page draws a strip**, including a page with a
+single group, which draws a one-tab strip: the tab that cannot be clicked is that page's section
+label, which is what it always was (`options-ui-§13`). The only exemption is a page the host does not
+render through the flow engine — here, Profiles, which AceConfigDialog draws whole.
 
-`settings/Schema.lua` currently carries **154 rows across 8 page keys** (windows, frame, header,
-bars, tooltip, visibility, columns, general); a ninth registered page, Profiles, hosts no schema rows
-at all — see [The pages](#the-pages) below for the per-page breakdown, read straight out of the
-schema rather than carried over from any design document.
+Within a tab, a row may also carry a **`subgroup`**, which draws an `H.Section` heading whenever it
+changes. That is what a tab mixing kinds of control uses to say where one kind stops and the next
+starts (`options-ui-§7`); four tabs here do. A `subgroup` is never a second tab level and never
+repeats its own tab's name.
+
+`settings/Schema.lua` currently carries **162 rows across 8 page keys** (windows 1, frame 26,
+header 31, bars 28, tooltip 30, visibility 17, columns 8, general 21); a ninth registered page,
+Profiles, hosts no schema rows at all — see [The pages](#the-pages) below for the per-page breakdown,
+read straight out of the schema rather than carried over from any design document.
+
+**Roughly a third of those rows are COMPOSED, not written out.** `options-ui-§15`, `§16` and `§17`
+fix the master-controls set and the font, border and bar blocks across the whole collection, and
+`LibKa0s-Options-1.0`'s composers emit them from one declaration each — see
+[The composed blocks](#the-composed-blocks) below.
 
 Almost none of the panel machinery is in this repo. The shell, the header, the lazy Defaults button,
 the five widget makers, the tab strip, the page banner, the flow engine, the landing-page builder and
-the always-shown scrollbar patch belong to `LibKa0s-Options-1.0` (`libs/LibKa0s/Options*.lua`, v1.20.0
-bundled). What lives under `settings/` is only the part that is this addon's: **where a value lives,
+the always-shown scrollbar patch belong to `LibKa0s-Options-1.0` (`libs/LibKa0s/Options*.lua`, v1.25.0
+bundled), and so do the five schema composers (`OptionsCompose.lua`). What lives under `settings/` is only the part that is this addon's: **where a value lives,
 which rows belong to which page and which tab, what the window picker does, and what a reset has to
 clear that no schema row owns.**
 
@@ -33,7 +45,7 @@ Companion docs: [schema.md](schema.md) for the row shape and the window-relative
 
 Registration order is the order they appear in the tree: `MultiMeters.toc` loads `General` before
 `Windows`, so General is the one page that is **not** where `settings/Schema.lua` declares it —
-Schema.lua's own row order runs Windows, Frame, Header, Bars, Tooltip, Visibility, Columns, General,
+Schema.lua's own row order runs Windows, Frame, Header, Bars, Tooltip, Visibility, Columns, then
 General last. The two orders exist for different readers: the tree is what a player clicks through,
 the schema file is grouped so a row's neighbors on the page are its neighbors in the file. See
 [locales/enUS.lua](../locales/enUS.lua)'s header comment for the same reconciliation on the locale
@@ -47,30 +59,137 @@ that filter drops `hidden` rows before grouping runs).
 
 | # | Page | Panel key | Schema rows | Tabs | Defaults | Banner | What is on it |
 |---|---|---|---|---|---|---|---|
-| 1 | General | `general` | 17 (14 visible + 3 `hidden`) | 2 — **General**, **Statistic colors** | yes | no | **General** — master enable, minimap button, **Merge pets** and **Refresh interval** (addon-wide since schemaVersion 5), Test mode and the debug console's visibility, plus the **Reset all settings** and **Reset position** buttons, fired through `RenderTabbedSchema`'s `afterGroup` hook keyed to General. **Statistic colors** — one swatch per entry of `Constants.STAT_COLORS`, [generated rather than written out](#the-statistic-palette), read back through `NS.StatColor`, with a note under the grid saying where those colours are actually worn (drawn through the same `afterGroup` hook, keyed to this tab). Two tabs were retired into General along the way: **Maintenance** (the console toggle and the two buttons) and **Data** (the two addon-wide data rows); neither was a subject worth a click. A third schema group, **Export**, holds the export modal's three remembered choices — all three `hidden`, so the group is real for `/mm list` and the schema-vs-defaults validator and never appears as a tab: this is the one *section that is not a tab*. General is not a window page, so it draws no banner. |
+| 1 | General | `general` | 21 (18 visible + 3 `hidden`) | 2 — **Master controls**, **Statistic colors** | yes | no | **Master controls** — `options-ui-§15`'s canonical set, first on this page in every Ka0s addon and [composed rather than written out](#the-composed-blocks): Enable Multi Meters, General visibility, Master scale, Master alpha, Lock frame, Debug console — then this addon's own four (the minimap button, **Merge pets** and **Refresh interval**, both addon-wide since schemaVersion 5, and Test mode), closed by the **Reset position** / **Reset all settings** button pair the composer hands back. The four `master.*` rows are ADDON-WIDE and are not the per-window lock, scale and opacity on the Frame page — see [The Master controls tab](#the-master-controls-tab). **Statistic colors** — one swatch per entry of `Constants.STAT_COLORS`, [generated rather than written out](#the-statistic-palette), read back through `NS.StatColor`, with a note under the grid saying where those colours are actually worn (drawn through the same `afterGroup` hook, keyed to this tab). A fourth schema group, **Export**, holds the export modal's three remembered choices — all three `hidden`, so the group is real for `/mm list` and the schema-vs-defaults validator and never appears as a tab: this is the one *section that is not a tab*, and a wholly hidden group is not a strip-less page. General is not a window page, so it draws no banner. |
 | 2 | Windows | `windows` | 1 (`window.name`) | 2 bespoke — **Window**, **Copy from** | no | yes | The picker, New / Duplicate / Delete, and Copy settings from, on the Window tab; the source picker, group filter and Copy button on Copy from. Content is bespoke rather than schema rows, so the strip is drawn directly with `H.TabStrip` rather than `RenderTabbedSchema`, which has nothing here to partition. |
-| 3 | `  - `Frame | `frame` | 24 | 4 — General, Size and position, Row, Background and border | yes | yes | **General** — lock and keep-on-screen, plus the four **meta rows** (Color mode, Bar texture, Font, Font outline, each "(all surfaces)"), which broadcast one value to every surface with a setting of that kind and are read by nothing. **Size and position** — geometry, scale, opacity, strata and padding. **Row** — height, count, spacing and growth, then always-show-self, highlight-self, mouseover highlight and the alternating stripe. **Background and border** — the fill inside the window and the LSM edge around it. |
-| 4 | `  - `Header | `header` | 31 (30 visible + 1 `hidden`) | 4 — Title bar, Title text, Controls, Button style | yes | yes | **Title bar** — whether it draws, its background, alignment and height, plus the **divider** under it: on/off, thickness, and a colour mode whose default (`skin`) writes nothing at all, so the shared skin still owns the line unless the player takes it. **Title text** — the six text controls for the window's own name, including a **colour mode** (class or custom, never per-statistic) that the title and the session line beside it both follow. **Controls** — every toggle for the icon strip, **in the order the strip reads left to right** and each carrying **its own icon in front of its label** (`controlLabel`): the segment line, then export, reset, segment picker, settings, lock, minimise, close — plus `window.frame.minimised` (the one `hidden` row: state the header's own minimise button writes). **Button style** — four pairs, read across rather than down: the reveal beside the size, then rest and hover side by side for mode, colour and **opacity**. The two color-mode dropdowns replaced the old `controlClassColor` / `controlHoverClassColor` booleans at schemaVersion 13; the two opacity sliders replaced a hardcoded `0.25` and `1` in `restAlpha`, and ship at those numbers so nothing moved. |
-| 5 | `  - `Bars | `bars` | 27 | 6 — Bar, Background, Border, Text content, Text style, Icons | yes | yes | **Everything drawn inside a cell.** Bar texture/color mode/opacity/fill direction; the background's mode, color and opacity plus the alternating row stripe; the border; the two text slots, number format, max name length; the four text controls; and the row icon, its size and which side of the name it sits on. |
-| 6 | `  - `Tooltip | `tooltip` | 29 | 6 — General, Bar, Bar background, Bar border, Text, Contents | yes | yes | **General** — anchor, scale, the two offsets and hide-in-combat. **Bar** / **Bar background** / **Bar border** — the spell line's own surfaces, configured separately from the grid's, and kept adjacent because they are read together. **Text** — its own six text controls. **Contents**, last because it is the tab you set once — spell breakdown and max spells (0 = all), targets and max targets, the two **death-line** switches (name the killer, name the killing blow), and summarize-on-name. |
+| 3 | `  - `Frame | `frame` | 26 | 4 — General, Size and position, Background and border, Row | yes | yes | **General** — the two window-wide toggles under a *Window* heading, then the four **meta rows** (Color mode, Bar texture, Font, Font outline, each "(all surfaces)") under an *All surfaces* heading, which broadcast one value to every surface with a setting of that kind and are read by nothing. The two headings are what stop a broadcast being mistaken for a font group. **Size and position** — geometry, scale, opacity, strata and padding. **Background and border** — the fill inside the window under a *Background* heading and the LSM edge around it under a *Border* heading, both composed; the merge is deliberate and the headings are what `options-ui-§7` adds to it. **Row** — height, count, spacing and growth, then always-show-self, highlight-self, mouseover highlight and the alternating stripe. |
+| 4 | `  - `Header | `header` | 31 (30 visible + 1 `hidden`) | 4 — Title bar, Title text, Controls, Button style | yes | yes | **Title bar** — three headings: *Layout* (whether it draws, its alignment and its height), *Background* (the one swatch in the addon with no colour mode beside it — a [documented deviation](ARCHITECTURE.md#documented-deviations)), and *Divider* (on/off, thickness, colour and a mode whose default `skin` writes nothing at all, so the shared skin still owns the line unless the player takes it). **Title text** — `options-ui-§16`'s composed font block, all six axes, with the colour mode (class or custom, never per-statistic) immediately right of the swatch. **Controls** — every toggle for the icon strip, **in the order the strip reads left to right** and each carrying **its own icon in front of its label** (`controlLabel`), plus `window.frame.minimised` (the one `hidden` row). **Button style** — three headings: *Icon* (reveal and size), *Color* (rest colour + its mode, then hover colour + its mode — each state one line, so the swatch and its companion can never be split), *Opacity* (rest and hover, read across). |
+| 5 | `  - `Bars | `bars` | 28 | 6 — Bar, Background, Border, Text content, Text style, Icons | yes | yes | **Everything drawn inside a cell**, and four of the six tabs are composed blocks. **Bar** — `options-ui-§16`'s bar group (texture, opacity, colour, mode) plus fill direction appended after it. **Background** — a backdrop with no fill texture, so a colour pair and its opacity, never a bar group. **Border** — the *Show border* toggle leading `options-ui-§16`'s border group, whose colour mode is new here. **Text content** — the two text slots, number format, death timestamps and max name length. **Text style** — the composed font block plus text opacity. **Icons** — the row icon, its size and which side of the name it sits on. |
+| 6 | `  - `Tooltip | `tooltip` | 30 | 6 — General, Bar, Bar background, Bar border, Text, Contents | yes | yes | **General** — anchor, scale, the two offsets and hide-in-combat. **Bar** / **Bar background** / **Bar border** — the spell line's own surfaces, configured separately from the grid's and kept adjacent because they are read together; all three are composed, and the bar border's colour mode is new here. **Text** — the composed font block. **Contents**, last because it is the tab you set once — spell breakdown and max spells (0 = all), targets and max targets, the two **death-line** switches, and summarize-on-name. |
 | 7 | `  - `Visibility | `visibility` | 17 | 3 — Where to show this window, When to hide this window, Combat | yes | yes | **Where to show this window** — dungeon / raid / arena / battleground / delve / scenario / world, all on. **When to hide this window** — solo, vehicles, mounted, skyriding, flight paths, player housing, pet battles, while dead, all off. **Combat** — hide in combat, hide out of combat, both off. |
-| 8 | `  - `Columns | `columns` | 8 (Header text 6, Header background 2) | 3 — **Columns** (bespoke block editor), Header text, Header background | yes | yes | **Columns** — one block per statistic, a drag handle, a tick/cross toggle and a name; ticked ones are the columns, in block order. This is the *page that is not tabbed by `RenderTabbedSchema`*: its Columns tab holds no schema rows at all, so the strip is drawn directly with `H.TabStrip` and each tab renders its own filtered row list. **Header text** and **Header background** are the `window.columnHeader.*` rows that used to sit on the Header page — they moved here because this is the page that labels the strip they style. |
+| 8 | `  - `Columns | `columns` | 8 (Header text 6, Header background 2) | 3 — **Columns** (bespoke block editor), Header text, Header background | yes | yes | **Columns** — one block per statistic, a drag handle, a tick/cross toggle and a name; ticked ones are the columns, in block order. The row's **bounded box and its handle are the library's** (`options-ui-§18`), not this addon's. This is the *page that is not tabbed by `RenderTabbedSchema`*: its Columns tab holds no schema rows at all, so the strip is drawn directly with `H.TabStrip` and each tab renders its own filtered row list. **Header text** (the composed font block) and **Header background** (a composed colour pair) are the `window.columnHeader.*` rows that used to sit on the Header page. |
 | 9 | Profiles | `profiles` | 0 | none | no | no | AceDBOptions' create / switch / copy / reset / delete. The one page with no tab strip at all — see [Profiles — the one place AceConfigDialog is permitted](#profiles--the-one-place-aceconfigdialog-is-permitted). |
 
-**147 schema rows total.** Five of the nine pages — Frame, Header, Bars, Tooltip, Visibility — draw
+**162 schema rows total.** Five of the nine pages — Frame, Header, Bars, Tooltip, Visibility — draw
 their entire body from one `H.WindowBanner(c)` plus one `H.RenderTabbedSchema(c, PAGE)` call and
 nothing else. Adding an option to any of them means adding one row in `settings/Schema.lua` — with
 the `group` you want it to land on — and touching no page file at all; adding an option to a *new*
 tab on one of them means adding one row with a `group` no existing row uses, and nothing else either.
 
-Four pages are not schema-driven bodies:
+Three pages are not schema-driven bodies:
 
 - **Windows** and **Columns**' block editor act on the *registry* and on an *array*, neither of which
   a flat path addresses, so both are bespoke — Columns' other two tabs are ordinary schema rows.
-- **General** carries two session-only toggles drawn through `Helpers.SessionCheckbox`, which is
-  wired to caller-supplied `get`/`set` instead of a settings path — so neither can accidentally
-  become a stored value — plus the addon's three bespoke reset buttons.
 - **Profiles** hosts an options table this addon does not own.
+
+**General is not one of them any more.** Its two session-only toggles (Test mode and the debug
+console) are `sessionOnly` schema rows carrying their own `get`/`set` — so neither can accidentally
+become a stored value — and its reset buttons are drawn by the hook `H.MasterControls` returns rather
+than by an `InlineButtonPair` written out in the page file. What the page file still supplies is one
+sentence under each of two tabs: the per-window meaning of *Reset position*, and where the statistic
+palette is actually worn.
+
+## The composed blocks
+
+`options-ui-§15`, `§16` and `§17` fix four row-sets across the whole collection — the master
+controls, and the font, border and bar groups — so that a player who has set a font in one Ka0s addon
+finds the same rows in the same order in the next one. `LibKa0s-Options-1.0`'s composers emit each
+block from one declaration; a hand-written copy beside them is **anti-pattern #73**.
+
+| Composer | Where it is used |
+|---|---|
+| `MasterControls` | General → Master controls |
+| `FontGroup` | Header → Title text · Bars → Text style · Tooltip → Text · Columns → Header text |
+| `BorderGroup` | Frame → Background and border · Bars → Border · Tooltip → Bar border |
+| `BarGroup` | Bars → Bar · Tooltip → Bar |
+| `ColorPair` | Frame → Background and border · Bars → Background · Tooltip → Bar background · Columns → Header background |
+
+Four things about how this addon calls them are worth knowing before editing a block:
+
+- **Nothing stored moved.** Each call passes `keys` and `defaults`, so the composed rows land on this
+  addon's existing paths at this addon's shipped values. `dress()` in `settings/Schema.lua` then puts
+  back what the composers have no override for — the slider bounds, the `%d px` suffix, the
+  validator, the stored value set behind a dropdown, and this addon's own sentence in each tooltip.
+  A `fontFlags` row that arrived carrying the library's flag vocabulary would refuse this addon's
+  stored `"NONE"`; a `borderSize` slider that stopped at 16 would put a stored 24 out of reach.
+- **The boolean companion is swapped for a dropdown.** The composers emit a `Use class color`
+  checkbox beside every swatch; this addon ships the **colour-mode dropdown** instead, which
+  `options-ui-§17` names as the richer form of the same control and forbids converting back — `stat`,
+  `skin` and `none` are answers a checkbox cannot give, and `core/Database.lua`'s v10 and v13 steps
+  are what migrated this addon's booleans into them. So every call omits the companion and
+  `withMode()` splices the mode into the slot it vacated, immediately right of the swatch.
+- **The composers are reached off a table of this file's own**, not off `NS.Helpers`.
+  `lib.__AttachCompose` is what `lib:New` calls, and `settings/OptionsSetup.lua` does not build an
+  instance until after `settings/Schema.lua` has run. Two instance members are forwarded onto that
+  table at **call** time and they are the whole of what the composers reach for: `LSMValues`, read
+  while a media dropdown opens, and `InlineButtonPair`, called by the one composer product that is
+  not a pure function — `MasterControls`' `afterGroup` hook, which draws the tab's closing button
+  pair and therefore has to touch a widget. With no library at all there are no composers and the
+  blocks are **empty** — a [documented deviation](ARCHITECTURE.md#documented-deviations), and one
+  that costs nothing a player can reach, because a degraded install has neither a settings panel nor
+  a schema CLI.
+- **Two `LSM30_*` pickers survive outside a composer call, and they are not a group.**
+  `grep -rn 'LSM30_Font\|LSM30_Border\|LSM30_Statusbar' settings/` returns `settings/Schema.lua:1553`
+  (`window.barTexture`) and `:1561` (`window.font`), and neither is composer-able. They are two of the
+  four **broadcast meta rows** on Frame → General, under the *All surfaces* heading: each one *writes*
+  a value into every surface that has a setting of that kind and is then read by nothing, which is
+  what the note above them at `settings/Schema.lua:1512-1522` says at length. `options-ui-§16` fixes
+  the shape of a **group** — a contiguous font block, a border block, a bar block, each over one
+  surface, each with a colour row and a companion. A single write-only setter over six surfaces has
+  none of that shape: there is no size, no colour, no flags and no second surface to be contiguous
+  with, and a composer asked to emit one would have to emit five rows this addon must not store. The
+  headings are the guard — a reader who sees *All surfaces* over them cannot mistake them for the font
+  group on Header → Title text. **This is a judgement about scope, not a deviation**, so it carries no
+  register row; if `options-ui-§16` ever grows a clause about broadcast setters, this bullet is what
+  gets re-read.
+
+## The Master controls tab
+
+Every Ka0s addon's General page opens on a tab named exactly `Master controls`, carrying the same
+rows in the same order, so that the one thing every player looks for first — how do I turn this off,
+how do I make it smaller, how do I put it back — is in the same place under the same words
+(`options-ui-§15`).
+
+| | |
+|---|---|
+| Enable Multi Meters (`enabled`) | General visibility (`master.visibility`) |
+| Master scale (`master.scale`) | Master alpha (`master.alpha`) |
+| Lock frame (`master.locked`) | Debug console (`state.debugConsole`, session-only) |
+| Reset position | Reset all settings |
+
+**This addon's own four rows follow the canonical set, on the same tab** — the minimap button, *Merge
+pets into their owner*, *Refresh interval* and *Test mode*, between the canonical rows and the
+closing button pair. They were a tab called **General**: four rows with nothing in common but
+"addon-wide", behind a click, next to the tab everybody opens — the same argument that retired
+**Data** and **Maintenance** before it, arriving one tab later. `§15` forbids **reordering**,
+**renaming** and **splitting** the canonical set; it does not forbid an addon's own rows after it,
+and `tests/test_schema.lua` pins that the canonical six are the tab's first rows, contiguous and in
+order, with the four extras following in a stated order. A `group` is not a stored path, so nothing
+moved in storage and no migration was owed.
+
+**All four `master.*` rows are ADDON-WIDE, and none of them is a promoted per-window row.** A window
+here is an instance (design §6), and its own **Lock window**, **Scale** and **Opacity** stay on the
+Frame page where the banner says which window they mean — promoting one would give the General page,
+which draws no banner, a control that retargeted silently every time the picker moved. The two are
+different settings and `modules/Window.lua` **composes** each pair rather than choosing between them:
+
+- `master.scale` and `master.alpha` **multiply** into `frame.scale` / `frame.alpha`, so a window at
+  0.80 under a master of 0.50 draws at 0.40, and putting the master back to 1.00 gives every window
+  exactly the size it was set to.
+- `master.locked` **ORs** with `frame.locked`: a window is draggable only while neither is on, so
+  unticking the master leaves the windows a player locked one at a time locked.
+- `master.visibility` is read by `core/MultiMeters.lua`'s show ladder, **below test mode** so a
+  layout can still be made anywhere: `never` answers `hidden` and cannot be overridden by an explicit
+  `/mm toggle`, and the two combat values answer in the same words the per-window `hideInCombat` pair
+  uses, so `/mm debug diag` reads one vocabulary either way.
+
+**`enabled` and `state.debugConsole` MOVED here** and are declared nowhere else — two controls over
+one setting is the thing this pass removed. Neither stored path changed, because a `group` is not a
+stored path.
+
+**Reset position keeps its per-window meaning.** It moves the window the Windows page has selected,
+and only that one. The composer's own tooltip is the collection's ("move the frame back to where it
+started") and takes no override, so the sentence that makes it true here is drawn as a line under the
+button pair instead — `settings/General.lua`'s `afterMaster`.
 
 ## The statistic palette
 
@@ -97,10 +216,20 @@ the catalog after a profile was written, and for a degraded install with no data
 **One tab is exactly one group.** `RenderTabbedSchema(ctx, pageKey)` reads `rowsForPage(pageKey,
 ctx.unit)`, collects the distinct `group` values in the order their first row appears, and draws one
 `H.TabStrip` tab per group — there is deliberately no second field naming a tab; the group heading
-that used to sit over a scrolling section *is* the tab label now. A page with fewer than two visible
-groups skips the strip and falls back to the library's plain `RenderSchema`, which is why Windows'
-single schema row (the `Window` group) never grows a strip of its own — the page's two visible tabs
-are drawn by its own bespoke `H.TabStrip` call instead, alongside the picker.
+that used to sit over a scrolling section *is* the tab label now. **A page with a single group draws a
+one-tab strip** — the `#groups < 2` fallback to the library's plain `RenderSchema` is gone as of
+LibKa0s v1.24.0 (`options-ui-§13`), so no page in this addon can render strip-less. Windows' single
+schema row (the `Window` group) is not an exception to that: its page is bespoke and draws its own
+two-tab `H.TabStrip` alongside the picker.
+
+**A tab that mixes kinds of control carries a subsection heading per kind** (`options-ui-§7`), drawn
+by the flow engine whenever a row's `subgroup` changes within a group — declared by the row, exactly
+as the tab is. Four tabs here mix and are headed accordingly: Frame → General (*Window*, *All
+surfaces*), Frame → Background and border (*Background*, *Border*), Header → Title bar (*Layout*,
+*Background*, *Divider*) and Header → Button style (*Icon*, *Color*, *Opacity*). A `subgroup` names
+the **kind** of control, never repeats its own tab's name, and is never used to fake a second tab
+level. It must also be **contiguous** within its group, for the same reason a group must be: the
+heading is emitted on a change, so an interleaved block prints one twice.
 
 **The strip wraps.** `H.TabStrip` lays tabs out left to right and wraps onto a second row at the
 panel's width rather than shrinking or scrolling; whether the widest pages (Bars and Tooltip, six
@@ -175,9 +304,10 @@ Two groups make the point, and both are deliberate:
   draws a control into the title bar, which is what a player looks for under Header — but renaming
   the keys to `window.header.*` for symmetry would migrate every saved profile in exchange for a
   tidiness nobody can see.
-- **Reset position** sits on **General**'s **General** tab and acts on the **selected window**.
-  It is the one control on that page that is not addon-wide, which is why its tooltip names the
-  window rather than saying "the window".
+- **Reset position** sits on **General**'s **Master controls** tab and acts on the **selected
+  window**. It is the one control on that page that is not addon-wide, which is why the line under
+  the button pair names the window rather than saying "the window" — the composer draws the button
+  and owns its tooltip, so the sentence goes beside it instead of inside it.
 
 ### What is no longer here
 
@@ -460,21 +590,24 @@ two addons.
 
 ## The bespoke controls
 
-Four things on two pages are commands rather than settings — they have no stored value to get, set
-or restore, so none of them can be a schema row.
+Three things are commands rather than settings — they have no stored value to get, set or restore,
+so none of them can be a schema row. The two on the General page are drawn by the hook
+`H.MasterControls` hands back, not by this repo.
 
 | Control | Page | Tab | What it does |
 |---|---|---|---|
-| **Reset position** | General | General | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
+| **Reset position** | General | Master controls | `WindowManager:ResetPosition(activeWindowId)` — the active window only. Positions are not rows (four values, one concept, and never read back off a live frame), so `NS.ApplyDefault` cannot reach them. |
 | **Reset meter data** | *the window header, not a page* | — | Confirms, then `NS.Provider.Reset()`. Irreversible and reaches **outside** this addon: `C_DamageMeter.ResetAllCombatSessions` wipes the data Blizzard's own meter is showing too. Routed through the provider and never straight at the Compat shim — the provider is the only permitted caller of the meter shims, and it also forgets the memoized availability answer and announces `METER_RESET`. |
-| **Reset all settings** | General | General | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
-| **Test mode** | General | General | `Helpers.SessionCheckbox` over `NS.State.testMode`. Fills every window with placeholder rows so columns can be laid out without being in combat. Session-only: persisting it would mean logging in to a screen full of fake numbers. Also reachable as `/mm test`. **Not** implied by unlocking a window any more — `WindowManager:SetLocked` used to also switch it on, which made `/mm lock off` silently turn placeholder data on and made unchecking Test mode a no-op while any window was unlocked; locking is now about movement and nothing else, and a player who wants a grid to aim at asks for one with `/mm test`. |
-| **Debug console** | General | General | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The spec comes from `LibKa0s-DebugLog-1.0` itself (`D:ConsoleCheckbox()`) rather than being hand-written, so its label, tooltip and show/hide are the library's. |
+| **Reset all settings** | General | Master controls | Confirms, then `Helpers.RestoreAllDefaults()` — the same implementation the header Defaults button and `/mm resetall` use, so the three cannot drift. `afterRestoreAll` hands the profile to `db:ResetProfile()`, which makes this the **equivalent of a new profile**: every setting back to shipped, extra windows **deleted**, names reset, one fresh window left. Other profiles untouched. See *Reset all settings vs Reset Profile* below. |
+| **Test mode** | General | General | A `sessionOnly` schema row over `NS.State.testMode`, carrying its own `get`/`set`. Fills every window with placeholder rows so columns can be laid out without being in combat. Session-only: persisting it would mean logging in to a screen full of fake numbers. Also reachable as `/mm test`. **Not** implied by unlocking a window any more — `WindowManager:SetLocked` used to also switch it on, which made `/mm lock off` silently turn placeholder data on and made unchecking Test mode a no-op while any window was unlocked; locking is now about movement and nothing else, and a player who wants a grid to aim at asks for one with `/mm test`. |
+| **Debug console** | General | Master controls | The console **window's** visibility, not the logging flag. Logging runs with the console closed so a bug can be reproduced first and the log read afterwards; the flag itself is `/mm debug on\|off`'s and is never written to SavedVariables (`debug-logging-§5`). The row is emitted by `H.MasterControls` under the path `state.debugConsole`, and this repo dresses the rest back on — the label in the composer call's `labels` table (`settings/Schema.lua:871`), and the description and both accessors in the `dress()` block at `settings/Schema.lua:922-930`, where `get` asks `NS.DebugLog:IsShown` and `set` calls `Show`/`Hide`. `LibKa0s-DebugLog-1.0`'s own `D:ConsoleCheckbox()` is no longer what draws it: nothing under `settings/` calls it, and the only `ConsoleCheckbox` left in this repo is the degraded stub's at `core/DebugLogSetup.lua:295`, kept so a library-less load still answers the member. |
 
-Both General toggles are also `sessionOnly` schema rows (`state.testMode`, `state.debugConsole`) so
-that `/mm list` and `/mm get` can reach them — a toggle that exists only in the panel is a toggle the
-CLI cannot reach. The rows carry their own `get`/`set`; the checkboxes are drawn bespoke because
-`SessionCheckbox` is wired to functions rather than to a path.
+Both General toggles are `sessionOnly` schema rows (`state.testMode`, `state.debugConsole`) so that
+`/mm list` and `/mm get` can reach them — a toggle that exists only in the panel is a toggle the CLI
+cannot reach. Each row carries its own `get`/`set`, which IS its whole storage, and neither is drawn
+bespoke: `Helpers.SessionCheckbox` was retired from this page when the duplicate checkboxes it
+produced were removed, and the debug console is now emitted by the master-controls composer with the
+row's accessors dressed back on.
 
 ---
 

@@ -73,13 +73,13 @@ overlap, and **a parent must never be summed with its children**.
 
 | Bucket | Inside | What it brackets | Call sites |
 |---|---|---|---|
-| `meterEvent` | — | one `DAMAGE_METER_*` handler, i.e. the bus fan-out to every window | `core/MultiMeters.lua:362`, `:372`, `:380` |
-| `refresh` | — | one coalesced window refresh pass | `modules/Window.lua:1406`, `:1416`, `:1439`, `:1446` (every exit) |
-| `providerRead` | `refresh` | one `C_DamageMeter` column read | `modules/Provider.lua:339` |
-| `aggregate` | `refresh` | the GUID join and the ordering pass | `modules/Aggregator.lua:1411`, `modules/DrillDown.lua:668`, `:700` |
-| `render` | `refresh` | the window's draw | `modules/Window.lua:1549` |
-| `renderRow` | `render` | one row's cells | `modules/Row.lua:1311` |
-| `tooltip` | — | one tooltip build | `modules/Tooltip.lua:2000`, `:2091`, `:2106`, `:2164`, `:2175`, `:2186` |
+| `meterEvent` | — | one `DAMAGE_METER_*` handler, i.e. the bus fan-out to every window | `core/MultiMeters.lua:384`, `:394`, `:402` |
+| `refresh` | — | one coalesced window refresh pass | `modules/Window.lua:1850`, `:1860`, `:1883`, `:1890` (every exit) |
+| `providerRead` | `refresh` | one `C_DamageMeter` column read | `modules/Provider.lua:349` |
+| `aggregate` | `refresh` | the GUID join and the ordering pass | `modules/Aggregator.lua:1694`, `modules/DrillDown.lua:668`, `:700` |
+| `render` | `refresh` | the window's draw | `modules/Window.lua:1993` |
+| `renderRow` | `render` | one row's cells | `modules/Row.lua:1620` |
+| `tooltip` | — | one tooltip build | `modules/Tooltip.lua:2393`, `:2527`, `:2545`, `:2606`, `:2620`, `:2634` |
 | `targets` | `tooltip` | the enemy cross-reference behind the Targets section | `modules/Targets.lua:394`, `:402`, `:416` |
 
 The three buckets under `refresh` exist to answer "which third of the pass is it" — reading the

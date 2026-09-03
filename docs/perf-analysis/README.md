@@ -140,19 +140,21 @@ calls `Perf.Note(key, ms)` with **two** arguments and no `parentKey`:
 
 | Bucket | Call sites |
 |---|---|
-| `meterEvent` | `core/MultiMeters.lua:200`, `:210`, `:218` |
-| `refresh` | `modules/Window.lua:699`, `:709`, `:731`, `:746` |
-| `providerRead` | `modules/Provider.lua:255` |
-| `aggregate` | `modules/Aggregator.lua:509`, `modules/DrillDown.lua:417` |
-| `render` | `modules/Window.lua:826` |
-| `renderRow` | `modules/Row.lua:835` |
-| `tooltip` | `modules/Tooltip.lua:464`, `:503`, `:547` |
+| `meterEvent` | `core/MultiMeters.lua:384`, `:394`, `:402` |
+| `refresh` | `modules/Window.lua:1850`, `:1860`, `:1883`, `:1890` |
+| `providerRead` | `modules/Provider.lua:349` |
+| `aggregate` | `modules/Aggregator.lua:1694`, `modules/DrillDown.lua:668`, `:700` |
+| `render` | `modules/Window.lua:1993` |
+| `renderRow` | `modules/Row.lua:1620` |
+| `tooltip` | `modules/Tooltip.lua:2393`, `:2527`, `:2545`, `:2606`, `:2620`, `:2634` |
+| `targets` | `modules/Targets.lua:394`, `:402`, `:416` |
 
 So `observedWithin` is **never populated** in a Ka0s Multi Meters record, and every report prints
-the *"`<bucket>` declares itself within `<parent>` — not observed"* form for the four nested buckets.
+the *"`<bucket>` declares itself within `<parent>` — not observed"* form for the five nested buckets.
 
 The declared tree in `core/PerfSetup.lua` — `providerRead`, `aggregate` and `render` within
-`refresh`, `renderRow` within `render` — is therefore an **unverified claim**. It is a reasoned one
+`refresh`, `renderRow` within `render`, `targets` within `tooltip` — is therefore an **unverified
+claim**. It is a reasoned one
 (a refresh pass calls all three inline, and the row loop runs inside the render), but reasoning is
 not observation. An `ANALYSIS.md` **must say so** rather than presenting the declared tree as
 measured containment, and must not subtract a declared child from its declared parent as though the

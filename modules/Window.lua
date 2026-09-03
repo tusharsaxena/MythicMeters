@@ -189,6 +189,11 @@ end
 -- defensively like every other seam member this file takes.
 local PlayerClassRGB = NS.PlayerClassRGB or function() return nil end
 
+-- Forward-declared because the window's own backdrop and border read it from
+-- ApplyBorder, which is written above the header surfaces it was extracted for.
+-- Defined once, below, beside the other colour readers.
+local surfaceColor
+
 local function borderPath(name)
     if type(name) ~= "string" or name == "" or name == "None" then return nil end
     local media = lsm()
@@ -210,6 +215,32 @@ local function clamp(v, lo, hi)
     if v < lo then return lo end
     if v > hi then return hi end
     return v
+end
+
+-- The bounds each `master.*` multiplier is clamped to, matched to the sliders that
+-- write them (settings/Schema.lua's Master controls block). Clamped rather than
+-- trusted for the reason every other slider read in this file is: the value can
+-- also arrive from `/mm set` or from a hand-edited SavedVariables, and a scale of
+-- 0 is a window nobody can find again.
+local MASTER_BOUNDS = {
+    scale = { 0.5, 2.0 },
+    alpha = { 0, 1 },
+}
+
+--- One addon-wide master control, defaulted and clamped.
+---
+--- Through defaults/Profile.lua's ONE reader (NS.MasterSetting), which falls back
+--- to the shipped value rather than to a literal here -- the same bargain
+--- `NS.DataSetting` gets, and for the same reason: a second copy of 1.0 in a module
+--- is a value that can drift from the schema row that claims to set it.
+---
+--- @param key string  scale | alpha | locked
+local function masterSetting(key)
+    local read = NS.MasterSetting
+    local v = read and read(key)
+    local bounds = MASTER_BOUNDS[key]
+    if not bounds then return v end
+    return clamp(v, bounds[1], bounds[2])
 end
 
 --- Resolve a collaborator module by either shape it can have: a plain table hung
@@ -403,7 +434,12 @@ function WindowProto:RefreshUpvalues()
     self.throttle    = clamp(throttle, Const.THROTTLE_MIN, Const.THROTTLE_MAX)
     self.sessionType = data.sessionType or Const.SESSION_TYPE.Current
     self.sortColumn  = data.sortColumn or "DamageDone"
-    self.locked      = (cfg.frame or {}).locked and true or false
+    -- EITHER LOCK PINS THE WINDOW. `master.locked` (General -> Master controls) is
+    -- addon-wide and `frame.locked` (Frame -> General) is this window's own; a
+    -- window is draggable only while neither is on. ORed rather than overriding,
+    -- so unticking the master leaves the windows a player locked one at a time
+    -- locked -- an override would silently erase those.
+    self.locked      = (masterSetting("locked") or (cfg.frame or {}).locked) and true or false
     self.layout      = self:BuildLayout()
 end
 
@@ -681,10 +717,18 @@ function WindowProto:ApplyConfig()
     -- the frame, at the same scale, then measures width by height in its own
     -- units and lays its rows out against the numbers the player set. One scale
     -- on both, and every part of the window changes size together.
-    local scale = frameCfg.scale or 1.0
+    --
+    -- BOTH SCALES COMPOSE, AND SO DO BOTH ALPHAS. `master.scale` and `master.alpha`
+    -- (General -> Master controls) are addon-wide MULTIPLIERS over this window's own
+    -- Scale and Opacity, which stay on the Frame page and stay per-window -- so a
+    -- window at 0.80 under a master of 0.50 draws at 0.40, and turning the master
+    -- back to 1.00 gives every window exactly the size it was set to. Multiplying
+    -- rather than choosing is what lets one control shrink a whole layout without
+    -- flattening the differences the player set between its windows.
+    local scale = (frameCfg.scale or 1.0) * masterSetting("scale")
     self.anchor:SetScale(scale)
     frame:SetScale(scale)
-    frame:SetAlpha(frameCfg.alpha or 1.0)
+    frame:SetAlpha((frameCfg.alpha or 1.0) * masterSetting("alpha"))
     frame:SetFrameStrata(frameCfg.strata or "MEDIUM")
 
     -- The skin is re-applied rather than patched: ApplySkin owns the backdrop,
@@ -766,11 +810,25 @@ function WindowProto:ApplyBorder(frameCfg)
         insets   = { left = inset, right = inset, top = inset, bottom = inset },
     })
 
-    local br, bg, bb, ba = RGBA(frameCfg.backdropColor, 0, 0, 0, 0.75)
+    -- BOTH SWATCHES ANSWER A MODE NOW (options-ui-§17). Two values each, class and
+    -- custom: a window's fill and its edge belong to the WINDOW rather than to any
+    -- row in it, so `class` is the LOCAL player's -- the same call headerColor
+    -- makes for the strip along the top. "Per statistic" is deliberately absent for
+    -- the reason it is absent from the title bar: over one surface spanning the
+    -- whole window it could only ever mean the sort column's colour, which is
+    -- already on screen twice.
+    --
+    -- THE CONFIGURED ALPHA SURVIVES THE MODE, which is what makes the backdrop's
+    -- 0.75 a tint under `class` rather than a slab: RAID_CLASS_COLORS carries no
+    -- alpha, and a mode that reset transparency would be one setting cancelling
+    -- another. It is also why neither swatch is ever disabled.
+    local br, bg, bb, ba = surfaceColor(frameCfg.backdropColorMode, frameCfg.backdropColor,
+        nil, 0, 0, 0, 0.75)
     if frame.SetBackdropColor then frame:SetBackdropColor(br, bg, bb, ba) end
 
     if edge and frame.SetBackdropBorderColor then
-        local er, eg, eb, ea = RGBA(frameCfg.borderColor, 0, 0, 0, 1)
+        local er, eg, eb, ea = surfaceColor(frameCfg.borderColorMode, frameCfg.borderColor,
+            nil, 0, 0, 0, 1)
         frame:SetBackdropBorderColor(er, eg, eb, ea)
     end
 end
@@ -817,7 +875,7 @@ end
 --- @param statKey string|nil which statistic `stat` means here
 --- @param dr number @param dg number @param db number @param da number
 --- @return number r, number g, number b, number a
-local function surfaceColor(mode, stored, statKey, dr, dg, db, da)
+function surfaceColor(mode, stored, statKey, dr, dg, db, da)
     local r, g, b, a = RGBA(stored, dr, dg, db, da)
 
     if mode == "class" then
@@ -2346,6 +2404,11 @@ end
 local UNFORCEABLE = {
     ["suspended"] = true,   -- step 0: a suspended capture must be inert
     ["disabled"]  = true,   -- step 1: the master switch is not a context rule
+    -- step 1b: General visibility set to Never. The same statement the master
+    -- switch makes, made on the same tab -- so an explicit "show this window" must
+    -- not overrule it either. The dropdown's two COMBAT answers are deliberately
+    -- absent: those ARE context rules and behave like the per-window pair.
+    ["hidden"]    = true,
     ["no window"] = true,   -- not a decision at all -- there is nothing to show
 }
 

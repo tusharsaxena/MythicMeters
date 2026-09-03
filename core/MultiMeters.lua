@@ -423,6 +423,41 @@ end
 --- @param window table  a window config from the profile
 --- @return boolean show, string reason  the reason names the step that decided,
 ---   which is what `/mm debug diag` prints and what a test asserts on.
+--- Is the player fighting?
+---
+--- UnitAffectingCombat and never InCombatLockdown -- modules/Visibility.lua's rule,
+--- restated here rather than reached for because that module is optional and this
+--- ladder must answer without it. Lockdown is about whether SECURE writes are
+--- legal, and as a proxy for "the player is fighting" it latches early and
+--- releases late.
+local function fighting()
+    local f = _G.UnitAffectingCombat
+    return (f and f("player")) and true or false
+end
+
+--- The addon-wide General visibility answer (options-ui-§15's Master controls tab),
+--- as the ladder's own (ok, reason) pair.
+---
+--- FOUR VALUES, and three of them can refuse. `never` is the master switch said a
+--- quieter way and answers `hidden`; the two combat values answer with the side of
+--- the pull the player is standing on, in the same words modules/Visibility.lua's
+--- per-window pair uses, so `/mm debug diag` reads the same either way.
+---
+--- Its own function rather than four branches inside NS.ShouldShow: that ladder
+--- sat one point under the complexity ceiling before this rule existed, and a
+--- decision that is a whole setting of its own is a thing to name anyway.
+---
+--- @return boolean ok, string|nil reason
+local function masterVisibilityAllows()
+    local read = NS.MasterSetting
+    local mode = read and read("visibility")
+
+    if mode == "never" then return false, "hidden" end
+    if mode == "inCombat" and not fighting() then return false, "out of combat" end
+    if mode == "outOfCombat" and fighting() then return false, "in combat" end
+    return true
+end
+
 function NS.ShouldShow(window)
     -- STEP 0 — perf suspend. FIRST, and above even the master enable, because a
     -- suspended capture must be inert: nothing — a combat transition, a zone-in,
@@ -448,7 +483,19 @@ function NS.ShouldShow(window)
     -- and "hide this window" the same keystroke.
     if NS.State and NS.State.testMode then return true, "test" end
 
-    -- STEP 3 — context. modules/Visibility.lua owns the instance / solo /
+    -- STEP 3 — General visibility, the ADDON-WIDE context answer, ahead of the
+    -- per-window rules because it is the wider statement of the same thing.
+    --
+    -- BELOW TEST MODE, which is what keeps test mode usable: a player laying a
+    -- window out at a target dummy under "Only in combat" would otherwise be
+    -- looking at nothing, and step 2's one-way force is the documented way that is
+    -- avoided for every other rule too. `never` is still not something an explicit
+    -- `/mm toggle` may overrule -- see modules/Window.lua's UNFORCEABLE, which
+    -- names its reason.
+    local allowed, why = masterVisibilityAllows()
+    if not allowed then return false, why end
+
+    -- STEP 4 — context. modules/Visibility.lua owns the instance / solo /
     -- vehicle rules; it is consulted rather than reimplemented, and its absence
     -- (a partial install) fails OPEN so a broken module cannot make the addon
     -- look uninstalled.
