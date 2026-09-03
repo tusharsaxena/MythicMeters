@@ -1393,7 +1393,7 @@ badge and any count quoted in the docs must agree with it.
 - The profile ships the one key LibDBIcon reads, and nothing else
 - modules/Minimap.lua passes the silent flag to every LibStub call
 
-### test_schema.lua (62)
+### test_schema.lua (63)
 
 - Schema: a window path resolves against the session's ACTIVE window
 - Schema: a global path is unaffected by which window is active
@@ -1453,6 +1453,7 @@ badge and any count quoted in the docs must agree with it.
 - Schema: every group on every page is CONTIGUOUS, or a heading prints twice
 - Schema: every LSM border setting is one this suite knows honours "None"
 - Schema: every text surface offers face, outline, shadow and colour
+- Schema: Highlight yourself and Alternating background ship OFF
 - RestoreAllDefaults resets EVERY window, not just the selected one
 - RestoreAllDefaults is the equivalent of a NEW PROFILE
 - RestoreAllDefaults leaves the profile LIST alone
@@ -1645,11 +1646,11 @@ badge and any count quoted in the docs must agree with it.
 | test_visibility.lua | 33 |
 | test_windowmanager.lua | 34 |
 | test_minimap.lua | 17 |
-| test_schema.lua | 62 |
+| test_schema.lua | 63 |
 | test_schema_defaults.lua | 10 |
 | test_slash.lua | 34 |
 | test_options_panel.lua | 34 |
 | test_columnblocks.lua | 17 |
 | test_columns.lua | 11 |
 | test_degraded.lua | 27 |
-| **Total** | **1486** |
+| **Total** | **1487** |

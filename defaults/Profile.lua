@@ -279,7 +279,11 @@ local WINDOW_TEMPLATE = {
         -- Pin the local player into view even when they fall off the bottom of
         -- a capped list. The single most-requested behavior of every meter.
         alwaysShowSelf        = true,
-        highlightSelf         = true,
+        -- OFF, unlike the row above it. `alwaysShowSelf` changes WHICH rows are on
+        -- screen; this one paints one of them, and a meter's job is telling rows
+        -- apart by their numbers. A decoration that shades a row for a reason
+        -- unrelated to the numbers is one the player should ask for.
+        highlightSelf         = false,
         -- Shade every other row so the grid is easier to read across. A ROW-level
         -- fact, which is why it lives here — but it is EDITED on the Bars page,
         -- beside the per-cell tint it competes with, because choosing between the
@@ -289,7 +293,12 @@ local WINDOW_TEMPLATE = {
         -- was briefly a row-level texture too, and tinting the row turned out to
         -- tint the two-pixel seams between the columns and lose the separators
         -- the grid is read by; painting the cells leaves them clear.
-        alternatingBackground = true,
+        -- OFF for the reason highlightSelf is: it shades rows for a reason that
+        -- is not the data, over a grid that is already separated by its columns.
+        -- The mouseover highlight below stays ON because it answers the CURSOR
+        -- rather than the numbers -- it appears where the player is pointing and
+        -- leaves with them.
+        alternatingBackground = false,
         mouseoverHighlight    = true,
     },
 

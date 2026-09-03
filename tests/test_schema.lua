@@ -705,7 +705,14 @@ end)
 --- options-ui-§17 asked for beside the four swatches that had none (the window's
 --- fill and its edge, a cell's bar outline, a tooltip bar's outline).
 local PARTITION = {
-    general    = { { "Master controls", 6 }, { "General", 4 }, { "Statistic colors", 8 } },
+    -- TEN on Master controls, not six: the canonical six, then this addon's own
+    -- four appended after them. `General` was a tab of four rows -- a minimap
+    -- toggle, two addon-wide data settings and Test mode -- sitting next to the
+    -- tab everybody opens, and none of the four is a subject of its own. §15
+    -- forbids reordering, renaming or splitting the canonical set; it does not
+    -- forbid an addon's own rows after it, and the case below pins that the six
+    -- come FIRST and contiguous.
+    general    = { { "Master controls", 10 }, { "Statistic colors", 8 } },
     windows    = { { "Window", 1 } },
     frame      = { { "General", 6 }, { "Size and position", 6 },
                    { "Background and border", 6 }, { "Row", 8 } },
@@ -776,8 +783,14 @@ function()
     -- options-ui-§15. The set is canonical, not a menu: an addon includes every row
     -- that applies to it and MUST NOT reorder them, rename them, or split them
     -- across tabs.
-    -- red under: renaming the group, moving it below General, dropping a row, or
-    -- adding one of this addon's own settings to it.
+    -- The canonical rows are the tab's FIRST rows, contiguous and in order. This
+    -- addon's own four follow them -- §15 forbids reordering, renaming and
+    -- splitting the set, not appending after it -- so the assertion is on the
+    -- PREFIX rather than on the whole tab, and the extras are pinned separately
+    -- below.
+    -- red under: renaming the group, moving it below another tab, dropping a
+    -- canonical row, reordering them, or INTERLEAVING one of this addon's own
+    -- rows among them.
     local inst = T.load()
     local NS, L = inst.NS, inst.NS.L
 
@@ -793,7 +806,20 @@ function()
 
     local want = {}
     for i, pair in ipairs(MASTER_ROWS) do want[i] = pair[1] .. " = " .. L[pair[2]] end
-    assertEqual(table.concat(got, "\n"), table.concat(want, "\n"))
+    local prefix = {}
+    for i = 1, #want do prefix[i] = got[i] end
+    assertEqual(table.concat(prefix, "\n"), table.concat(want, "\n"))
+
+    -- ...and what follows them is this addon's four, in the order the retired
+    -- General tab had them.
+    local extras = {}
+    for i = #want + 1, #got do extras[#extras + 1] = got[i] end
+    assertEqual(table.concat(extras, "\n"), table.concat({
+        "minimap.hide = " .. L["Show minimap button"],
+        "data.mergePets = " .. L["Merge pets into their owner"],
+        "data.throttle = " .. L["Refresh interval"],
+        "state.testMode = " .. L["Test mode"],
+    }, "\n"), "the retired General tab's rows must follow the canonical set, in order")
 end)
 
 test("Schema: the master controls are ADDON-WIDE, and the per-window three are untouched",
@@ -1408,6 +1434,48 @@ end)
 -- ---------------------------------------------------------------------------
 -- "Reset all settings" IS a profile reset
 -- ---------------------------------------------------------------------------
+
+-- Two row decorations ship OFF, and they are asserted in BOTH places because
+-- both are real: the window template a new window is stamped from, and the schema
+-- row the panel and `/mm set` read. NS.ValidateSchema already proves the two
+-- agree; this says WHICH value they agree on.
+--
+-- They shipped ON. A meter's job is telling rows apart by their numbers, and two
+-- decorations that shade rows for reasons unrelated to the numbers -- one marks
+-- you, one stripes every other row -- were doing that work before the player had
+-- asked for either. The other two on that tab keep their ON default: `always show
+-- yourself` changes WHICH rows are on screen rather than how they are painted,
+-- and the mouseover highlight answers the cursor rather than the data.
+--
+-- red under: flipping either default back, or changing one of the two places and
+-- not the other (which ValidateSchema catches, but not with a name).
+test("Schema: Highlight yourself and Alternating background ship OFF", function()
+    local inst = T.load()
+    local NS = inst.NS
+
+    local rows = NS.WINDOW_TEMPLATE and NS.WINDOW_TEMPLATE.rows
+    assertTrue(rows ~= nil, "the window template must carry its row block")
+    assertEqual(rows.highlightSelf, false, "a new window does not mark your row")
+    assertEqual(rows.alternatingBackground, false, "…and does not stripe its rows")
+    assertEqual(rows.alwaysShowSelf, true, "…while keeping your row on screen")
+    assertEqual(rows.mouseoverHighlight, true, "…and still answering the cursor")
+
+    local want = {
+        ["window.rows.highlightSelf"]         = false,
+        ["window.rows.alternatingBackground"] = false,
+        ["window.rows.alwaysShowSelf"]        = true,
+        ["window.rows.mouseoverHighlight"]    = true,
+    }
+    local seen = 0
+    for _, row in ipairs(NS.Schema) do
+        if want[row.path] ~= nil then
+            seen = seen + 1
+            assertEqual(row.default, want[row.path],
+                row.path .. "'s schema default")
+        end
+    end
+    assertEqual(seen, 4, "all four row-decoration rows must still be in the schema")
+end)
 
 test("RestoreAllDefaults resets EVERY window, not just the selected one", function()
     -- Every `window.` path resolves against ONE window -- whichever

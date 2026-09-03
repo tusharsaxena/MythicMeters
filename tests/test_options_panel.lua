@@ -741,8 +741,9 @@ test("Panel: the Statistic colors tab says where its colours are actually worn",
     assertTrue(textOnPage():find(note, 1, true) == nil,
         "the note is on the Master controls tab, which is not the tab it describes")
 
-    -- The THIRD tab: Master controls, General, then Statistic colors.
-    ctx.__tabKids[3]:__fire("OnClick")
+    -- The SECOND tab: Master controls, then Statistic colors. It was the third
+    -- until the General tab's four rows became Master controls' tail.
+    ctx.__tabKids[2]:__fire("OnClick")
     assertEqual(ctx.activeTab, L["Statistic colors"])
     assertTrue(textOnPage():find(note, 1, true) ~= nil,
         "the Statistic colors tab drew no note saying where its colours are worn")

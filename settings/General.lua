@@ -6,9 +6,18 @@
 -- TWO TABS. **Master controls** is options-ui-§15's canonical set, first on this
 -- page in every Ka0s addon and COMPOSED rather than written out
 -- (settings/Schema.lua's MASTER_ROWS): enable, general visibility, master scale,
--- master alpha, lock frame, debug console, then the two resets as a button pair.
--- **General** is the rest -- the minimap button, the two addon-wide data settings
--- and Test mode -- plus **Statistic colors**, the generated palette.
+-- master alpha, lock frame, debug console -- then this addon's own four, the
+-- minimap button, the two addon-wide data settings and Test mode, and then the
+-- two resets as a button pair. **Statistic colors** is the generated palette.
+--
+-- THE `General` TAB IS GONE and those four rows are that tail. It was four rows
+-- with nothing in common but "addon-wide", behind a click next to the tab
+-- everybody opens -- the same argument that retired Data and Maintenance, one tab
+-- later. §15 forbids reordering, renaming or splitting the canonical set, not
+-- appending after it; the six stay first and contiguous, which is what
+-- tests/test_schema.lua pins. The page KEEPS its name: a page called General
+-- holding the addon-wide settings is right, and it was only the tab inside it
+-- that named nothing.
 --
 -- The page is thin on purpose. A window is an instance (design §6), so everything
 -- a player thinks of as "a setting" belongs to one: width, columns, colors,

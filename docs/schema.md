@@ -492,11 +492,19 @@ The Rows page is gone; the paths did not move with it.
 
 `maxRows = 0` (0 means "as many as fit the frame"; a positive value caps it, hard-ceilinged at
 `Constants.MAX_ROWS = 40`) · `height = 16` · `spacing = 1` · `growthDirection = "DOWN"` ·
-`alwaysShowSelf = true` · `highlightSelf = true` · `alternatingBackground = true` ·
+`alwaysShowSelf = true` · `highlightSelf = **false**` · `alternatingBackground = **false**` ·
 `mouseoverHighlight = true`.
 
 `alwaysShowSelf` spends the last visible slot on the local player rather than growing the list, so
 the row count stays exactly at the cap (`Aggregator.ApplyRowLimit`).
+
+**The two row decorations ship OFF, and the other two on that tab ship ON**, which is one
+distinction rather than four decisions. A meter's job is telling rows apart by their numbers;
+`highlightSelf` and `alternatingBackground` shade rows for reasons that are not the numbers, so they
+are the player's to ask for. `alwaysShowSelf` changes *which* rows are on screen rather than how they
+are painted, and `mouseoverHighlight` answers the *cursor* — it appears where the player is pointing
+and leaves with them. Changing a default does not change a stored value: an existing profile that had
+either switched on keeps it, and only a profile that never touched the key follows the new default.
 
 **`alternatingBackground` lives here and is EDITED on the Bars page**, beside `bars.bgColorMode` —
 the two of them decide what colour sits behind a row, and choosing between them meant reading two

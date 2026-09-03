@@ -379,17 +379,20 @@ second edge to catch.
   a value on *Header text* or *Header background* without visiting it, and confirm Defaults still
   reaches it.
 - **The General page's shape and its buttons.** It is the **first** page in the tree, above Windows,
-  and it draws **no banner** — it is not a window page. Three tabs, in this order.
+  and it draws **no banner** — it is not a window page. Two tabs, in this order.
   **Master controls** is `options-ui-§15`'s canonical set and opens the page: **Enable Multi
   Meters**, **General visibility**, **Master scale**, **Master alpha**, **Lock frame**, **Debug
   console**, closed by the **Reset position** / **Reset all settings** button pair and one sentence
   under it saying what each reaches. The four `master.*` rows are addon-wide and are **not** the
   per-window lock, scale and opacity on Frame — set Master scale to 0.5 with a window already at
   0.8 and the window draws at 0.4, and putting the master back to 1.0 gives every window exactly the
-  size it was set to. **General** carries the minimap toggle, then **Merge pets into their owner**
-  and **Refresh interval** — both addon-wide: change either and **every** window follows, not just
-  the selected one — then Test mode. **Statistic colors** is the palette (below). The retired
-  **Data** and **Maintenance** tabs are where the middle rows used to live. There is deliberately
+  size it was set to. Below the canonical six and **above** the button pair sit this addon's own four:
+  the minimap toggle, then **Merge pets into their owner** and **Refresh interval** — both
+  addon-wide: change either and **every** window follows, not just the selected one — then Test mode.
+  They were a tab called **General**; there must be no tab by that name on this page any more, and a
+  strip showing three tabs here is the fold half-done. **Statistic colors** is the palette (below).
+  The retired **Data**, **Maintenance** and **General** tabs are where those rows used to live.
+  There is deliberately
   **no** Reset meter data button here, or on any page; the header's own reset control is the one way
   to it. Reset position is the one control on the page that is **not** addon-wide — it moves the
   window the banner is pointed at and nothing else, which the line under the pair says.

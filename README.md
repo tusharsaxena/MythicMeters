@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Standard](https://img.shields.io/badge/Ka0s-WoW_Addon_Standard-yellow)
-![Tests](https://img.shields.io/badge/Tests-1486%2F1486_passing-green)
+![Tests](https://img.shields.io/badge/Tests-1487%2F1487_passing-green)
 
 Every other meter shows you one number at a time. Multi Meters shows the whole group in one grid —
 who kicked, who dispelled, who stood in the fire, and who died — all in a single window, one row per
@@ -106,7 +106,7 @@ banner at all.
 
 | Page | What you set there |
 |---|---|
-| General | Three tabs. **Master controls** is the set every Ka0s addon opens on: the addon master switch, general visibility, master scale and opacity, lock every frame, the debug console, and two resets — all settings, and the selected window's position. **General** is the minimap button, whether pets are merged into their owner, how often the display refreshes, and Test mode. **Statistic colors** sets the colour of each statistic, worn by every surface that colours by column |
+| General | Two tabs. **Master controls** is the set every Ka0s addon opens on — the addon master switch, general visibility, master scale and opacity, lock every frame, the debug console — followed by this addon's own handful: the minimap button, whether pets are merged into their owner, how often the display refreshes, and Test mode. It closes with two resets: all settings, and the selected window's position. **Statistic colors** sets the colour of each statistic, worn by every surface that colours by column |
 | Windows | Pick the window you are configuring; create, rename, delete, duplicate, copy settings from another |
 | `  - `Frame | Lock, keep-on-screen and the four "all surfaces" shortcuts; size, scale, opacity, strata and padding; the window's own background and border; and the rows — height, count, spacing, growth direction and which of them are highlighted |
 | `  - `Header | The title bar's own text (font, alignment, background) and the header controls — which of the seven buttons the title strip draws, in what color and at what size |

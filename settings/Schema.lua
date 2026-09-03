@@ -1675,7 +1675,7 @@ NS.Schema = {
         desc = L["Keep your own row visible even when it would fall outside the maximum row count."],
     },
     {
-        path = "window.rows.highlightSelf", type = "bool", default = true,
+        path = "window.rows.highlightSelf", type = "bool", default = false,
         page = "frame", group = L["Row"],
         label = L["Highlight yourself"], desc = L["Mark your own row so it stands out at a glance."],
     },
@@ -1689,7 +1689,7 @@ NS.Schema = {
         -- behind a row. It is a ROW-level fact (modules/Row.lua's RowProto:Update
         -- draws it, not the cells), and its PATH says so -- but a player choosing
         -- between a class tint and a stripe was reading two pages to do it.
-        path = "window.rows.alternatingBackground", type = "bool", default = true,
+        path = "window.rows.alternatingBackground", type = "bool", default = false,
         page = "frame", group = L["Row"],
         label = L["Alternating background"],
         desc = L["Shade every other row slightly so the grid is easier to read across. Sits behind the bar background above, so a strong tint will hide it."],
@@ -2414,11 +2414,21 @@ NS.Schema = {
     -- ── General ──────────────────────────────────────────────
     -- The only genuinely addon-wide settings. Everything else is per-window.
     --
-    -- TWO VISIBLE TABS. **Master controls** is options-ui-§15's canonical set and
-    -- is FIRST on this page in every Ka0s addon -- enable, general visibility, the
-    -- two master multipliers, the addon-wide lock and the debug console, closed by
-    -- the two resets as a button pair. **General** is what is left over: the
-    -- minimap button, the two addon-wide data settings and Test mode.
+    -- ONE VISIBLE TAB of settings, plus the palette. **Master controls** is
+    -- options-ui-§15's canonical set and is FIRST on this page in every Ka0s addon
+    -- -- enable, general visibility, the two master multipliers, the addon-wide
+    -- lock and the debug console -- and this addon's own four follow it: the
+    -- minimap button, the two addon-wide data settings and Test mode. The two
+    -- resets close the tab as a button pair.
+    --
+    -- **THE `General` TAB IS GONE**, and its four rows are that tail. It was four
+    -- rows with nothing in common but "addon-wide", sitting behind a click next to
+    -- the tab everybody opens -- the same argument that retired Maintenance and
+    -- Data before it, arriving one tab later. §15 forbids REORDERING, RENAMING or
+    -- SPLITTING the canonical set; it does not forbid an addon's own rows after
+    -- it, and the six stay contiguous and first, which is what
+    -- tests/test_schema.lua pins. Nothing moved in storage: a `group` is not a
+    -- stored path.
     --
     -- `enabled` AND `state.debugConsole` MOVED INTO THE COMPOSED BLOCK and are
     -- declared nowhere else -- two controls over one setting is the thing this
@@ -2440,7 +2450,7 @@ NS.Schema = {
     -- a checkbox the user reads has to be phrased positively. See "Inversion".
     {
         path = "minimap.hide", type = "bool", default = false, invert = true,
-        page = "general", group = L["General"],
+        page = "general", group = L["Master controls"],
         label = L["Show minimap button"], desc = L["Show the minimap button for opening these settings."],
         onChange = refreshMinimap,
     },
@@ -2457,14 +2467,14 @@ NS.Schema = {
     -- live.
     {
         path = "data.mergePets", type = "bool", default = false,
-        page = "general", group = L["General"],
+        page = "general", group = L["Master controls"],
         label = L["Merge pets into their owner"],
         desc = L["Add a pet's numbers to its owner's row instead of giving it its own. Blizzard's combat restriction forbids the addition while you are fighting, so a merged pet's numbers are missing until the pull ends."],
     },
     {
         path = "data.throttle", type = "number", default = 0.25,
         min = Const.THROTTLE_MIN, max = Const.THROTTLE_MAX, step = 0.05, fmt = "%.2fs",
-        page = "general", group = L["General"],
+        page = "general", group = L["Master controls"],
         label = L["Refresh interval"],
         desc = L["Seconds between refreshes. Lower is more responsive and costs more; the display updates at most this often no matter how fast the game reports numbers."],
         validate = isNumberIn(Const.THROTTLE_MIN, Const.THROTTLE_MAX),
@@ -2477,7 +2487,7 @@ NS.Schema = {
     -- a toggle that exists only in the panel is a toggle the CLI cannot reach.
     {
         path = "state.testMode", type = "bool", default = false, sessionOnly = true,
-        page = "general", group = L["General"],
+        page = "general", group = L["Master controls"],
         label = L["Test mode"],
         desc = L["Fill every window with placeholder data so you can lay out columns without being in combat."],
         get = function() return NS.State and NS.State.testMode or false end,
@@ -2584,9 +2594,9 @@ NS.Schema = {
 --
 -- Appended AFTER the literal above rather than woven into it, which puts the
 -- group after the hidden Export block. That is fine and deliberate: Export draws
--- no tab, so the general page's visible strip is General then Statistic colors,
--- and each group is still CONTIGUOUS, which is the property the heading logic
--- actually needs.
+-- no tab, so the general page's visible strip is Master controls then Statistic
+-- colors, and each group is still CONTIGUOUS, which is the property the heading
+-- logic actually needs.
 for _, stat in ipairs(Const.STATS) do
     local c = Const.STAT_COLORS[stat.key]
     if c then
